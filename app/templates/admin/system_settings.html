@@ -47,6 +47,18 @@
       <p>Standard: AUS. Status: <strong>{{ 'Aktiv' if settings.get('admin_2fa_enabled') == 'true' else 'Inaktiv' }}</strong>.</p>
       <p>Vor dem Aktivieren muessen alle aktiven Systemadministratoren die Einrichtung bestaetigen.</p>
       <p><a href="/mfa/einrichten">Eigene 2FA einrichten</a> | <a href="/mfa/verify">2FA frisch bestaetigen</a></p>
+      <p>Reparaturen: zuerst 2FA aktivieren, dann Admin-MCP, dann Reparaturen. Standard: AUS.</p>
+      <form method="post" action="/admin/system-einstellungen/admin-mcp/reparatur">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label for="repair-enabled">Kontrollierte Reparaturen</label>
+        <select id="repair-enabled" name="enabled" class="form-input">
+          <option value="false">Inaktiv</option>
+          <option value="true" {% if settings.get('admin_repair_enabled') == 'true' %}selected{% endif %}>Aktiv</option>
+        </select>
+        <label for="repair-auto">LOW-Aktions-IDs ohne zusaetzliche Bestaetigung (kommagetrennt, Standard leer)</label>
+        <input id="repair-auto" name="low_auto" class="form-input" value="{{ settings.get('admin_repair_low_auto', '') }}">
+        <button class="btn btn--primary" type="submit">Reparaturschalter speichern</button>
+      </form>
       <ul>{% for admin, confirmed in mfa_admins %}<li>{{ admin.display_name }}{% if not admin.active %} (inaktiv){% endif %}: {{ 'Eingerichtet' if confirmed else 'Nicht eingerichtet' }}
         {% if admin.id != user.id %}
         <form method="post" action="/mfa/zuruecksetzen" style="display:inline">
@@ -69,7 +81,7 @@
   </section>
 
   <section class="card mb-4">
-    <div class="card-header"><h2>System-Admin-MCP (nur lesend)</h2></div>
+    <div class="card-header"><h2>System-Admin-MCP</h2></div>
     <div class="card-body">
       <p>Standard: AUS. Verbindungs-URL: <code>{{ admin_mcp_url }}</code></p>
       <p>Nur persoenliche Systemadministratoren mit expliziter Freigabe. Aktivieren eines Zugangs verlangt bei aktiver 2FA eine hoechstens 5 Minuten alte MFA-Pruefung.</p>
@@ -499,7 +511,7 @@
 
     {# ── Benutzerdefinierte Einstellungen ─────────────────────────────── #}
     {% set known_keys_list = [
-      'admin_2fa_enabled', 'admin_mcp_enabled',
+      'admin_2fa_enabled', 'admin_mcp_enabled', 'admin_repair_enabled', 'admin_repair_low_auto',
       'smtp_host','smtp_port','smtp_user','smtp_password','smtp_from','smtp_starttls','smtp_timeout',
       'resend_enabled','resend_api_key','resend_from_domain','resend_inbound_domain','resend_inbound_webhook_secret',
       'vapid_public_key','vapid_private_key','vapid_email','enable_push',

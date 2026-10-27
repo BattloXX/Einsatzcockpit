@@ -45,7 +45,7 @@ _GLOBAL_TABLES = frozenset({
     "system_settings", "rettungsdatenblatt_cache", "rettungskarten_katalog",
     "hoehen_cache", "alembic_version",
     # Systemweite Worker-Laufzeitdiagnose ohne Org-Bezug.
-    "worker_runtime", "diag_run", "diag_finding",
+    "worker_runtime", "diag_run", "diag_finding", "admin_repair_run", "admin_approval",
     # Systemweite Mail-Weiterleitungen (Sysadmin, kein Org-Bezug).
     "mail_weiterleitung", "mail_weiterleitung_log",
 })

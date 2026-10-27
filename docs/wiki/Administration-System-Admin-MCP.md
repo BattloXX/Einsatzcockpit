@@ -1,6 +1,7 @@
 # System-Admin-MCP
 
-Der System-Admin-MCP stellt sieben direkte Lesewerkzeuge und vier Werkzeuge fuer Diagnose-Laeufe bereit.
+Der System-Admin-MCP stellt sieben direkte Lesewerkzeuge, vier Werkzeuge fuer Diagnose-Laeufe
+und optional fuenf kontrollierte Reparaturwerkzeuge bereit.
 Er ist vom organisationsgebundenen MCP getrennt und funktioniert auch fuer
 Systemadministratoren ohne Organisation. Einsaetze, Kontakte, Mitglieder, Objekte,
 Jobinhalte und Zugangsdaten werden nicht ausgegeben.
@@ -81,7 +82,8 @@ keine neu gestarteten Pruefungen. W&T wird nur anhand dieser Datenbasis beurteil
 
 ## Grenzen
 
-Keine Fachdaten-Schreibwerkzeuge, Reparaturen oder Codeanalyse. Diagnose-Jobs und deren Grenzen stehen unten.
+Keine allgemeinen Fachdaten-Schreibwerkzeuge oder Codeanalyse. Diagnose-Jobs und eng
+begrenzte technische Reparaturen mit ihren Grenzen stehen unten.
 Logs stammen ausschliesslich vom angesprochenen Worker und werden nur aggregiert
 angezeigt. Ein Thread mit einer laufenden DB-Abfrage kann nach dem Antwortzeitlimit
 noch auslaufen; er besitzt seine eigene Session und fuehrt nur Lesepruefungen aus.
@@ -92,8 +94,8 @@ Fuer diese Phase sind keine serverseitigen SSO-Logins vorgesehen.
 
 Zusaetzlich zu den sieben unmittelbaren Lesewerkzeugen gibt es vier Werkzeuge
 fuer persistierte Diagnoseergebnisse. Ausschliesslich der Start legt einen
-Diagnoseauftrag an; die Checks veraendern keine Fachdaten. Es gibt keine
-Reparaturaktionen und noch keine Diagnose-UI oder automatische Tagesdiagnose.
+Diagnoseauftrag an; die Checks veraendern keine Fachdaten. Es gibt noch keine
+Diagnose-UI oder automatische Tagesdiagnose. Reparaturaktionen stehen separat unten.
 
 | Werkzeug | Parameter und Verhalten |
 | --- | --- |
@@ -183,3 +185,112 @@ Adressen, Telefonnummern, Einsatztexte, Query-Texte oder Dokumentpfade.
   Dateiverweise/Existenz, Seiten und Text-Index; sie validieren keine kompletten PDF-Inhalte.
 - MariaDB-Prozess-/Transaktionsinformationen sind auf SQLite `nicht verfuegbar`.
   Fehlende MariaDB-Leserechte ergeben einen fehlgeschlagenen Teilcheck ohne Rohfehlertext.
+
+## Kontrollierte Reparaturen (Phase 4)
+
+Reparaturen sind nach dem Deployment ausgeschaltet. Einschaltreihenfolge unter
+`/admin/system-einstellungen`: **2FA an -> admin_mcp_enabled -> admin_repair_enabled**.
+Die vorhandene persoenliche MCP-Freigabe bleibt erforderlich. Den Reparaturschalter
+aktiviert nur ein persoenlicher Systemadministrator mit frischer MFA (maximal 5 Minuten).
+`admin_repair_low_auto` ist standardmaessig leer und akzeptiert ausschliesslich
+kommagetrennte IDs registrierter LOW-Aktionen. Schalter und Liste werden auditiert;
+der allgemeine Einstellungseditor kann diese Sicherheitsschalter nicht umgehen.
+
+### Aktionskatalog und Scopes
+
+Alle drei Aktionen sind `einsatzsicher=False`. Sie aendern keine Alarm-/Einsatzinhalte
+und keine freigegebenen Einsatzplaene. Der Katalog wird nach Import versiegelt;
+SQL-, Shell-, Python- oder frei benennbare Funktionsaufrufe sind keine Werkzeuge.
+Scopes sind strikt typisiert: unbekannte Felder, falsche Typen und zu grosse Listen
+werden abgelehnt. Jede Ausfuehrung betrifft genau eine angegebene `org_id` und
+hoechstens 50 explizite IDs. Die Vorschau zeigt ausschliesslich technische IDs,
+feste Ueberspringgruende, Zaehler und Hashes, keine Dateipfade oder Fachdaten.
+
+| Aktion | Risiko | Scope und Wirkung | Rollback / Wiederholung |
+| --- | --- | --- | --- |
+| `outbox.haengende_claims_freigeben` | MEDIUM | `org_id`, `alarm_ids`, `sms_ids`, `druck_ids`, zusammen 1–50 IDs. Nur abgelaufene Claims ohne Zustellungsindizien; bestehende Jobidentitaet bleibt erhalten. | Status-/Lease-Aenderungen und SMS-Attempt-Abschluss liegen gemeinsam in einer Transaktion. Bei Fehler Rollback; nach Erfolg keine erneute Freigabe desselben Claims. |
+| `suche.rueckstand_anstossen` | LOW | `org_id`, `ids` (1–50 bestehende Such-Outbox-IDs). Stellt noch nicht faellige `pending`-/`retry`-Auftraege mit weniger als acht Versuchen faellig. Aktive Leases und terminale Jobs bleiben unberuehrt. Indexworker und Org-Suche muessen aktiviert sein. | Transaktionaler Rollback; erneutes Anstossen faelliger Jobs ist wirkungslos. Der vorhandene Indexworker verarbeitet die Queue. Kein vollstaendiger Neuaufbau oder direkter Eingriff in Quelldaten. |
+| `dateien.verwaiste_temp_loeschen` | LOW | `org_id`, `dateien` (1–50 technische Uploadnamen `<32 hex>.pdf` oder `.upload`), optional `max_bytes` (1–104857600, Standard 100 MiB). Nur regulaere referenzlose Dateien unter `OBJEKT_MEDIA_DIR/_mcp_uploads/<org_id>`, aelter als 24 Stunden. | Geloeschte Tempdateien werden nicht wiederhergestellt. Jeder erfolgreiche Schritt speichert einen Zwischenstand samt Audit; bei Abbruch neu simulieren und mit neuem Key fortsetzen. Bereits fehlende Dateien werden uebersprungen. |
+
+Alarm-Outbox-`sending` wird bewusst nie zurueckgesetzt: ohne Versand-Fence kann
+aus fehlendem Abschluss kein ausgebliebener Versand abgeleitet werden. Nur
+`pending`/`retry` mit Versuchszahl null, fehlendem Abschluss und veraltetem Lease
+koennen wieder `pending` werden (das ist hier der vorhandene Queue-Status).
+SMS werden nur aus `claimed`, mit unverbrauchter Versandfrist, weniger als fuenf
+Generationen und ausschliesslich eindeutig nicht versandten Attempts freigegeben.
+Provider-/Gateway-Zuweisungen, Transportnachrichten, Versandprotokoll-Indizien,
+Received-/Attempted-/Accepted-/Finished-Felder oder `may_have_sent` verhindern dies.
+Ein geloeschter Claim-Token sperrt den alten Worker; die Job-ID bleibt gleich.
+Bei Druck gilt ausschliesslich der Lease-Modus vor Spooler-Uebergabe (`leased`/
+`fetching`), unterhalb der bestehenden Attempts-Grenze. `submitting`, Spool-Referenz,
+Push-Route und terminale Status werden uebersprungen. Token-Loeschung und erhoehte
+Lease-Generation sperren alte Agent-Aufrufe.
+
+Die Dateibereinigung durchsucht keine beliebigen Verzeichnisse und nimmt keine
+frei waehlbaren Pfade an. Verzeichnis-Deskriptoren, `O_NOFOLLOW`, regulaere
+Dateityppruefung, Inode-/Zeit-/Groessenvergleich und eine erneute DB-Referenzpruefung
+unmittelbar vor `unlink` verhindern das Folgen von Symlinks und Pfad-Traversal.
+Auch ein noch nicht fertig hochgeladener DB-Upload schuetzt seinen technischen Namen.
+Andere Ablagen und weiterhin referenzierte, auch abgelaufene Uploads sind ausgeschlossen.
+
+### Werkzeugablauf und Freigaben
+
+Die vorhandene Diagnose prueft keine verwaisten MCP-Tempdateien. Deshalb wird
+die Dateibereinigung nur mit explizitem Scope simuliert; fehlende Dokumentdateien
+werden nicht als Anlass fuer eine sachlich unpassende Temp-Bereinigung verwendet.
+
+| Werkzeug | Verwendung |
+| --- | --- |
+| `admin_reparatur_vorschlagen` | Genau `finding_key` oder `id`. Ordnet `gateway.jobs` und `suche.rueckstand` den passenden Wartungsaktionen zu und legt `vorgeschlagen`-Laeufe an. Ein Vorschlag ist keine bestaetigte Ursache oder Loesung. |
+| `admin_reparatur_simulieren` | `run_id` (optional Scope fuer vorgeschlagenen Lauf) oder `aktion_id` + `scope`. Liefert Vorschau, `simulation_hash` und Freigabebedarf. SQL-Schreibsperre und Autoflush AUS sichern die Aktionssimulation. Nur die anschliessende Lauf-/Audit-Persistenz schreibt. |
+| `admin_reparatur_ausfuehren` | `run_id`, `simulation_hash`, verpflichtender `idempotency_key` (8–128 Zeichen), `bestaetigt`, optional `approval_token`. Liefert gespeichertes Ergebnis. |
+| `admin_reparatur_status` | `run_id`: Zustand, gespeicherte Vorschau, Ergebnis und Verifikation. Zugriff nur auf eigene Laeufe. |
+| `admin_reparatur_verifizieren` | `run_id`: lesende Nachpruefung. Optional `folgediagnose=true` reiht ueber den vorhandenen Diagnose-Start den zugeordneten Check erneut ein; dessen bestehende Kontingente gelten. |
+
+LOW darf nur dann ohne zusaetzliche Bestaetigung ausgefuehrt werden, wenn die
+Aktions-ID in `admin_repair_low_auto` steht. Andernfalls gilt wie fuer MEDIUM:
+`bestaetigt=true` und exakt der Hash aus der Simulation. HIGH verlangt zusaetzlich
+ein einmaliges Web-Token: `/admin/reparatur/freigabe/<run_id>` zeigt die gespeicherte
+maskierte Vorschau und verlangt einen **neuen** TOTP-/Recovery-Code. Eine bereits
+frische Browser-Sitzung ersetzt diese Pruefung nicht. CSRF-Schutz, fuenf Versuche
+pro Minute/IP und persistenter MFA-Lockout gelten auch hier. Die Antwort ist
+`no-store`/`no-referrer`; Token ausschliesslich in `approval_token` uebergeben.
+In der DB stehen nur Token-Hash, Benutzer, Lauf, Ablauf und der Hash aus
+Aktions-ID + Scope + Simulationshash. Ablauf nach maximal zehn Minuten, falscher
+Benutzer, anderer Aktionshash und Wiederverwendung werden abgelehnt. CRITICAL ist
+ueber MCP ausschliesslich vorschlag-/simulierbar. HIGH-/CRITICAL-Testaktionen
+existieren nur in Tests und sind nicht im Produktionskatalog registriert.
+
+### Harte Sperren und Betrieb
+
+Ohne aktive 2FA sind alle fuenf Tools verborgen und jeder direkte Aufruf meldet
+`2FA erforderlich`. Der Reparaturschalter muss ebenfalls aktiv sein. Unmittelbar
+vor Ausfuehrung werden Live-Benutzer, Rolle, Zugriff, MFA/OAuth-Gueltigkeit,
+Schalter und Sitzungsepoche erneut geprueft. MariaDB-Reparaturrequests verwenden
+READ COMMITTED, damit alte MVCC-Snapshots keinen Rechteentzug verdecken.
+Simulationen gelten maximal 15 Minuten (erneut nach dem Claim geprueft);
+veraenderter Datenbestand verlangt eine neue Simulation. Zeilensperren und
+bedingte Updates pruefen den Zustand anschliessend innerhalb der Aktion erneut.
+Aktive Einsaetze/Grossschadenslagen sperren die Ausfuehrung aller drei Aktionen;
+die Erkennung stammt direkt aus dem Diagnose-Runner.
+
+Zusaetzlich zum bestehenden MCP-Limit gelten fuer alle Reparaturtools zusammen
+20 Aufrufe pro Minute/Benutzer, in der DB unter Benutzer-Lock gezaehlt. Ein
+nullable UNIQUE-Slot pro Aktion und ein bedingter UPDATE verhindern konkurrierende
+Ausfuehrung auch zwischen Hosts. Ein ueberlappender Ausfuehrungsversuch wird
+abgelehnt; verschiedene Aktionen besitzen getrennte Slots. Gleicher Idempotency-Key
+und identischer Scope liefern den gespeicherten Zustand; anderer Scope/Aktion oder
+anderer Benutzer werden abgelehnt. Gespeichert wird nur der Hash des Keys.
+
+Jede Stufe und Ablehnung schreibt `admin_repair.*` mit Korrelations-ID und
+kontrolliertem Grund, ohne Token, Codes, freie Fehlertexte oder Fachdaten.
+Die globalen Tabellen `admin_repair_run`/`admin_approval` werden nicht exportiert.
+Laeufe mit einem regulaeren Fehler werden `fehlgeschlagen`; Status-/Queue-Aenderungen
+rollen zurueck, bereits geloeschte Tempdateien bleiben im Zwischenstand sichtbar.
+Nach hartem Prozess-/Host-Abbruch bleibt ein laufender Mutex absichtlich gesperrt:
+kein unsicheres automatisches Uebernehmen nach einer Zeitfrist. Die Administration
+muss zuerst das Ende des ausfuehrenden Prozesses und den Bestand pruefen, bevor sie
+den Lauf betrieblich abschliesst. Dafuer existiert kein generisches MCP-Schreibwerkzeug.
+Bei Antwortzeitlimit kann der begrenzte Ausfuehrungsthread weiterlaufen; deshalb
+Status mit demselben Key abfragen/wiederholen und keinen Ersatzlauf mit neuem Key
+starten. Es gibt keinen automatischen Reparatur-Loop und keine neue Hintergrundmutation.

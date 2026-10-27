@@ -2324,12 +2324,13 @@ def save_system_settings(
     # Handle any existing custom keys
     all_existing = db.query(SystemSettings).all()
     for s in all_existing:
-        if s.key not in known_keys and s.key not in ("admin_2fa_enabled", "admin_mcp_enabled"):
+        if s.key not in known_keys and s.key not in (
+                "admin_2fa_enabled", "admin_mcp_enabled", "admin_repair_enabled", "admin_repair_low_auto"):
             val = form.get(f"k_{s.key}")
             if val is not None:
                 s.value = val  # type: ignore[assignment]
     # New custom key
-    if new_key.strip() in ("admin_2fa_enabled", "admin_mcp_enabled"):
+    if new_key.strip() in ("admin_2fa_enabled", "admin_mcp_enabled", "admin_repair_enabled", "admin_repair_low_auto"):
         raise HTTPException(400, "2FA nur ueber den eigenen Sicherheitsschalter aendern")
     if new_key.strip():
         existing = db.get(SystemSettings, new_key.strip())
