@@ -53,8 +53,13 @@ class AdminOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Ref
             db.commit()
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
-        if params.resource != RESOURCE or params.scopes != ["mcp-admin"]:
-            raise AuthorizeError("invalid_target", "Ungueltige Resource oder Scope")
+        if params.resource != RESOURCE:
+            raise AuthorizeError("invalid_target", "Ungueltige Resource")
+        # Das SDK reicht fehlenden scope als None weiter, trotz DCR-Default.
+        if params.scopes is None:
+            params.scopes = ["mcp-admin"]
+        if params.scopes != ["mcp-admin"]:
+            raise AuthorizeError("invalid_scope", "Ungueltiger Scope")
         flow = raw()
         with SessionLocal() as db:
             db.add(AdminMCPOAuthCode(code_hash=hash_api_key(flow), client_id=client.client_id,

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.admin_mcp.code_tools import collect_code, safe_title
 from app.admin_mcp.diagnose_tools import collect_diagnose
+from app.admin_mcp.login_hinweise import HINWEISE
 from app.admin_mcp.masking import mask_text
 from app.admin_mcp.registry import READ_TOOLS, collect
 from app.admin_mcp.repair_tools import collect_repair
@@ -31,6 +32,20 @@ from app.services.diagnose.registry import CHECKS
 from app.services.diagnose.runner import einsatz_aktiv
 from app.services.repair.registry import ACTIONS
 from app.services.repair.runner import gates, prepare_session, public_run
+
+
+def login_grund(entry: AuditLog) -> str | None:
+    """Nur bekannte Login-Gruende zeigen, niemals freie Audit-Payloads."""
+    if entry.action not in ("admin_mcp.login_failed", "admin_mcp.denied"):
+        return None
+    try:
+        payload = json.loads(entry.payload_json or "{}")
+    except (TypeError, ValueError):
+        return None
+    grund = payload.get("grund") if isinstance(payload, dict) else None
+    if not isinstance(grund, str):
+        return None
+    return HINWEISE.get(grund, "").replace("{minuten}", "wenigen") or None
 
 
 def personal(request: Request, db: Session = Depends(get_db), _=Depends(require_role("system_admin"))):
@@ -118,6 +133,7 @@ def render(request, db, section, **extra):
                 "mfa.", "admin.mfa."))))
             .order_by(AuditLog.id.desc()).offset(page * 25).limit(25)))
         context["page"] = page
+        context["login_grund"] = login_grund
     response = templates.TemplateResponse(request, "admin/systemdiagnose/_panel.html", context)
     response.headers["Cache-Control"] = "no-store"
     return response

@@ -10,7 +10,7 @@
     <input type="hidden" name="vorgang" value="{{ vorgang }}">
     <div class="form-group"><label>Benutzername</label><input class="form-control" name="username" autocomplete="username" required></div>
     <div class="form-group"><label>Passwort</label><input class="form-control" type="password" name="password" autocomplete="current-password" required></div>
-    <div class="form-group"><label>TOTP- oder Recovery-Code (bei aktiver 2FA)</label><input class="form-control" name="code" autocomplete="one-time-code"></div>
+    <div class="form-group"><label for="mfa-code">Code aus der Authenticator-App oder Recovery-Code</label><input id="mfa-code" class="form-control" name="code" inputmode="numeric" autocomplete="one-time-code"><p>Bei aktiver 2FA erforderlich. Der Code darf nicht schon fuer die Web-Anmeldung in derselben halben Minute verwendet worden sein.</p></div>
     <button class="btn btn--primary" type="submit">Verbinden</button>
   </form>
 </div></div>

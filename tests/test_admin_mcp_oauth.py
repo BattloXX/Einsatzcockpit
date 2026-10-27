@@ -138,7 +138,7 @@ def test_discovery_and_cross_server(client, admin_env):
 
 
 @pytest.mark.parametrize("change", ["admin", "org_admin", "device", "access", "global", "inactive", "missing"])
-def test_login_denied_with_identical_message(client, admin_env, change):
+def test_login_denied_after_password(client, admin_env, change):
     with SessionLocal() as db:
         user = db.get(User, admin_env["id"])
         if change in ("admin", "org_admin"):
@@ -158,7 +158,10 @@ def test_login_denied_with_identical_message(client, admin_env, change):
         db.commit()
     result = login(client, admin_env, start_flow(client))
     assert result.status_code == 401
-    assert "Anmeldung oder Zugriff nicht moeglich." in result.text
+    if change == "inactive":
+        assert "Anmeldung oder Zugriff nicht moeglich." in result.text
+    else:
+        assert "Anmeldung oder Zugriff nicht moeglich." not in result.text
     with SessionLocal() as db:
         assert db.query(AuditLog).filter(AuditLog.action.in_(("admin_mcp.denied", "admin_mcp.login_failed"))).first()
 

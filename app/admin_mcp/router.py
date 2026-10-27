@@ -6,6 +6,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.admin_mcp.context import DENIED, allowed
+from app.admin_mcp.login_hinweise import HINWEISE
 from app.admin_mcp.provider import raw, revoke_user
 from app.core.audit import write_audit
 from app.core.permissions import require_role
@@ -56,15 +57,30 @@ def anmelden_submit(request: Request, vorgang: str = Form(...), username: str = 
     row = _flow(db, vorgang)
     event = "login_failed"
     success = False
+    error = DENIED
+    grund = "vorgang_abgelaufen" if not row else "authentifizierung_fehlgeschlagen"
     if row and user:
         if allowed(db, user):
             success = not totp.enabled(db) or totp.verify(db, user.id, code)
+            if not success:
+                grund, minuten = totp.diagnose_failure(db, user.id, code)
+                if grund == "ungueltig" and not code.strip():
+                    grund = "code_leer"
+                error = HINWEISE[grund].format(minuten=minuten)
         else:
             event = "denied"
+            switch = db.get(SystemSettings, "admin_mcp_enabled")
+            if not switch or switch.value != "true":
+                grund = "global_aus"
+            elif not user.is_system_admin or user.is_device:
+                grund = "kein_systemadministrator"
+            else:
+                grund = "kein_zugriff"
+            error = HINWEISE[grund]
     if not success:
-        write_audit(db, "admin_mcp." + event, user_id=user.id if user else None)
+        write_audit(db, "admin_mcp." + event, user_id=user.id if user else None, payload={"grund": grund})
         db.commit()  # Auch MFA-Sperren/Replay-Schutz und fehlgeschlagene Versuche persistieren.
-        return _page(request, row, vorgang, DENIED, 401)
+        return _page(request, row, vorgang, error, 401)
     assert row is not None and user is not None
     value = raw()
     row.code_hash, row.user_id, row.session_epoch = hash_api_key(value), user.id, user.session_epoch
