@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Einheitenmodus:** Offline-Outbox prüft den aktuellen Zugang vor jedem Versand, auch bei parallelem Reconnect und Retry. Abgelaufene Zugänge behalten Einträge lokal als `blockiert_zugang`, ohne vorherigen POST.
+
 - **Admin-MCP:** Handlungsorientierte Login-Hinweise erst nach Passwortnachweis, geheimnisfreie Audit-Gruende und Anzeige in der Systemdiagnose. Fehlender OAuth-Scope verwendet `mcp-admin`; zusaetzliche Discovery-Aliase und lokale ChatGPT-OAuth-Regressionstests. Replay-Schutz und Sperren unveraendert; Login-/CLI-Checklisten im Wiki, keine Migration.
 
 - **Systemadministration:** Phase 6: Systemdiagnose-Cockpit mit mobilen HTMX-Karten, gemeinsamen Diagnose-/Reparaturdiensten, GitHub-CI, Codex-Auftrag und maskiertem Audit. Optionale Tagesdiagnose (Default AUS), globale DB-Claims und deduplizierte System-Sammelmail; Migration 0329. Ausfuehrliche Betriebs- und Recovery-Dokumentation im Wiki.

@@ -31,6 +31,7 @@ export function createOutbox({
   requestTimeoutMs = 15000,
   fotoTimeoutMs = 60000,
   onTerminal = () => {},
+  vorSenden = async () => true,
 }) {
   const listeners = new Set();
   const inBearbeitung = new Set();
@@ -240,13 +241,20 @@ export function createOutbox({
           const url = eintrag.typ.startsWith("ressource_")
             ? `/einheit/api/ressource/${eintrag.typ.slice("ressource_".length)}`
             : `/einheit/api/auftrag/${eintrag.dispatch_id}/${eintrag.typ}`;
-          if (eintrag.typ === "foto" || eintrag.typ === "material_foto") {
-            let datei = null;
+          const istFoto = eintrag.typ === "foto" || eintrag.typ === "material_foto";
+          let datei = null;
+          if (istFoto) {
             try { datei = await fotoDatei(eintrag); } catch { datei = null; }
             if (!datei?.size) {
               await setze(eintrag, { status: "fehler", letzter_fehler: "foto_daten_fehlen", naechster_versuch_at: null });
               return "weiter";
             }
+          }
+          // Auch Erfassen, Retry und Foto-Spur muessen vor jedem POST den aktuellen
+          // Kontext pruefen; die UI-Pruefung beim Online-Event allein reicht nicht.
+          // Erst nach der asynchronen Fotoaufbereitung pruefen, dann ohne weitere Pause senden.
+          if (!await vorSenden(controller.signal) || terminal || controller.signal.aborted) return;
+          if (istFoto) {
             const form = new FormData();
             form.append("file", datei, eintrag.dateiname || "foto");
             form.append("client_uuid", eintrag.client_uuid);

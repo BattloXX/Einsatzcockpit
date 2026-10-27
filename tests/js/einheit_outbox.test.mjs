@@ -506,3 +506,70 @@ test("onChange liefert neue Einträge erst nach lokalem Commit, noch vor dem ers
   assert.equal((await o.liste())[0].client_uuid, neu[0].client_uuid);
   assert.equal((await o.verlauf()).length, 0);
 });
+
+test("offene Kontextpruefung sperrt automatische, manuelle und Foto-Flushes vor jedem POST", async () => {
+  let freigeben;
+  const pruefung = new Promise(resolve => { freigeben = resolve; });
+  let pruefungen = 0;
+  const env = umgebung([], { vorSenden: async () => { pruefungen++; return pruefung; } });
+  const o = createOutbox(env.basis);
+  await o.erfassenPaket([
+    { typ: "status", dispatch_id: 1, payload: { status: "bestaetigt" } },
+    { typ: "status", dispatch_id: 1, payload: { status: "anfahrt" } },
+    { typ: "foto", dispatch_id: 2, blob: new Blob(["foto"]) },
+  ]);
+  const lauf = o.flush({ wiederverbunden: true });
+  await warteAuf(() => pruefungen >= 2);
+  assert.equal(env.anfragen.length, 0);
+  // Wie beim 401 des Kontext-Endpunkts: alle Originaldaten lokal erhalten.
+  await o.blockiereZugang();
+  freigeben(true); // Selbst eine verspaetete positive Antwort darf die Sperre nicht aufheben.
+  await lauf;
+  await o.erneutSenden((await o.liste())[0].client_uuid);
+  assert.equal(env.anfragen.length, 0);
+  assert.deepEqual((await o.liste()).map(item => item.status), Array(3).fill("blockiert_zugang"));
+  assert.equal((await o.verlauf()).length, 0);
+});
+
+test("jeder POST prueft den Kontext und liest danach den erneuerten CSRF-Cookie", async () => {
+  let pruefungen = 0;
+  let token = "alt";
+  const env = umgebung([], {
+    vorSenden: async () => { pruefungen++; token = "erneuert"; return true; },
+    csrfToken: () => token,
+  });
+  const o = createOutbox(env.basis);
+  await o.erfassenPaket([
+    { typ: "status", dispatch_id: 1, payload: { status: "bestaetigt" } },
+    { typ: "status", dispatch_id: 1, payload: { status: "anfahrt" } },
+    { typ: "foto", dispatch_id: 2, blob: new Blob(["foto"]) },
+  ]);
+  await warteAuf(async () => (await o.verlauf()).length === 3);
+  assert.equal(pruefungen, 3);
+  assert.equal(env.anfragen.length, 3);
+  assert.ok(env.anfragen.every(anfrage => anfrage.headers["X-CSRF-Token"] === "erneuert"));
+  const foto = env.anfragen.find(anfrage => anfrage.body instanceof FormData);
+  assert.equal(foto.body.get("_csrf"), "erneuert");
+  assert.deepEqual(env.anfragen.filter(anfrage => typeof anfrage.body === "string")
+    .map(anfrage => JSON.parse(anfrage.body).status), ["bestaetigt", "anfahrt"]);
+});
+
+test("Netzfehler bei Kontextpruefung behaelt Originaleintrag und bisherige Retry-Frist", async () => {
+  let erreichbar = false;
+  const env = umgebung([], { vorSenden: async () => {
+    if (!erreichbar) throw new Error("offline");
+    return true;
+  } });
+  const o = createOutbox(env.basis);
+  const gespeichert = await eintrag(o);
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler_netz");
+  assert.equal(env.anfragen.length, 0);
+  assert.equal((await o.liste())[0].versuche, 1);
+  erreichbar = true;
+  env.vor(1999); await o.flush();
+  assert.equal(env.anfragen.length, 0);
+  env.vor(1); await o.flush();
+  assert.equal(env.anfragen.length, 1);
+  assert.equal(JSON.parse(env.anfragen[0].body).client_uuid, gespeichert.client_uuid);
+  assert.equal((await o.verlauf()).length, 1);
+});
