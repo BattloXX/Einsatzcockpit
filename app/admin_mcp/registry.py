@@ -1,4 +1,4 @@
-"""Abgeschlossene Registry der sieben lesenden Werkzeuge."""
+"""Diagnosewerkzeuge ohne Fachdatenmutationen."""
 import hashlib
 import hmac
 import re
@@ -28,10 +28,20 @@ ADMIN_TOOLS = {
 }
 
 
+READ_TOOLS = tuple(ADMIN_TOOLS)
+DIAG_TOOLS = {
+    "admin_diagnose_starten": AdminTool("Lesende Diagnose als begrenzten Hintergrundlauf anfordern.", "diagnose"),
+    "admin_diagnose_status": AdminTool("Status, Fortschritt und uebersprungene Checks eines Laufs lesen.", "diagnose"),
+    "admin_fehler_liste": AdminTool("Befunde nach Modul, Schweregrad, Status und Zeit paginiert lesen.", "diagnose"),
+    "admin_fehler_details": AdminTool("Maskierte Evidenz, begrenzte IDs und Befundhistorie lesen.", "diagnose"),
+}
+ADMIN_TOOLS.update(DIAG_TOOLS)
+
+
 def collect(db, name: str, **arguments) -> dict:
     if name == "admin_system_uebersicht":
         parts = {}
-        for key in ADMIN_TOOLS:
+        for key in READ_TOOLS:
             if key in ("admin_system_uebersicht", "admin_logs_analysieren"):
                 continue
             try:

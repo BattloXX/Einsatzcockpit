@@ -9,6 +9,7 @@ from app.models.atemschutz_pruefung import (
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
 from app.models.citizen_verification import CitizenReportVerification
+from app.models.diagnose import DiagFinding, DiagRun
 from app.models.dibos import OrgDibosConfig
 from app.models.dienst_monitor import (  # noqa: F401 -- registriert ORM-Modelle
     DienstMonitorLog,
@@ -515,6 +516,8 @@ __all__ = [
     "AdminMCPOAuthClient",
     "AdminMCPOAuthCode",
     "AdminMCPOAuthToken",
+    "DiagRun",
+    "DiagFinding",
     "MCPOAuthClient",
     "MCPOAuthCode",
     "MCPOAuthToken",

@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Systemdiagnose:** Registrierbare Integritaetschecks, begrenzte globale Diagnose-Laeufe mit deduplizierten Befunden und vier zusaetzliche Admin-MCP-Werkzeuge. Einsatz-Drosselung, atomare Claims und Retention; keine Fachdatenmutationen oder Reparaturen. Migration 0327.
+
 - **Systemadministration:** Separater lesender System-Admin-MCP unter `/mcp/admin` mit sieben Diagnosewerkzeugen, eigenem OAuth, optionaler TOTP-/Recovery-Anmeldung und expliziten globalen/persoenlichen Freigaben (Default AUS). Migration 0326.
 
 - **Systemadministration:** Optionale TOTP-2FA (Standard AUS) mit Recovery-Codes, zentraler Session-Pruefung, Widerruf und lokalem CLI-Notfallreset. Aktivierung erst nach Einrichtung aller aktiven Systemadministratoren.

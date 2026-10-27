@@ -27,9 +27,10 @@ from starlette.routing import Route
 
 from app.admin_mcp.context import DENIED, load_live_context
 from app.admin_mcp.context import admin_session as SessionLocal
+from app.admin_mcp.diagnose_tools import collect_diagnose
 from app.admin_mcp.masking import mask_arguments
 from app.admin_mcp.provider import RESOURCE, provider
-from app.admin_mcp.registry import ADMIN_TOOLS, collect
+from app.admin_mcp.registry import ADMIN_TOOLS, DIAG_TOOLS, collect
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.security import hash_api_key
@@ -92,6 +93,8 @@ def _execute(name: str, arguments: dict, correlation: str) -> dict:
             if not permitted:
                 return {"status": "warn", "evidence": {"fehler": "Rate-Limit erreicht"}}
             try:
+                if name in DIAG_TOOLS:
+                    return collect_diagnose(db, name, user_id, correlation, **arguments)
                 return collect(db, name, **arguments)
             except ValueError:
                 return {"status": "unbekannt", "evidence": {"fehler": "ungueltige Parameter"}}
@@ -156,6 +159,28 @@ async def admin_gateway_pruefen() -> dict:
 @server.tool(description=ADMIN_TOOLS["admin_logs_analysieren"].description)
 async def admin_logs_analysieren(level: str = "WARNING", limit: int = 100, suchtext: str = "") -> dict:
     return await call_tool("admin_logs_analysieren", level=level, limit=limit, suchtext=suchtext)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_diagnose_starten"].description)
+async def admin_diagnose_starten(checks: list[str] | None = None, umfang: str = "schnell") -> dict:
+    return await call_tool("admin_diagnose_starten", checks=checks, umfang=umfang)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_diagnose_status"].description)
+async def admin_diagnose_status(run_id: int | None = None) -> dict:
+    return await call_tool("admin_diagnose_status", run_id=run_id)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_fehler_liste"].description)
+async def admin_fehler_liste(modul: str | None = None, schweregrad: str | None = None,
+    status: str | None = None, seit: str | None = None, limit: int = 50, cursor: str | None = None) -> dict:
+    return await call_tool("admin_fehler_liste", modul=modul, schweregrad=schweregrad,
+                           status=status, seit=seit, limit=limit, cursor=cursor)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_fehler_details"].description)
+async def admin_fehler_details(finding_key: str | None = None, id: int | None = None) -> dict:
+    return await call_tool("admin_fehler_details", finding_key=finding_key, id=id)
 
 
 async def _token(request: Request) -> Response:
