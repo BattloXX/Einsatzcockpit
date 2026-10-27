@@ -2298,3 +2298,32 @@ async def alarm_parser_regelsatz_lesen(limit: int = 50, seite: int = 1) -> dict[
 @server.tool(name="alarm_ortsdaten_pruefen", description="Gemeinde, Ortsteil und Strasse gegen Org-Kataloge pruefen.")
 async def alarm_ortsdaten_pruefen(gemeinde: str = "", ortsteil: str = "", strasse: str = "") -> dict[str, object]:
     return await _call_registered_tool("alarm_ortsdaten_pruefen", gemeinde=gemeinde, ortsteil=ortsteil, strasse=strasse)
+
+
+@server.tool(name="alarm_parser_entwurf_anlegen", description=TOOLS["alarm_parser_entwurf_anlegen"].description)
+async def alarm_parser_entwurf_anlegen(notiz: str) -> dict[str, object]:
+    return await _call_registered_tool("alarm_parser_entwurf_anlegen", notiz=notiz)
+
+
+@server.tool(name="alarm_parser_entwurf_aendern", description=TOOLS["alarm_parser_entwurf_aendern"].description)
+async def alarm_parser_entwurf_aendern(
+    version: int, regel_aenderungen: list[dict], notiz: str | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("alarm_parser_entwurf_aendern", version=version,
+                                       regel_aenderungen=regel_aenderungen, notiz=notiz)
+
+
+@server.tool(name="alarm_parser_testen", description=TOOLS["alarm_parser_testen"].description)
+async def alarm_parser_testen(
+    version: int | str, ingest_ids: list[int] | None = None, filter: dict | None = None, limit: int = 200,
+) -> dict[str, object]:
+    return await _call_registered_tool("alarm_parser_testen", version=version, ingest_ids=ingest_ids,
+                                       filter=filter, limit=limit)
+
+
+@server.tool(name="alarm_parser_testfall_anlegen", description=TOOLS["alarm_parser_testfall_anlegen"].description)
+async def alarm_parser_testfall_anlegen(
+    titel: str, erwartet: dict, ingest_id: int | None = None, rohtext: str | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("alarm_parser_testfall_anlegen", titel=titel, erwartet=erwartet,
+                                       ingest_id=ingest_id, rohtext=rohtext)
