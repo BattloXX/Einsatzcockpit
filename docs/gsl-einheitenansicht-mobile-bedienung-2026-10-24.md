@@ -14,7 +14,7 @@ Die drei Bereiche bleiben **Einsätze**, **Karte** und **Meldungen**. Die aktive
 | Meldungen | **Meldung an Einsatzleitung** | Übermittlungen, **Jetzt synchronisieren**, Wiederholen, Prüfen, Kopieren und bewusstes Verwerfen bleiben verfügbar. Synchronisieren ist als Nebenaktion gestaltet. |
 | Formular / notwendige Bestätigung | Speichern beziehungsweise die gewählte kritische Aktion | Schließen und optionale Angaben bleiben nachgeordnet. Keine zusätzlichen normalen Bestätigungsdialoge. |
 
-**Weitere Funktionen** im Kopf enthält Gesamtansicht, vorhandene Einheitenwechsel und Bedienhinweise. Bei GK/QR stehen dort die berechtigten Zugangsaktionen, insbesondere Abmelden und die optionale Mobilnummer-Bestätigung. Ein Übungs-/Simulationshinweis bleibt sichtbar und wird nicht in dieses Menü verlagert.
+**Weitere Funktionen** im Kopf erscheint nur, wenn es Inhalt gibt (Einheitenwechsel, Abmelden, Mobilnummer). Bei GK/QR stehen dort die berechtigten Zugangsaktionen, insbesondere Abmelden und die optionale Mobilnummer-Bestätigung. Ein Übungs-/Simulationshinweis bleibt sichtbar und wird nicht in dieses Menü verlagert.
 
 ## Orientierung und Gefahren
 
