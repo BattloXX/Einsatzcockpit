@@ -86,12 +86,21 @@ async def test_follower_takes_over_once_and_keeps_loop_metrics(tmp_path, monkeyp
         first.release()
         await asyncio.wait_for(success.wait(), timeout=2)
         assert calls == [1, 1]
-        second.write_heartbeat()
         from app.models.worker_runtime import WorkerRuntime
         from app.services.sms_outbox import database
-        with database() as db:
-            row = db.get(WorkerRuntime, "test-second")
-            assert row.is_leader and row.loops["proof"]["last_success_at"]
+        # success wird gesetzt, sobald der zweite Runtime-Start loops() ruft; die erste
+        # Iteration des Takeover-Loops kann unter Last spaeter fertig werden. Daher
+        # bis zu 2 s auf die erste gemessene erfolgreiche Iteration warten.
+        deadline = asyncio.get_running_loop().time() + 2
+        while True:
+            second.write_heartbeat()
+            with database() as db:
+                row = db.get(WorkerRuntime, "test-second")
+                if row is not None and (row.loops or {}).get("proof", {}).get("last_success_at"):
+                    break
+            assert asyncio.get_running_loop().time() < deadline, "keine erfolgreiche Iteration gemessen"
+            await asyncio.sleep(.02)
+        assert row.is_leader
     finally:
         await first.stop_tasks()
         await second.stop_tasks()
