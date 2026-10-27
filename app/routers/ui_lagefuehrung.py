@@ -467,6 +467,7 @@ def lagefuehrung_objekte(
                 "lng": k.lng,
                 "geometry": geometry,
                 "label": k.label,
+                "rotation": k.rotation % 360,
             })
         out.append({
             "objekt_id": o.id,

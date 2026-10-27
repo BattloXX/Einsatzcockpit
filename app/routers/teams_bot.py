@@ -144,6 +144,7 @@ def alarm_objekt(token: str, db: Session = Depends(get_db)):
                 "lng": k.lng,
                 "geometry": parse_karten_geometry(k.geometry_json),
                 "label": k.label,
+                "rotation": k.rotation % 360,
             }
             for k in verknuepfung.objekt.karten_objekte
         ],

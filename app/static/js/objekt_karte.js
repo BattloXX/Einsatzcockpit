@@ -53,7 +53,7 @@
   }
   window.ladeObjektSymbole = ladeObjektSymbole;
 
-  function objektSymbolHtml(typ, label) {
+  function objektSymbolHtml(typ, label, rotation) {
     // Unbekannte Typen (z. B. aus EUS-Import): Typ-Kuerzel statt "?" anzeigen
     var s = SYMBOLE[typ] || { text: String(typ || "?").substring(0, 4).toUpperCase(), stil: "box" };
     var inner;
@@ -74,6 +74,9 @@
     } else {
       inner = '<div class="oks oks--box">' + s.text + "</div>";
     }
+    // Eigener innerer Wrapper: Leaflets Positions-Transform bleibt unberuehrt.
+    var winkel = ((Number(rotation) || 0) % 360 + 360) % 360;
+    inner = '<div style="transform: rotate(' + winkel + 'deg)">' + inner + "</div>";
     if (label) {
       inner += '<div class="oks__label">' + label.replace(/</g, "&lt;") + "</div>";
     }
@@ -95,9 +98,9 @@
     });
   }
 
-  function symbolIcon(typ, label) {
+  function symbolIcon(typ, label, rotation) {
     return L.divIcon({
-      html: objektSymbolHtml(typ, label),
+      html: objektSymbolHtml(typ, label, rotation),
       className: "oks-divicon",
       iconSize: null,
       iconAnchor: [16, 16]
@@ -136,8 +139,17 @@
     }
 
     function popupHtml(e) {
-      var html = "<strong>" + (e.label || e.typ) + "</strong>";
+      var html = "<strong>" + (e.label || e.typ).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</strong>";
       if (opts.editierbar) {
+        if (!e.geometry || e.geometry.type === "Point") {
+          html += '<div>Drehung: <span data-winkel>' + (e.rotation || 0) + '</span>°</div>' +
+            '<div><button type="button" class="btn btn--xs" data-drehung="-15">-15°</button> ' +
+            '<button type="button" class="btn btn--xs" data-drehung="15">+15°</button> ' +
+            '<button type="button" class="btn btn--xs" data-drehung="90">+90°</button> ' +
+            '<button type="button" class="btn btn--xs" data-reset>Zurücksetzen</button></div>' +
+            '<input type="range" min="0" max="359" step="1" aria-label="Drehwinkel" value="' +
+            (e.rotation || 0) + '" data-drehwinkel>';
+        }
         html += '<br><button type="button" class="btn btn--danger btn--xs" ' +
           'onclick="window._oksDelete(' + e.id + ')">Entfernen</button>';
       }
@@ -153,9 +165,12 @@
           style: { color: "#d42225", weight: 3, fillOpacity: 0.12 }
         });
         if (opts.editierbar) {
-          layer.on("pm:edit", function (ev) {
-            var gj = ev.layer.toGeoJSON();
-            apiPost("/objekte/" + e.id, { geometry: gj.geometry }).catch(function () {});
+          layer.eachLayer(function (geometrieLayer) {
+            geometrieLayer.on("pm:edit pm:rotateend", function () {
+              var gj = geometrieLayer.toGeoJSON();
+              apiPost("/objekte/" + e.id, { geometry: gj.geometry })
+                .catch(function () { alert("Geometrie speichern fehlgeschlagen"); });
+            });
           });
         }
       } else {
@@ -166,7 +181,8 @@
         var lat = punktGeometrie ? e.geometry.coordinates[1] : e.lat;
         var lng = punktGeometrie ? e.geometry.coordinates[0] : e.lng;
         layer = L.marker([lat, lng], {
-          icon: symbolIcon(e.typ, e.label),
+          icon: symbolIcon(e.typ, e.label, e.rotation),
+          pmIgnore: true,
           draggable: !!opts.editierbar
         });
         if (opts.editierbar) {
@@ -179,7 +195,41 @@
           });
         }
       }
-      layer.bindPopup(popupHtml(e));
+      layer.bindPopup(function () { return popupHtml(e); });
+      if (opts.editierbar && (!e.geometry || punktGeometrie)) {
+        layer.on("popupopen", function (ev) {
+          var popup = ev.popup.getElement();
+          var slider = popup.querySelector("[data-drehwinkel]");
+          var anzeige = popup.querySelector("[data-winkel]");
+          var controls = popup.querySelectorAll("button, input");
+          function vorschau(winkel) {
+            winkel = (winkel % 360 + 360) % 360;
+            layer.setIcon(symbolIcon(e.typ, e.label, winkel));
+            anzeige.textContent = winkel;
+            slider.value = winkel;
+            return winkel;
+          }
+          function speichern(winkel) {
+            winkel = vorschau(winkel);
+            controls.forEach(function (control) { control.disabled = true; });
+            apiPost("/objekte/" + e.id, { rotation: winkel }).then(function (gespeichert) {
+              e.rotation = gespeichert.rotation;
+              vorschau(e.rotation);
+            }).catch(function () {
+              vorschau(e.rotation || 0);
+              alert("Drehung speichern fehlgeschlagen");
+            }).finally(function () {
+              controls.forEach(function (control) { control.disabled = false; });
+            });
+          }
+          popup.querySelectorAll("[data-drehung]").forEach(function (button) {
+            button.onclick = function () { speichern((e.rotation || 0) + Number(button.dataset.drehung)); };
+          });
+          popup.querySelector("[data-reset]").onclick = function () { speichern(0); };
+          slider.oninput = function () { vorschau(Number(slider.value)); };
+          slider.onchange = function () { speichern(Number(slider.value)); };
+        });
+      }
       layer.addTo(karte);
       layerById[e.id] = layer;
     }
@@ -266,7 +316,7 @@
         dragMode: false,
         cutPolygon: false,
         removalMode: false,
-        rotateMode: false
+        rotateMode: true
       });
       karte.on("pm:create", function (ev) {
         var gj = ev.layer.toGeoJSON();

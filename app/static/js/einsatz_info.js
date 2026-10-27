@@ -242,7 +242,7 @@
           var lng = punkt ? e.geometry.coordinates[0] : e.lng;
           if (lat == null || lng == null) { return; }
           var html = (typeof window.objektSymbolHtml === "function")
-            ? window.objektSymbolHtml(e.typ, e.label)
+            ? window.objektSymbolHtml(e.typ, e.label, e.rotation)
             : '<div class="oks oks--box">' + (e.label || e.typ) + "</div>";
           L.marker([lat, lng], {
             icon: L.divIcon({ html: html, className: "oks-divicon", iconSize: null, iconAnchor: [16, 16] })

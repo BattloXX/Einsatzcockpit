@@ -480,33 +480,21 @@
     // gleiche Kurzsymbole/Stile wie objekt_karte.js, damit Einheiten das Symbol aus
     // der Objektverwaltung wiedererkennen. Punkte = Marker mit Kuerzel, Linien/
     // Flaechen (z. B. Zufahrten) = gestrichelte Geometrie mit Hover-Label.
-    var KARTENOBJEKT_TEXT = {
-      fsd: "FSD", schluesselbox: "BOX", bsp: "BSP", bmz: "BMZ", fbf: "FBF", dlk_stellplatz: "DLK",
-      objektfunk: "FUNK", sammelplatz: "SP", feuerloescher: "FL", hauptzugang: "➜", nebenzugang: "➜",
-      stiege: "ST", aufzug: "AZ", gefahr_ex: "EX", gefahr_gas: "GAS", gefahr_chemie: "CHE",
-      gefahr_strom: "kV", gefahr_pv: "PV", hydrant_ueberflur: "H", hydrant_unterflur: "UH"
-    };
-    var KARTENOBJEKT_STIL = {
-      fsd: "box", schluesselbox: "box", bsp: "box", bmz: "box", fbf: "box", dlk_stellplatz: "box",
-      objektfunk: "box", aufzug: "box", sammelplatz: "gruen", stiege: "gruen", feuerloescher: "rot",
-      hauptzugang: "pfeil", nebenzugang: "pfeil", gefahr_ex: "dreieck", gefahr_gas: "dreieck",
-      gefahr_chemie: "dreieck", gefahr_strom: "dreieck", gefahr_pv: "dreieck",
-      hydrant_ueberflur: "hydrant", hydrant_unterflur: "hydrant"
-    };
-    function kartenobjektIconHtml(k) {
-      var text = KARTENOBJEKT_TEXT[k.typ] || (k.typ || "?").slice(0, 3).toUpperCase();
-      var stil = KARTENOBJEKT_STIL[k.typ] || "box";
-      return '<div class="lft-kobj-icon lft-kobj-icon--' + stil + '">' + escapeHtml(text) + '</div>';
-    }
     function renderKartenobjekt(k) {
-      if (k.geometry) {
+      var punkt = k.geometry && k.geometry.type === "Point";
+      if (k.geometry && !punkt) {
         var geoLayer = L.geoJSON(k.geometry, { style: { color: "#2563eb", weight: 3, dashArray: "6 4", fillOpacity: 0.08 } });
         if (k.label) { geoLayer.bindTooltip(k.label, { sticky: true }); }
         geoLayer.addTo(layerObjekt);
         return;
       }
-      if (k.lat == null || k.lng == null) { return; }
-      var marker = L.marker([k.lat, k.lng], { icon: divIcon(kartenobjektIconHtml(k), [13, 13]) });
+      var lat = punkt ? k.geometry.coordinates[1] : k.lat;
+      var lng = punkt ? k.geometry.coordinates[0] : k.lng;
+      if (lat == null || lng == null) { return; }
+      var marker = L.marker([lat, lng], { icon: L.divIcon({
+        html: window.objektSymbolHtml(k.typ, null, k.rotation),
+        className: "oks-divicon", iconSize: null, iconAnchor: [16, 16]
+      }) });
       var label = k.label || k.typ_label;
       if (label) { marker.bindTooltip(label, { permanent: true, direction: "top", className: "lft-kobj-label" }); }
       marker.addTo(clusterObjektpunkte);
@@ -514,8 +502,8 @@
       objektKartenLayers.push(marker);
     }
     if (opts.objektEnabled) {
-      fetchJson(apiBase + "/objekte.json").then(function (liste) {
-        (liste || []).forEach(function (o) {
+      Promise.all([fetchJson(apiBase + "/objekte.json"), window.ladeObjektSymbole()]).then(function (daten) {
+        (daten[0] || []).forEach(function (o) {
           L.marker([o.lat, o.lng], { icon: objektIcon(o) })
             .addTo(layerObjekt)
             .bindPopup(objektPopupHtml(o));
