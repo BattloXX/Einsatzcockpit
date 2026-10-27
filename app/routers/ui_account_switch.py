@@ -42,11 +42,11 @@ def _wechsel_response(
     fcm_token: str = "",
     status_code: int = 303,
 ) -> RedirectResponse:
-    updated = add_account(accounts, user.id, remember)
+    updated = add_account(accounts, user.id, remember, session_epoch=user.session_epoch)
     response = RedirectResponse("/", status_code=status_code)
     _set_session_cookie(
         response,
-        sign_session(user.id, remember=remember),
+        sign_session(user.id, remember=remember, session_epoch=user.session_epoch),
         max_age=settings.SESSION_REMEMBER_MAX_AGE_SECONDS if remember else None,
     )
     set_accounts_cookie(response, updated)
@@ -80,7 +80,7 @@ def benutzer_wechseln(
     if entry is None:
         return RedirectResponse("/", status_code=303)
     user = db.get(User, user_id)
-    if not user or not user.active or user.is_device or _ist_gesperrt(user):
+    if not user or not user.active or user.is_device or _ist_gesperrt(user) or user.session_epoch != entry.get("e", 0):
         return RedirectResponse("/", status_code=303)
     # Ein bereits ueber Entra angemeldetes Konto bleibt wechselbar. enforce_sso
     # verbietet den lokalen Passwort-Login, nicht den Wechsel mit diesem signierten Nachweis.
@@ -123,7 +123,10 @@ def logout_oder_wechseln(request: Request, db: Session) -> RedirectResponse:
     users_by_id = {}
     for account in accounts:
         account_user = db.get(User, account["u"])
-        if account_user and account_user.active and not account_user.is_device and not _ist_gesperrt(account_user):
+        if (
+            account_user and account_user.active and not account_user.is_device
+            and not _ist_gesperrt(account_user) and account_user.session_epoch == account.get("e", 0)
+        ):
             gueltige_accounts.append(account)
             users_by_id[account_user.id] = account_user
     if gueltige_accounts:

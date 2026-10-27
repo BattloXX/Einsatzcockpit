@@ -26,7 +26,13 @@ from starlette.middleware.authentication import AuthenticationMiddleware
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
 from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
-from app.core.security import pruefe_geraete_session, unsign_native_link_token, unsign_session
+from app.core.security import (
+    pruefe_geraete_session,
+    session_security,
+    unsign_native_link_token,
+    unsign_session,
+    valid_mfa,
+)
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal, engine
 from app.mcp import download_router as mcp_download_router
@@ -104,6 +110,7 @@ from app.routers import (
     ui_map_tiles,
     ui_media,
     ui_medienverwaltung,
+    ui_mfa,
     ui_nachschlagewerke,
     ui_objekt,
     ui_objekt_dokumente,
@@ -559,6 +566,9 @@ async def session_middleware(request: Request, call_next):
     request.state.is_device = False
     request.state.device_token_id = None
     request.state.accounts = []
+    request.state.mfa_at = None
+    _session_security = session_security(token) if token else None
+    _session_epoch, _mfa_at, _started_at = _session_security or (0, None, 0)
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
     _refresh_remember: bool = False  # "Login merken" – längeres, gleitendes Fenster
 
@@ -584,6 +594,8 @@ async def session_middleware(request: Request, call_next):
             set_tenant_context(db, None)
             try:
                 user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
+                if user and not is_qr and not is_device and user.session_epoch != _session_epoch:
+                    user = None
                 if user and is_qr:
                     if qr_lage_id is not None:
                         # Lage QR session: valid while Lage is active and token not revoked.
@@ -670,6 +682,8 @@ async def session_middleware(request: Request, call_next):
     # normale Cookie-Session nichts geliefert hat, und authentifiziert
     # ausschliesslich DIESEN einen Request - keine generelle Session/Cookie.
     if request.state.user is None:
+        # Ein verworfenes Cookie darf dem separaten Handoff keine MFA vererben.
+        _mfa_at = None
         nt = request.query_params.get("nt")
         if nt:
             nt_result = unsign_native_link_token(nt)
@@ -690,6 +704,39 @@ async def session_middleware(request: Request, call_next):
                 finally:
                     db.close()
 
+    # Zentral fuer Passwort, SSO, Kontowechsel, PIN und Native-Link-Handoff.
+    # Ein MFA-Marker gilt fuer die urspruengliche Session, nicht den Sliding-Refresh.
+    _gate_user = request.state.user
+    if _gate_user and _gate_user.is_system_admin and not request.state.is_device and not (
+        request.state.qr_incident_id is not None or request.state.qr_lage_id is not None
+    ):
+        from app.services.totp_service import enabled as _mfa_enabled
+
+        if valid_mfa(_mfa_at, _started_at):
+            request.state.mfa_at = _mfa_at
+        _mfa_db = SessionLocal()
+        try:
+            _requires_mfa = _mfa_enabled(_mfa_db) and request.state.mfa_at is None
+        finally:
+            _mfa_db.close()
+        _mfa_exempt = (
+            _path.startswith(("/mfa/", "/sso/", "/pin-login/", "/health/"))
+            or _path in {
+                "/login", "/logout", "/logout/alle", "/pin-login", "/health",
+                "/geraet-login", "/geraet-login-pin", "/qr-login", "/qr-pin", "/qr-name",
+            }
+        )
+        if _requires_mfa and not _mfa_exempt:
+            reset_request_client_id(client_token)
+            if (
+                request.headers.get("HX-Request")
+                or "application/json" in request.headers.get("accept", "")
+                or _path.startswith("/api/")
+            ):
+                return JSONResponse({"code": "mfa_required", "detail": "mfa_required"}, status_code=403,
+                                    headers={"HX-Redirect": "/mfa/verify"})
+            return RedirectResponse("/mfa/verify", status_code=303)
+
     _bereinigte_accounts = []
     if (
         request.state.user is not None
@@ -708,7 +755,10 @@ async def session_middleware(request: Request, call_next):
                 now = datetime.now(UTC)
                 for account in cookie_accounts:
                     account_user = users_by_id.get(account["u"])
-                    if not account_user or account_user.is_device:
+                    if (
+                        not account_user or account_user.is_device
+                        or account_user.session_epoch != account.get("e", 0)
+                    ):
                         continue
                     locked_until = account_user.locked_until
                     if locked_until and locked_until.tzinfo is None:
@@ -735,6 +785,7 @@ async def session_middleware(request: Request, call_next):
                 _bereinigte_accounts,
                 _refresh_user_id,
                 _refresh_remember,
+                session_epoch=_session_epoch,
             )
             if not any(account["is_active_account"] for account in request.state.accounts):
                 active_user = request.state.user
@@ -759,6 +810,7 @@ async def session_middleware(request: Request, call_next):
     if (
         _refresh_user_id is not None
         and request.state.user is not None
+        and not request.url.path.startswith(("/mfa/", "/sso/", "/pin-login"))
         and request.url.path not in {"/logout", "/logout/alle", "/login", "/benutzer/wechseln"}
     ):
         from app.core.security import sign_session as _sign
@@ -768,7 +820,8 @@ async def session_middleware(request: Request, call_next):
         )
         response.set_cookie(
             "session",
-            _sign(_refresh_user_id, remember=_refresh_remember),
+            _sign(_refresh_user_id, remember=_refresh_remember, session_epoch=_session_epoch,
+                  mfa_at=_mfa_at, session_started_at=_started_at),
             httponly=True,
             secure=settings.COOKIE_SECURE,
             samesite="lax",
@@ -883,6 +936,7 @@ app.include_router(public_mailing_tracking.router)
 app.include_router(mailing_webhook.router)
 app.include_router(mail_inbound_webhook.router)
 app.include_router(ui_password_reset.router)
+app.include_router(ui_mfa.router)
 app.include_router(ui_pin_login.router)
 app.include_router(ui_account_switch.router)
 app.include_router(api_v1.router)

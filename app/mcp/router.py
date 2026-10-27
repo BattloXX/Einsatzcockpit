@@ -59,6 +59,11 @@ def anmelden_submit(
     user, error = authenticate_user(db, username, password, request.client.host if request.client else None)
     if not user or not user.org_id or user.is_device:
         return _anmeldeseite(request, row, vorgang, error or "Dieser Zugang darf MCP nicht verwenden.", 401)
+    from app.services.totp_service import enabled as mfa_enabled
+
+    if user.is_system_admin and mfa_enabled(db):
+        return _anmeldeseite(request, row, vorgang,
+                            "Systemadministratoren mit aktiver 2FA koennen MCP noch nicht verwenden.", 403)
     from app.mcp.context import mcp_effective_enabled
 
     if not mcp_effective_enabled(user.org_id, db):

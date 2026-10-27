@@ -41,6 +41,33 @@
   </div>
   {% endif %}
 
+  <section class="card mb-4">
+    <div class="card-header"><h2>Zwei-Faktor-Authentifizierung</h2></div>
+    <div class="card-body">
+      <p>Standard: AUS. Status: <strong>{{ 'Aktiv' if settings.get('admin_2fa_enabled') == 'true' else 'Inaktiv' }}</strong>.</p>
+      <p>Vor dem Aktivieren muessen alle aktiven Systemadministratoren die Einrichtung bestaetigen.</p>
+      <p><a href="/mfa/einrichten">Eigene 2FA einrichten</a> | <a href="/mfa/verify">2FA frisch bestaetigen</a></p>
+      <ul>{% for admin, confirmed in mfa_admins %}<li>{{ admin.display_name }}{% if not admin.active %} (inaktiv){% endif %}: {{ 'Eingerichtet' if confirmed else 'Nicht eingerichtet' }}
+        {% if admin.id != user.id %}
+        <form method="post" action="/mfa/zuruecksetzen" style="display:inline">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="user_id" value="{{ admin.id }}">
+          <button class="btn btn--secondary" type="submit">2FA zuruecksetzen</button>
+        </form>
+        {% endif %}
+      </li>{% endfor %}</ul>
+      <form method="post" action="/mfa/global" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <select name="enabled" class="form-input" aria-label="2FA systemweit">
+          <option value="false">Inaktiv</option>
+          <option value="true" {% if settings.get('admin_2fa_enabled') == 'true' %}selected{% endif %}>Aktiv</option>
+        </select>
+        <button class="btn btn--primary" type="submit">2FA-Schalter speichern</button>
+      </form>
+      <p>Deaktivieren braucht eine hoechstens 5 Minuten alte MFA-Pruefung und meldet alle Systemadministratoren ab.</p>
+    </div>
+  </section>
+
   <form method="post" action="/admin/system-einstellungen">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
@@ -446,6 +473,7 @@
 
     {# ── Benutzerdefinierte Einstellungen ─────────────────────────────── #}
     {% set known_keys_list = [
+      'admin_2fa_enabled',
       'smtp_host','smtp_port','smtp_user','smtp_password','smtp_from','smtp_starttls','smtp_timeout',
       'resend_enabled','resend_api_key','resend_from_domain','resend_inbound_domain','resend_inbound_webhook_secret',
       'vapid_public_key','vapid_private_key','vapid_email','enable_push',

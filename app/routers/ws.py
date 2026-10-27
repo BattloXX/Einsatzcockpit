@@ -20,7 +20,7 @@ import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.permissions import can_access_incident, has_role
-from app.core.security import hash_api_key, pruefe_geraete_session, unsign_session
+from app.core.security import hash_api_key, pruefe_geraete_session, session_security, unsign_session, valid_mfa
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
@@ -122,6 +122,14 @@ def _resolve_user(websocket: WebSocket) -> User | None:
             db, user_id, is_device, device_token_id,
         ):
             return None
+        if user is not None and not is_device and not _is_qr:
+            from app.services.totp_service import enabled as mfa_enabled
+
+            epoch, mfa_at, started_at = session_security(token) or (0, None, 0)
+            if user.session_epoch != epoch or (
+                user.is_system_admin and mfa_enabled(db) and not valid_mfa(mfa_at, started_at)
+            ):
+                return None
         if user is not None:
             # Lazy-Loaded Beziehungen sicherstellen, bevor die Session zugeht
             _ = [r.code for r in user.roles]
