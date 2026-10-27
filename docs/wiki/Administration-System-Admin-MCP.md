@@ -83,7 +83,7 @@ keine neu gestarteten Pruefungen. W&T wird nur anhand dieser Datenbasis beurteil
 
 ## Grenzen
 
-Keine allgemeinen Fachdaten-Schreibwerkzeuge oder Codeanalyse. Diagnose-Jobs und eng
+Keine allgemeinen Fachdaten-Schreibwerkzeuge. Lokale Codekorrelation und CI-Abgleich sind lesend. Diagnose-Jobs und eng
 begrenzte technische Reparaturen mit ihren Grenzen stehen unten.
 Logs stammen ausschliesslich vom angesprochenen Worker und werden nur aggregiert
 angezeigt. Ein Thread mit einer laufenden DB-Abfrage kann nach dem Antwortzeitlimit
@@ -95,8 +95,9 @@ Fuer diese Phase sind keine serverseitigen SSO-Logins vorgesehen.
 
 Zusaetzlich zu den sieben unmittelbaren Lesewerkzeugen gibt es vier Werkzeuge
 fuer persistierte Diagnoseergebnisse. Ausschliesslich der Start legt einen
-Diagnoseauftrag an; die Checks veraendern keine Fachdaten. Es gibt noch keine
-Diagnose-UI oder automatische Tagesdiagnose. Reparaturaktionen stehen separat unten.
+Diagnoseauftrag an; die Checks veraendern keine Fachdaten. Das [Systemdiagnose-Cockpit](Administration-Systemdiagnose) bietet dieselben
+Pruefungen als Weboberflaeche und eine optionale Tagesdiagnose. Reparaturaktionen
+stehen separat unten.
 
 | Werkzeug | Parameter und Verhalten |
 | --- | --- |
@@ -394,3 +395,23 @@ Gesamtkontingent unkoordiniert umgehen kann. Lokale Tools bleiben verwendbar.
   erzeugt keinen Befund, sondern einen unvollstaendigen Check mit
   `unbekannt`-Hinweis; vorhandene Befunde werden dadurch nicht als behoben markiert.
   Netzwerkzugriff findet im bestehenden hart begrenzten Check-Prozess statt.
+
+
+## Systemdiagnose-Cockpit und Tagesdiagnose (Phase 6)
+
+Die [Systemdiagnose](Administration-Systemdiagnose) unter `/admin/systemdiagnose`
+verwendet dieselbe Registry, denselben Runner und dieselben Code-/GitHub-Dienste.
+Web und MCP teilen sich den aktiven Lauf-Slot und das Kontingent von sechs Starts
+je Stunde/Benutzer. Die Webseite ist fuer persoenliche Systemadministratoren
+auch ohne MCP-Freigabe erreichbar; das zentrale MFA-Gate bleibt wirksam.
+
+Die Tagesdiagnose ist standardmaessig AUS. Migration 0329 ergaenzt globale
+Tages-Slots und Meldungsclaims; beide Tabellen sind vom Org-Export ausgeschlossen.
+Ein Leader plant hoechstens einen Lauf je lokalem Systemtag, mit DB-Schutz ueber
+alle Hosts. Einsatzbetrieb verschiebt den Lauf bis zu sechs Stunden und begrenzt
+ihn danach auf leichte Checks. Bei konfigurierten Empfaengern werden neue
+schwerwiegende Befunde nach Laufende in einer deduplizierten Systemmail gemeldet.
+Es werden keine GitHub-Schreibzugriffe eingefuehrt.
+
+Die gesamte Einschaltreihenfolge, Rechte-Matrix und Recovery stehen im
+[System-Admin-Ueberblick](Administration-System-Admin-Ueberblick).

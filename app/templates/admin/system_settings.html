@@ -41,6 +41,8 @@
   </div>
   {% endif %}
 
+  {% include "admin/systemdiagnose/_settings.html" %}
+
   <section class="card mb-4">
     <div class="card-header"><h2>Zwei-Faktor-Authentifizierung</h2></div>
     <div class="card-body">
@@ -570,7 +572,7 @@
     ] %}
     {% set ns = namespace(has_custom=false) %}
     {% for k, v in settings.items() %}
-      {% if k not in known_keys_list %}{% set ns.has_custom = true %}{% endif %}
+      {% if k not in known_keys_list and not k.lower().startswith('diag_schedule_') %}{% set ns.has_custom = true %}{% endif %}
     {% endfor %}
     {% if ns.has_custom %}
     <section class="card mb-4">
@@ -582,7 +584,7 @@
           <thead><tr><th style="width:230px">Schlüssel</th><th>Wert</th><th>Typ</th></tr></thead>
           <tbody>
             {% for k, v in settings.items() %}
-            {% if k not in known_keys_list %}
+            {% if k not in known_keys_list and not k.lower().startswith('diag_schedule_') %}
             <tr>
               <td data-label="Schlüssel"><code>{{ k }}</code></td>
               <td data-label="Wert"><input type="text" name="k_{{ k }}" class="form-input form-input--sm" value="{{ v or '' }}" style="width:260px"></td>

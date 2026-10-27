@@ -45,10 +45,11 @@ def gates(db: Session) -> None:
         raise ValueError("Reparaturen deaktiviert")
 
 
-def live_user(db: Session, user_id: int, epoch: int) -> User:
+def live_user(db: Session, user_id: int, epoch: int, *, web: bool = False) -> User:
     db.expire_all()  # Rollen und Schalter nicht aus einem früheren Request übernehmen.
     user = db.query(User).execution_options(include_all_tenants=True).filter(User.id == user_id).first()
-    if not allowed(db, user) or user is None or user.session_epoch != epoch:
+    permitted = bool(user and user.active and user.is_system_admin and not user.is_device) if web else allowed(db, user)
+    if not permitted or user is None or user.session_epoch != epoch:
         raise ValueError("Berechtigung widerrufen")
     gates(db)
     return user
@@ -235,12 +236,13 @@ def execute(
     bestaetigt: bool = False,
     approval_token: str | None = None,
     authorize: Callable[[], object] | None = None,
+    *, web: bool = False,
 ) -> dict:
     requested_at = utcnow()
     if (db.get_bind().dialect.name in ("mysql", "mariadb")
             and db.connection().get_isolation_level() != "READ COMMITTED"):
         raise ValueError("Aktuelle Transaktionssicht fuer Reparaturen erforderlich")
-    live_user(db, user_id, epoch)
+    live_user(db, user_id, epoch, web=web)
     if authorize:
         authorize()
     run = get_run(db, run_id, user_id)
@@ -283,7 +285,7 @@ def execute(
             )
             .values(status="laufend")
         )
-        live_user(db, user_id, epoch)
+        live_user(db, user_id, epoch, web=web)
         if authorize:
             authorize()
         if requirement(db, action) != "automatisch" and bestaetigt is not True:

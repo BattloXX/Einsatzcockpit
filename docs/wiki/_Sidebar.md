@@ -33,6 +33,12 @@
 - [Überblick](Anwender-Grosschadenslage)
 - [Einheitenansicht](Anwender-GSL-Einheitenansicht)
 
+**Systemadministration**
+- [Überblick und Inbetriebnahme](Administration-System-Admin-Ueberblick)
+- [Systemdiagnose](Administration-Systemdiagnose)
+- [System-Admin-MCP](Administration-System-Admin-MCP)
+- [Zwei-Faktor-Authentifizierung](Administration-Zwei-Faktor-Authentifizierung)
+
 **Mehr**
 - [Administration](Home#5-administration)
 - [Installation & Betrieb](Home#6-installation-und-betrieb)

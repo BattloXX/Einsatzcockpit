@@ -67,10 +67,23 @@ widerruft dessen Sessions. Nach neuer Anmeldung kann er sich neu einrichten.
 Beide Aktionen schreiben Audit-Eintraege mit dem Hinweis auf die lokale Ausfuehrung.
 Es gibt dafuer keinen HTTP-Endpunkt und keinen Mail-Bypass.
 
-## MCP in dieser Phase
+## MCP und Systemdiagnose
 
-Diese Phase fuehrt keinen Admin-MCP ein. Bei aktiver 2FA wird der bestehende
+Der separate [System-Admin-MCP](Administration-System-Admin-MCP) besitzt einen
+eigenen OAuth-Login mit zweitem Faktor und expliziten Freigaben. Bei aktiver 2FA wird der bestehende
 Org-MCP-Login fuer Systemadministratoren verweigert: Dieser OAuth-Flow hat noch
 keinen zweiten Faktor. Normale Organisationsbenutzer bleiben unveraendert.
 Bereits ausgestellte Org-MCP-Bearer-Tokens werden durch den Schalter nicht widerrufen;
 ihre bestehenden Org-Berechtigungen und Laufzeiten gelten weiter.
+
+
+Die [Systemdiagnose-Webseite](Administration-Systemdiagnose) verwendet das zentrale
+MFA-Gate und erlaubt ausschliesslich persoenliche Systemadministratoren. Fuer
+Reparaturen muessen 2FA und Reparaturschalter aktiv sein. Eine kontrollierte
+Ausfuehrung erfordert eine hoechstens fuenf Minuten alte MFA; HIGH verlangt
+zusaetzlich einen neu geprueften Faktor auf der vorhandenen Freigabeseite. Die
+Freigabe ist einmalig, zehn Minuten gueltig und an die konkrete Simulation gebunden.
+Ohne aktive 2FA sind Reparaturen auch bei gesetztem Reparaturschalter gesperrt.
+
+Die empfohlene Inbetriebnahme und Notfallverfahren stehen im
+[System-Admin-Ueberblick](Administration-System-Admin-Ueberblick).

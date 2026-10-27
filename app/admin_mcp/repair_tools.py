@@ -24,7 +24,9 @@ FINDING_ACTIONS = {
 }
 
 
-def collect_repair(db, name: str, user_id: int, epoch: int, correlation: str, authorize=None, **args) -> dict:
+def collect_repair(
+    db, name: str, user_id: int, epoch: int, correlation: str, authorize=None, web=False, **args
+) -> dict:
     run_id = args.get("run_id")
     try:
         gates(db)
@@ -49,7 +51,7 @@ def collect_repair(db, name: str, user_id: int, epoch: int, correlation: str, au
                     diag_finding_id=finding.id,
                     scope={},
                     angefordert_von=user_id,
-                    korrelations_id=str(uuid4()),
+                    korrelations_id=("web:" + uuid4().hex) if web else str(uuid4()),
                 )
                 db.add(row)
                 db.flush()
@@ -110,6 +112,7 @@ def collect_repair(db, name: str, user_id: int, epoch: int, correlation: str, au
                 args.get("bestaetigt", False),
                 args.get("approval_token"),
                 authorize,
+                web=web,
             )
             return {"status": "ok", "evidence": answer}
         run = get_run(db, run_id, user_id)

@@ -10,6 +10,7 @@ from app.models.atemschutz_pruefung import (
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
 from app.models.citizen_verification import CitizenReportVerification
+from app.models.diag_schedule import DiagNotification, DiagScheduleSlot
 from app.models.diagnose import DiagFinding, DiagRun
 from app.models.dibos import OrgDibosConfig
 from app.models.dienst_monitor import (  # noqa: F401 -- registriert ORM-Modelle
@@ -519,6 +520,8 @@ __all__ = [
     "AdminMCPOAuthClient",
     "AdminMCPOAuthCode",
     "AdminMCPOAuthToken",
+    "DiagNotification",
+    "DiagScheduleSlot",
     "DiagRun",
     "DiagFinding",
     "MCPOAuthClient",
