@@ -37,6 +37,15 @@ DIAG_TOOLS = {
 }
 ADMIN_TOOLS.update(DIAG_TOOLS)
 
+CODE_TOOLS = {
+    "admin_code_analyse": AdminTool("Lokale Fehlerstellen und verantwortliche Module lesend korrelieren.", "code"),
+    "admin_ci_status": AdminTool(
+        "Deploy, main, CI-Jobs, Docker-Build und zugehoerige PR lesend vergleichen.", "deploy"),
+    "admin_codex_auftrag_erstellen": AdminTool(
+        "Ausschliesslich einen maskierten Markdown-Auftrag als Text erzeugen.", "code"),
+}
+ADMIN_TOOLS.update(CODE_TOOLS)
+
 
 def collect(db, name: str, **arguments) -> dict:
     if name == "admin_system_uebersicht":

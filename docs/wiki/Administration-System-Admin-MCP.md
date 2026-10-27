@@ -1,7 +1,8 @@
 # System-Admin-MCP
 
-Der System-Admin-MCP stellt sieben direkte Lesewerkzeuge, vier Werkzeuge fuer Diagnose-Laeufe
-und optional fuenf kontrollierte Reparaturwerkzeuge bereit.
+Der System-Admin-MCP stellt sieben direkte Diagnose-Lesewerkzeuge, drei Werkzeuge
+fuer Code-/CI-Korrelation, vier Werkzeuge fuer Diagnose-Laeufe und optional fuenf
+kontrollierte Reparaturwerkzeuge bereit.
 Er ist vom organisationsgebundenen MCP getrennt und funktioniert auch fuer
 Systemadministratoren ohne Organisation. Einsaetze, Kontakte, Mitglieder, Objekte,
 Jobinhalte und Zugangsdaten werden nicht ausgegeben.
@@ -294,3 +295,82 @@ den Lauf betrieblich abschliesst. Dafuer existiert kein generisches MCP-Schreibw
 Bei Antwortzeitlimit kann der begrenzte Ausfuehrungsthread weiterlaufen; deshalb
 Status mit demselben Key abfragen/wiederholen und keinen Ersatzlauf mit neuem Key
 starten. Es gibt keinen automatischen Reparatur-Loop und keine neue Hintergrundmutation.
+
+## Codekorrelation und CI (Phase 5)
+
+Drei weitere Lesewerkzeuge verwenden dieselbe Sichtbarkeit, Live-Rechtepruefung,
+Auditierung, 30 Aufrufe/Minute je Benutzer, Zeitgrenze und 64-KiB-Antwortgrenze.
+Sie funktionieren auch bei ausgeschalteter Reparatur und ohne aktive 2FA.
+
+| Werkzeug | Verwendung und Ausgabe |
+| --- | --- |
+| `admin_code_analyse` | `quelle=logs` (Default) oder `befund` mit `finding_key`; `level` optional (Default ERROR), `limit` 1–100. Gruppiert nach Datei, Funktion und Exception-Typ, mit Anzahl, erstem/letztem Auftreten, verantwortlichen Modulen, Deploy-SHA und Version. Bekannte Aenderungen seit Deploy sind markiert. |
+| `admin_ci_status` | Optional `sha`; sonst Deploy-SHA, bei unbekanntem Deploy main-HEAD. Zeigt main-Abstand in beiden Richtungen, Commit-Anzahl, maximal 50 Dateinamen/Status, CI-/Docker-Build-Laeufe und zugehoerige PR-Nummern/URLs. CI-Jobs: Lint (ruff), Type-Check (mypy), Tests (pytest), Migration (MariaDB), Board ohne Full-Reload (Playwright), ausserdem JS-Tests (Outbox). |
+| `admin_codex_auftrag_erstellen` | Genau `finding_key` oder `fehlerstelle={"datei":"app/services/...py","funktion":"...","exception_typ":"ValueError"}` aus der lokalen Analyse. Erzeugt ausschliesslich Markdown-Text mit Evidenz, Zeitraum, Anzahl, Deploy, main-Abstand, Hypothese, Testidee und Abnahmekriterien. Reproduktion bleibt ohne Beleg `unbekannt`. Optionaler `titel` erlaubt nur feste technische Woerter; andere Woerter werden maskiert. |
+
+Der Auftrag enthaelt immer: **Aenderungen nur ueber Branch, Tests und Pull Request,
+nie direkt im Produktionscontainer.** Es werden keine Dateien, Issues, PRs oder
+Reparaturlaeufe angelegt. Nur das vorhandene Audit und die internen
+Rate-Limit-Zaehler in Redis werden geschrieben.
+
+### GitHub-Token einrichten
+
+1. In GitHub einen **fine-grained Personal Access Token** fuer ausschliesslich
+   `BattloXX/Einsatzcockpit` erzeugen. Repository permissions:
+   **Contents = Read**, **Actions = Read**, **Pull requests = Read**;
+   Metadata bleibt das von GitHub vorausgesetzte Leserecht. Keine Schreibrechte.
+2. Ablauf auf hoechstens **90 Tage** setzen und alle 90 Tage rotieren. Neues Token
+   eintragen, App neu starten, lesenden Abruf pruefen, altes Token widerrufen.
+3. In der privaten `docker.env` hinterlegen (Vorlage `deploy/docker.env.example`):
+
+   ```dotenv
+   GITHUB_READ_TOKEN=
+   GITHUB_REPOSITORY=BattloXX/Einsatzcockpit
+   GITHUB_API_TIMEOUT_S=8.0
+   ```
+
+   Das echte Token ausschliesslich lokal nach `=` eintragen, niemals committen,
+   in einen MCP-Auftrag kopieren oder als Toolargument uebergeben.
+   Docker Compose dieses Repos laedt `.env` ueber `env_file`: bei Verwendung einer
+   separaten `docker.env` deren Eintraege auch als Container-Umgebung einbinden.
+   `--env-file` allein ersetzt Compose-Interpolation, nicht dessen `env_file`.
+
+Ohne Token erfolgen unauthentifizierte GET-Anfragen fuer oeffentliche Daten mit
+niedrigem GitHub-Rate-Limit. GitHub-Ergebnisse melden `eingeschraenkt`; private
+Repos koennen `nicht_gefunden` liefern. 401/403/404/429, Timeout, Netzfehler und
+Redirects liefern feste, geheimnisfreie Codes. Lokale Analyse und Auftragstext
+bleiben moeglich. Kein automatischer Retry. Antworten sind pro Prozess fuer
+60 Sekunden zwischengespeichert (maximal 128 Eintraege, nach Repo/Token getrennt).
+Das gemeinsame GitHub-Budget betraegt **30 Netzwerkabrufe/Minute** in Redis;
+Jobs-Unterabfragen zaehlen mit. Ohne konfiguriertes/erreichbares Redis werden
+GitHub-Aufrufe geschlossen als `gedrosselt` abgelehnt, damit kein Prozess das
+Gesamtkontingent unkoordiniert umgehen kann. Lokale Tools bleiben verwendbar.
+
+### Sicherheitsmodell und Grenzen
+
+- Feste API-Adresse `https://api.github.com`, nur explizite GET-Endpunkte,
+  keine Redirects, keine konfigurierbaren Hosts/Proxies. Repo und SHA sind validiert.
+  Keine Contents-/Raw-Endpunkte; vom Compare-Endpunkt mitgelieferte Diff-Felder
+  werden verworfen. Keine lokalen Quelltexte werden an GitHub uebertragen.
+- Hoechstens 512 KiB pro API-Antwort; gemeinsames Zeitbudget von maximal 8 Sekunden
+  pro Client, zusaetzlich die bestehende harte Diagnose-Prozess-/MCP-Antwortfrist.
+  Bei vielen Laeufen/Dateien oder Zeitueberschreitung ist das Ergebnis begrenzt.
+  Ein positiver Dateitreffer gilt als geaendert; ein fehlender Treffer in einem
+  unvollstaendigen Vergleich bleibt unbekannt (`null`).
+- Nur existierende Python-Dateien unter dem lokalen `app/`-Baum; keine Traversals,
+  Windows-Pfade oder Symlinks. Absolute Stacktrace-Pfade werden nur fuer den
+  tatsaechlichen lokalen App-Baum akzeptiert. Funktionsnamen werden gegen den
+  lokalen Python-AST geprueft. Quelltext wird ausschliesslich lokal verarbeitet.
+- Keine freien Log-/Exception-Meldungen, Personen-/Einsatznamen, PR-Titel,
+  Commit-Meldungen oder Autoren. Stattdessen technische Stellen, Zeilennummern,
+  gepruefte eingebaute Exception-Typen (sonst `unbekannt`) und Zaehler. Befunde
+  werden ueber eine feste Check-zu-Modul-Tabelle zugeordnet; das ist eine
+  Zustaendigkeitshypothese und kein Beweis fuer eine fehlerhafte Datei.
+- Das GitHub-Token ist aus Settings-Repr ausgeschlossen. Exakte Tokenwerte werden
+  vor generischer Maskierung entfernt; Transportfehler und Antworten geben keine
+  fremden Fehlertexte aus. Audit erhaelt keine freien Eingaben oder Evidenz.
+- Der leichte Check `deploy.version` laeuft auch bei aktiven Einsaetzen. Unbekannte
+  Deploy-SHA und nachweislicher Rueckstand zu main erzeugen Warnungen. GitHub-Ausfall
+  erzeugt keinen Befund, sondern einen unvollstaendigen Check mit
+  `unbekannt`-Hinweis; vorhandene Befunde werden dadurch nicht als behoben markiert.
+  Netzwerkzugriff findet im bestehenden hart begrenzten Check-Prozess statt.

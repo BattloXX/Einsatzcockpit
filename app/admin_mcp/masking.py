@@ -14,6 +14,10 @@ _OPAQUE = re.compile(r"[A-Za-z0-9_+/=-]{24,}")
 
 
 def mask_text(value: str) -> str:
+    from app.config import settings
+
+    if settings.GITHUB_READ_TOKEN:
+        value = value.replace(settings.GITHUB_READ_TOKEN, "[MASKIERT]")
     for pattern in (_COOKIE, _SECRET, _EMAIL, _IP, _PHONE, _OPAQUE):
         value = pattern.sub("[MASKIERT]", value)
     return value
