@@ -11,6 +11,7 @@ API-Key-Hashing: SHA256 — bewusst gewählt, weil:
 import hashlib
 import hmac
 import secrets
+import time
 from datetime import UTC, datetime
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeSerializer, URLSafeTimedSerializer
@@ -230,6 +231,9 @@ def sign_session(
     lage_id: int | None = None,
     display_name: str | None = None,
     device_token_id: int | None = None,
+    mfa_at: int | None = None,
+    session_epoch: int = 0,
+    session_started_at: int | None = None,
 ) -> str:
     if qr:
         payload: dict | int = {"u": user_id, "qr": 1}
@@ -246,12 +250,29 @@ def sign_session(
         payload = {"u": user_id, "d": 1}
         if device_token_id is not None:
             payload["t"] = device_token_id
-    elif remember:
-        # "Login merken": längeres, gleitendes Fenster (siehe unsign_session).
-        payload = {"u": user_id, "r": 1}
     else:
-        payload = user_id
+        # "a" bleibt beim Sliding-Refresh erhalten; "m" muss zu dieser Session gehoeren.
+        payload = {"u": user_id, "e": session_epoch,
+                   "a": int(time.time()) if session_started_at is None else session_started_at}
+        if remember:
+            payload["r"] = 1
+        if mfa_at is not None:
+            payload["m"] = mfa_at
     return _signer.dumps(payload)
+
+
+def session_security(token: str) -> tuple[int, int | None, int] | None:
+    """Epoche, MFA-Zeit und urspruenglicher Sessionbeginn; altes Tupel bleibt stabil."""
+    if unsign_session(token) is None:
+        return None
+    data, timestamp = _signer.loads(token, return_timestamp=True)
+    if isinstance(data, dict):
+        return data.get("e", 0), data.get("m"), data.get("a", int(timestamp.timestamp()))
+    return 0, None, int(timestamp.timestamp())
+
+
+def valid_mfa(mfa_at: int | None, started_at: int) -> bool:
+    return mfa_at is not None and started_at <= mfa_at <= int(time.time())
 
 
 def unsign_session(
@@ -289,7 +310,7 @@ def unsign_session(
                 return None
             return (data["u"], False, None, False, None, None, True, None)
 
-        if isinstance(data, int):
+        if isinstance(data, int) or (isinstance(data, dict) and "u" in data):
             # Regular user session: enforce absolute max_age AND inactivity window.
             # The middleware re-signs on each request (sliding window), so age ≈ time
             # since last activity.
@@ -297,7 +318,7 @@ def unsign_session(
                 return None
             if age_s > settings.SESSION_INACTIVITY_SECONDS:
                 return None
-            return (data, False, None, False, None, None, False, None)
+            return (data["u"] if isinstance(data, dict) else data, False, None, False, None, None, False, None)
 
         return None
     except (BadSignature, SignatureExpired):

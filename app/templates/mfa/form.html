@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Zwei-Faktor-Authentifizierung{% endblock %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:2rem auto;width:100%"><div class="card-body">
+  <h1>Zwei-Faktor-Authentifizierung</h1>
+  {% if error %}<div class="alert alert--error" role="alert">{{ error }}</div>{% endif %}
+  {% if mode == 'unconfigured' %}
+  <p>Bitte zuerst die Zwei-Faktor-Authentifizierung einrichten.</p>
+  <p><a href="/mfa/einrichten">Zur Einrichtung</a></p>
+  {% elif mode == 'verify' %}
+  <p>Code aus Ihrer Authenticator-App oder einen unbenutzten Recovery-Code eingeben. Nach 5 Fehlversuchen wird der Zugang fuer 5 Minuten gesperrt.</p>
+  <form method="post" action="/mfa/verify">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label for="mfa-code">TOTP- oder Recovery-Code</label>
+    <input id="mfa-code" class="form-input" name="code" autocomplete="one-time-code" required autofocus>
+    <button type="submit" class="btn btn--primary">Bestaetigen</button>
+  </form>
+  {% elif mode == 'setup' %}
+  <p>QR-Code mit Microsoft Authenticator, Google Authenticator oder 2FAS scannen.</p>
+  {% if qr %}<img src="{{ qr }}" alt="QR-Code fuer die Authenticator-Einrichtung" style="max-width:100%;height:auto">
+  {% else %}<p>QR-Code derzeit nicht verfuegbar. Bitte den manuellen Schluessel in der Authenticator-App eingeben.</p>{% endif %}
+  <p>Manueller Schluessel: <code style="overflow-wrap:anywhere">{{ secret }}</code></p>
+  <form method="post" action="/mfa/bestaetigen">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label for="mfa-code">Sechsstelliger Code</label>
+    <input id="mfa-code" class="form-input" name="code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required>
+    <button type="submit" class="btn btn--primary">Einrichtung bestaetigen</button>
+  </form>
+  {% elif mode == 'recovery' %}
+  <p>Einrichtung bestaetigt. Diese 10 Recovery-Codes werden nur jetzt angezeigt. Sicher und getrennt vom Authenticator aufbewahren. Jeder Code gilt einmal.</p>
+  <ul>{% for code in codes %}<li><code>{{ code }}</code></li>{% endfor %}</ul>
+  {% elif mode == 'confirmed' %}
+  <p>Ihre 2FA ist eingerichtet. Ein Reset meldet Sie ab und erfordert anschliessend eine neue Einrichtung.</p>
+  <form method="post" action="/mfa/zuruecksetzen">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label for="reset-code">TOTP- oder Recovery-Code zum Zuruecksetzen</label>
+    <input id="reset-code" name="code" class="form-input" autocomplete="one-time-code" required>
+    <button type="submit" class="btn btn--secondary">Eigene 2FA zuruecksetzen</button>
+  </form>
+  {% elif mode == 'retry' %}<p><a href="/mfa/einrichten">Zur Einrichtung</a></p>{% endif %}
+  <p><a href="/admin/system-einstellungen">System-Einstellungen</a> | <a href="/logout">Abmelden</a></p>
+</div></div>
+{% endblock %}

@@ -1,3 +1,4 @@
+from app.models.admin_security import AdminRecoveryCode, AdminTotp
 from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.atemschutz_pruefung import (
     AtemschutzGeraet,
@@ -295,6 +296,7 @@ from app.models.wordpress_report import WordPressReportConfig
 from app.models.worker_runtime import WorkerRuntime  # noqa: F401
 
 __all__ = [
+    "AdminRecoveryCode", "AdminTotp",
     "CitizenReportVerification",
     "SearchChunk",
     "SearchDocument",

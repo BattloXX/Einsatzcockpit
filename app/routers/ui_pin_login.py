@@ -213,7 +213,7 @@ def pin_login_code_submit(
     db.commit()
 
     is_remember = bool(remember)
-    token = sign_session(match.id, remember=is_remember)
+    token = sign_session(match.id, remember=is_remember, session_epoch=match.session_epoch)
     redirect = RedirectResponse("/", status_code=302)
     _set_session_cookie(
         redirect, token,
@@ -221,6 +221,7 @@ def pin_login_code_submit(
     )
     set_accounts_cookie(
         redirect,
-        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), match.id, is_remember),
+        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), match.id, is_remember,
+                    session_epoch=match.session_epoch),
     )
     return redirect

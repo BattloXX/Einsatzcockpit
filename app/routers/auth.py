@@ -96,7 +96,7 @@ def login(
     # "Login merken": längeres, gleitendes Session-Fenster (7 Tage Inaktivität,
     # bis 30 Tage absolut). Checkbox sendet nur bei Aktivierung einen Wert.
     is_remember = bool(remember)
-    token = sign_session(user.id, remember=is_remember)
+    token = sign_session(user.id, remember=is_remember, session_epoch=user.session_epoch)
     redirect = RedirectResponse(_safe_next(next), status_code=302)
     _set_session_cookie(
         redirect, token,
@@ -104,7 +104,8 @@ def login(
     )
     set_accounts_cookie(
         redirect,
-        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), user.id, is_remember),
+        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), user.id, is_remember,
+                    session_epoch=user.session_epoch),
     )
     return redirect
 

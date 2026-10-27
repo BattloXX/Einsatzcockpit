@@ -358,12 +358,13 @@ async def sso_callback(
         slug, config.tenant_id, user.id, jit_provisioned,
     )
 
-    session_token = sign_session(user.id)
+    session_token = sign_session(user.id, session_epoch=user.session_epoch)
     redirect = RedirectResponse(_safe_next(flow.get("next")), status_code=302)
     _set_session_cookie(redirect, session_token)
     set_accounts_cookie(
         redirect,
-        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), user.id, False),
+        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), user.id, False,
+                    session_epoch=user.session_epoch),
     )
     redirect.delete_cookie(_FLOW_COOKIE, path="/")
     return redirect

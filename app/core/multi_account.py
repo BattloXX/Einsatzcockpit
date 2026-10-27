@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import time
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from fastapi import Response
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -18,6 +18,7 @@ class AccountEntry(TypedDict):
     u: int
     ts: int
     r: bool
+    e: NotRequired[int]
 
 
 def load_accounts(token: str | None, *, now: int | None = None) -> list[AccountEntry]:
@@ -52,6 +53,10 @@ def load_accounts(token: str | None, *, now: int | None = None) -> list[AccountE
         if timestamp > jetzt or jetzt - timestamp > inactivity:
             continue
         entry: AccountEntry = {"u": user_id, "ts": timestamp, "r": remember}
+        if "e" in raw:
+            if not isinstance(raw["e"], int) or isinstance(raw["e"], bool):
+                continue
+            entry["e"] = raw["e"]
         previous = accounts.get(user_id)
         if previous is None or timestamp > previous["ts"]:
             accounts[user_id] = entry
@@ -60,11 +65,15 @@ def load_accounts(token: str | None, *, now: int | None = None) -> list[AccountE
 
 def add_account(
     accounts: list[AccountEntry], user_id: int, remember: bool, *, now: int | None = None,
+    session_epoch: int | None = None,
 ) -> list[AccountEntry]:
     """Setzt ein Konto an die Spitze der LRU-Liste und begrenzt auf fuenf."""
     timestamp = int(time.time()) if now is None else now
     result = [account for account in accounts if account["u"] != user_id]
-    result.append({"u": user_id, "ts": timestamp, "r": remember})
+    entry: AccountEntry = {"u": user_id, "ts": timestamp, "r": remember}
+    if session_epoch is not None:
+        entry["e"] = session_epoch
+    result.append(entry)
     return sorted(result, key=lambda account: account["ts"], reverse=True)[:MAX_ACCOUNTS]
 
 
@@ -73,7 +82,7 @@ def remove_account(accounts: list[AccountEntry], user_id: int) -> list[AccountEn
 
 
 def sign_accounts(accounts: list[AccountEntry]) -> str:
-    payload = [{"u": account["u"], "ts": account["ts"], "r": account["r"]} for account in accounts]
+    payload = [dict(account) for account in accounts]
     return _signer.dumps(payload)
 
 

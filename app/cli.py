@@ -442,9 +442,35 @@ def suche_vektor_aufbau(org_id: int | None = None) -> None:
         print(f"{anzahl} Vektor-Jobs geplant.")
 
 
+def mfa_reset(username: str) -> None:
+    """Notfallzugang ausschliesslich ueber die lokale Server-CLI."""
+    from app.services import totp_service
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        user = db.query(User).filter(User.username == username).first()
+        if user is None or not user.is_system_admin:
+            raise ValueError("Systemadministrator nicht gefunden")
+        totp_service.reset(db, user, None, local=True)
+        db.commit()
+        totp_service.notify_reset(db, user)
+
+
+def mfa_global_aus() -> None:
+    from app.services import totp_service
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        totp_service.set_enabled(db, False, None, None, local=True)
+        db.commit()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command")
+    p_mfa = sub.add_parser("mfa-reset", help="Lokaler Notfallreset eines Systemadministrators")
+    p_mfa.add_argument("username")
+    sub.add_parser("mfa-global-aus", help="2FA lokal deaktivieren und Admin-Sessions widerrufen")
 
     p_admin = sub.add_parser("create-admin")
     p_admin.add_argument("--username", required=True)
@@ -482,7 +508,11 @@ def main() -> None:
     p_vektor.add_argument("--org", type=int)
 
     args = parser.parse_args()
-    if args.command == "create-admin":
+    if args.command == "mfa-reset":
+        mfa_reset(args.username)
+    elif args.command == "mfa-global-aus":
+        mfa_global_aus()
+    elif args.command == "create-admin":
         create_admin(args.username, args.password, args.display_name)
     elif args.command == "create-api-key":
         create_api_key(args.label)

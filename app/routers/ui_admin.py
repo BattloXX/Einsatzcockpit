@@ -2214,15 +2214,21 @@ def delete_default_message(
 @router.get("/system-einstellungen", response_class=HTMLResponse)
 def system_settings_page(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("system_admin"))):
+    from app.models.admin_security import AdminTotp
     from app.services.system_diagnose import version_info
+    from app.services.totp_service import admins
 
+    mfa_admins = [
+        (admin, bool((row := db.get(AdminTotp, admin.id)) and row.confirmed_at))
+        for admin in admins(db, active_only=False)
+    ]
     settings_raw = db.query(SystemSettings).all()
     settings = {s.key: s.value for s in settings_raw}
     resend_api_key_set = bool(settings.pop("resend_api_key", None))
     resend_inbound_webhook_secret_set = bool(settings.pop("resend_inbound_webhook_secret", None))
     saved = request.query_params.get("saved")
     return templates.TemplateResponse(request, "admin/system_settings.html", {
-        "user": request.state.user, "settings": settings, "saved": saved,
+        "user": request.state.user, "settings": settings, "saved": saved, "mfa_admins": mfa_admins,
         "version": version_info()["evidence"],
         "resend_api_key_set": resend_api_key_set,
         "resend_inbound_webhook_secret_set": resend_inbound_webhook_secret_set,
@@ -2317,11 +2323,13 @@ def save_system_settings(
     # Handle any existing custom keys
     all_existing = db.query(SystemSettings).all()
     for s in all_existing:
-        if s.key not in known_keys:
+        if s.key not in known_keys and s.key != "admin_2fa_enabled":
             val = form.get(f"k_{s.key}")
             if val is not None:
                 s.value = val  # type: ignore[assignment]
     # New custom key
+    if new_key.strip() == "admin_2fa_enabled":
+        raise HTTPException(400, "2FA nur ueber den eigenen Sicherheitsschalter aendern")
     if new_key.strip():
         existing = db.get(SystemSettings, new_key.strip())
         if existing:

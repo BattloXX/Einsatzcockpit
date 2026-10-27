@@ -145,3 +145,11 @@ Unter **Einstellungen → Großschadenslage** steuert die Karte „Gruppenkomman
 Zusätzlich konfiguriert die GSL-Seite die Module, den Lagemeldungs-Regelkreis, Sonderalarm, Geräteverleih-SMS und die automatische Übernahme als Einsatzstelle.
 
 **Serverkonfiguration:** `GSL_ZUGANG_KEY` (eigener, geheimer Schlüssel für die Ableitung der Zugangslinks, empfohlen: `python -c "import secrets; print(secrets.token_urlsafe(48))"`). Ein Wechsel des Schlüssels macht alle ausgegebenen Links ungültig. Ohne Wert wird der Schlüssel aus `SECRET_KEY` abgeleitet (eine Warnung im Log weist darauf hin); dann entwertet eine `SECRET_KEY`-Rotation alle Links.
+
+## Zwei-Faktor-Authentifizierung fuer Systemadministratoren
+
+Unter `/admin/system-einstellungen` kann TOTP-2FA eingerichtet und systemweit
+aktiviert werden. Standard ist AUS; vor der Aktivierung muessen alle aktiven
+Systemadministratoren eingerichtet sein. Siehe
+[Zwei-Faktor-Authentifizierung](Administration-Zwei-Faktor-Authentifizierung)
+fuer Einrichtung, Recovery-Codes und den lokalen CLI-Notfallreset.
