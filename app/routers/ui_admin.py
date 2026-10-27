@@ -2215,6 +2215,7 @@ def delete_default_message(
 def system_settings_page(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("system_admin"))):
     from app.models.admin_security import AdminTotp
+    from app.services.diag_schedule import configuration
     from app.services.system_diagnose import version_info
     from app.services.totp_service import admins
 
@@ -2234,6 +2235,7 @@ def system_settings_page(request: Request, db: Session = Depends(get_db),
     resend_inbound_webhook_secret_set = bool(settings.pop("resend_inbound_webhook_secret", None))
     saved = request.query_params.get("saved")
     return templates.TemplateResponse(request, "admin/system_settings.html", {
+        "diag_settings": configuration(db),
         "github_access": github_access, "github_date": github_token.parse_date,
         "github_repository": app_settings.GITHUB_REPOSITORY,
         "user": request.state.user, "settings": settings, "saved": saved, "mfa_admins": mfa_admins,
@@ -2332,14 +2334,15 @@ def save_system_settings(
     # Handle any existing custom keys
     all_existing = db.query(SystemSettings).all()
     for s in all_existing:
-        if not s.key.casefold().startswith("github_read_token_") and s.key not in known_keys and s.key not in (
-                "admin_2fa_enabled", "admin_mcp_enabled", "admin_repair_enabled", "admin_repair_low_auto"):
+        if (not s.key.casefold().startswith(("github_read_token_", "diag_schedule_"))
+                and s.key not in known_keys and s.key not in (
+                "admin_2fa_enabled", "admin_mcp_enabled", "admin_repair_enabled", "admin_repair_low_auto")):
             val = form.get(f"k_{s.key}")
             if val is not None:
                 s.value = val  # type: ignore[assignment]
     # New custom key
-    if new_key.strip().casefold().startswith("github_read_token_"):
-        raise HTTPException(400, "GitHub-Zugang nur ueber den eigenen Abschnitt aendern")
+    if new_key.strip().casefold().startswith(("github_read_token_", "diag_schedule_")):
+        raise HTTPException(400, "Geschuetzte Einstellungen nur ueber den eigenen Abschnitt aendern")
     if new_key.strip() in ("admin_2fa_enabled", "admin_mcp_enabled", "admin_repair_enabled", "admin_repair_low_auto"):
         raise HTTPException(400, "2FA nur ueber den eigenen Sicherheitsschalter aendern")
     if new_key.strip():

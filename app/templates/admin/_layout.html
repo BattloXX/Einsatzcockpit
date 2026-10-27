@@ -499,6 +499,7 @@
                {{ tip('KI-System-Prompts verwalten und versionieren') }}>
               <span class="admin-nav__icon">{{ icon("sparkles", size="sm") }}</span>KI-Prompts
             </a>
+            <a href="/admin/systemdiagnose" class="admin-nav__item {% if '/admin/systemdiagnose' in request.url.path %}is-active{% endif %}"><span class="admin-nav__icon">{{ icon("server", size="sm") }}</span>Systemdiagnose</a>
             <a href="/admin/system-einstellungen"
                class="admin-nav__item {% if '/admin/system-einstellungen' in request.url.path %}is-active{% endif %}"
                {{ tip('VAPID, Push-Konfiguration, globale Parameter') }}>

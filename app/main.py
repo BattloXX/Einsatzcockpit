@@ -139,6 +139,7 @@ from app.routers import (
     ui_stats,
     ui_suche,
     ui_sysadmin,
+    ui_systemdiagnose,
     ui_teams_bot,
     ui_termin,
     ui_uas,
@@ -247,6 +248,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.api_message_dispatch_loop import api_message_dispatch_loop
     from app.services.autoclose import autoclose_loop
     from app.services.breathing_service import _breathing_watchdog_loop
+    from app.services.diag_schedule import diag_schedule_loop
     from app.services.diagnose.runner import diag_runner_loop
     from app.services.dibos.dibos_capture import dibos_trace_retention_loop
     from app.services.dibos.dibos_loop import dibos_poll_loop
@@ -281,7 +283,8 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.weather_retention import weather_retention_loop
 
     loops = (
-        diag_runner_loop, autoclose_loop, _breathing_watchdog_loop, task_reminder_loop, print_job_watchdog_loop,
+        diag_runner_loop, diag_schedule_loop, autoclose_loop, _breathing_watchdog_loop, task_reminder_loop,
+        print_job_watchdog_loop,
         print_agent_sweep_loop, suche_outbox_loop,
         gsl_lagemeldung_reminder_loop, gk_versand_aufraeum_loop, verleih_erinnerung_loop, probe_erinnerung_loop,
         weather_retention_loop, ai_log_retention_loop, mcp_upload_retention_loop,
@@ -984,6 +987,7 @@ app.include_router(ui_annotation.router)
 app.include_router(ui_breathing.router)
 app.include_router(ui_archive.router)
 app.include_router(ui_hilfe.router)
+app.include_router(ui_systemdiagnose.router)
 app.include_router(ui_admin.router)
 app.include_router(ui_admin_mail_weiterleitung.router)
 app.include_router(ui_sms.router)

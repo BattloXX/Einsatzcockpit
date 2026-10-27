@@ -1,0 +1,7 @@
+<article class="diag-card"><h2>Befund #{{ finding.id }}: {{ safe_title(finding.titel) }}</h2>
+<p>{{ check.modul if check else 'system' }} / {{ finding.schweregrad }} / {{ finding.status }}</p>
+<p>Erstmals {{ finding.first_seen_at|local_datetime }} / zuletzt {{ finding.last_seen_at|local_datetime }} / behoben {{ finding.behoben_am|local_datetime }} / Anzahl {{ finding.occurrences }}</p>
+<h3>Evidenz (nur Werte, freie Texte und Feldnamen maskiert)</h3><pre>{{ numbers(finding.evidenz)|tojson(indent=2) }}</pre><h3>Betroffene IDs</h3><pre>{{ numbers(finding.betroffene_ids)|tojson(indent=2) }}</pre>
+<h3>Hypothese</h3><p>Hypothese: {{ safe_title(finding.ursache_hypothese) }}. Nicht bestaetigt.</p>
+<h3>Empfehlung</h3><p>{{ safe_title(finding.empfehlung) }}. Betroffene IDs anhand der Pruefung {{ check.id if check else 'unbekannt' }} kontrollieren.</p>
+{% if check %}<p>{{ check.beschreibung }}</p>{% endif %}</article>

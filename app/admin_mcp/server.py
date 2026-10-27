@@ -119,7 +119,7 @@ def _execute(name: str, arguments: dict, correlation: str) -> dict:
             try:
                 if name in REPAIR_TOOLS:
                     return collect_repair(db, name, user_id, context.user.session_epoch, correlation,
-                                          authorize=lambda: _context(db), **arguments)
+                                          authorize=lambda: _context(db), web=False, **arguments)
                 if name in CODE_TOOLS:
                     return collect_code(db, name, **arguments)
                 if name in DIAG_TOOLS:

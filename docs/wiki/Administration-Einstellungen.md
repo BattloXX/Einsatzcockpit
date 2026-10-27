@@ -158,4 +158,27 @@ fuer Einrichtung, Recovery-Codes und den lokalen CLI-Notfallreset.
 
 Unter dem 2FA-Abschnitt stehen der globale Admin-MCP-Schalter (Default AUS), die
 persoenlichen Freigaben und die Verbindungs-URL. Details zu Aktivierung, OAuth,
-Werkzeugen und Grenzen: [System-Admin-MCP](Administration-System-Admin-MCP.md).
+Werkzeugen und Grenzen: [System-Admin-MCP](Administration-System-Admin-MCP).
+
+
+## Systemdiagnose (nur system_admin)
+
+Der eigene Abschnitt **Systemdiagnose** unter `/admin/system-einstellungen`
+steuert die optionale Tagesdiagnose. Standard ist **AUS**; es gibt keine
+voreingestellten Mailempfaenger. Uhrzeit (Standard 03:00) gilt systemweit in
+Europe/Vienna, unabhaengig von Org-Zeitzonen. Umfang ist `schnell` oder `voll`.
+Kritische Befunde werden bei konfigurierten Empfaengern ueber die vorhandene
+Systemmail versandt: Mindest-Schweregrad `warn`, `fail` (Standard) oder `kritisch`,
+Wiederholung unveraenderter Befunde nach standardmaessig 24 Stunden (1–720).
+
+Ein DB-Tages-Slot verhindert doppelte geplante Laeufe ueber mehrere Hosts.
+Einsaetze verschieben den Start bis zu sechs Stunden; danach laufen nur leichte
+Checks. Meldungen sind nach Finding-Key dedupliziert und auf eine Sammelmail je
+Lauf begrenzt. Versandfehler blockieren die Diagnose nicht und stehen im Audit.
+Die Schluessel `diag_schedule_*` sind im allgemeinen Key-Value-Editor gesperrt;
+Aenderungen erfolgen nur ueber diesen eigenen Abschnitt mit CSRF und Audit.
+
+Das [Systemdiagnose-Cockpit](Administration-Systemdiagnose) ist im bestehenden
+Admin-Menue unter Einstellungen verlinkt. Der
+[System-Admin-Ueberblick](Administration-System-Admin-Ueberblick) erklaert die
+Einschaltreihenfolge, Rechte und Wiederherstellung.

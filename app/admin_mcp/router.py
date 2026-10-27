@@ -158,8 +158,9 @@ def _approval_run(request, db, run_id):
     if request.state.is_device or request.state.qr_incident_id or request.state.qr_lage_id:
         raise HTTPException(403, "Nur persoenliche Admin-Konten")
     try:
-        live_user(db, request.state.user.id, request.state.user.session_epoch)
         run = get_run(db, run_id, request.state.user.id)
+        live_user(db, request.state.user.id, request.state.user.session_epoch,
+                  web=run.korrelations_id.startswith("web:"))
         check_simulation(run, run.simulation_hash or "")
         if run.risiko != "high":
             raise ValueError("Keine HIGH-Freigabe moeglich")

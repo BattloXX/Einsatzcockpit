@@ -96,6 +96,11 @@ def persist_result(db: Session, run_id: int, check_id: str, result: CheckResult,
     if complete:
         for previous in db.scalars(select(DiagFinding).where(DiagFinding.check_id == check_id,
             DiagFinding.status == "offen", DiagFinding.finding_key.not_in(keys))):
+            from app.models.diag_schedule import DiagNotification
+
+            notification = db.get(DiagNotification, previous.finding_key)
+            if notification:
+                notification.last_sent_at = None
             previous.status = "behoben"
             previous.behoben_am = utcnow()
     progress = dict(run.fortschritt)
@@ -162,6 +167,13 @@ def _finish(factory, ident, failure: str | None = None):
             row.finished_at = utcnow()
             row.active_slot = None
             db.commit()
+            from app.services.diag_schedule import notify_run
+
+            try:
+                notify_run(db, ident)
+            except Exception:
+                db.rollback()
+                logger.warning("Systemdiagnose: Benachrichtigung fehlgeschlagen (Lauf %s)", ident)
 
 
 async def run_once(factory=SessionLocal):

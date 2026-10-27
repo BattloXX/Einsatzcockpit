@@ -1,0 +1,22 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Systemdiagnose{% endblock %}
+{% block admin_content %}
+<style>
+.diag-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.diag-card {padding:16px;border:1px solid var(--border);border-radius:8px;min-width:0;overflow-wrap:anywhere}
+.diag-wrap {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.diag pre,.diag textarea {white-space:pre-wrap;overflow-wrap:anywhere;width:100%;max-width:100%;box-sizing:border-box}
+.diag input,.diag select,.diag textarea {max-width:100%}
+@media(max-width:760px){.diag-grid{grid-template-columns:1fr}.diag .btn{min-height:44px}.diag-wrap>*{flex:1 1 auto}.diag-card{padding:12px}}
+</style>
+<div class="page-content diag">
+<h1>{{ icon("server") }} Systemdiagnose</h1>
+<p>Globale technische Zustaende und IDs. Diagnose liest; Reparaturen benoetigen gesonderte Freigaben.</p>
+<nav class="diag-wrap" aria-label="Systemdiagnose-Bereiche">
+{% set labels = {'gesamt':'Gesamtzustand','diagnose':'Diagnoselauf','befunde':'Integritaetsbefunde','laeufe':'Fehlerhistorie','reparaturen':'Reparaturen','github':'GitHub-CI / Code','audit':'Audit'} %}
+{% for section in sections %}<button type="button" class="btn btn--secondary" hx-get="/admin/systemdiagnose/teil/{{ section }}" hx-target="#diag-panel">{{ labels[section] }}</button>{% endfor %}
+</nav>
+<div id="diag-panel" hx-get="/admin/systemdiagnose/teil/gesamt" hx-trigger="load" aria-live="polite">Gesamtzustand wird geladen.</div>
+<div id="diag-detail" aria-live="polite"></div>
+</div>
+{% endblock %}

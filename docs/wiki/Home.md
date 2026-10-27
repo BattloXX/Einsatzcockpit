@@ -163,6 +163,10 @@ Für Org-Administratoren. Die Einrichtung der einzelnen Module steht oben bei de
 | Seite | Worum es geht |
 |---|---|
 | [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise) | Änderungen nachvollziehen, früheren Stand ansehen |
+| [System-Admin-Überblick](Administration-System-Admin-Ueberblick) | Architektur, Einschaltreihenfolge, Rechte und Recovery |
+| [Systemdiagnose](Administration-Systemdiagnose) | Cockpit, Integritätsbefunde, Reparaturen und Tagesdiagnose |
+| [System-Admin-MCP](Administration-System-Admin-MCP) | Separater technischer MCP-Zugang für persönliche Systemadministratoren |
+| [Zwei-Faktor-Authentifizierung](Administration-Zwei-Faktor-Authentifizierung) | Einrichtung, Recovery-Codes und lokale Notfall-CLI |
 | [Systemstatus & Überwachung](Administration-Dienstueberwachung) | Dienstüberwachung, Benachrichtigungen, Health-Endpunkte |
 | [Datensicherung (Org)](Administration-Org-Datensicherung) | Eigene Daten herunterladen oder geplant sichern |
 
