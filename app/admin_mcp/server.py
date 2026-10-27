@@ -79,6 +79,7 @@ def response(name: str, correlation: str, result: dict) -> dict:
         "schweregrad": {"ok": "info", "warn": "warnung", "fail": "fehler", "unbekannt": "info",
                        "eingeschraenkt": "info", "nicht verfuegbar": "info"}[state],
         "evidenz": result["evidence"],
+        **({"github_zugang": result["github_zugang"]} if "github_zugang" in result else {}),
         "ursachenhypothese": "Hypothese: Teilkomponente gestoert oder Datenbasis unvollstaendig."
             if state != "ok" else "Keine Hypothese erforderlich.",
         "empfehlung": "Zustaendige Systemadministration soll den Teilcheck pruefen."

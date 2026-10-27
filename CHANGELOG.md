@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Systemadministration:** Phase 5b: GitHub-Lesetoken verschluesselt in den Systemeinstellungen verwalten, testen und rotieren; MFA-Schutz, Ablaufhinweise, tokenfreie MCP-Zugangsstatus und Diagnosewarnungen. Umgebungsvariable bleibt Fallback; keine Migration.
+
 - **Systemadministration:** Phase 5 des Admin-MCP: lesende lokale Codekorrelation, GitHub-CI-/Deploy-Abgleich und ausschliesslich als Text erzeugte Codex-Auftraege. Optionales GitHub-Lesetoken, gemeinsame Drosselung, geheimnisfreie Metadaten und leichter Check `deploy.version`; keine Migration.
 
 - **Systemadministration:** Kontrollierte Reparatur-Engine mit drei festen Wartungsaktionen, Dry-Run, Datenbestand-Hash, Idempotenz und globalem DB-Mutex. Fuenf Admin-MCP-Werkzeuge, standardmaessig AUS und nur mit aktiver 2FA; aktionsgebundene Web-Freigaben fuer HIGH. Migration 0328.

@@ -2222,12 +2222,20 @@ def system_settings_page(request: Request, db: Session = Depends(get_db),
         (admin, bool((row := db.get(AdminTotp, admin.id)) and row.confirmed_at))
         for admin in admins(db, active_only=False)
     ]
+    from app.services import github_token
+
+    if (request.state.is_device or request.state.user.is_device
+            or request.state.qr_incident_id or request.state.qr_lage_id):
+        raise HTTPException(403, "Nur persoenliche Admin-Konten")
+    github_access = github_token.status(db)
     settings_raw = db.query(SystemSettings).all()
-    settings = {s.key: s.value for s in settings_raw}
+    settings = {s.key: s.value for s in settings_raw if not s.key.casefold().startswith("github_read_token_")}
     resend_api_key_set = bool(settings.pop("resend_api_key", None))
     resend_inbound_webhook_secret_set = bool(settings.pop("resend_inbound_webhook_secret", None))
     saved = request.query_params.get("saved")
     return templates.TemplateResponse(request, "admin/system_settings.html", {
+        "github_access": github_access, "github_date": github_token.parse_date,
+        "github_repository": app_settings.GITHUB_REPOSITORY,
         "user": request.state.user, "settings": settings, "saved": saved, "mfa_admins": mfa_admins,
         "version": version_info()["evidence"],
         "admin_mcp_url": app_settings.effective_public_base_url.rstrip("/") + "/mcp/admin",
@@ -2324,12 +2332,14 @@ def save_system_settings(
     # Handle any existing custom keys
     all_existing = db.query(SystemSettings).all()
     for s in all_existing:
-        if s.key not in known_keys and s.key not in (
+        if not s.key.casefold().startswith("github_read_token_") and s.key not in known_keys and s.key not in (
                 "admin_2fa_enabled", "admin_mcp_enabled", "admin_repair_enabled", "admin_repair_low_auto"):
             val = form.get(f"k_{s.key}")
             if val is not None:
                 s.value = val  # type: ignore[assignment]
     # New custom key
+    if new_key.strip().casefold().startswith("github_read_token_"):
+        raise HTTPException(400, "GitHub-Zugang nur ueber den eigenen Abschnitt aendern")
     if new_key.strip() in ("admin_2fa_enabled", "admin_mcp_enabled", "admin_repair_enabled", "admin_repair_low_auto"):
         raise HTTPException(400, "2FA nur ueber den eigenen Sicherheitsschalter aendern")
     if new_key.strip():
@@ -2348,6 +2358,61 @@ def save_system_settings(
             status_code=303,
         )
     return RedirectResponse("/admin/system-einstellungen?saved=1", status_code=303)
+
+
+@router.post("/system-einstellungen/github/{action}")
+def github_token_action(action: str, request: Request, db: Session = Depends(get_db),
+                        _=Depends(require_role("system_admin"))):
+    from urllib.parse import urlencode
+
+    from app.services import github_token, totp_service
+    from app.services.github_readonly import GitHubReadonly
+
+    if (request.state.is_device or request.state.user.is_device
+            or request.state.qr_incident_id or request.state.qr_lage_id):
+        raise HTTPException(403, "Nur persoenliche Admin-Konten")
+    if action not in ("speichern", "loeschen", "testen"):
+        raise HTTPException(404)
+    enabled = db.get(SystemSettings, "admin_2fa_enabled")
+    if action != "testen" and enabled and enabled.value == "true" and not totp_service.fresh(request.state.mfa_at):
+        return RedirectResponse("/admin/system-einstellungen?github_mfa=1#github-zugang", status_code=303)
+    form = run_async(request.form)
+    message = "GitHub-Zugang gespeichert."
+    event = "set"
+    if action == "speichern":
+        try:
+            replaced = github_token.save(db, str(form.get("token") or "").strip(), request.state.user.id,
+                                         str(form.get("expires_at") or ""))
+        except ValueError:
+            return RedirectResponse("/admin/system-einstellungen?github_error=1#github-zugang", status_code=303)
+        event = "replaced" if replaced else "set"
+    elif action == "loeschen":
+        if form.get("confirm") != "ja":
+            raise HTTPException(400, "Loeschen bitte bestaetigen")
+        github_token.delete(db)
+        event, message = "deleted", "DB-Token geloescht; eine Umgebungsvariable bleibt als Fallback aktiv."
+    else:
+        results = GitHubReadonly(db=db).connection_checks()
+        reachable = results[0].get("code") in ("ok", "ohne_token")
+        sufficient = all(r.get("code") == "ok" for r in results)
+        rates = [r.get("rate_limit", {}).get("remaining") for r in results]
+        remaining = min((v for v in rates if isinstance(v, int)), default=None)
+        codes = {r.get("code") for r in results}
+        check_status = ("ungueltig" if "nicht_autorisiert" in codes else "keine_berechtigung"
+                        if codes & {"zugriff_verweigert", "nicht_gefunden"} else "ok" if sufficient
+                        else "eingeschraenkt")
+        if github_token.resolve(db)[1] != "keine":
+            github_token.put(db, "last_status", check_status)
+            github_token.put(db, "last_check_at", github_token.now().isoformat())
+        message = ("Repository erreichbar: " + ("ja" if reachable else "nein")
+                   + "; Berechtigungen ausreichend: " + ("ja" if sufficient else "nein")
+                   + "; Rate-Limit-Rest: " + (str(remaining) if remaining is not None else "unbekannt")
+                   + ". " + github_token.status(db)["meldung"])
+        event = "tested"
+    write_audit(db, "github_token." + event, user_id=request.state.user.id)
+    db.commit()
+    return RedirectResponse("/admin/system-einstellungen?" + urlencode({"github_message": message})
+                            + "#github-zugang", status_code=303)
 
 
 @router.post("/system-einstellungen/test-resend-mail", response_class=HTMLResponse)

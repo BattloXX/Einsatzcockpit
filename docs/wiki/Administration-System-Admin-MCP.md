@@ -311,29 +311,49 @@ Sie funktionieren auch bei ausgeschalteter Reparatur und ohne aktive 2FA.
 Der Auftrag enthaelt immer: **Aenderungen nur ueber Branch, Tests und Pull Request,
 nie direkt im Produktionscontainer.** Es werden keine Dateien, Issues, PRs oder
 Reparaturlaeufe angelegt. Nur das vorhandene Audit und die internen
-Rate-Limit-Zaehler in Redis werden geschrieben.
+Rate-Limit-Zaehler in Redis sowie begrenzte GitHub-Zugangsmetadaten werden geschrieben.
 
 ### GitHub-Token einrichten
 
-1. In GitHub einen **fine-grained Personal Access Token** fuer ausschliesslich
-   `BattloXX/Einsatzcockpit` erzeugen. Repository permissions:
-   **Contents = Read**, **Actions = Read**, **Pull requests = Read**;
-   Metadata bleibt das von GitHub vorausgesetzte Leserecht. Keine Schreibrechte.
-2. Ablauf auf hoechstens **90 Tage** setzen und alle 90 Tage rotieren. Neues Token
-   eintragen, App neu starten, lesenden Abruf pruefen, altes Token widerrufen.
-3. In der privaten `docker.env` hinterlegen (Vorlage `deploy/docker.env.example`):
+1. **System > Einstellungen > GitHub-Zugang (Codeanalyse und CI)** oeffnen.
+   Nur persoenliche Systemadministratoren duerfen den Zugang verwalten.
+2. GitHub: **Settings > Developer settings > Personal access tokens > Fine-grained
+   tokens > Generate new token**. Name `ecp-admin-mcp-readonly`, Ablauf **90 Tage**.
+3. Resource owner und Repository gemaess `GITHUB_REPOSITORY` waehlen (die Oberflaeche
+   zeigt die konfigurierte Auswahl). **Only select repositories**, nur dieses Repo.
+4. Repository permissions: **Contents = Read-only**, **Actions = Read-only**,
+   **Pull requests = Read-only**, **Metadata = Read-only** (automatisch).
+   Alles andere **No access**. Organisationen muessen Tokens eventuell freigeben
+   (Status **pending**).
+5. Token kopieren (nur einmal sichtbar), im Passwortfeld einfuegen, speichern und
+   **Verbindung testen**. Repo-Erreichbarkeit, Berechtigungen und Rate-Limit pruefen.
+   Bei aktiver Admin-2FA braucht Speichern/Ersetzen/Loeschen frische MFA.
+6. Vor Ablauf rotieren: neues Token speichern/ersetzen, Verbindung testen, danach
+   altes Token in GitHub widerrufen. Niemals in Chats, MCP-Auftraegen oder im Repo teilen.
 
-   ```dotenv
-   GITHUB_READ_TOKEN=
-   GITHUB_REPOSITORY=BattloXX/Einsatzcockpit
-   GITHUB_API_TIMEOUT_S=8.0
-   ```
+Die DB speichert das Token Fernet-verschluesselt; die Oberflaeche zeigt nur
+**gesetzt**, nie den Klartext. Keine Migration erforderlich. `GITHUB_READ_TOKEN`
+bleibt als Fallback fuer Installationen ohne DB-Token verfuegbar; DB hat Vorrang.
+Loeschen entfernt ausschliesslich das DB-Token und dessen Metadaten. Ein vorhandenes
+Umgebungs-Token wird danach wieder verwendet. Dessen Rotation braucht einen
+Container-Neustart. `GITHUB_REPOSITORY` und `GITHUB_API_TIMEOUT_S` bleiben Konfiguration.
 
-   Das echte Token ausschliesslich lokal nach `=` eintragen, niemals committen,
-   in einen MCP-Auftrag kopieren oder als Toolargument uebergeben.
-   Docker Compose dieses Repos laedt `.env` ueber `env_file`: bei Verwendung einer
-   separaten `docker.env` deren Eintraege auch als Container-Umgebung einbinden.
-   `--env-file` allein ersetzt Compose-Interpolation, nicht dessen `env_file`.
+GitHub liefert bei fine-grained Tokens das Ablaufdatum im Antwort-Header.
+Ohne Header bleibt es unbekannt oder kann manuell hinterlegt werden (Zukunft,
+maximal 400 Tage; Datumeingabe UTC). Automatische Metadaten werden nur bei
+Aenderungen und hoechstens stuendlich aktualisiert; ein expliziter Verbindungstest
+aktualisiert seinen Teststatus sofort. Die Anzeige verwendet die Org-Zeitzone.
+
+Status: `nicht_gesetzt`, `nicht_getestet`, `ok`, `laeuft_bald_ab` (bis 30 Tage),
+`abgelaufen`, `ungueltig` (401 oder Entschluesselungsfehler), `keine_berechtigung`
+(403/404; Auswahl, Rechte und Organisationsfreigabe pruefen). Netz-/Rate-Limit-Probleme
+melden `eingeschraenkt`. Bis 7 Tage erscheint eine Warnung, ab Ablauf ein Fehler.
+Nach Wechsel des Fernet-Schluessels ein neues Token hinterlegen; ein unlesbares
+DB-Token wird nicht still durch die Umgebungsvariable ersetzt.
+
+Die MCP-Antworten enthalten `github_zugang` auf oberster Ebene mit Status,
+Handlungshinweis und Hilfe. Lokale Ergebnisse bleiben bei Tokenproblemen benutzbar.
+`deploy.version` meldet bekannte Tokenprobleme als stabilen Warnbefund `github.token`.
 
 Ohne Token erfolgen unauthentifizierte GET-Anfragen fuer oeffentliche Daten mit
 niedrigem GitHub-Rate-Limit. GitHub-Ergebnisse melden `eingeschraenkt`; private
