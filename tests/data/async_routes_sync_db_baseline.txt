@@ -51,7 +51,6 @@ app.routers.ui_gateway:printer_add_ip
 app.routers.ui_gateway:printer_defaults
 app.routers.ui_gateway:printer_delete
 app.routers.ui_gateway:printer_discover
-app.routers.ui_gateway:printer_rename
 app.routers.ui_gateway:printer_test
 app.routers.ui_gateway:printer_toggle
 app.routers.ui_gateway:resolve_uncertain_job
