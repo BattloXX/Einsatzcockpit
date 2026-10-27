@@ -2214,6 +2214,8 @@ def delete_default_message(
 @router.get("/system-einstellungen", response_class=HTMLResponse)
 def system_settings_page(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("system_admin"))):
+    from app.services.system_diagnose import version_info
+
     settings_raw = db.query(SystemSettings).all()
     settings = {s.key: s.value for s in settings_raw}
     resend_api_key_set = bool(settings.pop("resend_api_key", None))
@@ -2221,6 +2223,7 @@ def system_settings_page(request: Request, db: Session = Depends(get_db),
     saved = request.query_params.get("saved")
     return templates.TemplateResponse(request, "admin/system_settings.html", {
         "user": request.state.user, "settings": settings, "saved": saved,
+        "version": version_info()["evidence"],
         "resend_api_key_set": resend_api_key_set,
         "resend_inbound_webhook_secret_set": resend_inbound_webhook_secret_set,
         "resend_inbound_webhook_url": (app_settings.effective_public_base_url or str(request.base_url)).rstrip("/")

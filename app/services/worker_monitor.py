@@ -9,16 +9,12 @@ from sqlalchemy import and_, func, or_
 from app.models.gateway import Gateway, PrintJob
 from app.models.sms import SmsDispatchJob
 from app.models.user import SmsGatewayToken
-from app.models.worker_runtime import WorkerRuntime
 from app.services import gateway_presence as presence
-from app.services import ws_bus
+from app.services.system_diagnose import active_workers as active_workers
+from app.services.system_diagnose import worker_status
 
 SMS_OPEN = ("queued", "claimed", "dispatched", "acknowledged")
 PRINT_OPEN = ("queued", "leased", "fetching", "sent", "printing")
-
-
-def _datetime(value):
-    return presence.utc(datetime.fromisoformat(value)) if value else None
 
 
 def _job_counts(db, model, org_id, active, expiry, now):
@@ -29,48 +25,9 @@ def _job_counts(db, model, org_id, active, expiry, now):
             "overdue": query.filter(expiry <= now).count(), "states": counts}
 
 
-def active_workers(db, now: datetime | None = None) -> list[WorkerRuntime]:
-    """Nicht abgelaufene Worker aus der gemeinsamen Laufzeitregistrierung."""
-    now = presence.utc(now)
-    return db.query(WorkerRuntime).filter(WorkerRuntime.expires_at > now)\
-        .order_by(WorkerRuntime.worker_id).all()
-
-
 def snapshot(db, org_id: int, now: datetime | None = None) -> dict:
     now = presence.utc(now)
-    recent = db.query(WorkerRuntime).filter(WorkerRuntime.heartbeat_at > now - timedelta(days=1))\
-        .order_by(WorkerRuntime.worker_id).all()
-    workers = active_workers(db, now)
-    leaders = [w for w in workers if w.is_leader]
-    worker_rows = []
-    for worker in workers:
-        loops = []
-        for name, values in sorted(worker.loops.items()):
-            row = {"name": name, **values}
-            last_start = values.get("last_started_at")
-            running_age = 0.0
-            if values.get("state") == "running" and last_start:
-                try:
-                    running_age = max(0, (now - presence.utc(datetime.fromisoformat(last_start))).total_seconds())
-                except ValueError:
-                    running_age = float("inf")
-            row["overdue"] = running_age > max(60, 3 * values.get("interval_s", 0))
-            for field in ("last_started_at", "last_success_at", "last_failure_at"):
-                if row.get(field):
-                    row[field] = _datetime(row[field])
-            loops.append(row)
-        worker_rows.append({"worker_id": worker.worker_id, "hostname": worker.hostname, "pid": worker.pid,
-                            "heartbeat_at": worker.heartbeat_at, "expires_at": worker.expires_at,
-                            "leader": worker.is_leader, "leader_since": worker.leader_since,
-                            "leader_error": worker.leader_error,
-                            "redis": {**worker.redis, "last_error_at": _datetime(worker.redis.get("last_error_at"))},
-                            "loops": loops})
-    redis_workers = [w for w in workers if w.redis.get("configured")]
-    redis_up = sum(bool(w.redis.get("connected")) for w in redis_workers)
-    configured = ws_bus.enabled() or bool(redis_workers)
-    redis_state = ("not_configured" if not configured else "down" if not redis_workers
-                   else "ok" if redis_up == len(redis_workers)
-                   else "down" if not redis_up else "partial")
+    runtime = worker_status(db, now)["evidence"]
     gateways = []
     for kind, model in (("sms", SmsGatewayToken), ("print", Gateway)):
         query = db.query(model).filter(model.org_id == org_id)
@@ -108,12 +65,9 @@ def snapshot(db, org_id: int, now: datetime | None = None) -> dict:
         or_(PrintJob.lease_expires_at <= now,
             and_(PrintJob.lease_expires_at.is_(None), PrintJob.erstellt_am <= now - timedelta(minutes=5))),
     ).count()
-    last_success = max((values.get("last_success_at") for w in recent for values in w.loops.values()
-                        if values.get("last_success_at")), default=None)
-    return {"worker_count": len(workers), "workers": worker_rows,
-            "leader_workers": [w.worker_id for w in leaders], "last_success_at": _datetime(last_success),
-            "redis": {"state": redis_state, "configured": configured,
-                      "connected_workers": redis_up, "configured_workers": len(redis_workers)},
+    return {"worker_count": runtime["worker_count"], "workers": runtime["workers"],
+            "leader_workers": runtime["leader_workers"], "last_success_at": runtime["last_success_at"],
+            "redis": runtime["redis"],
             "gateways": gateways, "sms_connected": sum(g["online"] for g in gateways if g["kind"] == "sms"),
             "print_connected": sum(g["online"] for g in gateways if g["kind"] != "sms"),
             "sms_jobs": sms, "print_jobs": printing}
