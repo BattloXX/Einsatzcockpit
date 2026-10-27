@@ -92,6 +92,7 @@ class SmsLog(TenantScoped, Base):
 
     __tablename__ = "sms_log"
 
+    variant: Mapped[str] = mapped_column(String(40), nullable=False, default="", server_default="")
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id via TenantScoped
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)

@@ -509,6 +509,8 @@ async def dispatch_einsatzinfo(
     incident_id: int | None = None,
     *,
     planspiel_run_id: int | None = None,
+    variant: str = "",
+    text_prefix: str = "",
 ) -> EinsatzinfoDispatchResult:
     """Versendet automatische Einsatzinfo-SMS nach Alarmeingang.
 
@@ -546,7 +548,8 @@ async def dispatch_einsatzinfo(
                 return EinsatzinfoDispatchResult(False, "Einsatz gehoert nicht zur Organisation")
             existing = (
                 db.query(SmsLog)
-                .filter(SmsLog.org_id == org_id, SmsLog.incident_id == incident_id, SmsLog.source == "alarm")
+                .filter(SmsLog.org_id == org_id, SmsLog.incident_id == incident_id,
+                        SmsLog.source == "alarm", SmsLog.variant == variant)
                 .first()
             )
             if existing is not None:
@@ -622,7 +625,7 @@ async def dispatch_einsatzinfo(
             "leitstellennummer": leitstellennummer or "",
         }
         # .strip(): entfernt trailing Space, falls {link} leer ist (Altdaten ohne AlarmToken)
-        text = (exercise_prefix + render_template(template, ctx)).strip()
+        text = (text_prefix + exercise_prefix + render_template(template, ctx)).strip()
 
         # Empfaenger sammeln (inkl. Gruppen-Expansion, Dedup, Telefonnummer-Filter)
         recipients = collect_einsatzinfo_recipients(db, org_id, alarm_type_id)
@@ -646,7 +649,7 @@ async def dispatch_einsatzinfo(
                 .filter(
                     SmsLog.org_id == org_id,
                     SmsLog.incident_id == incident_id,
-                    SmsLog.source == "alarm",
+                    SmsLog.source == "alarm", SmsLog.variant == variant,
                 )
                 .first()
             )
@@ -659,7 +662,7 @@ async def dispatch_einsatzinfo(
             org_id=org_id,
             sent_at=now.replace(tzinfo=None),
             completed_at=None,
-            source="alarm",
+            source="alarm", variant=variant,
             alarm_type_code=alarm_type_code,
             text=text,
             recipient_count=len(jobs),

@@ -210,7 +210,7 @@ class IncidentAlarmJob(Base):
     """Persistenter, idempotenter Versandauftrag der Einsatzalarmierung."""
     __tablename__ = "incident_alarm_job"
     __table_args__ = (
-        UniqueConstraint("incident_id", "channel", name="uq_incident_alarm_job_incident_channel"),
+        UniqueConstraint("incident_id", "channel", "variant", name="uq_incident_alarm_job_incident_channel_variant"),
         Index("ix_incident_alarm_job_due", "org_id", "status", "next_attempt_at"),
     )
 
@@ -220,6 +220,7 @@ class IncidentAlarmJob(Base):
         BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True
     )
     channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    variant: Mapped[str] = mapped_column(String(40), nullable=False, default="", server_default="")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))

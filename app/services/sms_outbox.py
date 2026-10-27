@@ -190,7 +190,8 @@ def queue_log(db, log: SmsLog, recipients: dict, ctx) -> list[tuple]:
             db.flush()
         address_key = hashlib.sha256(phone.encode()).hexdigest()[:24]
         key = (
-            f"alarm:{log.incident_id}:{address_key}"
+            (f"alarm:{log.incident_id}:{log.variant}:{address_key}" if log.variant
+             else f"alarm:{log.incident_id}:{address_key}")
             if log.source == "alarm" and log.incident_id is not None
             else f"{log.source}:{log.id}:{address_key}"
         )
