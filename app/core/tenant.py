@@ -251,6 +251,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "mailing_link_click",
     "member_tag",
     "alarm_ingest",
+    "incident_alarm_field",
     "alarm_parser_regelsatz",
     "alarm_parser_testfall",
     "print_rule",

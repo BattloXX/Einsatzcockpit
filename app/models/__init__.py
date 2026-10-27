@@ -63,6 +63,7 @@ from app.models.incident import (
     RescuedPerson,
     Task,
 )
+from app.models.incident_alarm_field import IncidentAlarmField  # noqa: F401
 from app.models.invitation import OrgInvitation, OrgPartner
 from app.models.katplan import (  # noqa: F401 -- registriert ORM-Modelle
     KatplanAbschnitt,

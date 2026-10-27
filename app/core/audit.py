@@ -69,3 +69,14 @@ def write_incident_change(
         ts=ts if ts is not None else datetime.now(UTC),
     )
     db.add(entry)
+
+    # Nur echte Benutzer-/API-Key-Mutationen markieren, keine Alarmpipeline.
+    if entity_type == "incident" and action != "alarm.update" and (user_id is not None or api_key_id is not None):
+        from app.models.incident import Incident
+        from app.services.alarm_apply_service import ALARM_FELDER, markiere_manuell
+
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
+        if incident is not None and incident.primary_org_id is not None:
+            for field in ALARM_FELDER:
+                if after is not None and field in after and (before or {}).get(field) != after[field]:
+                    markiere_manuell(db, incident_id, incident.primary_org_id, field)

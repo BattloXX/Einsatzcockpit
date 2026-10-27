@@ -26,6 +26,20 @@ from app.services.teams_alarm_service import TeamsDispatchResult
 pytestmark = pytest.mark.usefixtures("sms_outbox_state")
 
 
+@pytest.fixture(autouse=True)
+def _offene_jobs_anderer_tests_entfernen(setup_db):
+    # Die Test-DB lebt die ganze Session; offene Jobs aus anderen Testdateien
+    # (z. B. Alarm-Pipeline) wuerde run_alarm_outbox_once sonst mitverarbeiten.
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        for job in db.query(IncidentAlarmJob).filter(
+            IncidentAlarmJob.status.in_(("pending", "sending", "retry"))
+        ).all():
+            db.delete(job)
+        db.commit()
+    yield
+
+
 def _db_incident(*, code="B2", exercise=False):
     db = SessionLocal()
     set_tenant_context(db, None)

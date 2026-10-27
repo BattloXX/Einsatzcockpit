@@ -788,6 +788,13 @@ def alarm_save(
     incident.alarm_type_code = alarm_type_code
     incident.reason = reason.strip() or None
     incident.report_text = report_text.strip() or None
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "incident.alarm_updated", "incident", incident_id,
+        dict(zip(("alarm_type_code", "reason", "report_text"), before, strict=True)),
+        {"alarm_type_code": incident.alarm_type_code, "reason": incident.reason, "report_text": incident.report_text},
+        user_id=request.state.user.id,
+    )
     db.commit()
     if before != (incident.alarm_type_code, incident.reason, incident.report_text):
         from app.services.print_dispatcher import autoprint_incident_updated_background

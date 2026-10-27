@@ -123,8 +123,8 @@ def test_new_fields_sequence_duplicate_and_merged_run_nachlauf(alarm_api):
     assert merged_result["duplicate"] is False and merged_result["process_status"] == "applied"
     assert merged_result["einsatz_id"] == result["einsatz_id"]
     assert saved(merged_result["ingest_id"]).dedup_action == "merged"
-    # Bisheriges Verhalten: auch verknuepfte Einsaetze durchlaufen den Nachlauf (Outbox idempotent).
-    assert calls == ["broadcast", "alarm_print", "geocode", "match"] and jobs(result["einsatz_id"]) == initial_jobs
+    # Ohne Leitstellennummer kein Auto-Merge und kein erneuter Anlagenachlauf.
+    assert calls == [] and jobs(result["einsatz_id"]) == initial_jobs
     with SessionLocal() as db:
         set_tenant_context(db, None)
         assert db.query(Incident).filter(

@@ -137,7 +137,7 @@ def ingest_alarm(
         except Exception:
             db.rollback()
             alarm_logger.exception("Alarm-Verarbeitung fehlgeschlagen (ingest %s)", ingest_id)
-        if applied_here and ingest.einsatz_id:
+        if applied_here and ingest.einsatz_id and ingest.dedup_action != "duplicate":
             from app.services.alarm_apply_service import nachlauf
 
             nachlauf(
