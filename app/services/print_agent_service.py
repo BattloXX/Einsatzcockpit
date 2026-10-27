@@ -19,6 +19,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.models.gateway import (
@@ -61,6 +62,7 @@ AGENT_ENDZUSTAENDE = tuple(JOB_TERMINAL | {JOB_UNCERTAIN})
 
 FEHLER_UNKLAR = "Keine Rückmeldung des Druckagents nach Druckübergabe – bitte am Drucker prüfen"
 FEHLER_KEIN_AGENT = "Kein Druckagent bereit"
+HINWEIS_SPOOLER_OFFLINE = "Druckagent offline; Auftrag im Spooler, Abschluss noch nicht bestätigt."
 FEHLER_MEHRFACH = "Druckagent hat den Auftrag mehrfach nicht übernommen"
 
 
@@ -320,6 +322,7 @@ def renew(db: Session, gateway: Gateway, leases: list[dict], now: datetime | Non
             .update({
                 "lease_expires_at": zeit + timedelta(seconds=LEASE_TTL_S),
                 "agent_contact_at": zeit,
+                "error": case((PrintJob.error == HINWEIS_SPOOLER_OFFLINE, None), else_=PrintJob.error),
             }, synchronize_session=False)
         )
         if treffer != 1:
@@ -415,13 +418,31 @@ def apply_agent_status(db: Session, gateway: Gateway, job_id: int, token: str, s
     elif status == JOB_UNCERTAIN:
         werte.update(status=JOB_UNCERTAIN, error=fehler or FEHLER_UNKLAR)
     elif status == JOB_FAILED:
+        # Alte Agents senden das Flag nicht. Nur eindeutige Ablehnungen erkennen;
+        # beliebige Uebergabefehler bleiben wegen moeglicher Ausgabe unklar.
+        ablehnung = (fehler or "").casefold().startswith((
+            "queue fehlt", "druckerwarteschlange konnte nicht geöffnet werden",
+            "raw-druckauftrag konnte nicht angelegt werden", "druckauftrag konnte nicht gestartet werden",
+            "pdf konnte nicht gelesen werden", "pdf enthält keine seiten",
+            "erste seite konnte nicht gerastert werden", "unbekannter druckmodus:",
+            "kein druckkommando konfiguriert", "druckkommando ist nicht erlaubt",
+            "zielverzeichnis fehlt", "zielverzeichnis ist nicht beschreibbar", "ungültige ipp-ziel-uri",
+        )) or ((fehler or "").startswith('Windows-Drucker "') and '" ist nicht verfügbar.' in (fehler or ""))
+        sicher_abgelehnt = (
+            (not_submitted or ablehnung)
+            and phase in (*VOR_UEBERGABE, PHASE_SUBMITTING)
+            and job.phase in (*VOR_UEBERGABE, PHASE_SUBMITTING)
+            and not job.spool_ref and not spool_ref
+        )
         werte["error"] = fehler or "Druck fehlgeschlagen"
-        if job.phase in VOR_UEBERGABE and job.attempts < MAX_AGENT_ATTEMPTS:
+        if sicher_abgelehnt:
+            werte["status"] = JOB_FAILED
+            ersatzdruck = True
+        elif job.phase in VOR_UEBERGABE and job.attempts < MAX_AGENT_ATTEMPTS:
             werte.update(status=JOB_QUEUED, phase=None, queued_at=zeit, lease_gateway_id=None,
                          lease_token=None, lease_expires_at=None)
             erneut_einreihen = True
-        elif job.phase in VOR_UEBERGABE or (job.phase == PHASE_SUBMITTING and phase == PHASE_SUBMITTING
-                                            and not_submitted and not job.spool_ref):
+        elif job.phase in VOR_UEBERGABE:
             werte["status"] = JOB_FAILED
             ersatzdruck = True
         else:
@@ -479,6 +500,7 @@ def resume(db: Session, gateway: Gateway, open_jobs: list[dict], now: datetime |
             .update({
                 "lease_expires_at": zeit + timedelta(seconds=LEASE_TTL_S),
                 "agent_contact_at": zeit,
+                "error": case((PrintJob.error == HINWEIS_SPOOLER_OFFLINE, None), else_=PrintJob.error),
             }, synchronize_session=False)
         )
     db.commit()
@@ -489,7 +511,7 @@ def sweep(db: Session, now: datetime | None = None) -> dict[str, list[tuple[int,
     """Räumt Agent-Jobs auf (läuft in jedem Worker; bedingte UPDATEs, ein Gewinner).
 
     (a) abgelaufener Lease vor der Übergabe → wieder einreihen (nach MAX_AGENT_ATTEMPTS: failed)
-    (b) nach der Übergabe ohne Agent-Kontakt → uncertain (nie neu drucken)
+    (b) nach der Übergabe ohne Agent-Kontakt → uncertain; mit Spoolref nur Warnung
     (c) zu lange ohne bereiten Agent in der Warteschlange → failed (Ersatzdruck durch Aufrufer)
     """
     zeit = _jetzt(now)
@@ -526,6 +548,16 @@ def sweep(db: Session, now: datetime | None = None) -> dict[str, list[tuple[int,
             elif fall == "abgelaufen":
                 art = "failed"
                 werte = {"status": JOB_FAILED, "error": FEHLER_MEHRFACH}
+            elif fall == "uncertain" and job.status == JOB_PRINTING and job.spool_ref:
+                if job.error:
+                    continue  # Bestehenden Spoolerfehler erhalten; Warnung nicht staendig schreiben.
+                db.query(PrintJob).filter(
+                    PrintJob.id == job.id, PrintJob.org_id == job.org_id, *bedingungen,
+                    PrintJob.error.is_(None), PrintJob.spool_ref == job.spool_ref,
+                ).update({"error": HINWEIS_SPOOLER_OFFLINE},
+                         synchronize_session=False)
+                db.commit()
+                continue
             elif fall == "uncertain":
                 art = "uncertain"
                 werte = {"status": JOB_UNCERTAIN, "error": FEHLER_UNKLAR}

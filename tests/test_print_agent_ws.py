@@ -355,7 +355,8 @@ def test_unklaren_auftrag_aufloesen(client, aktion, erwartet):
     assert "geprüft von" in job.error
 
 
-def test_unklaren_auftrag_erneut_drucken_legt_neuen_job_an(client, monkeypatch):
+@pytest.mark.parametrize("initial_status", [JOB_UNCERTAIN, JOB_FAILED])
+def test_unklaren_auftrag_erneut_drucken_legt_neuen_job_an(client, monkeypatch, initial_status):
     gesendet = []
 
     async def dispatch(db, job):
@@ -363,8 +364,8 @@ def test_unklaren_auftrag_erneut_drucken_legt_neuen_job_an(client, monkeypatch):
         return {"status": JOB_QUEUED}
 
     monkeypatch.setattr("app.services.print_dispatcher.dispatch_job", dispatch)
-    gw_id = _admin_client(client, "agent_resolve_reprint")
-    job_id = _org1_job(gw_id, status=JOB_UNCERTAIN, delivery=DELIVERY_LEASE)
+    gw_id = _admin_client(client, "agent_resolve_reprint_" + initial_status)
+    job_id = _org1_job(gw_id, status=initial_status, delivery=DELIVERY_LEASE)
     antwort = client.post(f"/gateway/jobs/{job_id}/resolve",
                           data={"action": "reprint", "_csrf": client.cookies.get("ec_csrf")},
                           follow_redirects=False)
@@ -447,3 +448,15 @@ def test_sweep_iteration_meldet_und_ersatzdruckt(monkeypatch):
     assert wartend in ersatz
     assert abgelaufen in geweckt
     assert _laden(abgelaufen).status == JOB_QUEUED
+
+
+def test_historie_shows_spooler_details_and_cancel_warning(client):
+    gw_id = _admin_client(client, "agent_spooler_details")
+    _org1_job(gw_id, status=JOB_PRINTING, delivery=DELIVERY_LEASE, phase="spooled", spool_ref="win:42")
+    _org1_job(gw_id, status=JOB_DONE, delivery=DELIVERY_LEASE, phase="spooled")
+    _org1_job(gw_id, status=JOB_FAILED, delivery=DELIVERY_LEASE, error="Queue fehlt")
+    response = client.get(f"/gateway/{gw_id}/historie")
+    assert response.status_code == 200
+    for text in ("Im Windows-Spooler", "Phase: spooled", "Spool-Ref: win:42",
+                 "vom Spooler abgeschlossen", "bereits ausgegebene Seiten", "Neu drucken", "Queue fehlt"):
+        assert text in response.text

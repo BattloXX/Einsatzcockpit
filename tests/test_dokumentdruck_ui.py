@@ -161,7 +161,7 @@ def test_stationsauftrag_status_und_doppelklick(viewer_seite, client, dokumente,
     expect(dialog.get_by_role("link", name="PDF öffnen", exact=True)).not_to_be_visible()
     druckpdf(dialog, client)
     button.evaluate("e => { e.click(); e.click(); }")
-    expect(dialog.locator('[data-dp-status]')).to_contain_text("Wartet auf Druckdienst")
+    expect(dialog.locator('[data-dp-status]')).to_contain_text("Eingereiht")
     expect(button).to_be_disabled()
     expect(dialog).to_have_attribute("data-confirmed", "false")
     with TestingSession() as db:
@@ -177,5 +177,7 @@ def test_stationsauftrag_status_und_doppelklick(viewer_seite, client, dokumente,
         agent.apply_agent_status(db, gateway, job.id, grant["lease_token"], "done", "spooled", "win:42", None)
     dialog.get_by_role("button", name="Status prüfen").click()
     expect(dialog).to_have_attribute("data-confirmed", "true")
-    expect(dialog.locator('[data-dp-status]')).to_contain_text("Abschluss bestätigt")
+    expect(dialog.locator('[data-dp-status]')).to_contain_text("vom Spooler abgeschlossen")
+    expect(dialog.locator('[data-dp-status]')).to_contain_text("Phase: spooled")
+    expect(dialog.locator('[data-dp-status]')).to_contain_text("Spool-Ref: win:42")
     assert not errors

@@ -1153,6 +1153,8 @@ async def _agent_job_status(websocket: WebSocket, org_id: int, gateway_id: int, 
 
     p = msg.get("payload") or {}
     jid = p.get("job_id")
+    if isinstance(jid, str) and jid.isascii() and jid.isdigit() and len(jid) <= 19:
+        jid = int(jid)
     ergebnis = None
     if isinstance(jid, int):
         ergebnis = await asyncio.to_thread(
