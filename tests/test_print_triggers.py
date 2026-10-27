@@ -160,6 +160,8 @@ def test_alarm_route_schedules_trigger_only_for_new_ingest(
     gateway = SimpleNamespace(id=9, org_id=7)
     ingest = SimpleNamespace(
         id=11,
+        org_id=gateway.org_id,
+        gateway_id=gateway.id,
         einsatz_id=12,
         parse_status="parsed",
         process_status="applied",

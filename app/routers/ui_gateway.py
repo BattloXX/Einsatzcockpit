@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session, object_session
 
 from app.core.async_bridge import run_async
@@ -29,6 +30,7 @@ from app.models.gateway import (
     RULE_DOCUMENT_LABELS,
     TRIGGER_DOCUMENT_TYPES,
     TRIGGER_LABELS,
+    AlarmIngest,
     Gateway,
     Printer,
     PrintJob,
@@ -48,8 +50,8 @@ def require_gateway_enabled(request: Request) -> None:
 
 
 def _gw_or_404(db: Session, org_id: int | None, gateway_id: int) -> Gateway:
-    gw = db.get(Gateway, gateway_id)
-    if gw is None or gw.org_id != org_id:
+    gw = db.query(Gateway).filter(Gateway.id == gateway_id, Gateway.org_id == org_id).first()
+    if gw is None:
         raise HTTPException(status_code=404, detail="Gateway nicht gefunden")
     return gw
 
@@ -1434,3 +1436,134 @@ async def resolve_uncertain_job(
         context["user"] = user
         return templates.TemplateResponse(request, "gateway/_druckhistorie.html", context)
     return RedirectResponse(f"/gateway/{gw_id}#historie", status_code=303)
+
+
+# Alarmempfang und Diagnose (Regelsatz-Verwaltung folgt getrennt).
+def _alarm_ingest_or_404(db: Session, gw: Gateway, ingest_id: int) -> AlarmIngest:
+    ingest = db.query(AlarmIngest).filter(
+        AlarmIngest.id == ingest_id, AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id,
+    ).first()
+    if ingest is None:
+        raise HTTPException(404, "Alarmempfang nicht gefunden")
+    return ingest
+
+
+def _alarmempfang_context(db: Session, gw: Gateway, user: User, status: str, zeitraum: str, nummer: str) -> dict:
+    from app.core.timezones import local_date_to_utc, now_local
+    from app.routers.ws import gateway_online_id
+
+    if status not in ("alle", "error", "needs_review", "stored", "processing", "applied"):
+        raise HTTPException(400, "Ungueltiger Status")
+    if zeitraum not in ("heute", "7", "30"):
+        raise HTTPException(400, "Ungueltiger Zeitraum")
+    heute = now_local(user.org).date()
+    start = local_date_to_utc(heute.isoformat(), org=user.org)
+    ende = local_date_to_utc((heute + timedelta(days=1)).isoformat(), org=user.org)
+    basis = db.query(AlarmIngest).filter(AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id)
+    tag = basis.filter(AlarmIngest.received_at >= start, AlarmIngest.received_at < ende)
+    zaehler = {
+        "empfangen": tag.count(),
+        "verarbeitet": tag.filter(AlarmIngest.process_status == "applied").count(),
+        "fehlerhaft": tag.filter(AlarmIngest.process_status.in_(("error", "needs_review"))).count(),
+        "duplikate": tag.filter(AlarmIngest.dedup_action == "duplicate").count(),
+    }
+    seit = start if zeitraum == "heute" else datetime.now(UTC).replace(tzinfo=None) - timedelta(days=int(zeitraum))
+    query = basis.filter(AlarmIngest.received_at >= seit)
+    if status != "alle":
+        query = query.filter(AlarmIngest.process_status == status)
+    if nummer.strip():
+        query = query.filter(AlarmIngest.leitstellennummer.contains(nummer.strip(), autoescape=True))
+    letzte_nummer = basis.filter(AlarmIngest.leitstellennummer.is_not(None)).order_by(
+        AlarmIngest.received_at.desc(), AlarmIngest.id.desc(),
+    ).first()
+    letzter_empfang = db.query(func.max(AlarmIngest.received_at)).filter(
+        AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id,
+    ).scalar()
+    return {
+        "gw": gw, "user": user, "status": status, "zeitraum": zeitraum, "nummer": nummer,
+        "ingests": query.order_by(AlarmIngest.received_at.desc(), AlarmIngest.id.desc()).limit(200).all(),
+        "zaehler": zaehler, "letzter_empfang": letzter_empfang,
+        "letzte_nummer": letzte_nummer.leitstellennummer if letzte_nummer else None,
+        "connected": gateway_online_id(gw.id, user.org_id),
+    }
+
+
+@router.get("/{gateway_id:int}/alarmempfang", response_class=HTMLResponse)
+def gateway_alarmempfang(
+    gateway_id: int, request: Request, status: str = "alle", zeitraum: str = "heute", nummer: str = "",
+    db: Session = Depends(get_db), user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    context = _alarmempfang_context(db, gw, user, status, zeitraum, nummer)
+    template = ("gateway/_alarmempfang_liste.html" if request.headers.get("HX-Request") == "true"
+                else "gateway/alarmempfang.html")
+    return templates.TemplateResponse(request, template, context)
+
+
+def _alarmempfang_detail(request: Request, db: Session, gw: Gateway, user: User, ingest: AlarmIngest) -> HTMLResponse:
+    versionen = []
+    if ingest.leitstellennummer:
+        versionen = db.query(AlarmIngest).filter(
+            AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id,
+            AlarmIngest.leitstellennummer == ingest.leitstellennummer,
+        ).order_by(AlarmIngest.received_at, AlarmIngest.id).all()
+    raw = ingest.raw_bytes or b""
+    auszug = raw[:4096]
+    hex_text = "\n".join(f"{i:04x}  {auszug[i:i + 16].hex(' ')}" for i in range(0, len(auszug), 16))
+    return templates.TemplateResponse(request, "gateway/_alarmempfang_detail.html", {
+        "gw": gw, "user": user, "ingest": ingest, "versionen": versionen,
+        "hex_text": hex_text, "bytes_gekuerzt": len(raw) > 4096,
+    })
+
+
+@router.get("/{gateway_id:int}/alarmempfang/{ingest_id:int}", response_class=HTMLResponse)
+def gateway_alarmempfang_detail(
+    gateway_id: int, ingest_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")), _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    return _alarmempfang_detail(request, db, gw, user, _alarm_ingest_or_404(db, gw, ingest_id))
+
+
+@router.post("/{gateway_id:int}/alarmempfang/{ingest_id:int}/{aktion}", response_class=HTMLResponse)
+def gateway_alarmempfang_aktion(
+    gateway_id: int, ingest_id: int, aktion: str, request: Request, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")), _guard: None = Depends(require_gateway_enabled),
+):
+    from app.core.audit import write_audit
+    from app.services.alarm_apply_service import melde_ingest_geaendert, verarbeite_neu
+
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    ingest = _alarm_ingest_or_404(db, gw, ingest_id)
+    assert gw.org_id is not None
+    ohne_einsatz = ingest.einsatz_id is None
+    if aktion == "neu-verarbeiten":
+        try:
+            ingest = verarbeite_neu(db, ingest, gw.org_id, user)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+    elif aktion == "geprueft":
+        ingest = db.query(AlarmIngest).filter(
+            AlarmIngest.id == ingest_id, AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id,
+        ).populate_existing().with_for_update().one()
+        if ingest.process_status not in ("needs_review", "error"):
+            raise HTTPException(409, "Nur fehlerhafte oder zu pruefende Datensaetze koennen bestaetigt werden")
+        ingest.process_error = None
+        if ingest.einsatz_id is not None:
+            ingest.process_status = "applied"
+    else:
+        raise HTTPException(404, "Aktion nicht gefunden")
+    write_audit(db, f"alarm_ingest.{aktion}", org_id=gw.org_id, user_id=user.id,
+                entity_type="alarm_ingest", entity_id=ingest.id,
+                payload={"gateway_id": gw.id, "process_status": ingest.process_status,
+                         "einsatz_id": ingest.einsatz_id})
+    db.commit()
+    if aktion == "neu-verarbeiten" and ohne_einsatz and ingest.process_status == "applied":
+        from app.services.alarm_apply_service import nachlauf
+        nachlauf(db, ingest, org_id=gw.org_id, background_tasks=background_tasks, base_url=str(request.base_url))
+    melde_ingest_geaendert(ingest)
+    response = _alarmempfang_detail(request, db, gw, user, ingest)
+    response.headers["HX-Trigger"] = "alarm-ingest-refresh"
+    return response

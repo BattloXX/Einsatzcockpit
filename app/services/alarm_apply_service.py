@@ -16,6 +16,7 @@ from app.core.async_bridge import run_async
 from app.models.gateway import PARSE_FAILED, AlarmIngest
 from app.models.incident import Incident
 from app.models.incident_alarm_field import IncidentAlarmField
+from app.models.user import User
 
 logger = logging.getLogger("einsatzleiter.alarm")
 
@@ -69,6 +70,7 @@ def _codes(parsed: dict) -> list[str]:
 
 def merge_folgenachricht(
     db: Session, incident: Incident, ingest: AlarmIngest, parsed_result: dict, org_id: int,
+    *, nur_alarm: bool = False,
 ) -> MergeErgebnis:
     """Fuehrt eine Version zusammen; commit und Nachlauf bleiben beim Aufrufer."""
     from app.core.audit import write_incident_change
@@ -97,7 +99,7 @@ def merge_folgenachricht(
         if herkunft is not None and herkunft.source == "manual":
             hinweis(feld, wert)
             return True
-        return False
+        return nur_alarm and (herkunft is None or herkunft.source != "alarm")
 
     def aendern(feld: str, wert: str, text: str) -> None:
         vorher = getattr(incident, feld)
@@ -172,7 +174,7 @@ def merge_folgenachricht(
     gesehen = _herkunft(db, incident.id, org_id, "codes")
     bisher = json.loads(gesehen.value) if gesehen and gesehen.value else []
     result.neue_codes = [code for code in _codes(parsed_result) if code not in bisher]
-    if result.neue_codes:
+    if result.neue_codes and (not nur_alarm or not geschuetzt("codes", ", ".join(result.neue_codes))):
         wert = json.dumps([*bisher, *result.neue_codes])
         _speichere_feld(db, incident.id, org_id, "codes", wert, "alarm", ingest.id)
         write_incident_change(db, incident.id, "alarm.update", "incident", incident.id,
@@ -180,6 +182,88 @@ def merge_folgenachricht(
         journal(f"Alarmupdate v{version}: Codes ergaenzt: {', '.join(result.neue_codes)}")
         result.felder_geaendert.append("codes")
     return result
+
+
+def verarbeite_neu(db: Session, ingest: AlarmIngest, org_id: int, user: User) -> AlarmIngest:
+    """Aktuellen Parser anwenden, verknuepfte Einsaetze ohne Alarm-/Drucknachlauf mergen."""
+    from app.models.incident import IncidentLog
+    from app.services.serial_alarm_service import _parse_ingest, process_ingest
+
+    if ingest.org_id != org_id or user.org_id != org_id:
+        raise ValueError("Wiederverarbeitung ausserhalb der Organisation")
+    ingest = db.query(AlarmIngest).filter(
+        AlarmIngest.id == ingest.id, AlarmIngest.org_id == org_id,
+    ).populate_existing().with_for_update().one()
+    if ingest.process_status == "processing":
+        raise ValueError("Datensatz wird bereits verarbeitet")
+    text = f"Alarmdaten manuell neu verarbeitet von {user.username}"
+    if ingest.einsatz_id is None:
+        ingest.process_status = "error"
+        db.flush()
+        ingest = process_ingest(db, ingest.id, org_id=org_id)
+        if ingest.process_status == "applied" and ingest.einsatz_id:
+            db.add(IncidentLog(incident_id=ingest.einsatz_id, author_name=user.display_name or user.username,
+                               level="info", text=text))
+            db.commit()
+        return ingest
+
+    incident = db.query(Incident).filter(
+        Incident.id == ingest.einsatz_id, Incident.primary_org_id == org_id,
+    ).with_for_update().one()
+    vorher = (ingest.parsed, ingest.parser_version, ingest.process_status, ingest.process_error)
+    incident_geaendert = False
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        with db.begin_nested():
+            parsed = _parse_ingest(db, ingest, org_id)
+            if ingest.process_error:
+                raise ValueError(ingest.process_error)
+            ergebnis = merge_folgenachricht(
+                db, incident, ingest, {**(ingest.parsed or {}), **parsed}, org_id, nur_alarm=True,
+            )
+            incident_geaendert = bool(ergebnis.felder_geaendert)
+            ingest.process_status = "applied"
+            vorhanden = db.query(IncidentLog.id).filter(
+                IncidentLog.incident_id == incident.id, IncidentLog.text == text,
+            ).first()
+            geaendert = vorher != (ingest.parsed, ingest.parser_version, ingest.process_status, ingest.process_error)
+            if geaendert or ergebnis.felder_geaendert or vorhanden is None:
+                db.add(IncidentLog(incident_id=incident.id, author_name=user.display_name or user.username,
+                                   level="info", text=text, ts=now))
+                ingest.parsed_at = now
+                ingest.applied_at = now
+                ingest.process_attempts = (ingest.process_attempts or 0) + 1
+            db.flush()
+    except Exception as exc:
+        logger.exception("Manuelle Wiederverarbeitung fehlgeschlagen (ingest %s, org %s)", ingest.id, org_id)
+        ingest.process_status = "error"
+        ingest.process_error = str(exc)
+        ingest.process_attempts = (ingest.process_attempts or 0) + 1
+        ingest.parsed_at = now
+    db.commit()
+    if incident_geaendert and ingest.process_status == "applied":
+        from app.services.broadcast import broadcast_org, manager
+        payload = {"type": "incident_updated", "incident_id": incident.id}
+        try:
+            run_async(broadcast_org, org_id, payload)
+            run_async(manager.broadcast, incident.id, payload)
+        except Exception:
+            logger.warning("Manueller Alarmupdate-Broadcast fehlgeschlagen (ingest %s, org %s)",
+                           ingest.id, org_id, exc_info=True)
+    return ingest
+
+
+def melde_ingest_geaendert(ingest: AlarmIngest) -> None:
+    """Diagnoseansichten workeruebergreifend informieren; Speicherung bleibt unabhaengig."""
+    from app.services.broadcast import broadcast_org
+
+    try:
+        run_async(broadcast_org, ingest.org_id, {
+            "type": "alarm_ingest_changed", "gateway_id": ingest.gateway_id, "ingest_id": ingest.id,
+        })
+    except Exception:
+        logger.warning("Alarm-Diagnose-Broadcast fehlgeschlagen (ingest %s, org %s)",
+                       ingest.id, ingest.org_id, exc_info=True)
 
 
 def nach_adressaenderung(incident_id: int, background_tasks: BackgroundTasks) -> None:

@@ -1,0 +1,37 @@
+<article id="alarm-detail-inhalt" class="card">
+  <div class="card-body">
+    <h2>Alarmempfang #{{ ingest.id }}</h2>
+    <p>{{ ingest.received_at|local_datetime_sec }} | {{ ingest.process_status }} | Version {{ ingest.version_no or '-' }}</p>
+    <p>Versuche: {{ ingest.process_attempts or 0 }} | Letzter Versuch: {{ ingest.parsed_at|local_datetime_sec or '-' }} | Verarbeitet: {{ ingest.applied_at|local_datetime_sec or '-' }}</p>
+    {% if ingest.einsatz_id %}<p><a href="/einsatz/{{ ingest.einsatz_id }}">Einsatz #{{ ingest.einsatz_id }}</a></p>{% endif %}
+    {% if ingest.process_error %}<p class="alert alert--error">{{ ingest.process_error }}</p>{% endif %}
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <form hx-post="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}/neu-verarbeiten" hx-target="#alarm-detail-inhalt" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="gwx-btn" type="submit" {{ 'disabled' if ingest.process_status == 'processing' else '' }}>Neu verarbeiten</button>
+      </form>
+      {% if ingest.process_status in ['needs_review', 'error'] %}
+      <form hx-post="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}/geprueft" hx-target="#alarm-detail-inhalt" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="gwx-btn" type="submit">Als geprüft markieren</button>
+      </form>
+      {% if not ingest.einsatz_id %}<p>Ohne verknüpften Einsatz bleibt der Status erhalten; die Prüfung wird im Audit vermerkt.</p>{% endif %}
+      {% endif %}
+    </div>
+    <h3>Originaltext</h3><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ ingest.raw_text }}</pre>
+    <details><summary>Hex-Ansicht (maximal 4 KiB)</summary>
+      <pre style="overflow-x:auto">{{ hex_text or 'Keine Rohbytes vorhanden.' }}</pre>
+      {% if bytes_gekuerzt %}<p>Anzeige auf die ersten 4 KiB gekürzt.</p>{% endif %}
+    </details>
+    <h3>Parserfelder</h3>
+    {% set p = ingest.parsed or {} %}
+    <p>Qualität: {{ p.get('qualitaet', '-') }} | Parse-Status: {{ ingest.parse_status }} | Parserversion: {{ ingest.parser_version or '-' }}</p>
+    <dl>{% for feld, wert in p.items() if feld not in ['gateway_parsed', 'original_text'] %}
+      <dt><strong>{{ feld }}</strong></dt><dd style="white-space:pre-wrap;overflow-wrap:anywhere">{{ wert|tojson }}</dd>
+    {% endfor %}</dl>
+    <details><summary>Vergleich: Gateway-Parser</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ p.get('gateway_parsed')|tojson(indent=2) }}</pre></details>
+    <h3>Versionen dieser Leitstellennummer</h3>
+    <ul>{% for version in versionen %}<li><a href="/gateway/{{ gw.id }}/alarmempfang/{{ version.id }}" hx-get="/gateway/{{ gw.id }}/alarmempfang/{{ version.id }}" hx-target="#alarm-detail-inhalt" hx-swap="outerHTML">{{ version.received_at|local_datetime_sec }} - Version {{ version.version_no or '-' }} - {{ version.process_status }}</a></li>
+    {% else %}<li>Keine Leitstellennummer vorhanden.</li>{% endfor %}</ul>
+  </div>
+</article>

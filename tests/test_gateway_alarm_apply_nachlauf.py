@@ -32,7 +32,8 @@ def alarm_api(setup_db, monkeypatch):
         return lambda *args, **kwargs: calls.append(name)
 
     async def broadcast(*args, **kwargs):
-        calls.append("broadcast")
+        if args[1].get("type") != "alarm_ingest_changed":
+            calls.append("broadcast")
 
     monkeypatch.setattr("app.services.print_dispatcher.autoprint_alarm_background", record("alarm_print"))
     monkeypatch.setattr("app.services.print_dispatcher.autoprint_incident_background", record("incident_print"))

@@ -1,0 +1,28 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Alarmempfang - {{ gw.name }} - {{ brand }}{% endblock %}
+{% block admin_content %}
+{% include "gateway/_gwx_style.html" %}
+<div class="gwx">
+  <h1>Alarmempfang - {{ gw.name }}</h1>
+  {% from "gateway/_tabs.html" import gwtabs %}
+  {{ gwtabs(gw.id, "alarmempfang") }}
+  <div class="gwx-body">
+    <form id="alarm-filter" hx-get="/gateway/{{ gw.id }}/alarmempfang" hx-target="#alarm-liste" hx-swap="outerHTML" hx-trigger="change, submit">
+      <label>Status <select name="status">
+        {% for wert in ['alle', 'error', 'needs_review', 'stored', 'processing', 'applied'] %}
+        <option value="{{ wert }}" {{ 'selected' if status == wert else '' }}>{{ wert }}</option>
+        {% endfor %}
+      </select></label>
+      <label>Zeitraum <select name="zeitraum">
+        {% for wert, text in [('heute', 'Heute'), ('7', '7 Tage'), ('30', '30 Tage')] %}
+        <option value="{{ wert }}" {{ 'selected' if zeitraum == wert else '' }}>{{ text }}</option>
+        {% endfor %}
+      </select></label>
+      <label>Leitstellennummer <input name="nummer" value="{{ nummer }}" maxlength="40"></label>
+      <button class="gwx-btn" type="submit">Filtern</button>
+    </form>
+    {% include "gateway/_alarmempfang_liste.html" %}
+    <section id="alarm-detail" aria-live="polite"></section>
+  </div>
+</div>
+{% endblock %}

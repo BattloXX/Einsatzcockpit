@@ -25,7 +25,7 @@ def _org_id(user: User, target_org_id: int | None = None) -> int:
 def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
     from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorLog, DienstMonitorToken, DienstStatus
     from app.models.master import FireDept, OrgSettings, SystemSettings
-    from app.services.dienst_monitor_service import dienst_zustand, pruefe_dienste
+    from app.services.dienst_monitor_service import alarmempfang_warnungen, dienst_zustand, pruefe_dienste
     from app.services.worker_monitor import snapshot
 
     org = db.get(FireDept, org_id)
@@ -52,6 +52,7 @@ def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
         "org": org,
         "org_settings": settings,
         "checks": checks,
+        "alarmempfang_warnungen": alarmempfang_warnungen(db, org_id),
         "status_rows": rows,
         "dienst_zustaende": {c.key: dienst_zustand(c, rows.get(c.key), karenz, jetzt) for c in checks},
         "loop_letzter_lauf": loop_letzter_lauf,

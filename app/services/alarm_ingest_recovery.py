@@ -70,10 +70,11 @@ def run_alarm_ingest_recovery_once() -> None:
                     run_async(tasks)
 
                 try:
-                    process_ingest(
+                    ingest = process_ingest(
                         db, ingest_id, org_id=org_id, on_applied=after_applied,
                         claim_filter=_eligible(datetime.now(UTC).replace(tzinfo=None)),
                     )
+                    alarm_apply_service.melde_ingest_geaendert(ingest)
                 except Exception:
                     db.rollback()
                     logger.exception("Alarm-Recovery fehlgeschlagen (ingest %s, org %s)",
