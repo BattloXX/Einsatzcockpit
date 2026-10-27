@@ -173,3 +173,43 @@ Parserhinweise und die lokale Gateway-Statusseite prüfen. Der Instanz-Lock im
 Gateway verhindert, dass mehrere Container dieselbe W&T-Verbindung gleichzeitig
 lesen. Ein Lock-Konflikt muss am Gateway behoben werden; Cloud-Wiederverarbeitung
 ersetzt keine fehlenden Bytes.
+
+## Parser-Regeln pflegen
+
+Im Tab **Alarmempfang** befindet sich der Unterbereich **Parser** fuer Org-Admins
+und Admins. Die Versionen gelten fuer die gesamte eigene Organisation. Version 0
+ist der eingebaute Standard; Versionen zeigen Quelle (UI/MCP), Ersteller, Notiz und
+Zeitpunkte. Ein neuer Entwurf kopiert den aktiven Satz oder den Standard.
+
+Den Entwurf oeffnen, Regeln als JSON und eine Notiz bearbeiten und speichern.
+Schema und Regex-Muster werden dabei validiert; Fehlermeldungen erscheinen direkt
+im Unterbereich. Der strukturierte Diff zeigt hinzugefuegte, geaenderte und
+entfernte Felder gegenueber dem aktiven Satz. Aktive und archivierte Versionen
+sind unveraenderlich. **Entwurf verwerfen** archiviert den Entwurf.
+
+Testfaelle koennen manuell oder aus einer Alarmempfang-ID des angezeigten Gateways
+angelegt werden. Unter **Erwartete Felder** ein JSON-Objekt mit den zu pruefenden
+Feldern des Parserergebnisses angeben, beispielsweise `{"stichwort": "f2"}`.
+Nur diese Felder werden verglichen. Testfaelle lassen sich deaktivieren oder
+loeschen; ihre Quelle bleibt sichtbar. Beim Speichern ersetzt die Anonymisierung
+Telefonnummern, E-Mail-Adressen, IBAN und erkannte Namen nach Notrufer/Melder/Anrufer
+durch Platzhalter. Auch Titel und erwartete Textwerte werden maskiert. Weitere
+Personendaten in Freitext bitte vor dem Speichern selbst entfernen.
+
+**Probelauf** prueft die gespeicherte Version gegen die letzten maximal 200
+Rohdatensaetze der Organisation sowie alle aktiven Testfaelle, jeweils auch mit
+dem aktiven Satz. Er schreibt keine Einsaetze, Ingests, Alarm- oder Druckauftraege.
+Das Zeitlimit betraegt 10 Sekunden fuer die isolierte Parser-Auswertung. Die Tabelle
+zeigt Feld-Diffs und Erwartungsfehler, Regressionen zuerst. Ein bestandener
+Testfall, der jetzt fehlschlaegt, oder ein schlechterer Status/Qualitaetswert gilt
+als Regression. Neu bestandene Testfaelle oder bessere Status-/Qualitaetswerte
+gelten als neu korrekt, sofern keine Regression vorliegt.
+
+**Aktivieren** wiederholt diese Pruefungen. Alle aktiven Testfaelle muessen bestehen
+und es darf keine Regression geben. Ein bewusster Override erfordert die Checkbox
+und eine Begruendung; beides wird zusammen mit der Zusammenfassung auditiert.
+Bei Zeitlimit oder ungueltigen Regeln ist keine Freigabe moeglich. Zum
+**Zuruecksetzen** die gewuenschte archivierte Vorversion oeffnen und **Auf diese
+Vorversion zuruecksetzen** waehlen; es gelten dieselben Pruefungen und Audit-Regeln.
+Die Aktivierung aendert nur kuenftige Verarbeitung. Bestehende Einsaetze werden
+nur mit **Neu verarbeiten** in der Alarmempfang-Diagnose erneut ausgewertet.

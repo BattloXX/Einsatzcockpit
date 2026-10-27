@@ -86,7 +86,10 @@ class Regelsatz(BaseModel):
             if name.endswith("_muster"):
                 wert = getattr(self, name)
                 # Eingebaute Standardmuster sind geprueft; Probelauf nur fuer fremde Muster.
-                validiere_muster(wert, probelauf=wert != type(self).model_fields[name].default)
+                try:
+                    validiere_muster(wert, probelauf=wert != type(self).model_fields[name].default)
+                except ValueError as exc:
+                    raise ValueError(f"{name}: {exc}") from exc
         if any(value < 0 or value > 100 for value in self.qualitaetsgewichte.values()):
             raise ValueError("Gewichte muessen zwischen 0 und 100 liegen")
         erlaubt = {"gemeinde", "ortsteil", "strasse"}

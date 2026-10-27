@@ -23,6 +23,7 @@
     </form>
     {% include "gateway/_alarmempfang_liste.html" %}
     <section id="alarm-detail" aria-live="polite"></section>
+    <section id="alarm-parser" hx-get="/gateway/{{ gw.id }}/alarmempfang/parser" hx-trigger="load" hx-swap="outerHTML" aria-live="polite">Parser wird geladen</section>
   </div>
 </div>
 {% endblock %}

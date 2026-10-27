@@ -1438,7 +1438,7 @@ async def resolve_uncertain_job(
     return RedirectResponse(f"/gateway/{gw_id}#historie", status_code=303)
 
 
-# Alarmempfang und Diagnose (Regelsatz-Verwaltung folgt getrennt).
+# Alarmempfang und Diagnose.
 def _alarm_ingest_or_404(db: Session, gw: Gateway, ingest_id: int) -> AlarmIngest:
     ingest = db.query(AlarmIngest).filter(
         AlarmIngest.id == ingest_id, AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id,
@@ -1566,4 +1566,194 @@ def gateway_alarmempfang_aktion(
     melde_ingest_geaendert(ingest)
     response = _alarmempfang_detail(request, db, gw, user, ingest)
     response.headers["HX-Trigger"] = "alarm-ingest-refresh"
+    return response
+
+
+# Parserverwaltung: ausschliesslich Session-Rollen wie die Diagnose-Routen.
+def _require_parser_session(request: Request) -> None:
+    from app.core.security import unsign_session
+
+    session = unsign_session(request.cookies.get("session", ""))
+    user = getattr(request.state, "user", None)
+    if not session or session[1] or session[3] or user is None or session[0] != user.id:
+        raise HTTPException(401, "Session-Login erforderlich")
+
+
+def _parser_version(db: Session, org_id: int, version: int):
+    from app.services.alarm_parser.laufzeit import lade_regelsatz
+
+    row = lade_regelsatz(db, org_id, version)
+    if row is None:
+        raise HTTPException(404, "Regelsatz nicht gefunden")
+    return row
+
+
+def _parser_ansicht(
+    request: Request, db: Session, gw: Gateway, user: User, *, version: int | None = None,
+    meldung: str = "", ergebnis=None, eingabe: str | None = None, notiz: str | None = None,
+):
+    import json
+
+    from app.models.gateway import AlarmParserRegelsatz, AlarmParserTestfall
+    from app.services.alarm_parser.laufzeit import aktiver_regelsatz
+    from app.services.alarm_parser.probelauf import feld_diff
+
+    assert gw.org_id is not None
+    aktiv = aktiver_regelsatz(db, gw.org_id)
+    row = _parser_version(db, gw.org_id, version) if version is not None else None
+    versionen = db.query(AlarmParserRegelsatz).filter(
+        AlarmParserRegelsatz.org_id == gw.org_id,
+    ).order_by(AlarmParserRegelsatz.version.desc()).all()
+    ersteller = dict(db.query(User.id, User.display_name).filter(User.org_id == gw.org_id).all())
+    return templates.TemplateResponse(request, "gateway/_alarmempfang_parser.html", {
+        "gw": gw, "user": user, "versionen": versionen, "auswahl": row, "ersteller": ersteller,
+        "aktiv_version": aktiv.version, "meldung": meldung, "ergebnis": ergebnis,
+        "regeln_json": eingabe if eingabe is not None else json.dumps(
+            row.regeln if row else aktiv.model_dump(mode="json"), ensure_ascii=False, indent=2),
+        "notiz": notiz if notiz is not None else (row.notiz if row else ""),
+        "regeldiff": feld_diff(aktiv.model_dump(mode="json"), row.regeln) if row else [],
+        "testfaelle": db.query(AlarmParserTestfall).filter(
+            AlarmParserTestfall.org_id == gw.org_id,
+        ).order_by(AlarmParserTestfall.id).all(),
+    })
+
+
+@router.get("/{gateway_id:int}/alarmempfang/parser", response_class=HTMLResponse)
+def gateway_parser(
+    gateway_id: int, request: Request, version: int | None = None, db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")), _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    return _parser_ansicht(request, db, gw, user, version=version)
+
+
+@router.post("/{gateway_id:int}/alarmempfang/parser/{aktion}", response_class=HTMLResponse)
+def gateway_parser_aktion(
+    gateway_id: int, aktion: str, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")), _guard: None = Depends(require_gateway_enabled),
+    _session: None = Depends(_require_parser_session),
+):
+    import json
+
+    from pydantic import ValidationError
+
+    from app.core.audit import write_audit
+    from app.models.gateway import AlarmParserTestfall
+    from app.models.master import FireDept
+    from app.services.alarm_parser import AlarmParseResult, Regelsatz
+    from app.services.alarm_parser.anonymisieren import anonymisiere
+    from app.services.alarm_parser.laufzeit import aktiviere_regelsatz, lege_entwurf_an
+    from app.services.alarm_parser.probelauf import probelauf
+
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    assert gw.org_id is not None
+    form = run_async(request.form)
+    version = None
+    ergebnis = None
+    eingabe = None
+    notiz = None
+    # Alle Verwaltungsaktionen serialisieren sich mit der Aktivierung.
+    db.query(FireDept).filter(FireDept.id == gw.org_id).with_for_update().one()
+    try:
+        if aktion == "entwurf":
+            row = lege_entwurf_an(db, gw.org_id, erstellt_von_user_id=user.id, quelle="ui")
+            version = row.version
+            entity_id = row.id
+        elif aktion in ("speichern", "verwerfen", "probelauf", "aktivieren", "zuruecksetzen"):
+            version = int(str(form.get("version", "")))
+            row = _parser_version(db, gw.org_id, version)
+            # Auch archivierte Versionen bleiben unveraenderlich.
+            row = db.query(type(row)).filter(type(row).id == row.id, type(row).org_id == gw.org_id
+                                            ).populate_existing().with_for_update().one()
+            entity_id = row.id
+            if aktion in ("speichern", "verwerfen") and row.status != "entwurf":
+                raise ValueError("Nur Entwuerfe koennen bearbeitet oder verworfen werden")
+            if aktion == "speichern":
+                eingabe = str(form.get("regeln", ""))
+                notiz = str(form.get("notiz", ""))
+                if len(eingabe) > 131072:
+                    raise ValueError("Regeln: maximal 128 KiB")
+                validiert = Regelsatz.model_validate(json.loads(eingabe))
+                row.regeln = validiert.model_dump(mode="json")
+                row.notiz = notiz
+            elif aktion == "verwerfen":
+                row.status = "archiviert"
+            else:
+                if aktion == "aktivieren" and row.status != "entwurf":
+                    raise ValueError("Nur Entwuerfe koennen aktiviert werden")
+                if aktion == "zuruecksetzen" and row.status != "archiviert":
+                    raise ValueError("Zum Zuruecksetzen eine archivierte Version waehlen")
+                regeln = Regelsatz.model_validate({**row.regeln, "version": str(row.version)})
+                ergebnis = probelauf(db, gw.org_id, regeln)
+                if aktion != "probelauf":
+                    override = form.get("override") == "on"
+                    begruendung = str(form.get("begruendung", "")).strip()
+                    if override and not begruendung:
+                        raise ValueError("Override erfordert eine Begruendung")
+                    if not ergebnis.freigabefaehig and not override:
+                        raise ValueError("Aktivierung blockiert: Testfall-Fehler oder Regression. Probelauf pruefen.")
+                    aktiviere_regelsatz(db, gw.org_id, version, aktiviert_von_user_id=user.id)
+                    write_audit(db, f"alarm_parser.{aktion}", org_id=gw.org_id, user_id=user.id,
+                                entity_type="alarm_parser_regelsatz", entity_id=row.id,
+                                payload={"version": version, "override": override, "begruendung": begruendung,
+                                         "zusammenfassung": ergebnis.zusammenfassung})
+        elif aktion == "testfall-anlegen":
+            titel = str(form.get("titel", "")).strip()
+            text = str(form.get("rohtext", ""))
+            ingest_id_text = str(form.get("ingest_id", "")).strip()
+            ingest = _alarm_ingest_or_404(db, gw, int(ingest_id_text)) if ingest_id_text else None
+            if ingest is not None:
+                text = ingest.raw_text or ""
+            erwartet = json.loads(str(form.get("erwartet", "{}")))
+            if not isinstance(erwartet, dict) or not erwartet:
+                raise ValueError("Erwartet: mindestens ein Ergebnisfeld als JSON-Objekt angeben")
+            felder = AlarmParseResult(original_text="").to_dict()
+            for key, value in erwartet.items():
+                if key not in felder:
+                    raise ValueError(f"Erwartet: unbekanntes Feld {key}")
+                if value is not None and felder[key] is not None and type(value) is not type(felder[key]):
+                    raise ValueError(f"Erwartet: falscher Typ fuer {key}")
+            if not titel or len(titel) > 200 or not text.strip() or len(text) > 65536:
+                raise ValueError("Testfall: Titel (max. 200) und Rohtext (max. 64 KiB) erforderlich")
+            test = AlarmParserTestfall(
+                org_id=gw.org_id, titel=anonymisiere(titel), rohtext=anonymisiere(text),
+                erwartet=json.loads(anonymisiere(json.dumps(erwartet, ensure_ascii=False))),
+                ingest_id=ingest.id if ingest else None, quelle="ui", erstellt_von_user_id=user.id, aktiv=True,
+            )
+            db.add(test)
+            db.flush()
+            entity_id = test.id
+        elif aktion in ("testfall-schalten", "testfall-loeschen"):
+            test_id = int(str(form.get("testfall_id", "")))
+            test_row = db.query(AlarmParserTestfall).filter(
+                AlarmParserTestfall.org_id == gw.org_id, AlarmParserTestfall.id == test_id,
+            ).with_for_update().one_or_none()
+            if test_row is None:
+                raise HTTPException(404, "Testfall nicht gefunden")
+            entity_id = test_row.id
+            if aktion == "testfall-schalten":
+                test_row.aktiv = not test_row.aktiv
+            else:
+                db.delete(test_row)
+        else:
+            raise HTTPException(404, "Aktion nicht gefunden")
+        if aktion not in ("aktivieren", "zuruecksetzen", "probelauf"):
+            write_audit(db, f"alarm_parser.{aktion}", org_id=gw.org_id, user_id=user.id,
+                        entity_type=("alarm_parser_testfall" if aktion.startswith("testfall-")
+                                     else "alarm_parser_regelsatz"),
+                        entity_id=entity_id, payload={"version": version})
+        db.commit()
+        if aktion != "probelauf":
+            from app.services.broadcast import broadcast_org
+            run_async(broadcast_org, gw.org_id, {"type": "alarm_parser_changed"})
+        meldung = "Probelauf abgeschlossen" if aktion == "probelauf" else "Gespeichert"
+    except ValueError as exc:
+        db.rollback()
+        if isinstance(exc, ValidationError):
+            meldung = "; ".join(f"{'.'.join(map(str, e['loc'])) or 'Regeln'}: {e['msg']}" for e in exc.errors())
+        else:
+            meldung = str(exc)
+    response = _parser_ansicht(request, db, gw, user, version=version, meldung=meldung,
+                               ergebnis=ergebnis, eingabe=eingabe, notiz=notiz)
+    response.headers["HX-Trigger"] = "alarm-parser-refresh"
     return response
