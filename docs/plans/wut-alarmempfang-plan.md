@@ -199,7 +199,20 @@ Betriebsfreigabe (manuell, nicht Codex): Gateway-Release mit P2 ausrollen, **Par
 
 ## Status
 
-Plan final; **Umsetzung noch nicht gestartet** (Start auf Anweisung). Gate 0 (Realdaten) ist Voraussetzung für P3 (Feinschliff), P4 und P6; P1 kann sofort beginnen. P7 (Admin-MCP) ergänzt am 2026-10-26: erst nach P3 und P5.
+Stand 2026-10-27: Code-Umfang komplett umgesetzt und gemergt.
+
+| Paket | PR | Inhalt |
+|---|---|---|
+| P1 | Cloud #733 | Rohdatenspeicher, Pipeline-Trennung, Recovery-Loop, Aufbewahrung (Migration 0318) |
+| P2 | Gateway #9 | Robuster Empfang: Byte-Puffer, incomplete, Backoff, Instanz-Lock, Sequenz |
+| P3 | Cloud #734 | Parserkern, Regelsatz als Daten, Katalog, Anbindung an process_ingest (0319) |
+| P4a/b | Cloud #735 | Zuordnung per Leitstellennummer, Versionen, Feld-Merge mit Herkunftsschutz (0320, 0321) |
+| P4c | Cloud #736 | Nachalarmierung ueber die Alarm-Outbox (0322) |
+| P5a/b | Cloud #737, #738 | Diagnose-Tab, Neu verarbeiten, Regelsatz-Verwaltung mit Probelauf |
+| P7a/b | Cloud #739, #740 | Admin-MCP lesen und Entwuerfe/Tests/Testfaelle (0323) |
+| P6 | Cloud #741 | Abnahmesuite (21 Tests) |
+
+Offen (Betrieb, kein Code): Gate 0 (mindestens 30 reale Mitschnitte als Fixtures, Charset/Nachrichtenende festhalten, Parser-Feinschliff), Test am echten W&T-Geraet, Gateway-Release mit P2 ausrollen, mehrtaegiger Parallelbetrieb mit DIBOS/EUS-REST, erst danach gilt der W&T-Kanal als maßgeblich. `source_addr` und `incomplete` werden von der Cloud angenommen, aber nicht gespeichert.
 
 ## Anhang A – Beispieltexte der Leitstelle (Parser-Fixtures)
 
