@@ -106,7 +106,7 @@ def _volles_objekt(db, org_id: int) -> Objekt:
         org_id=org_id, objekt_id=objekt.id, art="hausverwaltung", kontakt_id=zentral2.id
     )
     db.add_all([kontakt1, kontakt2])
-    db.add(ObjektKartenObjekt(org_id=org_id, objekt_id=objekt.id, typ="fsd", lat=47.4, lng=9.75))
+    db.add(ObjektKartenObjekt(org_id=org_id, objekt_id=objekt.id, typ="fsd", lat=47.4, lng=9.75, rotation=135))
     db.flush()
     objekt.wohnanlage = ObjektWohnanlage(
         org_id=org_id, objekt_id=objekt.id, wohneinheiten=12,
@@ -139,6 +139,7 @@ def test_erstelle_arbeitskopie_kopiert_alle_kinddaten(db, org):
     assert len(kopie.kontakte) == 2
     assert {k.id for k in kopie.kontakte}.isdisjoint({k.id for k in basis.kontakte})
     assert len(kopie.karten_objekte) == 1
+    assert kopie.karten_objekte[0].rotation == basis.karten_objekte[0].rotation == 135
 
     # Wohnanlage.hausverwaltung_kontakt_id muss auf den KOPIERTEN Kontakt remappt sein,
     # nicht auf den Kontakt des Basis-Objekts.
@@ -424,6 +425,7 @@ def test_uebernimm_arbeitskopie_erhaelt_merkmale_gefahren_zusatzadressen_karteno
     assert aktualisiert.gefahren[0].detail == "Lager"
     assert len(aktualisiert.merkmale) == 1
     assert len(aktualisiert.karten_objekte) == 1
+    assert aktualisiert.karten_objekte[0].rotation == 135
 
     # Genau je eine Zeile in der DB - keine Dubletten, keine Karteileichen der Kopie.
     assert db.query(ObjektZusatzadresse).filter(ObjektZusatzadresse.objekt_id == basis_id).count() == 1

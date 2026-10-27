@@ -493,6 +493,7 @@ def infoscreen_daten(
                 {
                     "typ": k.typ, "lat": k.lat, "lng": k.lng,
                     "geometry": parse_karten_geometry(k.geometry_json), "label": k.label,
+                    "rotation": k.rotation % 360,
                 }
                 for k in o.karten_objekte
             ]

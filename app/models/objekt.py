@@ -23,6 +23,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -791,6 +792,7 @@ class ObjektKartenObjekt(TenantScoped, Base):
         BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False
     )
     typ: Mapped[str] = mapped_column(String(40), nullable=False)
+    rotation: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0, server_default="0")
     # Punkt-Symbole: lat/lng; Linien/Flaechen: geometry_json (GeoJSON, Muster Sector.geometry)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)

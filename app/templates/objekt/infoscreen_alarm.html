@@ -853,7 +853,7 @@
           L.geoJSON(k.geometry, { style: { color: "#d42225", weight: 3, fillOpacity: .12 } }).addTo(karte);
         } else if (mlat != null && mlng != null) {
           L.marker([mlat, mlng], {
-            icon: L.divIcon({ html: window.objektSymbolHtml(k.typ, k.label), className: "oks-divicon", iconSize: null, iconAnchor: [16, 16] }),
+            icon: L.divIcon({ html: window.objektSymbolHtml(k.typ, k.label, k.rotation), className: "oks-divicon", iconSize: null, iconAnchor: [16, 16] }),
             interactive: false
           }).addTo(karte);
           bounds.push([mlat, mlng]);

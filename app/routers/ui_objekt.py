@@ -2725,7 +2725,18 @@ def _karten_objekt_dict(k: ObjektKartenObjekt) -> dict:
         "lng": k.lng,
         "geometry": parse_karten_geometry(k.geometry_json),
         "label": k.label,
+        "rotation": k.rotation % 360,
     }
+
+
+def _karten_rotation(wert: object) -> int:
+    try:
+        # Nur ganze Grad akzeptieren; ungueltige JSON-Werte ergeben HTTP 400.
+        if not isinstance(wert, (int, str)) or isinstance(wert, bool):
+            raise ValueError
+        return int(wert) % 360
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Rotation muss eine ganze Gradzahl sein") from None
 
 
 @router.get("/{objekt_id}/karte", response_class=HTMLResponse)
@@ -2868,6 +2879,7 @@ def karten_objekt_neu(
         geometry_json=_json.dumps(geometry, ensure_ascii=False) if geometry else None,
         label=(str(daten.get("label") or "").strip() or None),
         sort=max_sort + 1,
+        rotation=_karten_rotation(daten.get("rotation", 0)),
     )
     db.add(eintrag)
     write_objekt_change(db, objekt.id, objekt.org_id, "karte", "symbol_neu", before=None, after=typ, user_id=user.id)
@@ -2895,6 +2907,9 @@ def karten_objekt_update(
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Kartenobjekt nicht gefunden")
     daten = run_async(request.json)
+    vorher = _karten_objekt_dict(eintrag)
+    if "rotation" in daten:
+        eintrag.rotation = _karten_rotation(daten["rotation"])
     if "lat" in daten:
         eintrag.lat = float(daten["lat"]) if daten["lat"] is not None else None
     if "lng" in daten:
@@ -2904,6 +2919,10 @@ def karten_objekt_update(
         eintrag.geometry_json = _json.dumps(geometry, ensure_ascii=False) if geometry else None
     if "label" in daten:
         eintrag.label = str(daten["label"] or "").strip() or None
+    write_objekt_change(
+        db, objekt.id, objekt.org_id, "karte", "symbol_geaendert",
+        before=vorher, after=_karten_objekt_dict(eintrag), user_id=user.id,
+    )
     db.commit()
     return _karten_objekt_dict(eintrag)
 

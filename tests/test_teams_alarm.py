@@ -66,7 +66,7 @@ def _public_alarm(db, *, token: str, with_objekt: bool = False):
             ),
             ObjektKartenObjekt(
                 org_id=ORG_ID, objekt_id=objekt.id, typ="bmz",
-                lat=47.471, lng=9.731, label="Foyer",
+                lat=47.471, lng=9.731, label="Foyer", rotation=75,
             ),
             ObjektSymbol(
                 org_id=ORG_ID, code=f"bild_{incident.id}", name="Bildzeichen",
@@ -112,7 +112,7 @@ def test_public_alarm_objekt_liefert_kartenobjekte_und_bild_fallback(client):
         assert response.status_code == 200
         assert response.json()["karten_objekte"] == [{
             "typ": "bmz", "lat": 47.471, "lng": 9.731,
-            "geometry": None, "label": "Foyer",
+            "geometry": None, "label": "Foyer", "rotation": 75,
         }]
         bild = next(s for s in response.json()["symbole"] if s["name"] == "Bildzeichen")
         assert bild["stil"] == "box"

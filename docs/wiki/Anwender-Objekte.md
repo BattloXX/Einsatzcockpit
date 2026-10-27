@@ -94,6 +94,13 @@ Gefahren-Dreiecke (EX/Gas/Chemie/Strom/PV) und Hydranten. Marker sind verschiebb
 Flächen zeichnest du mit den Werkzeugen links oben. Die Karte erscheint read-only in der
 Einsatzansicht, am Alarm-Infoscreen und (vereinfacht) am Objektblatt.
 
+Zum Drehen ein Punkt-Symbol anklicken: Im Popup stehen -15°/+15°, +90°,
+Zurücksetzen und ein Winkel-Schieberegler zur Verfügung. Die Beschriftung bleibt
+aufrecht; die Ausrichtung wird gespeichert und auch in Einsatzansicht,
+Lageführung, Alarm-Infoscreen und öffentlicher Alarmseite angezeigt.
+Linien und Flächen drehst du mit dem Drehwerkzeug links oben; dabei wird ihre
+Geometrie gespeichert. Das PDF-Objektblatt zeigt weiterhin vereinfachte Kreise.
+
 ## Im Einsatz
 
 **Automatische Verknüpfung:** Bei jeder Einsatzanlage (Alarm-API, LIS/Leitstelle, manuell) sucht

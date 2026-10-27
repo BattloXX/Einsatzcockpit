@@ -90,7 +90,7 @@ def test_objekte_json_enthaelt_kartenobjekte_punkt_und_geometrie():
         db.add(objekt)
         db.flush()
         db.add(ObjektKartenObjekt(
-            org_id=ORG_ID, objekt_id=objekt.id, typ="sammelplatz",
+            org_id=ORG_ID, objekt_id=objekt.id, typ="sammelplatz", rotation=225,
             lat=47.4655, lng=9.7510, label="Sammelplatz Nord",
         ))
         db.add(ObjektKartenObjekt(
@@ -117,6 +117,7 @@ def test_objekte_json_enthaelt_kartenobjekte_punkt_und_geometrie():
     assert len(kartenobjekte) == 2
 
     punkt = next(k for k in kartenobjekte if k["typ"] == "sammelplatz")
+    assert punkt["rotation"] == 225
     assert punkt["lat"] == 47.4655
     assert punkt["label"] == "Sammelplatz Nord"
     assert punkt["typ_label"] == "Sammelplatz"
