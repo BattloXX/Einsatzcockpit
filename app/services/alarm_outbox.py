@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, or_, update
-from sqlalchemy.exc import StatementError
+from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -43,7 +44,7 @@ def enqueue_incident_alarm(
 
     existing = {
         channel for (channel,) in db.query(IncidentAlarmJob.channel).filter(
-            IncidentAlarmJob.incident_id == incident.id
+            IncidentAlarmJob.incident_id == incident.id, IncidentAlarmJob.variant == ""
         ).all()
     }
     # SessionLocal laeuft mit autoflush=False: noch nicht geflushte Jobs aus einem
@@ -53,7 +54,7 @@ def enqueue_incident_alarm(
     # und der neue Einsatz wurde bei jedem Poll zurueckgerollt (Vorfall 2026-10-06).
     existing |= {
         obj.channel for obj in db.new
-        if isinstance(obj, IncidentAlarmJob) and obj.incident_id == incident.id
+        if isinstance(obj, IncidentAlarmJob) and obj.incident_id == incident.id and not obj.variant
     }
     grund = alarm_unterdrueckung_grund(db, incident, org_id)
     suppressed = grund is not None
@@ -68,7 +69,7 @@ def enqueue_incident_alarm(
     for channel in CHANNELS:
         if channel not in existing:
             db.add(IncidentAlarmJob(
-                org_id=org_id, incident_id=incident.id, channel=channel,
+                org_id=org_id, incident_id=incident.id, channel=channel, variant="",
                 status="suppressed" if suppressed else "pending", next_attempt_at=now,
                 finished_at=now if suppressed else None, context=context,
             ))
@@ -77,6 +78,68 @@ def enqueue_incident_alarm(
             incident_id=incident.id, author_name="System", level="info",
             text=f"Keine Alarmierung (SMS/Push/Teams/Mail): {grund}",
         ))
+
+
+def enqueue_nachalarmierung(
+    db: Session, incident: Incident, *, org_id: int | None, key: str, codes: list[str],
+    source: str | None, base_url: str | None, push_url: str | None,
+) -> bool:
+    """Nachalarm in der aufrufenden Transaktion; True bei neuen Versandauftraegen."""
+    from app.services.incident_notify import alarm_unterdrueckung_grund
+
+    # Serialisiert auch unterschiedliche, ueberlappende Code-Saetze unter MariaDB.
+    db.query(Incident.id).filter(
+        Incident.id == incident.id, Incident.primary_org_id == org_id,
+    ).with_for_update().one()
+    jobs = db.query(IncidentAlarmJob).filter(
+        IncidentAlarmJob.incident_id == incident.id, IncidentAlarmJob.org_id == org_id,
+        IncidentAlarmJob.variant != "",
+    ).with_for_update().all()
+    jobs += [obj for obj in db.new if isinstance(obj, IncidentAlarmJob)
+             and obj.incident_id == incident.id and obj.org_id == org_id and obj.variant]
+    # Exakte Tokens statt Substring: r2 darf r20 nicht sperren. Stichwort und
+    # Zusatzcode besitzen getrennte Namensraeume.
+    namespace = key.split(":", 1)[0]
+    seen = {code for job in jobs if job.variant.startswith(f"nach:{namespace}:")
+            for code in (job.context or {}).get("codes", [])}
+    codes = sorted(set(codes) - seen)
+    if not codes:
+        return False
+    variant = f"nach:{namespace}:{'+'.join(codes)}"
+    if len(variant) > 40:
+        # Spalte variant ist String(40): lange Code-Saetze per Hash kuerzen. Die
+        # Idempotenz je Code laeuft ueber context["codes"], nicht ueber die Variante.
+        variant = f"nach:{namespace}:h{hashlib.sha1('+'.join(codes).encode()).hexdigest()[:16]}"
+    grund = alarm_unterdrueckung_grund(db, incident, org_id)
+    now = _now()
+    context = {
+        "source": source, "base_url": base_url or settings.effective_public_base_url,
+        "push_url": push_url or f"/einsatz/{incident.id}", "suppressed_reason": grund,
+        "nachalarmierung": True, "codes": codes,
+    }
+    created = False
+    for channel in CHANNELS:
+        if any(job.channel == channel and job.variant == variant for job in jobs):
+            continue
+        try:
+            with db.begin_nested():
+                db.add(IncidentAlarmJob(
+                    org_id=org_id, incident_id=incident.id, channel=channel, variant=variant,
+                    status="suppressed" if grund is not None else "pending", next_attempt_at=now,
+                    finished_at=now if grund is not None else None, context=context,
+                ))
+                db.flush()
+            created = True
+        except IntegrityError:
+            # Nur den konkurrierenden Insert verwerfen, nie Ingest/Merge/Commit.
+            continue
+    return created
+
+
+def nachalarm_praefix(job: IncidentAlarmJob) -> str:
+    if not job.context.get("nachalarmierung"):
+        return ""
+    return "NACHALARMIERUNG " + ", ".join(job.context.get("codes", [])) + " "
 
 
 def _claim(db: Session, job: IncidentAlarmJob, now: datetime) -> bool:
@@ -125,6 +188,7 @@ async def _send_sms(db: Session, incident: Incident, job: IncidentAlarmJob) -> t
         incident.reason, incident.is_exercise, job.context.get("triggered_by_user_id"), info_link,
         incident.lis_operation_number, incident.id,
         planspiel_run_id=incident.planspiel_run_id,
+        **({"variant": job.variant, "text_prefix": nachalarm_praefix(job)} if job.variant else {}),
     )
     if result is None:
         return "uncertain", "keine Versandbestaetigung"
@@ -143,6 +207,7 @@ async def _send_push(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
     org_id = job.org_id
     address = _address(incident)
     title = f"{'[ÜBUNG] ' if incident.is_exercise else ''}🚒 Einsatz: {incident.alarm_type_code}"
+    title = nachalarm_praefix(job) + title
     body = address or incident.report_text or "Kein Ort angegeben"
     url = job.context.get("push_url") or f"/einsatz/{incident.id}"
     user_id = job.context.get("triggered_by_user_id")
@@ -176,7 +241,10 @@ async def _send_teams(db: Session, incident: Incident, job: IncidentAlarmJob) ->
     base_url = job.context.get("base_url")
     if not base_url:
         return "suppressed", "keine Base-URL verfuegbar"
-    result = await post_incident_card(db, incident, base_url=base_url)
+    result = await post_incident_card(
+        db, incident, base_url=base_url,
+        **({"text_prefix": nachalarm_praefix(job)} if job.variant else {}),
+    )
     if result is None or result.sent:
         return "sent", None
     if result.retryable:
@@ -192,7 +260,8 @@ async def _send_mail(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
     if not job.org_id:
         return "suppressed", "keine Organisation zugeordnet"
     result = await dispatch_einsatzinfo_mail(
-        job.org_id, incident.id, job.context.get("triggered_by_user_id")
+        job.org_id, incident.id, job.context.get("triggered_by_user_id"),
+        **({"variant": job.variant, "text_prefix": nachalarm_praefix(job)} if job.variant else {}),
     )
     if result.sent:
         return "sent", result.reason or f"gesendet an {result.recipient_count}"

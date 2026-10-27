@@ -51,6 +51,7 @@ class MailEinsatzinfoLog(TenantScoped, Base):
     """Protokolleintrag fuer einen Einsatzinfo-Mail-Versand."""
     __tablename__ = "mail_einsatzinfo_log"
 
+    variant: Mapped[str] = mapped_column(String(40), nullable=False, default="", server_default="")
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id via TenantScoped
     sent_at: Mapped[datetime] = mapped_column(

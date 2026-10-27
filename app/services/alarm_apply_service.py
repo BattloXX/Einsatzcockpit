@@ -292,7 +292,30 @@ def wende_an(db: Session, ingest: AlarmIngest, org_id: int) -> tuple[Incident | 
         _speichere_feld(db, match.id, org_id, "codes", json.dumps(_codes(parsed_result)), "alarm", ingest.id)
     elif nummer:
         # Transientes Ergebnis bleibt ueber den Commit fuer Router/Recovery verfuegbar.
-        ingest.merge_ergebnis = merge_folgenachricht(db, match, ingest, parsed_result, org_id)  # type: ignore[attr-defined]
+        ergebnis = merge_folgenachricht(db, match, ingest, parsed_result, org_id)
+        ingest.merge_ergebnis = ergebnis  # type: ignore[attr-defined]
+        if ergebnis.neue_codes or ergebnis.stichwort_erhoeht:
+            from app.models.incident import IncidentLog
+            from app.services.alarm_outbox import enqueue_nachalarmierung
+
+            if match.status == "closed":
+                db.add(IncidentLog(
+                    incident_id=match.id, author_name="System", level="info",
+                    text="Nachalarmierung unterdrueckt: Einsatz abgeschlossen",
+                ))
+            else:
+                ausloeser = [("code", ergebnis.neue_codes)] if ergebnis.neue_codes else []
+                if ergebnis.stichwort_erhoeht:
+                    ausloeser.append(("stichwort", [match.alarm_type_code]))
+                for namespace, codes in ausloeser:
+                    if enqueue_nachalarmierung(
+                        db, match, org_id=org_id, key=f"{namespace}:{'+'.join(sorted(codes))}",
+                        codes=codes, source="gateway", base_url=None, push_url=None,
+                    ):
+                        db.add(IncidentLog(
+                            incident_id=match.id, author_name="System", level="info",
+                            text=f"Nachalarmierung: Codes {', '.join(codes)}",
+                        ))
     logger.info("Serieller Alarm %s: Einsatz %s, Version %s (org %s)", action, match.id, ingest.version_no, org_id)
     return match, action
 

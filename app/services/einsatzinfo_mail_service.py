@@ -320,6 +320,7 @@ async def dispatch_einsatzinfo_mail(
     org_id: int,
     incident_id: int,
     triggered_by_user_id: int | None = None,
+    *, variant: str = "", text_prefix: str = "",
 ) -> EinsatzinfoMailResult:
     """Versendet Einsatzinfo-Mails und protokolliert jeden Bcc-Block persistent."""
     from app.services import mail_service
@@ -359,7 +360,8 @@ async def dispatch_einsatzinfo_mail(
             return EinsatzinfoMailResult(False, "keine Empfaenger konfiguriert")
 
         log_entry = db.query(MailEinsatzinfoLog).filter(
-            MailEinsatzinfoLog.org_id == org_id, MailEinsatzinfoLog.incident_id == incident_id
+            MailEinsatzinfoLog.org_id == org_id, MailEinsatzinfoLog.incident_id == incident_id,
+            MailEinsatzinfoLog.variant == variant,
         ).first()
         if log_entry is None:
             now = datetime.now(UTC)
@@ -375,12 +377,12 @@ async def dispatch_einsatzinfo_mail(
                 or default_einsatzinfo_mail_template()
             )
             # Header muessen einzeilig sein (z.B. {meldung} mit Zeilenumbruch im Betreff)
-            subject = " ".join(_render_mail_template(subject_template, context).split())[:280]
+            subject = " ".join((text_prefix + _render_mail_template(subject_template, context)).split())[:280]
             if incident.is_exercise:
                 subject = f"[ÜBUNG] {subject}"
             body = _render_mail_template(body_template, context)
             log_entry = MailEinsatzinfoLog(
-                org_id=org_id, incident_id=incident_id, alarm_type_code=incident.alarm_type_code,
+                org_id=org_id, incident_id=incident_id, variant=variant, alarm_type_code=incident.alarm_type_code,
                 subject=subject, body=body, recipient_count=len(recipients), success_count=0,
                 triggered_by_user_id=triggered_by_user_id, sent_at=now.replace(tzinfo=None),
             )

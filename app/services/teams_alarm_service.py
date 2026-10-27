@@ -95,12 +95,19 @@ async def _post_payload(webhook_url: str, payload: dict, *, log_label: str) -> t
 
 
 async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlarmConfig,
-                             *, base_url: str, org: FireDept | None) -> tuple[bool, bool, str | None]:
+                             *, base_url: str, org: FireDept | None,
+                             text_prefix: str = "") -> tuple[bool, bool, str | None]:
     payload = build_incident_message_card(incident, cfg, base_url=base_url, org=org)
+    if text_prefix:
+        payload["attachments"][0]["content"]["body"][0]["text"] = (
+            text_prefix + payload["attachments"][0]["content"]["body"][0]["text"]
+        )
     return await _post_payload(webhook_url, payload, log_label=f"Einsatz {incident.id}")
 
 
-async def post_incident_card(db: Session, incident: Incident, *, base_url: str) -> TeamsDispatchResult:
+async def post_incident_card(
+    db: Session, incident: Incident, *, base_url: str, text_prefix: str = "",
+) -> TeamsDispatchResult:
     """Postet die Alarmkarte für einen (neu angelegten) Einsatz — Bot bevorzugt, sonst
     Webhook-Fallback. No-op, wenn die Teams-Alarmierung für die Org deaktiviert ist oder
     kein Ziel konfiguriert ist. Fehler werden nur geloggt (best effort)."""
@@ -222,7 +229,10 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
             reason, incident.id, incident.primary_org_id, incident.alarm_type_code, incident.is_exercise,
         )
         return TeamsDispatchResult(False, reason)
-    sent, retryable, failure_reason = await _post_via_webhook(webhook_url, incident, cfg, base_url=base_url, org=org)
+    sent, retryable, failure_reason = await _post_via_webhook(
+        webhook_url, incident, cfg, base_url=base_url, org=org,
+        **({"text_prefix": text_prefix} if text_prefix else {}),
+    )
     if sent and major_incident_id is not None:
         _record_card_post(db, incident, target=target, conversation_id=webhook_url, major_incident_id=major_incident_id)
     if sent:
