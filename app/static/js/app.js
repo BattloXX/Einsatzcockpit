@@ -185,6 +185,9 @@ document.addEventListener('alpine:init', () => {
             const liveEv = new CustomEvent('gsl-live', { detail: ev, bubbles: true });
             document.body.dispatchEvent(liveEv);
           }
+          if (ev.type === 'alarm_parser_changed') {
+            document.body.dispatchEvent(new CustomEvent('alarm-parser-changed', { detail: ev, bubbles: true }));
+          }
           if (ev.type === 'print_job_status') {
             document.body.dispatchEvent(new CustomEvent('print-job-status', { detail: ev, bubbles: true }));
           }
