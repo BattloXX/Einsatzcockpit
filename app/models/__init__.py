@@ -1,3 +1,4 @@
+from app.models.admin_mcp import AdminMCPOAuthClient, AdminMCPOAuthCode, AdminMCPOAuthToken
 from app.models.admin_security import AdminRecoveryCode, AdminTotp
 from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.atemschutz_pruefung import (
@@ -511,6 +512,9 @@ __all__ = [
     "LagefuehrungEvent",
     "LagefuehrungBerechtigung",
     "LagefuehrungSnapshot",
+    "AdminMCPOAuthClient",
+    "AdminMCPOAuthCode",
+    "AdminMCPOAuthToken",
     "MCPOAuthClient",
     "MCPOAuthCode",
     "MCPOAuthToken",

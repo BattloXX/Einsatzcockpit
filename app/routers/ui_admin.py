@@ -2230,6 +2230,7 @@ def system_settings_page(request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "admin/system_settings.html", {
         "user": request.state.user, "settings": settings, "saved": saved, "mfa_admins": mfa_admins,
         "version": version_info()["evidence"],
+        "admin_mcp_url": app_settings.effective_public_base_url.rstrip("/") + "/mcp/admin",
         "resend_api_key_set": resend_api_key_set,
         "resend_inbound_webhook_secret_set": resend_inbound_webhook_secret_set,
         "resend_inbound_webhook_url": (app_settings.effective_public_base_url or str(request.base_url)).rstrip("/")
@@ -2323,12 +2324,12 @@ def save_system_settings(
     # Handle any existing custom keys
     all_existing = db.query(SystemSettings).all()
     for s in all_existing:
-        if s.key not in known_keys and s.key != "admin_2fa_enabled":
+        if s.key not in known_keys and s.key not in ("admin_2fa_enabled", "admin_mcp_enabled"):
             val = form.get(f"k_{s.key}")
             if val is not None:
                 s.value = val  # type: ignore[assignment]
     # New custom key
-    if new_key.strip() == "admin_2fa_enabled":
+    if new_key.strip() in ("admin_2fa_enabled", "admin_mcp_enabled"):
         raise HTTPException(400, "2FA nur ueber den eigenen Sicherheitsschalter aendern")
     if new_key.strip():
         existing = db.get(SystemSettings, new_key.strip())

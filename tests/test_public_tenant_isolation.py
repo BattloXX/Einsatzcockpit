@@ -1491,3 +1491,20 @@ def test_public_weather_presentation_scoped_by_token(client, setup_db, monkeypat
             if "alarm/" in path:
                 assert {"temp": 12, "wind": None, "code": None}.items() <= data.items()
     ui_infoscreen_alarm._wetter_cache.clear()
+
+
+def test_admin_mcp_ist_keine_org_token_hintertuer(client):
+    """Die neuen anonymen Admin-OAuth-/MCP-Pfade akzeptieren keine Org-Tokens."""
+    from uuid import uuid4
+    from tests.test_mcp_fundament import _enable_mcp, _oauth_tokens
+
+    org = _enable_mcp("admin-isolation-" + uuid4().hex[:8], "admin-isolation-" + uuid4().hex[:8])
+    token = _oauth_tokens(client, org)
+    response = client.post("/mcp/admin", headers={
+        "Authorization": "Bearer " + token["access_token"], "Accept": "application/json, text/event-stream",
+    }, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert response.status_code == 401
+    assert client.post("/mcp/admin/token", data={"grant_type": "refresh_token",
+        "client_id": token["client_id"], "refresh_token": token["refresh_token"]}).status_code in (400, 401)
+    assert client.post("/mcp/admin/anmelden", data={"username": org["username"],
+        "password": "Test1234!", "vorgang": "org-a-token"}).status_code == 403

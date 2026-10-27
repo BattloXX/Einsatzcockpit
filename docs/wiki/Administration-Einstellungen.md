@@ -153,3 +153,9 @@ aktiviert werden. Standard ist AUS; vor der Aktivierung muessen alle aktiven
 Systemadministratoren eingerichtet sein. Siehe
 [Zwei-Faktor-Authentifizierung](Administration-Zwei-Faktor-Authentifizierung)
 fuer Einrichtung, Recovery-Codes und den lokalen CLI-Notfallreset.
+
+## Lesender System-Admin-MCP
+
+Unter dem 2FA-Abschnitt stehen der globale Admin-MCP-Schalter (Default AUS), die
+persoenlichen Freigaben und die Verbindungs-URL. Details zu Aktivierung, OAuth,
+Werkzeugen und Grenzen: [System-Admin-MCP](Administration-System-Admin-MCP.md).

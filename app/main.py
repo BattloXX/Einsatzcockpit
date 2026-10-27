@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import secrets as _secrets
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import UTC, datetime
 from typing import cast
 
@@ -23,6 +23,9 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as _StarletteHTTPException
 from starlette.middleware.authentication import AuthenticationMiddleware
 
+from app.admin_mcp import router as admin_mcp_router
+from app.admin_mcp.server import application as admin_mcp_application
+from app.admin_mcp.server import server as admin_mcp_server
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
 from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
@@ -339,73 +342,78 @@ async def lifespan(app: FastAPI):
     runtime_mcp_routes = build_mcp_application().routes
     runtime_mcp_route = next(route for route in runtime_mcp_routes if getattr(route, "path", None) == "/mcp")
     app.state.mcp_streamable_route.app = runtime_mcp_route.app
-    mcp_session_context = mcp_server.session_manager.run()
-    await mcp_session_context.__aenter__()
+    runtime_admin_routes = admin_mcp_application().routes
+    app.state.admin_mcp_streamable_route.app = next(
+        route for route in runtime_admin_routes if getattr(route, "path", None) == "/mcp/admin"
+    ).app
+    async with AsyncExitStack() as mcp_lifespans:
+        await mcp_lifespans.enter_async_context(mcp_server.session_manager.run())
+        await mcp_lifespans.enter_async_context(admin_mcp_server.session_manager.run())
 
-    # Benigne WebSocket-Trennungen dämpfen (siehe _install_ws_quiet_exception_handler).
-    _install_ws_quiet_exception_handler()
+        # Benigne WebSocket-Trennungen dämpfen (siehe _install_ws_quiet_exception_handler).
+        _install_ws_quiet_exception_handler()
 
-    # Redis Pub/Sub-Bus für worker-übergreifende WS-Zustellung starten (No-Op ohne
-    # REDIS_URL). Nach dem Router-Import, damit alle Bus-Handler registriert sind.
-    from app.services import ws_bus
-
-    await ws_bus.start()
-    from app.services import gateway_routing
-    await gateway_routing.start()
-    from app.services import sms_outbox
-    await sms_outbox.start()
-    from app.services import linux_print_service
-    await linux_print_service.start()
-
-    from app.services.startup_lock import startup_lock
-
-    # Auch create_all der separaten Wetter-DB ueber die Haupt-DB serialisieren.
-    with startup_lock(engine):
-        _bootstrap_admin()
-        try:
-            from app.db_weather import init_weather_db
-
-            init_weather_db()
-        except Exception as exc:  # Wetter ist unkritisch – Start nie blockieren.
-            logger.warning("Wetter-DB-Init übersprungen: %s", exc)
-
-    # Der Lock ist die Sicherheitsgrenze. DB-Heartbeats dienen nur der Diagnose.
-    runtime = BackgroundRuntime(settings.LEADER_LOCK_PATH, _start_background_loops)
-    background_tasks: list[asyncio.Task] = []
-    if settings.LOOP_LAG_WARN_MS > 0:
-        background_tasks.append(asyncio.create_task(_loop_lag_monitor()))
-    if not settings.TESTING:
-        await runtime.start()
-    else:
-        logger.info("Hintergrund-Loops im Testmodus deaktiviert")
-
-    try:
-        yield
-    finally:
-        await runtime.stop_tasks()
-        await mcp_session_context.__aexit__(None, None, None)
+        # Redis Pub/Sub-Bus für worker-übergreifende WS-Zustellung starten (No-Op ohne
+        # REDIS_URL). Nach dem Router-Import, damit alle Bus-Handler registriert sind.
         from app.services import ws_bus
 
-        await linux_print_service.stop()
-        await sms_outbox.stop()
-        await gateway_routing.stop()
-        await ws_bus.stop()
-        from app.services.teams_alarm_service import aclose_teams_client
+        await ws_bus.start()
+        from app.services import gateway_routing
+        await gateway_routing.start()
+        from app.services import sms_outbox
+        await sms_outbox.start()
+        from app.services import linux_print_service
+        await linux_print_service.start()
 
-        await aclose_teams_client()
-        for task in background_tasks:
-            task.cancel()
-        await asyncio.gather(*background_tasks, return_exceptions=True)
-        # Cancel beendet to_thread-Arbeit nicht. Vor Freigabe des Locks muessen
-        # auch diese Arbeiten enden; bei Haengern beendet Gunicorn den Prozess.
-        if runtime.is_leader:
-            await asyncio.get_running_loop().shutdown_default_executor()
-        if not settings.TESTING:
+        from app.services.startup_lock import startup_lock
+
+        # Auch create_all der separaten Wetter-DB ueber die Haupt-DB serialisieren.
+        with startup_lock(engine):
+            _bootstrap_admin()
             try:
-                runtime.write_heartbeat(stopped=True)
-            except Exception as exc:
-                logger.warning("Worker-Abmeldung nicht gespeichert (error=%s)", type(exc).__name__)
-        runtime.release()
+                from app.db_weather import init_weather_db
+
+                init_weather_db()
+            except Exception as exc:  # Wetter ist unkritisch – Start nie blockieren.
+                logger.warning("Wetter-DB-Init übersprungen: %s", exc)
+
+        # Der Lock ist die Sicherheitsgrenze. DB-Heartbeats dienen nur der Diagnose.
+        runtime = BackgroundRuntime(settings.LEADER_LOCK_PATH, _start_background_loops)
+        background_tasks: list[asyncio.Task] = []
+        if settings.LOOP_LAG_WARN_MS > 0:
+            background_tasks.append(asyncio.create_task(_loop_lag_monitor()))
+        if not settings.TESTING:
+            await runtime.start()
+        else:
+            logger.info("Hintergrund-Loops im Testmodus deaktiviert")
+
+        try:
+            yield
+        finally:
+            await runtime.stop_tasks()
+            await mcp_lifespans.aclose()
+            from app.services import ws_bus
+
+            await linux_print_service.stop()
+            await sms_outbox.stop()
+            await gateway_routing.stop()
+            await ws_bus.stop()
+            from app.services.teams_alarm_service import aclose_teams_client
+
+            await aclose_teams_client()
+            for task in background_tasks:
+                task.cancel()
+            await asyncio.gather(*background_tasks, return_exceptions=True)
+            # Cancel beendet to_thread-Arbeit nicht. Vor Freigabe des Locks muessen
+            # auch diese Arbeiten enden; bei Haengern beendet Gunicorn den Prozess.
+            if runtime.is_leader:
+                await asyncio.get_running_loop().shutdown_default_executor()
+            if not settings.TESTING:
+                try:
+                    runtime.write_heartbeat(stopped=True)
+                except Exception as exc:
+                    logger.warning("Worker-Abmeldung nicht gespeichert (error=%s)", type(exc).__name__)
+            runtime.release()
 
 
 def _bootstrap_admin() -> None:
@@ -494,6 +502,11 @@ for _mcp_route in _mcp_routes:
         setattr(_mcp_endpoint, "__name__", "mcp_sdk_endpoint")
 app.router.routes.extend(_mcp_routes)
 app.state.mcp_streamable_route = next(route for route in _mcp_routes if getattr(route, "path", None) == "/mcp")
+_admin_mcp_routes = admin_mcp_application().routes
+app.router.routes.extend(_admin_mcp_routes)
+app.state.admin_mcp_streamable_route = next(
+    route for route in _admin_mcp_routes if getattr(route, "path", None) == "/mcp/admin"
+)
 app.mount("/.well-known", StaticFiles(directory="app/static/.well-known"), name="well-known")
 
 
@@ -926,6 +939,7 @@ app.add_middleware(WriteFailureLogMiddleware)
 # Routers
 app.include_router(csp_report.router)
 app.include_router(auth.router)
+app.include_router(admin_mcp_router.router)
 app.include_router(mcp_router.router)
 app.include_router(mcp_upload_router.router)
 app.include_router(mcp_download_router.router)

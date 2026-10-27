@@ -131,3 +131,71 @@ def version_info() -> dict:
             "checked_at": presence.utc(), "evidence": {
                 "APP_VERSION": settings.APP_VERSION, "GIT_SHA": settings.GIT_SHA, "BUILD_TIME": settings.BUILD_TIME,
             }}
+
+
+def service_summary(db: Session) -> dict:
+    """Nur bekannte Dienstschluessel/Zustaende zaehlen, niemals freie Meldungen."""
+    from sqlalchemy import func
+
+    from app.models.dienst_monitor import DIENST_LABELS, DienstStatus
+
+    now = presence.utc()
+    rows = db.query(DienstStatus.key, DienstStatus.state, func.count(DienstStatus.id)).filter(
+        DienstStatus.key.in_(DIENST_LABELS), DienstStatus.state.in_(("ok", "down", "unknown", "teilweise")),
+    ).execution_options(include_all_tenants=True).group_by(DienstStatus.key, DienstStatus.state).all()
+    evidence = {key: {"ok": 0, "down": 0, "unknown": 0, "teilweise": 0} for key in DIENST_LABELS}
+    for key, state, count in rows:
+        evidence[key][state] = count
+    status = "unbekannt" if not rows else "fail" if any(r[1] == "down" for r in rows) else (
+        "warn" if any(r[1] != "ok" for r in rows) else "ok")
+    return {"status": status, "checked_at": now,
+            "evidence": {"dienste": evidence, "datenbasis": "gespeicherter Dienstmonitor-Zustand"
+                         if rows else "nicht verfuegbar"}}
+
+
+def gateway_summary(db: Session) -> dict:
+    """Globale SQL-Zaehler; keine Jobs/Inhalte oder Gateway-Namen laden."""
+    from sqlalchemy import func
+
+    from app.models.gateway import Gateway, PrintJob
+    from app.models.sms import SmsDispatchJob
+    from app.models.user import SmsGatewayToken
+
+    now = presence.utc()
+
+    def count(model, *conditions):
+        return db.query(func.count(model.id)).filter(*conditions)\
+            .execution_options(include_all_tenants=True).scalar() or 0
+
+    evidence: dict = {}
+    for kind in ("linux", "windows_agent"):
+        valid = (Gateway.kind == kind, Gateway.device_token_hash.isnot(None))
+        evidence[kind] = {"eingerichtet": count(Gateway, *valid), "online": count(Gateway, *valid,
+            Gateway.agent_connection_id.isnot(None), Gateway.agent_presence_expires_at > now,
+            Gateway.agent_connection_token_hash == Gateway.device_token_hash)}
+    evidence["sms"] = {"eingerichtet": count(SmsGatewayToken, SmsGatewayToken.revoked_at.is_(None)),
+        "online": count(SmsGatewayToken, SmsGatewayToken.revoked_at.is_(None),
+            SmsGatewayToken.connection_id.isnot(None), SmsGatewayToken.presence_expires_at > now,
+            SmsGatewayToken.connection_token_hash == SmsGatewayToken.token_hash)}
+    # W&T besitzt keinen eigenen Presence-Lease: gespeicherte Dienstmonitorwerte.
+    serial = service_summary(db)["evidence"]["dienste"]["alarm_seriell"]
+    evidence["wt"] = {"dienstmonitor": serial,
+                      "datenbasis": "nicht verfuegbar" if not sum(serial.values()) else "Dienstmonitor"}
+    # Dieselben offenen Zustaende und Faelligkeiten wie im vorhandenen Monitor.
+    from sqlalchemy import and_, or_
+
+    from app.services.worker_monitor import PRINT_OPEN, SMS_OPEN
+
+    for label, model, active, overdue in (
+        ("druck_jobs", PrintJob, PRINT_OPEN, or_(PrintJob.lease_expires_at <= now,
+            and_(PrintJob.lease_expires_at.is_(None), PrintJob.erstellt_am <= now - timedelta(minutes=5)))),
+        ("sms_jobs", SmsDispatchJob, SMS_OPEN, or_(SmsDispatchJob.expires_at <= now,
+            and_(SmsDispatchJob.status != "queued", SmsDispatchJob.lease_until <= now),
+            and_(SmsDispatchJob.status == "queued", SmsDispatchJob.created_at <= now - timedelta(minutes=5)))),
+    ):
+        pending = model.status.in_(active)
+        evidence[label] = {"offen": count(model, pending), "ueberfaellig": count(model, pending, overdue)}
+    warn = any(evidence[k]["eingerichtet"] > evidence[k]["online"] for k in ("linux", "windows_agent", "sms"))
+    warn = warn or bool(serial["down"] or serial["teilweise"])
+    warn = warn or any(evidence[k]["ueberfaellig"] for k in ("druck_jobs", "sms_jobs"))
+    return {"status": "warn" if warn else "ok", "checked_at": now, "evidence": evidence}

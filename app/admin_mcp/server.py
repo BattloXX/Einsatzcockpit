@@ -1,0 +1,223 @@
+"""Separater SDK-Server mit eigenen OAuth-/Discovery-Pfaden."""
+import asyncio
+import json
+from typing import cast
+from uuid import uuid4
+
+from limits import parse
+from limits.storage import storage_from_string
+from limits.strategies import FixedWindowRateLimiter
+from mcp.server.auth.handlers.metadata import MetadataHandler
+from mcp.server.auth.handlers.revoke import RevocationRequest
+from mcp.server.auth.handlers.token import TokenHandler
+from mcp.server.auth.middleware.auth_context import AuthContextMiddleware, get_access_token
+from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend
+from mcp.server.auth.middleware.client_auth import AuthenticationError, ClientAuthenticator
+from mcp.server.auth.provider import ProviderTokenVerifier
+from mcp.server.auth.routes import build_metadata, cors_middleware
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import RequestBodyLimitMiddleware, TransportSecuritySettings
+from pydantic import AnyHttpUrl, ValidationError
+from starlette.middleware.authentication import AuthenticationMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
+
+from app.admin_mcp.context import DENIED, load_live_context
+from app.admin_mcp.context import admin_session as SessionLocal
+from app.admin_mcp.masking import mask_arguments
+from app.admin_mcp.provider import RESOURCE, provider
+from app.admin_mcp.registry import ADMIN_TOOLS, collect
+from app.config import settings
+from app.core.audit import write_audit
+from app.core.security import hash_api_key
+from app.models.admin_mcp import AdminMCPOAuthToken
+from app.models.admin_security import utcnow
+
+TOOL_TIMEOUT = 20
+MAX_RESPONSE_BYTES = 64 * 1024
+_tool_limiter = FixedWindowRateLimiter(storage_from_string(settings.REDIS_URL or "memory://"))
+
+
+def _context(db):
+    token = get_access_token()
+    if not token or token.resource != RESOURCE or token.scopes != ["mcp-admin"]:
+        raise PermissionError(DENIED)
+    row = db.query(AdminMCPOAuthToken).filter(AdminMCPOAuthToken.token_hash == hash_api_key(token.token),
+        AdminMCPOAuthToken.token_type == "access").first()
+    if not provider._valid(db, row):
+        raise PermissionError(DENIED)
+    return load_live_context(db, row)
+
+
+class AdminMCPServer(MCPServer):
+    async def list_tools(self):
+        with SessionLocal() as db:
+            try:
+                _context(db)
+            except PermissionError:
+                return []
+        return await super().list_tools()
+
+
+def response(name: str, correlation: str, result: dict) -> dict:
+    state = result["status"]
+    return {"zeitpunkt": utcnow().isoformat() + "Z", "status": state, "modul": ADMIN_TOOLS[name].module,
+        "schweregrad": {"ok": "info", "warn": "warnung", "fail": "fehler", "unbekannt": "info"}[state],
+        "evidenz": result["evidence"],
+        "ursachenhypothese": "Hypothese: Teilkomponente gestoert oder Datenbasis unvollstaendig."
+            if state != "ok" else "Keine Hypothese erforderlich.",
+        "empfehlung": "Zustaendige Systemadministration soll den Teilcheck pruefen."
+            if state != "ok" else "Keine Aktion erforderlich.",
+        "korrelations_id": correlation}
+
+
+def _execute(name: str, arguments: dict, correlation: str) -> dict:
+    # Eigene Session im Thread: Auch Live-Pruefung, Audit und Rate-Limit
+    # blockieren die Event-Loop nicht und liegen innerhalb des Antwortzeitlimits.
+    # Nach Timeout darf der rein lesende Check seine Session sauber schliessen.
+    with SessionLocal() as db:
+        try:
+            context = _context(db)
+            user_id = context.user.id
+            write_audit(db, "admin_mcp.tool", user_id=user_id,
+                payload={"tool": name, "argumente": mask_arguments(arguments), "korrelations_id": correlation})
+            db.commit()
+            try:
+                permitted = _tool_limiter.hit(parse("30/minute"), "admin-mcp-tool", str(user_id))
+            except Exception:
+                return {"status": "unbekannt", "evidence": {"fehler": "Rate-Limit-Pruefung nicht verfuegbar"}}
+            if not permitted:
+                return {"status": "warn", "evidence": {"fehler": "Rate-Limit erreicht"}}
+            try:
+                return collect(db, name, **arguments)
+            except ValueError:
+                return {"status": "unbekannt", "evidence": {"fehler": "ungueltige Parameter"}}
+        except PermissionError:
+            raise
+        except Exception:
+            return {"status": "fail", "evidence": {"fehler": "Teilcheck nicht verfuegbar"}}
+
+
+async def call_tool(name: str, **arguments) -> dict:
+    correlation = str(uuid4())
+    try:
+        result = await asyncio.wait_for(asyncio.to_thread(_execute, name, arguments, correlation), timeout=TOOL_TIMEOUT)
+    except TimeoutError:
+        result = {"status": "unbekannt", "evidence": {"fehler": "Zeitlimit erreicht"}}
+    except PermissionError as exc:
+        raise ToolError(DENIED) from exc
+    answer = response(name, correlation, result)
+    if len(json.dumps(answer, ensure_ascii=False, default=str).encode()) > MAX_RESPONSE_BYTES:
+        answer = response(name, correlation, {"status": "warn", "evidence": {"fehler": "Antwortgroesse begrenzt"}})
+    return answer
+
+
+registration = ClientRegistrationOptions(enabled=True, valid_scopes=["mcp-admin"], default_scopes=["mcp-admin"])
+revocation = RevocationOptions(enabled=True)
+server = AdminMCPServer("Einsatzcockpit Systemdiagnose", auth_server_provider=provider,
+    auth=AuthSettings(issuer_url=cast(AnyHttpUrl, RESOURCE), resource_server_url=cast(AnyHttpUrl, RESOURCE),
+        validate_token_resource=True, required_scopes=["mcp-admin"],
+        client_registration_options=registration, revocation_options=revocation))
+
+
+@server.tool(description=ADMIN_TOOLS["admin_system_uebersicht"].description)
+async def admin_system_uebersicht() -> dict:
+    return await call_tool("admin_system_uebersicht")
+
+
+@server.tool(description=ADMIN_TOOLS["admin_dienste_pruefen"].description)
+async def admin_dienste_pruefen() -> dict:
+    return await call_tool("admin_dienste_pruefen")
+
+
+@server.tool(description=ADMIN_TOOLS["admin_worker_pruefen"].description)
+async def admin_worker_pruefen() -> dict:
+    return await call_tool("admin_worker_pruefen")
+
+
+@server.tool(description=ADMIN_TOOLS["admin_redis_pruefen"].description)
+async def admin_redis_pruefen() -> dict:
+    return await call_tool("admin_redis_pruefen")
+
+
+@server.tool(description=ADMIN_TOOLS["admin_datenbank_pruefen"].description)
+async def admin_datenbank_pruefen() -> dict:
+    return await call_tool("admin_datenbank_pruefen")
+
+
+@server.tool(description=ADMIN_TOOLS["admin_gateway_pruefen"].description)
+async def admin_gateway_pruefen() -> dict:
+    return await call_tool("admin_gateway_pruefen")
+
+
+@server.tool(description=ADMIN_TOOLS["admin_logs_analysieren"].description)
+async def admin_logs_analysieren(level: str = "WARNING", limit: int = 100, suchtext: str = "") -> dict:
+    return await call_tool("admin_logs_analysieren", level=level, limit=limit, suchtext=suchtext)
+
+
+async def _token(request: Request) -> Response:
+    # Das SDK gibt den Resource-Parameter am Token-Endpunkt derzeit nicht an
+    # den Provider weiter. Abweichende explizite Ziele hier ablehnen.
+    form = await request.form()
+    if form.get("resource") not in (None, RESOURCE):
+        return JSONResponse({"error": "invalid_target"}, status_code=400,
+                            headers={"Cache-Control": "no-store"})
+    return await TokenHandler(provider, ClientAuthenticator(provider)).handle(request)
+
+
+async def _revoke(request: Request) -> Response:
+    """RFC 7009 fuer oeffentliche Clients ohne client_secret-Formularfeld.
+
+    Das SDK verlangt aktuell selbst bei auth_method=none ein vorhandenes
+    nullable client_secret. Die Korrektur bleibt auf diesen Server beschraenkt.
+    """
+    try:
+        client = await ClientAuthenticator(provider).authenticate_request(request)
+    except AuthenticationError:
+        return JSONResponse({"error": "unauthorized_client"}, status_code=401)
+    form: dict = dict(await request.form())
+    form.setdefault("client_secret", None)
+    try:
+        values = RevocationRequest.model_validate(form)
+    except ValidationError:
+        return JSONResponse({"error": "invalid_request"}, status_code=400)
+    token = await provider.load_access_token(values.token) or await provider.load_refresh_token(client, values.token)
+    if token and token.client_id == client.client_id:
+        await provider.revoke_token(token)
+    return Response(status_code=200, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+
+
+def application():
+    app = server.streamable_http_app(streamable_http_path="/mcp/admin", stateless_http=True,
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
+    metadata = build_metadata(cast(AnyHttpUrl, RESOURCE), None, registration, revocation)
+    metadata.token_endpoint_auth_methods_supported = ["none"]
+    metadata.revocation_endpoint_auth_methods_supported = ["none"]
+    routes = []
+    for route in app.routes:
+        path = getattr(route, "path", "")
+        if path == "/.well-known/oauth-authorization-server":
+            route = Route("/.well-known/oauth-authorization-server/mcp/admin",
+                endpoint=cors_middleware(MetadataHandler(metadata).handle, ["GET", "OPTIONS"]),
+                methods=["GET", "OPTIONS"])
+        elif path in ("/authorize", "/token", "/register", "/revoke"):
+            # Neue Route statt path-Mutation: Starlettes kompiliertes Matching
+            # muss die tatsaechlichen Admin-Pfade enthalten.
+            endpoint = route.endpoint
+            if path in ("/token", "/revoke"):
+                endpoint = RequestBodyLimitMiddleware(
+                    cors_middleware(_token if path == "/token" else _revoke, ["POST", "OPTIONS"]),
+                    max_body_size=1024 * 1024)
+            route = Route("/mcp/admin" + path, endpoint=endpoint, methods=route.methods)
+        elif path == "/mcp/admin":
+            route.app = AuthenticationMiddleware(AuthContextMiddleware(route.app),
+                backend=BearerAuthBackend(ProviderTokenVerifier(provider),
+                                          resource_server_url=cast(AnyHttpUrl, RESOURCE)))
+        if not hasattr(route.endpoint, "__name__"):
+            route.endpoint.__name__ = "admin_mcp_sdk_endpoint"
+        routes.append(route)
+    app.router.routes[:] = routes
+    return app

@@ -45,7 +45,9 @@ EXEMPT_PREFIXES = (
 )
 # MCP-OAuth-Endpunkte (Bearer/PKCE, kein Browser-Cookie): nur exakte Pfade, kein Praefix.
 # CSP-Berichte werden vom Browser anonym und ohne CSRF-Token gesendet.
-_EXEMPT_EXACT = frozenset({"/csp-report", "/mcp", "/token", "/register", "/revoke", "/mail/webhook/resend-inbound"})
+_EXEMPT_EXACT = frozenset({
+    "/csp-report", "/mcp", "/mcp/admin", "/mcp/admin/token", "/mcp/admin/register", "/mcp/admin/revoke",
+    "/token", "/register", "/revoke", "/mail/webhook/resend-inbound"})
 # Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
 # Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
 _ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)
