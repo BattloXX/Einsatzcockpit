@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import io
 import logging
+import math
 import secrets
 import struct
 import time
@@ -151,6 +152,28 @@ def verify(db: Session, user_id: int, code: str, *, confirming: bool = False) ->
         audit(db, "failed", user_id)
     db.flush()
     return success
+
+
+def diagnose_failure(db: Session, user_id: int, code: str) -> tuple[str, int | None]:
+    """Nach verify()-Fehlschlag nur lesen; keine Zaehler, Faktoren oder Audits aendern."""
+    with db.no_autoflush:
+        factor = db.query(AdminTotp.secret_enc, AdminTotp.confirmed_at,
+                          AdminTotp.locked_until, AdminTotp.last_used_step).filter(
+                              AdminTotp.user_id == user_id).first()
+        if factor is None or factor.confirmed_at is None:
+            return "nicht_eingerichtet", None
+        now = utcnow()
+        if factor.locked_until and factor.locked_until > now:
+            return "gesperrt", max(1, math.ceil((factor.locked_until - now).total_seconds() / 60))
+        step = matching_step(decrypt_secret(factor.secret_enc), code.strip())
+        if step is not None and factor.last_used_step is not None and step <= factor.last_used_step:
+            return "verbraucht", None
+        if step is None and db.query(AdminRecoveryCode.id).filter(
+            AdminRecoveryCode.user_id == user_id, AdminRecoveryCode.code_hash == recovery_hash(code),
+            AdminRecoveryCode.used_at.is_not(None),
+        ).first():
+            return "verbraucht", None
+    return "ungueltig", None
 
 
 def fresh(mfa_at: int | None) -> bool:

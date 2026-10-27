@@ -54,11 +54,21 @@ einen Hinweis; Audit-Eintraege entstehen auch ohne Mailkonfiguration.
 
 ## Totalverlust: lokale Server-CLI
 
+Ohne verfuegbare Recovery-Codes erfolgt der Notfallreset nur per CLI am Server.
+Die regulaere, frisch MFA-bestaetigte Verwaltung durch einen anderen
+Systemadministrator bleibt wie oben beschrieben verfuegbar.
 Nur mit Zugang zur Server-Shell, im Anwendungsverzeichnis bzw. Container:
 
 ```bash
 .venv/bin/python -m app.cli mfa-reset <username>
 .venv/bin/python -m app.cli mfa-global-aus
+```
+
+Mit Docker Compose heisst der Appservice in diesem Repo `app`:
+
+```bash
+docker compose exec app python -m app.cli mfa-reset <username>
+docker compose exec app python -m app.cli mfa-global-aus
 ```
 
 `mfa-reset` entfernt Faktoren und Recovery-Codes dieses Systemadministrators und

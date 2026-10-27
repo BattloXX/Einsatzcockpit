@@ -319,8 +319,19 @@ def application():
             route.app = AuthenticationMiddleware(AuthContextMiddleware(route.app),
                 backend=BearerAuthBackend(ProviderTokenVerifier(provider),
                                           resource_server_url=cast(AnyHttpUrl, RESOURCE)))
+        routes.append(route)
+    # Discovery-Aliase nur fuer den separaten Admin-Issuer. Der Org-Issuer
+    # und dessen pfadgebundene Resource-Metadaten bleiben unveraendert.
+    for path in ("/.well-known/openid-configuration/mcp/admin",
+                 "/mcp/admin/.well-known/openid-configuration"):
+        routes.append(Route(path, endpoint=cors_middleware(MetadataHandler(metadata).handle, ["GET", "OPTIONS"]),
+                            methods=["GET", "OPTIONS"]))
+    resource_route = next(route for route in routes
+                          if route.path == "/.well-known/oauth-protected-resource/mcp/admin")
+    routes.append(Route("/.well-known/oauth-protected-resource", endpoint=resource_route.endpoint,
+                        methods=["GET", "OPTIONS"]))
+    for route in routes:
         if not hasattr(route.endpoint, "__name__"):
             route.endpoint.__name__ = "admin_mcp_sdk_endpoint"
-        routes.append(route)
     app.router.routes[:] = routes
     return app

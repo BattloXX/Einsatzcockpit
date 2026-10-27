@@ -1508,3 +1508,25 @@ def test_admin_mcp_ist_keine_org_token_hintertuer(client):
         "client_id": token["client_id"], "refresh_token": token["refresh_token"]}).status_code in (400, 401)
     assert client.post("/mcp/admin/anmelden", data={"username": org["username"],
         "password": "Test1234!", "vorgang": "org-a-token"}).status_code == 403
+
+
+def test_admin_mcp_discovery_aliases_enthalten_keine_org_daten(client):
+    """Globale Discovery-Aliase liefern in beiden Org-Sessions nur feste Metadaten."""
+    from uuid import uuid4
+
+    from app.core.security import sign_session
+    from tests.test_mcp_fundament import _enable_mcp
+
+    users = [_enable_mcp("discovery-" + uuid4().hex[:8], "discovery-" + uuid4().hex[:8]) for _ in range(2)]
+    paths = ("/.well-known/oauth-protected-resource", "/.well-known/openid-configuration/mcp/admin",
+             "/mcp/admin/.well-known/openid-configuration")
+    anonymous = [client.get(path).json() for path in paths]
+    for user in users:
+        client.cookies.set("session", sign_session(user["id"]), domain="testserver.local", path="/")
+        for path, metadata in zip(paths, anonymous, strict=True):
+            response = client.get(path)
+            assert response.status_code == 200 and response.json() == metadata
+            assert user["username"] not in response.text
+            assert "org_id" not in response.text
+    assert anonymous[0]["resource"].endswith("/mcp/admin")
+    assert anonymous[1]["scopes_supported"] == ["mcp-admin"]

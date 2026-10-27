@@ -415,3 +415,55 @@ Es werden keine GitHub-Schreibzugriffe eingefuehrt.
 
 Die gesamte Einschaltreihenfolge, Rechte-Matrix und Recovery stehen im
 [System-Admin-Ueberblick](Administration-System-Admin-Ueberblick).
+
+
+## Anmeldung schlaegt fehl – Checkliste
+
+Die Seite zeigt konkrete Hinweise erst nach erfolgreicher lokaler Passwortpruefung
+und bei einem noch gueltigen Anmeldevorgang. Unbekannte Konten, falsche Passwoerter,
+SSO-only-Konten und abgelaufene Vorgaenge behalten dieselbe generische Ablehnung.
+Eine Ablehnung liefert weiterhin HTTP 401; das Rate-Limit liefert HTTP 429.
+Unter `/admin/systemdiagnose` im Bereich Audit steht der lesbare Grund der
+Eintraege `admin_mcp.login_failed` bzw. `admin_mcp.denied`. Deren Payload enthaelt
+nur `grund`, keine Passwoerter, Faktorwerte oder Tokens.
+
+| Ursache | Audit (`grund`) / Erkennung | Loesung |
+| --- | --- | --- |
+| (a) Admin-MCP global aus | `admin_mcp.denied`: `global_aus` | Unter System > Einstellungen den Admin-MCP aktivieren. |
+| (b) Benutzer nicht freigegeben | `admin_mcp.denied`: `kein_zugriff` | Admin-MCP-Zugriff fuer das persoenliche Systemadministratorkonto freigeben. |
+| Kein persoenlicher Systemadministrator | `admin_mcp.denied`: `kein_systemadministrator` | Mit einem persoenlichen Systemadministratorkonto verbinden; Geraetekonten sind ausgeschlossen. |
+| (c) TOTP-Schritt bereits verbraucht, etwa durch `/mfa/verify` | `admin_mcp.login_failed`: `verbraucht` | Naechsten Code abwarten (bis zu 30 Sekunden) oder unbenutzten Recovery-Code verwenden. Web und Admin-MCP teilen den Replay-Schutz; auch ein alter Schritt wird abgelehnt. |
+| (d) 2FA nach fuenf Fehlversuchen gesperrt | `admin_mcp.login_failed`: `gesperrt` | Angezeigte Restzeit abwarten (Sperre fuenf Minuten). Web und Admin-MCP teilen die Sperre; erneute Versuche verkuerzen sie nicht. |
+| (e) 2FA global aktiv, Einrichtung fehlt/unbestaetigt | `admin_mcp.login_failed`: `nicht_eingerichtet` | Zuerst im Web unter `/mfa/einrichten` einrichten und bestaetigen. Bei Faktorverlust die Server-CLI gemaess 2FA-Wiki verwenden. |
+| Code fehlt oder passt nicht | `admin_mcp.login_failed`: `code_leer` / `ungueltig` | Authenticator- oder Recovery-Code eingeben; bei ungueltigem Code Uhrzeit von Server und App pruefen. |
+| (f) Falsches Passwort, unbekanntes/inaktives Konto, Passwortsperre oder SSO-only | `admin_mcp.login_failed`: `authentifizierung_fehlgeschlagen`; ggf. zusaetzlich `auth.login.failed`, `auth.login.locked` oder `auth.login.lockout_triggered` | Lokales Passwort und Kontostatus pruefen. SSO-only wird hier nicht unterstuetzt. Der MCP-Audit-Grund unterscheidet diese Faelle bewusst nicht. |
+| (g) Mehr als fuenf Login-Versuche pro Minute | HTTP 429; kein zusaetzlicher Login-Audit-Eintrag fuer den vom Rate-Limit abgefangenen Versuch | Eine Minute warten und Verbindung erneut versuchen. |
+| (h) Anmeldevorgang abgelaufen oder schon abgeschlossen | `admin_mcp.login_failed`: `vorgang_abgelaufen` bei POST; GET zeigt nur die generische Ablehnung | In ChatGPT die Verbindung neu starten. Der Anmeldevorgang ist fuenf Minuten gueltig. |
+
+### ChatGPT / Custom MCP (OAuth)
+
+Als Serveradresse `/mcp/admin` mit oeffentlich erreichbarer HTTPS-Basis verwenden.
+Oeffentliche Clients koennen sich dynamisch mit `token_endpoint_auth_method=none`
+registrieren. PKCE S256 ist erforderlich. Unterstuetzte Redirect-Formen sind
+`https://chatgpt.com/connector_platform_oauth_redirect`,
+`https://chatgpt.com/connector/oauth/<id>` und
+`https://chat.openai.com/aip/<id>/oauth/callback` (jeweils exakt registrieren).
+Fehlender Scope faellt auf `mcp-admin`; andere Scopes werden abgelehnt.
+Die Resource bleibt exakt die konfigurierte oeffentliche Basis plus `/mcp/admin`.
+
+Discovery: `/.well-known/oauth-protected-resource/mcp/admin` sowie der zusaetzliche
+Root-Pfad `/.well-known/oauth-protected-resource` beschreiben die Admin-Resource.
+Der Org-MCP behaelt `/.well-known/oauth-protected-resource/mcp` und seinen eigenen
+Issuer. Der Admin-Issuer liefert OAuth-Metadaten unter
+`/.well-known/oauth-authorization-server/mcp/admin` sowie den Discovery-Aliasen
+`/.well-known/openid-configuration/mcp/admin` und
+`/mcp/admin/.well-known/openid-configuration`. Die Aliase fuehren keine OIDC-Anmeldung,
+ID-Tokens oder einen `openid`-Scope ein.
+Ein anonymer Aufruf der Admin-Resource liefert HTTP 401 mit `WWW-Authenticate`
+und dem pfadgebundenen `resource_metadata`-Verweis.
+
+Die automatisierten Tests pruefen Registrierung, Discovery und den gesamten
+Passwort-/TOTP-/Token-Flow lokal ohne Netz. Ob eine konkrete produktive
+ChatGPT-Verbindung funktioniert, haengt auch von HTTPS, Proxy, oeffentlicher
+Basisadresse und der tatsaechlichen Client-Anfrage ab; diese werden damit nicht
+live verifiziert.
