@@ -42,13 +42,18 @@ def medien_im_testverzeichnis(tmp_path, monkeypatch):
 
 @pytest.fixture
 def offline_browser(client, browser):
-    state = {"posts": [], "ws": [], "ws_anzahl": 0, "loop": None, "antwort_verlieren": None}
+    state = {"posts": [], "ws": [], "ws_anzahl": 0, "loop": None, "antwort_verlieren": None,
+             "kontext_freigabe": None, "kontext_gestartet": threading.Event()}
 
     async def http(request: Request):
         state["loop"] = asyncio.get_running_loop()
         if request.url.path.startswith("/karten/osm-tile/"):
             return Response('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"/>',
                             media_type="image/svg+xml")
+        if request.url.path == "/einheit/api/zustand" and state["kontext_freigabe"] is not None:
+            state["kontext_gestartet"].set()
+            while not state["kontext_freigabe"].is_set():
+                await asyncio.sleep(.01)
         body = await request.body()
         headers = {k: v for k, v in request.headers.items()
                    if k not in {"host", "content-length", "accept-encoding", "connection"}}
@@ -113,6 +118,8 @@ def offline_browser(client, browser):
         asyncio.run_coroutine_threadsafe(schliessen(), state["loop"]).result(timeout=5)
 
     yield context, page, state, errors, starten, verbindungen_schliessen
+    if state["kontext_freigabe"] is not None:
+        state["kontext_freigabe"].set()
     context.close()
     server.should_exit = True
     thread.join(timeout=5)
@@ -304,6 +311,15 @@ def test_websocket_reconnect_laesst_boardaenderung_nachladen(client, setup_db, o
 
 @pytest.mark.parametrize("zugang", ["gk", "qr"])
 def test_abgelaufener_zugang_blockiert_offline_eintraege_vor_dem_versand(client, setup_db, offline_browser, zugang):
+    _abgelaufener_zugang(client, offline_browser, zugang)
+
+
+@pytest.mark.parametrize("zugang", ["gk", "qr"])
+def test_verzoegerte_kontextpruefung_blockiert_auch_den_outbox_retry(client, setup_db, offline_browser, zugang):
+    _abgelaufener_zugang(client, offline_browser, zugang, kontext_verzoegert=True)
+
+
+def _abgelaufener_zugang(client, offline_browser, zugang, *, kontext_verzoegert=False):
     from playwright.sync_api import expect
 
     if zugang == "gk":
@@ -327,7 +343,19 @@ def test_abgelaufener_zugang_blockiert_offline_eintraege_vor_dem_versand(client,
     with _db() as db:
         db.get(LageEinheitZugang, zugang_id).laeuft_ab_at = datetime.now(UTC) - timedelta(minutes=1)
         db.commit()
+    if kontext_verzoegert:
+        # Echte SW-Requests werden von page.route nicht abgefangen: am HTTP-Proxy halten.
+        page.wait_for_function(f"{DATEN}.outboxListe[0]?.status === 'fehler_netz'")
+        state["kontext_freigabe"] = threading.Event()
     context.set_offline(False)
+    if kontext_verzoegert:
+        try:
+            assert state["kontext_gestartet"].wait(timeout=5)
+            # Die vorhandene 2-s-Retry-Frist laeuft waehrend der offenen Kontextpruefung ab.
+            page.wait_for_timeout(2500)
+            assert not state["posts"]
+        finally:
+            state["kontext_freigabe"].set()
     page.wait_for_function(f"{DATEN}.zugangBeendet")
     expect(page.locator('.einheit-page')).to_contain_text("Die Anmeldung ist abgelaufen")
     expect(page.locator('.einheit-meta .einheit-offline')).to_have_text("Zugang beendet")

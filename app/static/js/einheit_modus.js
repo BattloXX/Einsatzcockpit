@@ -389,6 +389,7 @@ function registriere() {
           einheitId: this.einheitId,
           dbName: this.outboxName(),
           onTerminal: () => { void this.zugangBeenden(); },
+          vorSenden: (signal) => this.versandKontextPruefen(signal),
         });
       } catch (error) {
         // Ohne Outbox bleibt die Ansicht benutzbar (nur ohne Offline-Speicher), statt leer zu bleiben.
@@ -1168,6 +1169,31 @@ function registriere() {
         if (anfrage !== this.retryAnfrage || wartezeit === null || this.zugangBeendet) return;
         this.retryTimer = setTimeout(() => { void this.flush(); }, wartezeit);
       }).catch((error) => console.warn("Einheiten-Outbox nicht verfuegbar", error));
+    },
+    async versandKontextPruefen(signal) {
+      if (this.zugangBeendet) return false;
+      if (!navigator.onLine) throw new Error("offline");
+      // Eigene Anfrage ohne ETag: unabhaengig von konkurrierenden UI-Ladevorgaengen.
+      // Der Service Worker darf einen lokalen Stand niemals zum Versand freigeben.
+      const response = await fetch("/einheit/api/zustand", {
+        headers: this.headers(), credentials: "same-origin", cache: "no-store", signal,
+      });
+      if (response.headers.get("X-EC-Offline") === "1") throw new Error("offline");
+      const data = await response.json().catch(() => null);
+      if (response.status === 401 || ["kein_einheitenkontext", "einheit_gewechselt"].includes(data?.code)) {
+        this.ladeFehler = response.status === 401 || window.EINHEIT_PRINCIPAL ? "anmeldung" : "kontext";
+        await this.zugangBeenden();
+        return false;
+      }
+      if (!response.ok) throw new Error(`http_${response.status}`);
+      if (!data) throw new Error("kontext_unlesbar");
+      if (data.kopf?.einheit_id !== this.einheitId || data.kopf?.lage_id !== this.lageId) {
+        this.ladeFehler = "kontext";
+        await this.zugangBeenden();
+        return false;
+      }
+      if (!navigator.onLine) throw new Error("offline");
+      return !this.zugangBeendet;
     },
     async flush(abgleichen = false) {
       if (this.zugangBeendet || !this.outbox) return;
