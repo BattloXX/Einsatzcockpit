@@ -213,3 +213,7 @@ Bei Zeitlimit oder ungueltigen Regeln ist keine Freigabe moeglich. Zum
 Vorversion zuruecksetzen** waehlen; es gelten dieselben Pruefungen und Audit-Regeln.
 Die Aktivierung aendert nur kuenftige Verarbeitung. Bestehende Einsaetze werden
 nur mit **Neu verarbeiten** in der Alarmempfang-Diagnose erneut ausgewertet.
+
+## Parserdiagnose per MCP
+
+Im Gateway-Detail kann ein Org-Admin oder Admin **Parser per MCP (KI-Client) lesen/optimieren** für die gesamte Organisation einschalten (Standard aus). Zusätzlich müssen Gateway und MCP auf System- und Org-Ebene aktiv sein. Die fünf lesenden P7a-Werkzeuge liefern maskierte Diagnoseinformationen an den verbundenen externen KI-Dienst. Freitext kann trotz Maskierung Personendaten enthalten; die Freigabe setzt erlaubte Datenweitergabe voraus. Ablauf und Grenzen: [Alarm-Parser optimieren](Administration-MCP-Server.md#alarm-parser-optimieren). MCP-Entwurfs-, Test- und Testfallwerkzeuge folgen mit P7b; Aktivierung bleibt in der Web-UI.

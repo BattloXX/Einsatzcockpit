@@ -28,3 +28,13 @@ def anonymisiere(text: str) -> str:
     text = _IBAN.sub("[IBAN]", text)
     text = _TELEFON.sub("[Telefon]", text)
     return _NAME.sub(_maskiere_name, text)
+
+
+def erkannte_namen(text: str) -> list[str]:
+    """Erkannte Namensbestandteile auch in abgeleiteten Parserfeldern schuetzen."""
+    namen = []
+    for match in _NAME.finditer(text):
+        name = match.group()[len(match.group(1)):]
+        if name.split()[0].casefold() not in _KEIN_NAME:
+            namen.extend([name, *name.split()])
+    return sorted(set(namen), key=len, reverse=True)

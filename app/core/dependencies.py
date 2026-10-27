@@ -118,6 +118,20 @@ _SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled", "kontakte_mo
                      "planspiel_module_enabled", "katplan_module_enabled")
 
 
+def gateway_effective_enabled(
+    org_id: int, db: Session, *, system_flags: set[str] | None = None, org_settings=None,
+) -> bool:
+    """Gateway-Freigabe; die Request-Aufloesung kann ihre gebuendelten Loads nutzen."""
+    from app.models.master import OrgSettings, SystemSettings
+
+    if system_flags is None:
+        system_flags = {row.key for row in db.query(SystemSettings).filter(
+            SystemSettings.key == "gateway_module_enabled", SystemSettings.value == "true",
+        )}
+        org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    return bool("gateway_module_enabled" in system_flags and org_settings and org_settings.gateway_module_enabled)
+
+
 def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session) -> None:
     """Setzt alle Modul-Flags auf request.state fail-safe (nie crashen).
 
@@ -147,8 +161,8 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
         request.state.nachschlagewerke_enabled = bool(
             "nachschlagewerke_module_enabled" in sys_on
             and org_s and org_s.nachschlagewerke_module_enabled)
-        request.state.gateway_enabled = bool(
-            "gateway_module_enabled" in sys_on and org_s and org_s.gateway_module_enabled)
+        request.state.gateway_enabled = gateway_effective_enabled(
+            org_id, db, system_flags=sys_on, org_settings=org_s)
         request.state.lagefuehrung_modul_aktiv = bool(
             "lagefuehrung_modul_aktiv" in sys_on and org_s and org_s.lagefuehrung_modul_aktiv)
         request.state.foerderstrecke_enabled = bool(

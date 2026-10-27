@@ -384,6 +384,8 @@ class OrgSettings(Base):
 
     __tablename__ = "org_settings"
 
+    alarm_parser_mcp_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     org_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), unique=True, nullable=False

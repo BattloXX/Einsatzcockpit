@@ -27,6 +27,7 @@ from app.core.security import hash_api_key
 from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
+from app.mcp.tools import alarm_parser as _alarm_parser  # noqa: F401 - registriert Alarmdiagnose
 from app.mcp.tools import benutzer as _benutzer  # noqa: F401 - registriert Benutzer-Lesetools
 from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsatz-Lesetools
 from app.mcp.tools import einsatzwissen as _einsatzwissen  # noqa: F401 - Wissenspflege
@@ -2267,3 +2268,33 @@ async def katplan_dokument_zusammenfassung(plan_id: int, dokument_id: int,
                                           von: int = 1, bis: int | None = None) -> dict:
     return await _call_registered_tool("katplan_dokument_zusammenfassung", plan_id=plan_id,
                                        dokument_id=dokument_id, von=von, bis=bis)
+
+
+@server.tool(name="alarm_rohdaten_liste", description="Maskierte Alarmrohdaten paginiert lesen; Gateway-Admin.")
+async def alarm_rohdaten_liste(
+    status: str = "", qualitaet_max: int | None = None, von: str = "", bis: str = "",
+    leitstellennummer: str = "", nur_ohne_einsatz: bool = False, limit: int = 50, seite: int = 1,
+) -> dict[str, object]:
+    return await _call_registered_tool("alarm_rohdaten_liste", status=status, qualitaet_max=qualitaet_max,
+                                       von=von, bis=bis, leitstellennummer=leitstellennummer,
+                                       nur_ohne_einsatz=nur_ohne_einsatz, limit=limit, seite=seite)
+
+
+@server.tool(name="alarm_rohdaten_lesen", description="Maskierten Rohalarm mit begrenztem Hex-Auszug lesen.")
+async def alarm_rohdaten_lesen(ingest_id: int) -> dict[str, object]:
+    return await _call_registered_tool("alarm_rohdaten_lesen", ingest_id=ingest_id)
+
+
+@server.tool(name="alarm_parser_statistik", description="Parser-Kennzahlen und maskierte Alias-Kandidaten lesen.")
+async def alarm_parser_statistik(von: str = "", bis: str = "") -> dict[str, object]:
+    return await _call_registered_tool("alarm_parser_statistik", von=von, bis=bis)
+
+
+@server.tool(name="alarm_parser_regelsatz_lesen", description="Regeln, Regelschema und Org-Ortskatalog lesen.")
+async def alarm_parser_regelsatz_lesen(limit: int = 50, seite: int = 1) -> dict[str, object]:
+    return await _call_registered_tool("alarm_parser_regelsatz_lesen", limit=limit, seite=seite)
+
+
+@server.tool(name="alarm_ortsdaten_pruefen", description="Gemeinde, Ortsteil und Strasse gegen Org-Kataloge pruefen.")
+async def alarm_ortsdaten_pruefen(gemeinde: str = "", ortsteil: str = "", strasse: str = "") -> dict[str, object]:
+    return await _call_registered_tool("alarm_ortsdaten_pruefen", gemeinde=gemeinde, ortsteil=ortsteil, strasse=strasse)

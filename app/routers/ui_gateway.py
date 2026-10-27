@@ -36,6 +36,7 @@ from app.models.gateway import (
     PrintJob,
     PrintRule,
 )
+from app.models.master import OrgSettings
 from app.models.user import User
 
 logger = logging.getLogger("einsatzleiter.gateway")
@@ -402,6 +403,7 @@ def gateway_detail(
     )
     from app.routers.ws import gateway_online_id, get_passthrough_status
     from app.services import ws_bus
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     return templates.TemplateResponse(request, "gateway/detail.html", {
         "user": user,
         "gw": gw,
@@ -414,6 +416,7 @@ def gateway_detail(
         "trigger_labels": TRIGGER_LABELS,
         "passthrough_status": run_async(get_passthrough_status, user.org_id),
         "redis_status": ws_bus.status(),
+        "alarm_parser_mcp_aktiv": bool(org_settings and org_settings.alarm_parser_mcp_aktiv),
     })
 
 
@@ -1757,3 +1760,32 @@ def gateway_parser_aktion(
                                ergebnis=ergebnis, eingabe=eingabe, notiz=notiz)
     response.headers["HX-Trigger"] = "alarm-parser-refresh"
     return response
+
+
+@router.post("/{gateway_id:int}/alarm-parser-mcp", response_class=HTMLResponse)
+def gateway_alarm_parser_mcp(
+    gateway_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+    enabled: bool = Form(False),
+):
+    from app.core.audit import write_audit
+    from app.models.master import OrgSettings
+
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
+    if org is None:
+        org = OrgSettings(org_id=user.org_id)
+        db.add(org)
+    if org.alarm_parser_mcp_aktiv != enabled:
+        org.alarm_parser_mcp_aktiv = enabled
+        write_audit(db, "alarm_parser.mcp_freigabe_geaendert", org_id=user.org_id, user_id=user.id,
+                    payload={"enabled": enabled})
+        db.commit()
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "gateway/_alarm_parser_mcp_settings.html", {
+            "gw": gw, "alarm_parser_mcp_aktiv": enabled, "parser_mcp_saved": True,
+        })
+    return RedirectResponse(f"/gateway/{gw.id}#alarm-parser-mcp", status_code=303)
