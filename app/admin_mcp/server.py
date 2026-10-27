@@ -30,12 +30,14 @@ from app.admin_mcp.context import admin_session as SessionLocal
 from app.admin_mcp.diagnose_tools import collect_diagnose
 from app.admin_mcp.masking import mask_arguments
 from app.admin_mcp.provider import RESOURCE, provider
-from app.admin_mcp.registry import ADMIN_TOOLS, DIAG_TOOLS, collect
+from app.admin_mcp.registry import ADMIN_TOOLS, DIAG_TOOLS, REPAIR_TOOLS, collect
+from app.admin_mcp.repair_tools import collect_repair
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.security import hash_api_key
 from app.models.admin_mcp import AdminMCPOAuthToken
 from app.models.admin_security import utcnow
+from app.services.repair.runner import gates, prepare_session
 
 TOOL_TIMEOUT = 20
 MAX_RESPONSE_BYTES = 64 * 1024
@@ -58,14 +60,21 @@ class AdminMCPServer(MCPServer):
         with SessionLocal() as db:
             try:
                 _context(db)
+                try:
+                    gates(db)
+                    repair_enabled = True
+                except ValueError:
+                    repair_enabled = False
             except PermissionError:
                 return []
-        return await super().list_tools()
+        return [tool for tool in await super().list_tools()
+                if repair_enabled or tool.name not in REPAIR_TOOLS]
 
 
 def response(name: str, correlation: str, result: dict) -> dict:
     state = result["status"]
-    return {"zeitpunkt": utcnow().isoformat() + "Z", "status": state, "modul": ADMIN_TOOLS[name].module,
+    return {"zeitpunkt": utcnow().isoformat() + "Z", "status": state,
+        "modul": (ADMIN_TOOLS | REPAIR_TOOLS)[name].module,
         "schweregrad": {"ok": "info", "warn": "warnung", "fail": "fehler", "unbekannt": "info"}[state],
         "evidenz": result["evidence"],
         "ursachenhypothese": "Hypothese: Teilkomponente gestoert oder Datenbasis unvollstaendig."
@@ -75,12 +84,22 @@ def response(name: str, correlation: str, result: dict) -> dict:
         "korrelations_id": correlation}
 
 
+def _repair_rejection(db, name: str, user_id: int | None, correlation: str, reason: str):
+    if name in REPAIR_TOOLS:
+        write_audit(db, "admin_repair.abgelehnt", user_id=user_id,
+                    payload={"tool": name, "korrelations_id": correlation, "grund": reason})
+        db.commit()
+
+
 def _execute(name: str, arguments: dict, correlation: str) -> dict:
     # Eigene Session im Thread: Auch Live-Pruefung, Audit und Rate-Limit
     # blockieren die Event-Loop nicht und liegen innerhalb des Antwortzeitlimits.
-    # Nach Timeout darf der rein lesende Check seine Session sauber schliessen.
+    # Nach Timeout schliesst der Thread seine Session selbst. Reparaturen
+    # persistieren Ergebnis und Idempotenz; ihr Mutex bleibt bis Abschluss belegt.
     with SessionLocal() as db:
         try:
+            if name in REPAIR_TOOLS:
+                prepare_session(db)
             context = _context(db)
             user_id = context.user.id
             write_audit(db, "admin_mcp.tool", user_id=user_id,
@@ -89,16 +108,24 @@ def _execute(name: str, arguments: dict, correlation: str) -> dict:
             try:
                 permitted = _tool_limiter.hit(parse("30/minute"), "admin-mcp-tool", str(user_id))
             except Exception:
+                _repair_rejection(db, name, user_id, correlation, "rate_limit_nicht_verfuegbar")
                 return {"status": "unbekannt", "evidence": {"fehler": "Rate-Limit-Pruefung nicht verfuegbar"}}
             if not permitted:
+                _repair_rejection(db, name, user_id, correlation, "rate_limit_erreicht")
                 return {"status": "warn", "evidence": {"fehler": "Rate-Limit erreicht"}}
             try:
+                if name in REPAIR_TOOLS:
+                    return collect_repair(db, name, user_id, context.user.session_epoch, correlation,
+                                          authorize=lambda: _context(db), **arguments)
                 if name in DIAG_TOOLS:
                     return collect_diagnose(db, name, user_id, correlation, **arguments)
                 return collect(db, name, **arguments)
             except ValueError:
                 return {"status": "unbekannt", "evidence": {"fehler": "ungueltige Parameter"}}
         except PermissionError:
+            if name in REPAIR_TOOLS:
+                db.rollback()
+                _repair_rejection(db, name, None, correlation, "berechtigung_widerrufen")
             raise
         except Exception:
             return {"status": "fail", "evidence": {"fehler": "Teilcheck nicht verfuegbar"}}
@@ -181,6 +208,34 @@ async def admin_fehler_liste(modul: str | None = None, schweregrad: str | None =
 @server.tool(description=ADMIN_TOOLS["admin_fehler_details"].description)
 async def admin_fehler_details(finding_key: str | None = None, id: int | None = None) -> dict:
     return await call_tool("admin_fehler_details", finding_key=finding_key, id=id)
+
+
+@server.tool(description=REPAIR_TOOLS["admin_reparatur_vorschlagen"].description)
+async def admin_reparatur_vorschlagen(finding_key: str | None = None, id: int | None = None) -> dict:
+    return await call_tool("admin_reparatur_vorschlagen", finding_key=finding_key, id=id)
+
+
+@server.tool(description=REPAIR_TOOLS["admin_reparatur_simulieren"].description)
+async def admin_reparatur_simulieren(run_id: int | None = None, aktion_id: str | None = None,
+                                    scope: dict | None = None) -> dict:
+    return await call_tool("admin_reparatur_simulieren", run_id=run_id, aktion_id=aktion_id, scope=scope)
+
+
+@server.tool(description=REPAIR_TOOLS["admin_reparatur_ausfuehren"].description)
+async def admin_reparatur_ausfuehren(run_id: int, simulation_hash: str, idempotency_key: str,
+                                   bestaetigt: bool = False, approval_token: str | None = None) -> dict:
+    return await call_tool("admin_reparatur_ausfuehren", run_id=run_id, simulation_hash=simulation_hash,
+                          idempotency_key=idempotency_key, bestaetigt=bestaetigt, approval_token=approval_token)
+
+
+@server.tool(description=REPAIR_TOOLS["admin_reparatur_status"].description)
+async def admin_reparatur_status(run_id: int) -> dict:
+    return await call_tool("admin_reparatur_status", run_id=run_id)
+
+
+@server.tool(description=REPAIR_TOOLS["admin_reparatur_verifizieren"].description)
+async def admin_reparatur_verifizieren(run_id: int, folgediagnose: bool = False) -> dict:
+    return await call_tool("admin_reparatur_verifizieren", run_id=run_id, folgediagnose=folgediagnose)
 
 
 async def _token(request: Request) -> Response:

@@ -1,4 +1,5 @@
 from app.models.admin_mcp import AdminMCPOAuthClient, AdminMCPOAuthCode, AdminMCPOAuthToken
+from app.models.admin_repair import AdminApproval, AdminRepairRun
 from app.models.admin_security import AdminRecoveryCode, AdminTotp
 from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.atemschutz_pruefung import (
@@ -298,6 +299,8 @@ from app.models.wordpress_report import WordPressReportConfig
 from app.models.worker_runtime import WorkerRuntime  # noqa: F401
 
 __all__ = [
+    "AdminRepairRun",
+    "AdminApproval",
     "AdminRecoveryCode", "AdminTotp",
     "CitizenReportVerification",
     "SearchChunk",

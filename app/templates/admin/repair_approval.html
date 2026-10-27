@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Reparatur freigeben{% endblock %}
+{% block content %}
+<div class="card" style="max-width:760px;margin:2rem auto;width:100%"><div class="card-body">
+  <h1>Reparatur freigeben</h1>
+  <p>Lauf {{ run.id }}: {{ run.aktion_id }} ({{ run.risiko }})</p>
+  <pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ run.vorschau|tojson(indent=2) }}</pre>
+  {% if error %}<p class="alert alert--error" role="alert">{{ error }}</p>{% endif %}
+  {% if approval_token %}
+  <p>Einmalige Freigabe, 10 Minuten gueltig. Im MCP-Aufruf als approval_token angeben:</p>
+  <code style="overflow-wrap:anywhere">{{ approval_token }}</code>
+  {% else %}
+  <p>Die Freigabe gilt nur fuer diese Simulation. Neuen TOTP- oder unbenutzten Recovery-Code eingeben.</p>
+  <form method="post" action="/admin/reparatur/freigabe/{{ run.id }}">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="simulation_hash" value="{{ run.simulation_hash }}">
+    <label for="repair-code">TOTP- oder Recovery-Code</label>
+    <input id="repair-code" class="form-input" name="code" autocomplete="one-time-code" required>
+    <button type="submit" class="btn btn--primary">Diesen Lauf freigeben</button>
+  </form>
+  {% endif %}
+</div></div>
+{% endblock %}

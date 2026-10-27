@@ -88,3 +88,17 @@ def collect(db, name: str, **arguments) -> dict:
         "quelle": "lokaler Worker-Ringpuffer", "rohtexte": "nicht ausgegeben",
         "gruppen": [{"level": level, "signatur": signature, "anzahl": count}
                     for (level, signature), count in groups.items()]}}
+
+
+REPAIR_TOOLS = {
+    "admin_reparatur_vorschlagen": AdminTool(
+        "Zu einem Befund feste Reparaturaktionen mit Risiko vorschlagen.", "reparatur"),
+    "admin_reparatur_simulieren": AdminTool(
+        "Begrenzte Reparatur ohne Schreibzugriff simulieren und Freigabebedarf anzeigen.", "reparatur"),
+    "admin_reparatur_ausfuehren": AdminTool(
+        "Simulierte Reparatur mit Bestaetigung und Idempotency-Key kontrolliert ausfuehren.", "reparatur"),
+    "admin_reparatur_status": AdminTool(
+        "Maskierte Vorschau und gespeicherten Reparaturstatus lesen.", "reparatur"),
+    "admin_reparatur_verifizieren": AdminTool(
+        "Reparaturergebnis durch eine lesende Nachpruefung verifizieren.", "reparatur"),
+}

@@ -56,6 +56,20 @@ def plane_neuaufbau(db: Session, org_id: int) -> int:
     return len(quellen)
 
 
+def stosse_rueckstand_an(db: Session, org_id: int, ids: list[int]) -> int:
+    """Explizit begrenzte Wartungsanforderung; Verarbeitung bleibt beim Indexworker."""
+    if not 1 <= len(ids) <= 50:
+        raise ValueError("1 bis 50 IDs erforderlich")
+    jetzt = _jetzt()
+    result = db.execute(update(SearchOutbox).where(
+        SearchOutbox.org_id == org_id, SearchOutbox.id.in_(ids),
+        SearchOutbox.status.in_(_OFFEN), SearchOutbox.versuche < 8,
+        SearchOutbox.naechster_versuch_am > jetzt,
+        or_(SearchOutbox.gesperrt_bis.is_(None), SearchOutbox.gesperrt_bis < jetzt),
+    ).values(naechster_versuch_am=jetzt))
+    return getattr(result, "rowcount", 0)
+
+
 def _wert(instanz: Any, name: str) -> Any:
     # Niemals getattr: abgelaufene/deferred Attribute duerfen keinen Lazy-Load ausloesen.
     zustand = inspect(instanz)

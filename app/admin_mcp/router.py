@@ -116,3 +116,98 @@ def user_switch(request: Request, user_id: int = Form(...), enabled: str = Form(
         entity_type="user", entity_id=target.id, payload={"enabled": value})
     db.commit()
     return RedirectResponse("/admin/system-einstellungen?saved=1", status_code=303)
+
+
+@router.post("/admin/system-einstellungen/admin-mcp/reparatur")
+def repair_switch(request: Request, enabled: str = Form("false"), low_auto: str = Form(""),
+                  db: Session = Depends(get_db), _=Depends(require_role("system_admin"))):
+    from app.services.repair.registry import ACTIONS
+
+    if request.state.is_device or request.state.qr_incident_id or request.state.qr_lage_id:
+        raise HTTPException(403, "Nur persoenliche Admin-Konten")
+    ids = sorted({value.strip() for value in low_auto.split(",") if value.strip()})
+    if any(value not in ACTIONS or ACTIONS[value].risiko != "low" for value in ids):
+        raise HTTPException(400, "Nur registrierte LOW-Aktionen freischaltbar")
+    if enabled == "true" and not totp.enabled(db):
+        raise HTTPException(400, "2FA erforderlich")
+    if enabled == "true" and not totp.fresh(request.state.mfa_at):
+        raise HTTPException(403, "Zuerst 2FA frisch bestaetigen")
+    for key, value in (("admin_repair_enabled", enabled), ("admin_repair_low_auto", ",".join(ids))):
+        row = db.get(SystemSettings, key)
+        if row is None:
+            row = SystemSettings(key=key)
+            db.add(row)
+        row.value, row.updated_by_user_id = value, request.state.user.id
+    write_audit(db, "admin_repair.global_changed", user_id=request.state.user.id,
+                payload={"enabled": enabled == "true", "low_auto": ids})
+    db.commit()
+    return RedirectResponse("/admin/system-einstellungen?saved=1", status_code=303)
+
+
+def _repair_page(request, run, **context):
+    response = templates.TemplateResponse(request, "admin/repair_approval.html", {"run": run, **context})
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+def _approval_run(request, db, run_id):
+    from app.services.repair.runner import check_simulation, get_run, live_user
+
+    set_tenant_context(db, None)
+    if request.state.is_device or request.state.qr_incident_id or request.state.qr_lage_id:
+        raise HTTPException(403, "Nur persoenliche Admin-Konten")
+    try:
+        live_user(db, request.state.user.id, request.state.user.session_epoch)
+        run = get_run(db, run_id, request.state.user.id)
+        check_simulation(run, run.simulation_hash or "")
+        if run.risiko != "high":
+            raise ValueError("Keine HIGH-Freigabe moeglich")
+        return run
+    except ValueError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+
+@router.get("/admin/reparatur/freigabe/{run_id}")
+def repair_approval(request: Request, run_id: int, db: Session = Depends(get_db),
+                    _=Depends(require_role("system_admin"))):
+    return _repair_page(request, _approval_run(request, db, run_id))
+
+
+@router.post("/admin/reparatur/freigabe/{run_id}")
+@(limiter.limit("5/minute") if limiter else lambda f: f)
+def repair_approval_submit(request: Request, run_id: int, code: str = Form(...),
+                           simulation_hash: str = Form(...), db: Session = Depends(get_db),
+                           _=Depends(require_role("system_admin"))):
+    import time
+    from uuid import uuid4
+
+    from app.routers.ui_mfa import _verified_cookie
+    from app.services.repair.runner import action_hash, audit, issue_approval
+
+    run = _approval_run(request, db, run_id)
+    correlation = str(uuid4())
+    original = action_hash(run)
+    if run.simulation_hash != simulation_hash or not totp.verify(db, request.state.user.id, code):
+        audit(db, "abgelehnt", request.state.user.id, correlation, run.id, "starke_authentifizierung_fehlgeschlagen")
+        db.commit()
+        return _repair_page(request, run, error="Code oder Simulation ungueltig, verbraucht oder gesperrt.")
+    # Ein Session-MFA-Marker ersetzt niemals die neue Code-Prüfung für diesen Lauf.
+    verified_at = int(time.time())
+    db.refresh(run, with_for_update=True)
+    if not totp.fresh(verified_at):
+        db.commit()
+        raise HTTPException(403, "Frische 2FA erforderlich")
+    if action_hash(run) != original:
+        db.commit()  # Code verbraucht halten, auch wenn die Simulation inzwischen verändert wurde.
+        raise HTTPException(409, "Simulation geaendert")
+    try:
+        token = issue_approval(db, run, request.state.user.id, correlation)
+    except ValueError as exc:
+        audit(db, "abgelehnt", request.state.user.id, correlation, run.id, "simulation_nicht_mehr_freigebbar")
+        db.commit()  # Auch bei Ablauf während der Prüfung bleibt der Faktor verbraucht.
+        raise HTTPException(409, str(exc)) from exc
+    db.commit()
+    response = _repair_page(request, run, approval_token=token)
+    _verified_cookie(request, request.state.user, response)
+    return response
