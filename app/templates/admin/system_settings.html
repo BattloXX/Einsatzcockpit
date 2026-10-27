@@ -106,6 +106,52 @@
     </div>
   </section>
 
+  <section id="github-zugang" class="card mb-4">
+    <div class="card-header"><h2>GitHub-Zugang (Codeanalyse und CI)</h2></div>
+    <div class="card-body">
+      {% if request.query_params.get('github_mfa') %}<div class="alert alert--warn">Frische MFA erforderlich. <a href="/mfa/verify">2FA jetzt bestaetigen</a>, danach erneut speichern oder loeschen.</div>{% endif %}
+      {% if request.query_params.get('github_error') %}<div class="alert alert--error">Token oder Ablaufdatum ungueltig. Datum muss in der Zukunft liegen, maximal 400 Tage entfernt.</div>{% endif %}
+      {% if request.query_params.get('github_message') %}<p role="status">{{ request.query_params.get('github_message') }}</p>{% endif %}
+      {% set days = github_access.restlaufzeit_tage %}
+      <div class="alert alert--{{ 'error' if github_access.status in ['abgelaufen', 'ungueltig', 'keine_berechtigung'] else 'warn' if days is not none and days <= 7 else 'info' if github_access.status != 'ok' or (days is not none and days <= 30) else 'success' }}">
+        <p>Quelle: <strong>{{ github_access.quelle }}</strong> | <span class="badge">{{ github_access.status }}</span> | {{ 'gesetzt' if github_access.quelle != 'keine' else 'nicht gesetzt' }}</p>
+        <p>{{ github_access.meldung }}</p>
+        {% if github_access.hinterlegt_am %}<p>Hinterlegt am {{ github_date(github_access.hinterlegt_am)|local_datetime }}</p>{% endif %}
+        {% if github_access.ablauf_am %}<p>Laeuft ab am {{ github_date(github_access.ablauf_am)|local_datetime }} ({{ github_access.expiry_source }}), noch ca. {{ days }} Tage</p>{% else %}<p>Ablaufdatum unbekannt; bei Bedarf manuell hinterlegen.</p>{% endif %}
+        <p>Letzter Test: {% if github_access.letzter_test %}{{ github_date(github_access.letzter_test)|local_datetime }}{% else %}noch nicht getestet{% endif %}</p>
+      </div>
+      {% if github_access.quelle == 'Umgebungsvariable' %}<p>Nur GITHUB_READ_TOKEN aus der Umgebungsvariable aktiv. Ein hier gespeichertes Token hat Vorrang.</p>{% endif %}
+      <form method="post" action="/admin/system-einstellungen/github/speichern" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label>Token speichern/ersetzen<input name="token" type="password" autocomplete="off" class="form-input" required></label>
+        <label>Manuelles Ablaufdatum (optional, UTC)<input name="expires_at" type="date" class="form-input"></label>
+        <button class="btn btn--primary" type="submit">Token speichern/ersetzen</button>
+      </form>
+      <form method="post" action="/admin/system-einstellungen/github/testen" class="mt-4">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--secondary" type="submit">Verbindung testen</button>
+      </form>
+      <form method="post" action="/admin/system-einstellungen/github/loeschen" class="mt-4">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label><input type="checkbox" name="confirm" value="ja" required> Loeschen des DB-Tokens bestaetigen</label>
+        <button class="btn btn--secondary" type="submit">Token loeschen</button>
+      </form>
+      <p>Bei aktiver Admin-2FA verlangen Speichern, Ersetzen und Loeschen eine frische <a href="/mfa/verify">MFA-Bestaetigung</a>.</p>
+      <details class="mt-4"><summary>GitHub-Token Schritt fuer Schritt einrichten</summary>
+        <ol>
+          <li>GitHub: Settings &gt; Developer settings &gt; Personal access tokens &gt; Fine-grained tokens &gt; Generate new token.</li>
+          <li>Name: <code>ecp-admin-mcp-readonly</code>; Ablauf: 90 Tage.</li>
+          <li>Resource owner: <code>{{ github_repository.split('/')[0] }}</code>.</li>
+          <li>Repository access: Only select repositories; nur <code>{{ github_repository }}</code> auswaehlen.</li>
+          <li>Repository permissions: Contents Read-only, Actions Read-only, Pull requests Read-only, Metadata Read-only (automatisch). Alles andere: No access.</li>
+          <li>Token kopieren (nur einmal sichtbar), hier einfuegen und speichern. Danach Verbindung testen.</li>
+        </ol>
+        <p>Organisationen muessen fine-grained Tokens eventuell erst freigeben (Status pending). Vor Ablauf rotieren. Token nie in Chats oder im Repository teilen.</p>
+        <p><a href="https://github.com/{{ github_repository }}/wiki/Administration-System-Admin-MCP">Wiki: Administration System-Admin-MCP</a></p>
+      </details>
+    </div>
+  </section>
+
   <form method="post" action="/admin/system-einstellungen">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 

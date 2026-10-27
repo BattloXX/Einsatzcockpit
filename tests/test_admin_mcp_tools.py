@@ -56,8 +56,11 @@ def test_all_seven_schemas_audit_and_no_org_contents(client, admin_env, monkeypa
     correlations = set()
     for name in READ_TOOLS:
         answer = call(client, values["access_token"], name)
-        assert set(answer) == {"zeitpunkt", "status", "modul", "schweregrad", "evidenz",
-                               "ursachenhypothese", "empfehlung", "korrelations_id"}
+        expected = {"zeitpunkt", "status", "modul", "schweregrad", "evidenz",
+                    "ursachenhypothese", "empfehlung", "korrelations_id"}
+        if name == "admin_system_uebersicht":
+            expected.add("github_zugang")
+        assert set(answer) == expected
         assert answer["status"] in ("ok", "warn", "fail", "unbekannt")
         assert datetime.fromisoformat(answer["zeitpunkt"]).utcoffset().total_seconds() == 0
         UUID(answer["korrelations_id"])

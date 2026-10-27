@@ -16,6 +16,8 @@ from limits.storage import storage_from_string
 from limits.strategies import FixedWindowRateLimiter
 
 from app.config import settings
+from app.db import SessionLocal
+from app.services import github_token
 
 SHA = re.compile(r"[0-9a-f]{7,40}")
 REPOSITORY = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}")
@@ -80,15 +82,32 @@ def _permit() -> bool:
 
 
 class GitHubReadonly:
-    def __init__(self, transport: httpx.BaseTransport | None = None):
+    def __init__(self, transport: httpx.BaseTransport | None = None, db=None, persist: bool = True):
+        self._db = db
+        self._persist = persist
         self._transport = transport
         self._deadline = time.monotonic() + max(0.1, min(settings.GITHUB_API_TIMEOUT_S, 8.0))
 
     def _get(self, suffix: str, project) -> dict:
+        if self._db is not None:
+            return self._get_with_db(suffix, project, self._db)
+        with SessionLocal() as db:
+            self._db = db
+            try:
+                result = self._get_with_db(suffix, project, db)
+                if self._persist:
+                    db.commit()
+                return result
+            finally:
+                self._db = None
+
+    def _get_with_db(self, suffix: str, project, db) -> dict:
         repo = settings.GITHUB_REPOSITORY
         if not REPOSITORY.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):
             return unavailable("ungueltiges_repository")
-        token = settings.GITHUB_READ_TOKEN
+        token, _, invalid = github_token.resolve(db)
+        if invalid:
+            return unavailable("nicht_autorisiert")
         key = (repo, hashlib.sha256(token.encode()).digest(), suffix)
         cached = _CACHE.get(key)
         if cached is not None:
@@ -107,6 +126,9 @@ class GitHubReadonly:
                 transport=self._transport, timeout=remaining, follow_redirects=False, trust_env=False
             ) as client:
                 with client.stream("GET", f"https://api.github.com/repos/{repo}/{suffix}", headers=headers) as reply:
+                    if self._persist:
+                        github_token.observe(db, token, reply.status_code,
+                                             reply.headers.get("github-authentication-token-expiration"))
                     rate = {}
                     for name in ("remaining", "reset", "limit"):
                         value = reply.headers.get(f"x-ratelimit-{name}", "")
@@ -151,6 +173,11 @@ class GitHubReadonly:
             result = unavailable("netz_oder_antwort_fehler")
         _CACHE.put(key, result)
         return result
+
+    def connection_checks(self) -> list[dict]:
+        """Drei feste, kleine Leseproben ohne Jobs-/PR-Inhalte."""
+        return [self.head_of_main(), self._get("actions/runs?per_page=1", lambda d: {}),
+                self._get("pulls?per_page=1", lambda d: {})]
 
     def head_of_main(self) -> dict:
         return self._get("git/ref/heads/main", lambda d: {"sha": _sha(d.get("object", {}).get("sha"))})

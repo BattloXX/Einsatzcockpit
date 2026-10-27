@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from app import log_buffer
 from app.admin_mcp.masking import mask_text
 from app.config import settings
+from app.services import github_token
 from app.services import system_diagnose as diagnose
 
 
@@ -61,7 +62,12 @@ def collect(db, name: str, **arguments) -> dict:
         version = diagnose.version_info()
         states = [p["status"] for p in parts.values()] + [version["status"]]
         status = next((s for s in ("fail", "warn", "unbekannt") if s in states), "ok")
-        return {"status": status, "evidence": {"version": version["evidence"],
+        access = github_token.status(db)
+        if access["status"] == "nicht_getestet":
+            access["status"] = "eingeschraenkt"
+        if access["status"] != "ok" and status == "ok":
+            status = "warn"
+        return {"status": status, "github_zugang": access, "evidence": {"version": version["evidence"],
                 "teilchecks": {k: v["status"] for k, v in parts.items()}}}
     if name == "admin_dienste_pruefen":
         return diagnose.service_summary(db)

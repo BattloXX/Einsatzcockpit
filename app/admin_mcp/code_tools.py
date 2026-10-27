@@ -10,6 +10,7 @@ from app.admin_mcp.masking import mask_text
 from app.config import settings
 from app.models.diagnose import DiagFinding
 from app.services import code_analyse as code
+from app.services import github_token
 from app.services.github_readonly import GitHubReadonly, unavailable, valid_sha
 
 TITLE_WORDS = frozenset(
@@ -87,11 +88,45 @@ def ci_status(sha: str | None = None) -> dict:
 
 def collect_code(db, name: str, **args) -> dict:
     result = _collect_code(db, name, **args)
-    token = settings.GITHUB_READ_TOKEN
+    access = github_token.status(db)
+
+    def github_errors(value):
+        if isinstance(value, dict):
+            yield value.get("code")
+            for child in value.values():
+                yield from github_errors(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from github_errors(child)
+
+    errors = set(github_errors(result))
+    override = ("ungueltig" if "nicht_autorisiert" in errors else "keine_berechtigung"
+                if errors & {"zugriff_verweigert", "nicht_gefunden"} else "eingeschraenkt"
+                if errors & {"timeout", "gedrosselt", "rate_limit", "github_fehler", "redirect_abgelehnt",
+                             "netz_oder_antwort_fehler", "ungueltiges_repository", "antwort_zu_gross",
+                             "ungueltige_antwort"} else None)
+    parts = [value for key, value in result.get("evidence", {}).items()
+             if key in ("main", "vergleich", "workflows", "pull_requests") and isinstance(value, dict)]
+    if override is None and parts and all(part.get("status") == "ok" for part in parts):
+        override = "ok"
+    if override:
+        access = github_token.status(db, override=override)
+    if access["status"] == "nicht_getestet":
+        access["status"] = "eingeschraenkt"
+    result["github_zugang"] = access
+    if access["status"] != "ok":
+        result["status"] = "eingeschraenkt"
+        for value in result.get("evidence", {}).values():
+            if isinstance(value, dict) and "status" in value:
+                value["status"] = "warn"
+    token, _, _ = github_token.resolve(db)
 
     def redact(value):
         if isinstance(value, str):
-            return value.replace(token, "[MASKIERT]") if token else value
+            for secret in (token, settings.GITHUB_READ_TOKEN):
+                if secret:
+                    value = value.replace(secret, "[MASKIERT]")
+            return value
         if isinstance(value, dict):
             return {redact(k): redact(v) for k, v in value.items()}
         if isinstance(value, list):
@@ -191,4 +226,4 @@ def _collect_code(db, name: str, **args) -> dict:
     # engen Projektionen. Exaktes Secret-Redacting bleibt die letzte Sicherheitsgrenze.
     if settings.GITHUB_READ_TOKEN:
         markdown = markdown.replace(settings.GITHUB_READ_TOKEN, "[MASKIERT]")
-    return {"status": state, "evidence": {"markdown": markdown, "titel": title}}
+    return {"status": state, "evidence": {"markdown": markdown, "titel": title, "vergleich": comparison}}

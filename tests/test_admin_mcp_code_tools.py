@@ -54,7 +54,7 @@ def test_tools_schema_masking_audit_and_visibility(client, admin_env):
     for tool in CODE_TOOLS:
         answer = call(client, token, tool, args_for(tool))
         assert set(answer) == {"zeitpunkt", "status", "modul", "schweregrad", "evidenz",
-                               "ursachenhypothese", "empfehlung", "korrelations_id"}
+                               "ursachenhypothese", "empfehlung", "korrelations_id", "github_zugang"}
         assert answer["status"] == "ok"
         assert all(value not in json.dumps(answer) for value in (
             SECRET, "alice@example.org", "+436641234567", "192.168.1.4", "COOKIESEED"))
