@@ -77,13 +77,20 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
                heartbeat_at=utcnow(), expires_at=utcnow() + timedelta(seconds=20), is_leader=True,
                redis=redis, loops={})
         org = insert(db, "fire_dept", name="PRIVATE-NAME", slug="test")
+    if check_id == "deploy.version":
+        from app.services.github_readonly import GitHubReadonly
+        monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
+        monkeypatch.setattr(GitHubReadonly, "compare", lambda self, sha: {
+            "status": "ok", "daten": {"commits_hinter_main": 0}})
     check = registry.CHECKS[check_id]
     before = snapshot(diag_engine)
     result = registry.execute_check(diag_engine, check)
     assert result.findings == [], (check_id, result)
     assert snapshot(diag_engine) == before
     with factory() as db:
-        if check_id == "db.zustand":
+        if check_id == "deploy.version":
+            monkeypatch.setattr(settings, "GIT_SHA", "")
+        elif check_id == "db.zustand":
             db.execute(text("UPDATE alembic_version SET version_num = 'alt'"))
             db.commit()
         elif check_id == "worker.zustand":

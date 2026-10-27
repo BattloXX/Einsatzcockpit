@@ -25,12 +25,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from app.admin_mcp.code_tools import collect_code
 from app.admin_mcp.context import DENIED, load_live_context
 from app.admin_mcp.context import admin_session as SessionLocal
 from app.admin_mcp.diagnose_tools import collect_diagnose
 from app.admin_mcp.masking import mask_arguments
 from app.admin_mcp.provider import RESOURCE, provider
-from app.admin_mcp.registry import ADMIN_TOOLS, DIAG_TOOLS, REPAIR_TOOLS, collect
+from app.admin_mcp.registry import ADMIN_TOOLS, CODE_TOOLS, DIAG_TOOLS, REPAIR_TOOLS, collect
 from app.admin_mcp.repair_tools import collect_repair
 from app.config import settings
 from app.core.audit import write_audit
@@ -75,7 +76,8 @@ def response(name: str, correlation: str, result: dict) -> dict:
     state = result["status"]
     return {"zeitpunkt": utcnow().isoformat() + "Z", "status": state,
         "modul": (ADMIN_TOOLS | REPAIR_TOOLS)[name].module,
-        "schweregrad": {"ok": "info", "warn": "warnung", "fail": "fehler", "unbekannt": "info"}[state],
+        "schweregrad": {"ok": "info", "warn": "warnung", "fail": "fehler", "unbekannt": "info",
+                       "eingeschraenkt": "info", "nicht verfuegbar": "info"}[state],
         "evidenz": result["evidence"],
         "ursachenhypothese": "Hypothese: Teilkomponente gestoert oder Datenbasis unvollstaendig."
             if state != "ok" else "Keine Hypothese erforderlich.",
@@ -117,6 +119,8 @@ def _execute(name: str, arguments: dict, correlation: str) -> dict:
                 if name in REPAIR_TOOLS:
                     return collect_repair(db, name, user_id, context.user.session_epoch, correlation,
                                           authorize=lambda: _context(db), **arguments)
+                if name in CODE_TOOLS:
+                    return collect_code(db, name, **arguments)
                 if name in DIAG_TOOLS:
                     return collect_diagnose(db, name, user_id, correlation, **arguments)
                 return collect(db, name, **arguments)
@@ -236,6 +240,24 @@ async def admin_reparatur_status(run_id: int) -> dict:
 @server.tool(description=REPAIR_TOOLS["admin_reparatur_verifizieren"].description)
 async def admin_reparatur_verifizieren(run_id: int, folgediagnose: bool = False) -> dict:
     return await call_tool("admin_reparatur_verifizieren", run_id=run_id, folgediagnose=folgediagnose)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_code_analyse"].description)
+async def admin_code_analyse(quelle: str = "logs", finding_key: str | None = None,
+                             level: str | None = None, limit: int = 100) -> dict:
+    return await call_tool("admin_code_analyse", quelle=quelle, finding_key=finding_key, level=level, limit=limit)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_ci_status"].description)
+async def admin_ci_status(sha: str | None = None) -> dict:
+    return await call_tool("admin_ci_status", sha=sha)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_codex_auftrag_erstellen"].description)
+async def admin_codex_auftrag_erstellen(finding_key: str | None = None, fehlerstelle: dict | None = None,
+                                       titel: str | None = None) -> dict:
+    return await call_tool("admin_codex_auftrag_erstellen", finding_key=finding_key,
+                           fehlerstelle=fehlerstelle, titel=titel)
 
 
 async def _token(request: Request) -> Response:

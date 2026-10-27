@@ -1,6 +1,7 @@
 """Diagnose-Registry; Import registriert ausschliesslich lesende Checks."""
 from app.services.diagnose import (  # noqa: F401
     datenbank,
+    deploy,
     einsatz,
     gateway,
     katplan,

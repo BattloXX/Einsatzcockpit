@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     APP_VERSION: str = "2026.10.26"
     GIT_SHA: str = ""
     BUILD_TIME: str = ""
+    GITHUB_READ_TOKEN: str = Field(default="", repr=False)
+    GITHUB_REPOSITORY: str = "BattloXX/Einsatzcockpit"
+    GITHUB_API_TIMEOUT_S: float = 8.0
     ICONS_STRICT: bool = False
     DEBUG: bool = False
     # Pytest setzt dies vor dem App-Import: Lifespan startet dann keine produktiven
