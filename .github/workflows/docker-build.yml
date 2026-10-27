@@ -67,10 +67,17 @@ jobs:
             type=match,pattern=v(.*),group=1
             type=sha,prefix=sha-,format=short
 
+      - name: Build-Zeitpunkt (UTC)
+        id: build_time
+        run: echo "value=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Image bauen (und bei main/Tags pushen)
         uses: docker/build-push-action@v7
         with:
           context: .
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

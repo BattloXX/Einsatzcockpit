@@ -9,6 +9,11 @@
     </div>
   </div>
 
+  <p class="text-muted" style="overflow-wrap:anywhere;">
+    <strong>Version / Commit / Build:</strong>
+    {{ version.APP_VERSION }} / {{ version.GIT_SHA[:12] or 'unbekannt' }} / {{ version.BUILD_TIME or 'unbekannt' }}
+  </p>
+
   {% if saved %}
   <div class="alert alert--success">Einstellungen wurden gespeichert.</div>
   {% endif %}
