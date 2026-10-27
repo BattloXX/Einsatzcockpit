@@ -190,16 +190,34 @@ sowie der separate Org-Schalter **Parser per MCP (KI-Client) lesen/optimieren** 
 Gateway-Detail. Dieser Schalter ist standardmäßig aus und gilt für alle Gateways der
 Organisation. Seine Änderung verlangt Session-Anmeldung und CSRF-Schutz und wird auditiert.
 
-P7a bietet ausschließlich `alarm_parser_statistik`, `alarm_rohdaten_liste`,
+Die lesenden Diagnosewerkzeuge sind `alarm_parser_statistik`, `alarm_rohdaten_liste`,
 `alarm_rohdaten_lesen`, `alarm_parser_regelsatz_lesen` und `alarm_ortsdaten_pruefen`.
 Empfohlener Arbeitsablauf:
 
 1. Statistik für einen Zeitraum lesen und häufige Hinweise und Resttexte prüfen.
 2. Problematische Rohdaten gezielt lesen; mit Ortsprüfung und Regelschema Ursachen eingrenzen.
-3. Regelsatz-Entwurf vorschlagen, gegen Rohdaten testen und bestätigte Testfälle ergänzen.
-   **Die MCP-Werkzeuge für Entwurf, Probelauf und Testfälle folgen mit P7b.** Bis dahin
-   diese Schritte in der Parserverwaltung der Gateway-Oberfläche ausführen.
-4. Ergebnisse prüfen und den Regelsatz als Mensch in der Web-UI freigeben.
+3. Mit `alarm_parser_entwurf_anlegen(notiz)` eine Kopie des aktiven Satzes (sonst Standard)
+   erstellen. Höchstens 20 offene MCP-Entwürfe sind je Organisation erlaubt.
+4. Mit `alarm_parser_entwurf_aendern(version, regel_aenderungen, notiz?)` einzelne Regeln
+   bearbeiten. `setzen` ersetzt ein Regelfeld oder einen vorhandenen Objektschlüssel;
+   `hinzufuegen` und `entfernen` bearbeiten Listenwerte oder Objektschlüssel (`schluessel`).
+   Beispiel: `{"aktion":"hinzufuegen","feld":"gemeinde_aliase","schluessel":"wfurt","wert":"Wolfurt"}`.
+   Nur UI-/MCP-Entwürfe sind änderbar; Schema und Muster werden vollständig geprüft.
+5. `alarm_parser_testen(version | "aktiv", ingest_ids?, filter?, limit)` vergleicht maximal
+   200 Rohdatensätze und alle aktiven Testfälle mit dem aktiven Satz. IDs und Filter sind
+   alternativ; die Filter entsprechen der Rohdatenliste. Diffs, Klassifikation und
+   Zusammenfassung zeigen Regressionen. Einsatz, Ingest, Alarmierung und Druck bleiben unverändert.
+6. Das erwartete Ergebnis im Gespräch vom Menschen bestätigen lassen und mit
+   `alarm_parser_testfall_anlegen(ingest_id | rohtext, titel, erwartet)` sichern.
+   Nur bekannte Ergebnisfelder sind erlaubt. Texte und Textwerte der Erwartungen werden
+   anonymisiert gespeichert; maximal 500 aktive Testfälle je Organisation. Probelauf wiederholen.
+7. Ergebnisse und Regeldiff in der Parserverwaltung prüfen: **Freigabe nur in der Web-UI**.
+   Aktivieren, Zurücksetzen, Neuverarbeiten, Einsatzänderungen, Alarmierung und Löschen
+   von Rohdaten sind keine MCP-Werkzeuge. Die UI verlangt Session-Login und CSRF-Schutz.
+
+Entwurfsänderungen auditieren `alarm_parser.mcp_entwurf`, Testfallanlagen
+`alarm_parser.mcp_testfall`, jeweils ohne Inhalte. Der Probelauf zählt zum gemeinsamen
+Leselimit und auditiert `alarm_ingest.mcp_gelesen`.
 
 Alle Antworten sind maskiert: Telefonnummern, E-Mail, IBAN-ähnliche Muster und
 gekennzeichnete Notrufer-/Melder-/Anrufernamen werden ersetzt. Die Maskierung kann nicht
@@ -219,7 +237,7 @@ Häufigkeitsliste; Katalogauszüge sind ebenfalls begrenzt. Jeder erfolgreiche L
 und erfolglose Datensatzabruf schreibt `alarm_ingest.mcp_gelesen` mit Benutzer, Anzahl und
 Filtermetadaten, ohne Alarmtexte oder eingegebene Freitextfragmente.
 
-Das gemeinsame Limit aller fünf Werkzeuge beträgt 300 Leseaufrufe pro Stunde und Benutzer,
+Das gemeinsame Limit aller sechs lesenden Werkzeuge (einschließlich Probelauf) beträgt 300 Leseaufrufe pro Stunde und Benutzer,
 unabhängig vom OAuth-Client. Wie bei den HTTP-Limits sorgt `REDIS_URL` im Mehrworkerbetrieb
 für einen gemeinsamen Zähler. Ohne Redis zählt jeder Prozess separat (Entwicklungsbetrieb).
 Bei Redis-Ausfall wird der Export gesperrt, statt ein zusätzliches lokales Kontingent zu öffnen.

@@ -21,7 +21,7 @@ Die lesenden Einsatz-Werkzeuge liegen in `app/mcp/tools/einsatz.py`; gemeinsame,
 
 | Bereich | Werkzeuge | Rollen und Modul-Check |
 |---------|-----------|------------------------|
-| Alarm-Parser (P7a) | `alarm_rohdaten_liste`, `alarm_rohdaten_lesen`, `alarm_parser_statistik`, `alarm_parser_regelsatz_lesen`, `alarm_ortsdaten_pruefen` | `required_roles=("admin",)`; `has_role` erlaubt wie die Gateway-UI auch `org_admin` und `system_admin`; `gateway_effective_enabled`, `mcp_effective_enabled` und `OrgSettings.alarm_parser_mcp_aktiv` |
+| Alarm-Parser (P7a/P7b) | `alarm_rohdaten_liste`, `alarm_rohdaten_lesen`, `alarm_parser_statistik`, `alarm_parser_regelsatz_lesen`, `alarm_ortsdaten_pruefen`, `alarm_parser_entwurf_anlegen`, `alarm_parser_entwurf_aendern`, `alarm_parser_testen`, `alarm_parser_testfall_anlegen` | `required_roles=("admin",)`; `has_role` erlaubt wie die Gateway-UI auch `org_admin` und `system_admin`; `gateway_effective_enabled`, `mcp_effective_enabled` und `OrgSettings.alarm_parser_mcp_aktiv` |
 | Allgemein | `mcp_whoami`, `organisation_lesen` | `readonly` |
 | Suche | `ecp_suchen` | alle Leserollen wie `ui_suche._leser` (Rang ≥ `readonly`), `SEARCH_ENABLED`, `SEARCH_MCP_ENABLED` und `OrgSettings.suche_aktiv` |
 | Objekte | `objekt_kataloge`, `objekt_suchen`, `objekt_lesen`, `objekt_duplikate_pruefen`, `objekt_anlegen`, `objekt_aktualisieren` | `objekt_verwalter`, Objekt-Modul |
@@ -65,4 +65,4 @@ Vor dem Merge prüfen:
 - `objekt_dokument_uebergeben` nimmt genau eines von `inhalt_base64` oder `upload_id`. Ist `seiten[]` vollständig, läuft keine KI; fehlende Seiten werden ohne Dokumentart angelegt und (bei aktiver KI-Klassifizierung) nur als Vorschläge nachgezogen. Antwortfeld `klassifizierung_quelle` ist `client` oder `server`.
 - `objekt_aktualisieren` löst die ID einer Arbeitskopie auf das Basisobjekt auf und bildet Zuordnungs-IDs der Basis beim Entfernen auf die Arbeitskopie ab; fachliche Fehler müssen als `ValueError` bzw. `ToolError` auftreten, sonst maskiert das SDK die Meldung.
 
-Alarmdiagnose maskiert ausschließlich Ausgaben (auch Parserfelder und Hex), auditiert ohne Inhalte und begrenzt alle lesenden Werkzeuge gemeinsam auf 300 Aufrufe/Stunde/Benutzer. Redis stellt den gemeinsamen Zähler über Worker bereit; ohne Redis gilt das Limit pro Prozess. P7b-Entwurfs-/Testwerkzeuge sind noch nicht verfügbar.
+Alarmdiagnose maskiert ausschließlich Ausgaben (auch Parserfelder und Hex), auditiert ohne Inhalte und begrenzt alle lesenden Werkzeuge gemeinsam auf 300 Aufrufe/Stunde/Benutzer. Redis stellt den gemeinsamen Zähler über Worker bereit; ohne Redis gilt das Limit pro Prozess. Entwürfe und Testfälle schreiben Quelle `mcp` und inhaltsfreie Audits. Org-Sperren sichern die Limits (20 offene MCP-Entwürfe, 500 aktive Testfälle). Der isolierte Probelauf liest maximal 200 Rohalarme und alle aktiven Org-Testfälle und zählt zum Leselimit. Keine Aktivierung per MCP; die UI-Aktivierungsroute verlangt eine Session.

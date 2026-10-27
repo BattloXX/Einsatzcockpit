@@ -26,6 +26,9 @@ diagnose = gateway_tests.diagnose
 
 NAMEN = {"alarm_rohdaten_liste", "alarm_rohdaten_lesen", "alarm_parser_statistik",
          "alarm_parser_regelsatz_lesen", "alarm_ortsdaten_pruefen"}
+SCHREIB_NAMEN = {"alarm_parser_entwurf_anlegen", "alarm_parser_entwurf_aendern",
+                 "alarm_parser_testen", "alarm_parser_testfall_anlegen"}
+ALLE_NAMEN = NAMEN | SCHREIB_NAMEN
 GEHEIM = "Notrufer Max Mustermann +43 664 1234567 max@example.at AT611904300234573201"
 
 
@@ -73,9 +76,20 @@ def rufe(client, daten, name, **kwargs):
     return _rufe(client, daten["token"], name, **kwargs)
 
 
+def schreib_aufrufe(daten):
+    return {
+        "alarm_rohdaten_liste": {},
+        "alarm_parser_entwurf_anlegen": {"notiz": "Test"},
+        "alarm_parser_entwurf_aendern": {"version": 1, "regel_aenderungen": []},
+        "alarm_parser_testen": {"version": "aktiv", "ingest_ids": []},
+        "alarm_parser_testfall_anlegen": {"ingest_id": daten["ingest_id"], "titel": "Test",
+                                          "erwartet": {"status": "unklar"}},
+    }
+
+
 def test_registrierung_und_adapter():
-    assert {name for name in TOOLS if name.startswith("alarm_")} == NAMEN
-    assert all(TOOLS[name].required_roles == ("admin",) and TOOLS[name].module_check for name in NAMEN)
+    assert {name for name in TOOLS if name.startswith("alarm_")} == ALLE_NAMEN
+    assert all(TOOLS[name].required_roles == ("admin",) and TOOLS[name].module_check for name in ALLE_NAMEN)
 
 
 @pytest.mark.parametrize("rolle, erlaubt", [("admin", True), ("org_admin", True), ("system_admin", True),
@@ -87,9 +101,10 @@ def test_rollen_live(client, daten, rolle, erlaubt):
         ur.role_id = db.query(Role).filter_by(code=rolle).one().id
         db.commit()
     liste = _mcp(client, daten["token"], "tools/list", {}, 101).text
-    assert all((name in liste) == erlaubt for name in NAMEN)
-    result = rufe(client, daten, "alarm_rohdaten_liste")
-    assert ("__fehler__" not in result) == erlaubt
+    assert all((name in liste) == erlaubt for name in ALLE_NAMEN)
+    for name, args in schreib_aufrufe(daten).items():
+        result = rufe(client, daten, name, **args)
+        assert ("__fehler__" not in result) == erlaubt, (name, result)
 
 
 @pytest.mark.parametrize("ebene, flag", [("org", "alarm_parser_mcp_aktiv"), ("org", "mcp_modul_aktiv"),
@@ -105,9 +120,8 @@ def test_live_schalter(client, daten, ebene, flag):
             db.get(SystemSettings, flag).value = "false"
         db.commit()
     listed = _mcp(client, daten["token"], "tools/list", {}, 102).text
-    assert not any(name in listed for name in NAMEN)
-    for name in NAMEN:
-        args = {"ingest_id": daten["ingest_id"]} if name == "alarm_rohdaten_lesen" else {}
+    assert not any(name in listed for name in ALLE_NAMEN)
+    for name, args in schreib_aufrufe(daten).items():
         assert "__fehler__" in rufe(client, daten, name, **args)
 
 
