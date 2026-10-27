@@ -539,3 +539,108 @@ def test_stale_fetch_failure_cannot_requeue_after_parallel_intent(db, monkeypatc
     assert result["result"] == "stale"
     db.refresh(job)
     assert job.status == JOB_SENT and job.phase == PHASE_SUBMITTING
+
+
+@pytest.mark.parametrize("phase", ["leased", "fetching", "submitting"])
+@pytest.mark.parametrize("explicit_flag", [False, True])
+def test_rejection_before_handoff_fails_immediately(db, phase, explicit_flag):
+    a, _b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = svc.lease_jobs(db, a, 1, NOW)[0]
+    if phase == "submitting":
+        assert svc.print_intent(db, a, job.id, grant["lease_token"], NOW)[0]
+    result = svc.apply_agent_status(db, a, job.id, grant["lease_token"], JOB_FAILED, phase,
+                                    None, "Queue fehlt", NOW, not_submitted=explicit_flag)
+    assert (result["status"], result["fallback"], result["requeued"]) == (JOB_FAILED, True, False)
+    assert _reload(db, job).status == JOB_FAILED
+
+
+@pytest.mark.parametrize("error", ["Verbindung unterbrochen", "Drucker offline", "Druck fehlgeschlagen"])
+def test_unknown_submission_failure_remains_uncertain(db, error):
+    a, _b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = svc.lease_jobs(db, a, 1, NOW)[0]
+    svc.print_intent(db, a, job.id, grant["lease_token"], NOW)
+    result = svc.apply_agent_status(db, a, job.id, grant["lease_token"], JOB_FAILED,
+                                    "submitting", None, error, NOW)
+    assert (result["status"], result["fallback"]) == (JOB_UNCERTAIN, False)
+
+
+def test_rejection_flag_cannot_override_spool_evidence(db):
+    a, _b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = _bis_gespoolt(db, a, job)
+    result = svc.apply_agent_status(db, a, job.id, grant["lease_token"], JOB_FAILED,
+                                    "submitting", None, "Queue fehlt", NOW, not_submitted=True)
+    assert (result["status"], result["fallback"]) == (JOB_UNCERTAIN, False)
+
+
+@pytest.mark.parametrize("spool_ref", [None, "win:7"])
+def test_sweep_offline_spooled_job_only_warns_with_spool_reference(db, spool_ref):
+    a, b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = _bis_gespoolt(db, a, job)
+    job = _reload(db, job)
+    job.spool_ref = spool_ref
+    db.commit()
+    later = NOW + timedelta(seconds=svc.UNCERTAIN_AFTER_S + 1)
+    result = svc.sweep(db, later)
+    job = _reload(db, job)
+    assert job.status == (JOB_PRINTING if spool_ref else JOB_UNCERTAIN)
+    assert ((job.id, printer.org_id) in result["uncertain"]) is (not spool_ref)
+    assert (job.id, printer.org_id) not in result["requeued"]
+    assert job.error
+    if spool_ref:
+        assert "offline" in job.error
+        assert svc.lease_jobs(db, b, 5, later) == []
+        svc.sweep(db, later + timedelta(hours=1))
+        result = svc.apply_agent_status(db, a, job.id, grant["lease_token"], "done",
+                                       "spooled", spool_ref, None, later)
+        assert result["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_ws_string_job_id_rejection_dispatches_fallback(db, monkeypatch):
+    import json
+    from unittest.mock import AsyncMock
+
+    from app.routers import ws
+    from app.services import print_dispatcher
+
+    a, _b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = svc.lease_jobs(db, a, 1, NOW)[0]
+    svc.print_intent(db, a, job.id, grant["lease_token"], NOW)
+
+    def agent_call(gateway_id, fn, *args, **kwargs):
+        session = _session()
+        try:
+            return fn(session, session.get(Gateway, gateway_id), *args, now=NOW)
+        finally:
+            session.close()
+
+    monkeypatch.setattr(ws, "_agent_call", agent_call)
+    monkeypatch.setattr(ws, "broadcast_org", AsyncMock())
+    fallback = AsyncMock()
+    monkeypatch.setattr(print_dispatcher, "dispatch_fallback_for_failed_job", fallback)
+    socket = AsyncMock()
+    await ws._agent_job_status(socket, printer.org_id, a.id, {
+        "id": "status-1", "payload": {"job_id": str(job.id), "lease_token": grant["lease_token"],
+        "status": "failed", "phase": "submitting", "error": 'Windows-Drucker "Test" ist nicht verfügbar.'},
+    })
+    fallback.assert_awaited_once_with(job.id)
+    assert _reload(db, job).status == JOB_FAILED
+    assert json.loads(socket.send_text.call_args.args[0]) == {"type": "ack", "payload": {"id": "status-1"}}
+
+
+@pytest.mark.parametrize("contact", ["renew", "resume"])
+@pytest.mark.parametrize("error", [svc.HINWEIS_SPOOLER_OFFLINE, "Papier leer"])
+def test_reconnected_agent_clears_only_offline_warning(db, contact, error):
+    a, _b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = _bis_gespoolt(db, a, job)
+    job = _reload(db, job)
+    job.error = error
+    db.commit()
+    getattr(svc, contact)(db, a, [{"job_id": job.id, "lease_token": grant["lease_token"]}], NOW)
+    assert _reload(db, job).error == (None if error == svc.HINWEIS_SPOOLER_OFFLINE else error)

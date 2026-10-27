@@ -262,7 +262,7 @@ def job_status(job: PrintJob) -> dict:
               "failed": "Druckauftrag fehlgeschlagen", "uncertain": "Druckausgang unklar – bitte am Drucker prüfen",
               "canceled": "Druckauftrag abgebrochen"}
     return {"job_id": job.id, "status": job.status, "label": labels.get(job.status, job.status),
-            "error": job.error, "confirmed": job.status == "done", "spool_ref": job.spool_ref}
+            "error": job.error, "confirmed": job.status == "done", "spool_ref": job.spool_ref, "phase": job.phase}
 
 
 def render_druckjob(db: Session, job: PrintJob) -> bytes:

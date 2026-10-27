@@ -1394,12 +1394,12 @@ async def resolve_uncertain_job(
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
 ):
-    """Löst einen unklaren Agent-Druckauftrag ('uncertain') durch einen Menschen auf.
+    """Löst unklare Aufträge auf und erlaubt bewussten Nachdruck fehlgeschlagener Aufträge.
 
     reprint: neuer manueller Auftrag auf dasselbe Druckziel (bewusster Nachdruck),
     done: als gedruckt markieren, discard: als abgebrochen markieren. Ohne Prüfung am
     Drucker darf das System nie selbst nachdrucken (kein blinder Doppeldruck)."""
-    from app.models.gateway import JOB_CANCELED, JOB_DONE, JOB_UNCERTAIN, PrintJob
+    from app.models.gateway import JOB_CANCELED, JOB_DONE, JOB_FAILED, JOB_UNCERTAIN, PrintJob
     from app.services.broadcast import broadcast_org
     from app.services.print_dispatcher import create_print_job, dispatch_job
 
@@ -1411,11 +1411,11 @@ async def resolve_uncertain_job(
     assert user.org_id is not None
     gw_id = job.gateway_id
     ersatz = None
-    if job.status == JOB_UNCERTAIN:
+    if job.status == JOB_UNCERTAIN or (job.status == JOB_FAILED and action == "reprint"):
         hinweis = f"{AUFLOESUNG_LABELS[action]} (geprüft von {user.display_name or user.username})"
         target = JOB_DONE if action == "done" else JOB_CANCELED
         won = db.query(PrintJob).filter(PrintJob.id == job.id, PrintJob.org_id == user.org_id,
-            PrintJob.status == JOB_UNCERTAIN).update({"status": target,
+            PrintJob.status == job.status).update({"status": target,
                 "error": (hinweis + (f" – {job.error}" if job.error else ""))[:500]}, synchronize_session=False)
         db.refresh(job)
         if won and action == "reprint":

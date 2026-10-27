@@ -294,7 +294,9 @@ def test_station_vorhandener_job_agent_status_idempotenz_und_artifact(client, do
         agent.apply_agent_status(db, gateway, stored.id, grant["lease_token"], "printing", "spooled", "win:1", None)
     assert len(pdf(client.get(url)).pages) == 12
     status_url = f'/druck/viewer/auftrag/{job["job_id"]}'
-    assert client.get(status_url).json()["confirmed"] is False
+    status = client.get(status_url).json()
+    assert status["confirmed"] is False
+    assert status["phase"] == "spooled" and status["spool_ref"] == "win:1"
     with TestingSession() as db:
         set_tenant_context(db, None)
         gateway = db.get(Gateway, station["gateway_id"])

@@ -164,7 +164,12 @@
   }
   function showStatus(data) {
     dialog.dataset.confirmed = data.confirmed ? 'true' : 'false';
-    message(`Auftrag ${data.job_id}: ${data.label}${data.error ? ' – ' + data.error : ''}`);
+    const labels = {queued: 'Eingereiht', sent: 'An Druckdienst übergeben',
+      printing: data.phase === 'spooled' ? 'Im Windows-Spooler' : data.label,
+      done: 'Gedruckt (vom Spooler abgeschlossen)'};
+    const details = [data.phase ? `Phase: ${data.phase}` : '', data.spool_ref ? `Spool-Ref: ${data.spool_ref}` : '',
+      data.error ? `Fehler / Hinweis: ${data.error}` : ''].filter(Boolean);
+    message(`Auftrag ${data.job_id}: ${labels[data.status] || data.label}${details.length ? ' – ' + details.join(' – ') : ''}`);
   }
   async function status(run) {
     clearTimeout(poll);
