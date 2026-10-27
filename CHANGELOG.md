@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Alarmierung und Druck:** MariaDB-Snapshot-Konflikte (1020) beim Alarm-Claim begrenzt wiederholen; Druck-Deduplizierung liest den konkurrierenden Gewinner unter bestehender Zeilensperre, ohne Fachaenderungen der aufrufenden Transaktion zu verwerfen.
+
 - **Einheitenmodus:** Offline-Outbox prüft den aktuellen Zugang vor jedem Versand, auch bei parallelem Reconnect und Retry. Abgelaufene Zugänge behalten Einträge lokal als `blockiert_zugang`, ohne vorherigen POST.
 
 - **Admin-MCP:** Handlungsorientierte Login-Hinweise erst nach Passwortnachweis, geheimnisfreie Audit-Gruende und Anzeige in der Systemdiagnose. Fehlender OAuth-Scope verwendet `mcp-admin`; zusaetzliche Discovery-Aliase und lokale ChatGPT-OAuth-Regressionstests. Replay-Schutz und Sperren unveraendert; Login-/CLI-Checklisten im Wiki, keine Migration.

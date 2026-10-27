@@ -143,13 +143,21 @@ def nachalarm_praefix(job: IncidentAlarmJob) -> str:
 
 
 def _claim(db: Session, job: IncidentAlarmJob, now: datetime) -> bool:
+    from app.services.db_transactions import retry_claim
+
+    # Der Claim besitzt bereits seine Commits; keine Versandwirkung wiederholen.
+    job_id, org_id, channel = job.id, job.org_id, job.channel
+    return retry_claim(db, lambda: _claim_once(db, job_id, org_id, channel, now))
+
+
+def _claim_once(db: Session, job_id: int, org_id: int | None, channel: str, now: datetime) -> bool:
     due = and_(IncidentAlarmJob.status.in_(("pending", "retry")), IncidentAlarmJob.next_attempt_at <= now)
     stale = and_(IncidentAlarmJob.status == "sending", IncidentAlarmJob.lease_until < now)
     # Nur SMS besitzen stabile, dauerhaft deduplizierte Unterauftraege. Andere
     # Kanaele nach moeglichem externem Versand niemals an einen zweiten Worker geben.
-    if job.channel != "sms":
+    if channel != "sms":
         db.execute(update(IncidentAlarmJob).where(
-            IncidentAlarmJob.id == job.id, IncidentAlarmJob.org_id == job.org_id, stale,
+            IncidentAlarmJob.id == job_id, IncidentAlarmJob.org_id == org_id, stale,
         ).values(status="uncertain", lease_until=None, finished_at=now,
                  last_error="Worker-Kontakt nach Versandbeginn verloren; Ergebnis pruefen"))
         db.commit()
@@ -158,7 +166,7 @@ def _claim(db: Session, job: IncidentAlarmJob, now: datetime) -> bool:
         eligible = or_(due, stale)
     result = db.execute(
         update(IncidentAlarmJob)
-        .where(IncidentAlarmJob.id == job.id, IncidentAlarmJob.org_id == job.org_id, eligible)
+        .where(IncidentAlarmJob.id == job_id, IncidentAlarmJob.org_id == org_id, eligible)
         .values(status="sending", lease_until=now + _LEASE,
                 attempt_count=IncidentAlarmJob.attempt_count + 1)
     )

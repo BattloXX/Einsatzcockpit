@@ -12,6 +12,7 @@ import re
 import uuid
 from typing import TYPE_CHECKING, NamedTuple
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, defer
 
@@ -188,6 +189,20 @@ def create_print_job(
             db.add(job)
             db.flush()
     except IntegrityError:
+        # Der Gewinner liegt ausserhalb des Snapshots. Nur dieser Locking-Read
+        # braucht die aktuelle Version; ein Rollback wuerde auch Fachmutationen
+        # des Aufrufers verlieren. SET STATEMENT gilt ausschliesslich fuer diesen
+        # SELECT und behaelt dessen Zeilensperre bis zum aeusseren Commit bei.
+        dialect = db.get_bind().dialect
+        if (dialect.name in ("mysql", "mariadb") and getattr(dialect, "is_mariadb", False)
+                and (dialect.server_version_info or ()) >= (11, 6, 2)):
+            existing = db.query(PrintJob).from_statement(text(
+                "SET STATEMENT innodb_snapshot_isolation=OFF FOR "
+                "SELECT print_job.* FROM print_job WHERE idempotency_key = :key LIMIT 1 FOR UPDATE"
+            )).params(key=key).execution_options(include_all_tenants=True).first()
+            if existing is not None:
+                return existing, False
+            raise
         existing = (
             db.query(PrintJob)
             .filter(PrintJob.idempotency_key == key)

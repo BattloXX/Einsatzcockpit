@@ -1,6 +1,7 @@
 """Aktuelle Queue-Lesesichten und begrenzte Wiederholung reiner DB-Transaktionen."""
 
 import logging
+import secrets
 import time
 from collections.abc import Callable
 
@@ -8,6 +9,29 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger("einsatzleiter.db_transactions")
+
+
+def retry_claim[T](db: Session, operation: Callable[[], T]) -> T:
+    """Nur eigenstaendige DB-Claims ohne Aussenwirkung und mit eigenem Commit.
+
+    Die Operation muss ihre Schluessel vor dem ersten Versuch sichern und darf
+    keine Aenderungen des Aufrufers enthalten: Rollback verwirft den ganzen Versuch.
+    SQLite und andere Fehler bleiben unveraendert.
+    """
+    if db.get_bind().dialect.name not in ("mysql", "mariadb"):
+        return operation()
+    for attempt in range(3):
+        try:
+            return operation()
+        except OperationalError as error:
+            args = getattr(error.orig, "args", ())
+            if not args or args[0] != 1020:
+                raise
+            db.rollback()
+            if attempt == 2:
+                raise
+            time.sleep(0.01 * (attempt + 1) + secrets.randbelow(10) / 1000)
+    raise RuntimeError("Claim ohne Ergebnis beendet")
 
 
 def current_read_session(factory: Callable[[], Session]) -> Session:
