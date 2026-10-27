@@ -11,6 +11,17 @@
       <div>
         <div class="gwx-brand__t">{{ gw.name }}</div>
         <div class="gwx-brand__s">{{ (gw.standort or 'PRINT & ALARM GATEWAY')|upper }}</div>
+        <details style="margin-top:8px;">
+          <summary>Gateway umbenennen</summary>
+          <form method="post" action="/gateway/{{ gw.id }}/rename" class="gwx-formgrid" style="margin-top:8px;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <label class="gwx-field"><span class="gwx-label">Name</span>
+              <input class="gwx-input" type="text" name="name" value="{{ gw.name }}" maxlength="150" required></label>
+            <label class="gwx-field"><span class="gwx-label">Standort</span>
+              <input class="gwx-input" type="text" name="standort" value="{{ gw.standort or '' }}" maxlength="200"></label>
+            <div><button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Speichern</button></div>
+          </form>
+        </details>
       </div>
     </div>
     <div class="gwx-pills">
@@ -40,6 +51,7 @@
   <div class="gwx-body">
     {# ── Flash-Meldungen ── #}
     {% set q = request.query_params %}
+    {% if q.get('error') == 'name' %}<div class="gwx-alert gwx-alert--err">Bitte einen Namen angeben.</div>{% endif %}
     {% if q.get('pairing_code') %}
     <div class="gwx-alert gwx-alert--info">
       <strong>Pairing-Code (10 min gültig):</strong>

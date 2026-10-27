@@ -609,6 +609,28 @@ def gateway_create(
     return RedirectResponse(f"/gateway/{gw.id}?created=1", status_code=303)
 
 
+@router.post("/{gateway_id}/rename")
+def gateway_rename(
+    gateway_id: int,
+    request: Request,
+    name: str = Form(...),
+    standort: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    name = name.strip()[:150]
+    if not name:
+        return RedirectResponse(f"/gateway/{gw.id}?error=name", status_code=303)
+    gw.name = name
+    gw.standort = standort.strip()[:200] or None
+    db.commit()
+    if gw.is_windows_agent:
+        run_async(_agent_config_push, db, gw)
+    return RedirectResponse(f"/gateway/{gw.id}?saved=1", status_code=303)
+
+
 @router.post("/{gateway_id}/pair-code")
 def gateway_pair_code(
     gateway_id: int,
@@ -750,10 +772,11 @@ async def printer_add_ip(
 
 
 @router.post("/printers/{printer_id}/rename")
-async def printer_rename(
+def printer_rename(
     printer_id: int,
     request: Request,
     name: str = Form(...),
+    return_gateway_id: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
@@ -761,17 +784,24 @@ async def printer_rename(
     p = db.get(Printer, printer_id)
     if p is None or p.org_id != user.org_id:
         raise HTTPException(status_code=404, detail="Drucker nicht gefunden")
+    gw = _gw_or_404(db, user.org_id, p.gateway_id)
+    return_gw = _gw_or_404(db, user.org_id, return_gateway_id) if return_gateway_id is not None else gw
+    anchor = "routen" if return_gw.is_windows_agent else "drucker"
     name = name.strip()[:150]
     if not name:
-        return RedirectResponse(f"/gateway/{p.gateway_id}?error=printer#drucker", status_code=303)
+        return RedirectResponse(f"/gateway/{return_gw.id}?error=printer#{anchor}", status_code=303)
     p.name = name
     db.commit()
-    # Gateway kennt Drucker per Identität/URI, der Anzeigename ist rein Cloud-seitig —
-    # trotzdem Config-Sync, damit CUPS-Queue-Beschriftung ggf. mitzieht.
-    from app.routers.ws import push_config_sync
-    assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
-    await push_config_sync(user.org_id, p.gateway_id)
-    return RedirectResponse(f"/gateway/{p.gateway_id}?saved=1#drucker", status_code=303)
+    from app.services.print_agent_service import route_gateway_ids
+    for agent_id in route_gateway_ids(db, user.org_id, p.id):
+        agent = _gw_or_404(db, user.org_id, agent_id)
+        if agent.is_windows_agent:
+            run_async(_agent_config_push, db, agent)
+    if not gw.is_windows_agent:
+        from app.routers.ws import push_config_sync
+        assert user.org_id is not None
+        run_async(push_config_sync, user.org_id, gw.id)
+    return RedirectResponse(f"/gateway/{return_gw.id}?saved=1#{anchor}", status_code=303)
 
 
 @router.post("/printers/{printer_id}/defaults")
