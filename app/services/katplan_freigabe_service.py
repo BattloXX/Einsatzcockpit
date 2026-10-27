@@ -104,7 +104,7 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
     ).order_by(KatplanLink.sort, KatplanLink.id)]
     anhaenge = db.query(KatplanAnhang).filter_by(
         org_id=plan.org_id, plan_id=plan.id, geloescht_am=None,
-    ).order_by(KatplanAnhang.sort, KatplanAnhang.uuid).all()
+    ).order_by(KatplanAnhang.sort, KatplanAnhang.id).all()
     kopf["anhaenge"] = [{**anhang_snapshot(a), "abschnitt_id": a.abschnitt_id}
                         for a in anhaenge if a.element_id is None]
     kopf["quellen"] = [{**{f: getattr(d, f) for f in (

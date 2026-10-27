@@ -74,14 +74,18 @@ def test_mehrfachauswahl_und_massnahmensammlung(viewer_seite, client, dokumente,
     dialog = page.locator('#documentTransferDialog')
     expect(dialog).to_be_visible()
     expect(dialog.locator('[data-ed-documents] input[type=checkbox]')).to_have_count(5)
-    # Die Sammlung zeigt jede Unterlage; eigene Seiten pro markiertem Dokument.
+    # Die Sammlung zeigt jede Unterlage; eigene Seiten pro markiertem Dokument. Die
+    # Reihenfolge im Freigabe-Snapshot ist bei gleichem sort zufällig (uuid), daher
+    # die mehrseitigen PDFs über den Titel wählen statt über die Position.
     rows = dialog.locator('[data-ed-documents] > div')
     for checkbox in rows.locator('input[type=checkbox]').all():
         checkbox.uncheck()
-    rows.nth(0).locator('input[type=checkbox]').check()
-    rows.nth(0).locator('input[type=text]').fill('4-6')
-    rows.nth(1).locator('input[type=checkbox]').check()
-    rows.nth(1).locator('input[type=text]').fill('1')
+    erste = rows.filter(has_text="Unterlage 1")
+    zweite = rows.filter(has_text="Unterlage 2")
+    erste.locator('input[type=checkbox]').check()
+    erste.locator('input[type=text]').fill('4-6')
+    zweite.locator('input[type=checkbox]').check()
+    zweite.locator('input[type=text]').fill('1')
     dialog.locator('[data-ed-target]').select_option(f'einsatz/{einsatz["incident"]}')
     expect(dialog.locator('[data-ed-submit]')).to_be_enabled()
     dialog.locator('[data-ed-submit]').click()
