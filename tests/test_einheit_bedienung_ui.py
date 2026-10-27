@@ -67,10 +67,8 @@ def test_standardansichten_haben_eine_hauptaktion_grosse_touchflaechen_und_lesba
     _eine_hauptaktion(page)
     _touchpruefung(page)
     expect(page.get_by_role("link", name="Gesamtansicht", exact=True)).to_have_count(0)
-    page.get_by_text("Weitere Funktionen", exact=True).click()
-    expect(page.get_by_role("link", name="Gesamtansicht", exact=True)).to_have_count(0)
+    expect(page.get_by_text("Weitere Funktionen", exact=True)).to_have_count(0)  # Ohne Inhalt kein leeres Menue.
     _touchpruefung(page)
-    page.get_by_text("Weitere Funktionen", exact=True).click()
     page.locator(f'[data-einheit-auftrag][data-dispatch-id="{ids["d1"]}"] button').click()
     expect(page.locator('[data-einheit-hauptaktion]')).to_be_enabled()
     _eine_hauptaktion(page)

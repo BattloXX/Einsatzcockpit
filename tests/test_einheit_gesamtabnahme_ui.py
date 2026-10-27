@@ -330,8 +330,7 @@ def test_freitext_und_gefahrenangaben_bleiben_nach_offline_neustart_erhalten(
     page.get_by_role("button", name="Meldung an Einsatzleitung", exact=True).click()
     dialog = page.get_by_role("dialog")
     dialog.get_by_label("Ergänzung (optional bei Schnellmeldung)").fill("Keller kontrolliert.")
-    dialog.locator("summary").filter(has_text="Strukturierte Angaben").click()
-    dialog.get_by_placeholder("Festgestellte Gefahren", exact=True).fill("Offene Stromleitung im Wasser.")
+    expect(dialog.get_by_text("Strukturierte Angaben")).to_have_count(0)
     dialog.get_by_role("button", name="Erfassen", exact=True).click()
     expect(dialog).not_to_be_visible()
     _gesendet(page, 1)
@@ -341,6 +340,6 @@ def test_freitext_und_gefahrenangaben_bleiben_nach_offline_neustart_erhalten(
     _gesendet(page)
     with _db() as db:
         meldung = db.query(SiteLogEntry).filter_by(einheit_id=ids["e1"], kind="lagemeldung").one()
-        assert meldung.text == "Keller kontrolliert.\nFestgestellte Gefahren: Offene Stromleitung im Wasser."
-    expect(page.locator('[data-einheit-verlauf="stelle"]')).to_contain_text("Offene Stromleitung im Wasser.")
+        assert meldung.text == "Keller kontrolliert."
+    expect(page.locator('[data-einheit-verlauf="stelle"]')).to_contain_text("Keller kontrolliert.")
     assert len(state["posts"]) == 1 and errors == []

@@ -51,7 +51,7 @@ Erst nachdem alle erfassten Texte und gewählten Fotos sicher lokal gespeichert 
 
 Im Detail direkt sichtbare sekundäre Buttons: **Lagemeldung**, **Foto**, **Gefahr melden**. Unter **Weitere Meldungen** stehen **Maßnahme** und **Notiz**. Im Bereich Meldungen führt **Meldung schreiben** in denselben Ablauf; ohne ausgewählten Auftrag muss zuerst ein berechtigter Auftrag gewählt werden.
 
-Jeder Dialog zeigt Auftrag und Einsatzstelle. „Lage unverändert“ ist eine optionale Textvorlage im Lagemeldungsdialog und wird vor dem Senden angezeigt. **Gefahr melden** nutzt die bestehende Lagemeldung mit erkennbarem Gefahrentext, ohne neuen Meldungstyp oder Alarmierungsversprechen. Strukturierte Angaben funktionieren auch ohne zusätzlichen Freitext und gehen vollständig in die Meldung ein.
+Jeder Dialog zeigt Auftrag und Einsatzstelle. „Lage unverändert“ ist eine optionale Textvorlage im Lagemeldungsdialog und wird vor dem Senden angezeigt. **Gefahr melden** nutzt die bestehende Lagemeldung mit erkennbarem Gefahrentext, ohne neuen Meldungstyp oder Alarmierungsversprechen.
 
 Fotos erlauben Kamera oder vorhandenes Bild, Vorschau, Entfernen und optionalen Kommentar. Die Hauptaktion lautet **Meldung senden** beziehungsweise **Foto senden**. „Senden“ speichert zuerst lokal: offline folgt „Auf diesem Gerät gespeichert – noch nicht übermittelt“, nach Serverbestätigung „Übermittelt“. Fehlende Verbindung oder ein Schreibfehler leert niemals Eingaben.
 

@@ -123,6 +123,7 @@
       <button type="button" class="btn btn--ghost" x-show="detail" @click="waehleBereich('einsaetze')">
         {{ icon("arrow-left", size="sm") }} Zur Einsatzübersicht
       </button>
+      {% if gk_zugang or benutzer_einheiten|default([]) %}
       <details class="einheit-mehr">
         <summary>Weitere Funktionen</summary>
         <div class="einheit-mehr__inhalt">
@@ -132,8 +133,6 @@
           {% if gk_zugang %}
           <button type="button" class="btn btn--ghost" @click="lokaleDatenLoeschen()">Abmelden</button>
           {% endif %}
-          <p>Du kannst alle Aufträge öffnen und mehrere übernehmen. Übernehmen bestätigt den Empfang.
-             Anfahrt, Vor Ort und In Arbeit zeigen die aktive Bearbeitung.</p>
   {% if gk_zugang %}
   <section class="einheit-warning einheit-warning--stack" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
     <div><strong>Mobilnummer für Einsatzbenachrichtigungen hinterlegen</strong></div>
@@ -156,6 +155,7 @@
   {% endif %}
         </div>
       </details>
+      {% endif %}
     </nav>
   </header>
 
@@ -659,16 +659,6 @@
                       @input="entwurfSpeichern()" placeholder="Text eingeben oder diktieren"></textarea>
             <button type="button" class="btn btn--ghost" x-show="diktatVerfuegbar" :disabled="meldungSpeichern || meldungLaden"
                     onclick="startVoice('einheit-meldung-text')">{{ icon("microphone", size="sm") }} Diktieren</button>
-            <details x-show="flyout === 'lagemeldung'">
-              <summary>Strukturierte Angaben (optional)</summary>
-              <input class="form-control" x-model="felder.lage" @input="entwurfSpeichern()" placeholder="Lage vor Ort">
-              <input class="form-control" x-model="felder.gefahren" @input="entwurfSpeichern()"
-                     placeholder="Festgestellte Gefahren">
-              <input class="form-control" x-model="felder.massnahmen" @input="entwurfSpeichern()"
-                     placeholder="Durchgeführte Maßnahmen">
-              <input class="form-control" x-model="felder.fortschritt" @input="entwurfSpeichern()"
-                     placeholder="Aktueller Fortschritt">
-            </details>
             <label for="meldung-fotos">Fotos (optional)</label>
             <input id="meldung-fotos" x-ref="meldungFotos" class="form-control" type="file" accept="image/*"
                    @change="meldungFotosVorhanden = Boolean($event.target.files.length)"
