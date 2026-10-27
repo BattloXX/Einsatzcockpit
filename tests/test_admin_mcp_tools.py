@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.admin_mcp.context import admin_session as SessionLocal
 from app.admin_mcp.masking import mask_arguments, mask_text
-from app.admin_mcp.registry import ADMIN_TOOLS
+from app.admin_mcp.registry import READ_TOOLS
 from app.models.dienst_monitor import DienstStatus
 from app.models.master import FireDept
 from app.models.user import AuditLog
@@ -54,7 +54,7 @@ def test_all_seven_schemas_audit_and_no_org_contents(client, admin_env, monkeypa
     ])
     values = tokens(client, admin_env)
     correlations = set()
-    for name in ADMIN_TOOLS:
+    for name in READ_TOOLS:
         answer = call(client, values["access_token"], name)
         assert set(answer) == {"zeitpunkt", "status", "modul", "schweregrad", "evidenz",
                                "ursachenhypothese", "empfehlung", "korrelations_id"}
