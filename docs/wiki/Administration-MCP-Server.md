@@ -180,3 +180,47 @@ Die Antwort enthält `quelle`, `seiten_ohne_element`, `elemente_ohne_quelle`,
 (je belegter Seite `{seiten_nr, anzahl}` mit Status `offen`) und `naechste_schritte`
 (maximal 30). Seitenbezüge zählen nur für die exakte Dokument-ID. Vorschlagsimporte
 melden Titelüberschneidungen in `warnungen`, ohne die Anlage zu blockieren.
+
+## Alarm-Parser optimieren
+
+Gateway-Administratoren (`admin`, `org_admin`, einschließlich `system_admin` innerhalb
+seiner Token-Organisation) können den Parser mit einem externen KI-Client untersuchen.
+Voraussetzung sind das aktive Gateway-Modul und MCP auf System- und Organisationsebene
+sowie der separate Org-Schalter **Parser per MCP (KI-Client) lesen/optimieren** im
+Gateway-Detail. Dieser Schalter ist standardmäßig aus und gilt für alle Gateways der
+Organisation. Seine Änderung verlangt Session-Anmeldung und CSRF-Schutz und wird auditiert.
+
+P7a bietet ausschließlich `alarm_parser_statistik`, `alarm_rohdaten_liste`,
+`alarm_rohdaten_lesen`, `alarm_parser_regelsatz_lesen` und `alarm_ortsdaten_pruefen`.
+Empfohlener Arbeitsablauf:
+
+1. Statistik für einen Zeitraum lesen und häufige Hinweise und Resttexte prüfen.
+2. Problematische Rohdaten gezielt lesen; mit Ortsprüfung und Regelschema Ursachen eingrenzen.
+3. Regelsatz-Entwurf vorschlagen, gegen Rohdaten testen und bestätigte Testfälle ergänzen.
+   **Die MCP-Werkzeuge für Entwurf, Probelauf und Testfälle folgen mit P7b.** Bis dahin
+   diese Schritte in der Parserverwaltung der Gateway-Oberfläche ausführen.
+4. Ergebnisse prüfen und den Regelsatz als Mensch in der Web-UI freigeben.
+
+Alle Antworten sind maskiert: Telefonnummern, E-Mail, IBAN-ähnliche Muster und
+gekennzeichnete Notrufer-/Melder-/Anrufernamen werden ersetzt. Die Maskierung kann nicht
+abgeschaltet werden; sie erkennt keine beliebigen Personennamen im Freitext. Parserfelder
+werden per Whitelist ausgewählt und ebenfalls maskiert. Originale bleiben unverändert.
+Der Hex-Auszug entsteht erst nach Dekodierung und Maskierung, umfasst höchstens 512 Byte
+und entfällt bei nicht sicher dekodierbaren Bytes. Steuerzeichen erscheinen sichtbar.
+
+Listen und Entwürfe sind paginiert (höchstens 50 je Seite). Der Filter `ok` prüft den
+Parserstatus; `incomplete` findet explizit so gespeicherte Parse-/Verarbeitungsstatus.
+Das Gateway-Eingabeflag `incomplete` wird im bisherigen Alarm-Endpunkt noch nicht persistiert;
+dieser Filter kann daher keine historische Übertragungsunvollständigkeit rekonstruieren.
+Die übrigen Statusfilter prüfen den Verarbeitungsstatus. `von`/`bis` sind inklusive ISO-Zeitgrenzen (ohne Zeitzone: UTC). Weitere Versionen eines
+Rohalarms sind auf 49 IDs/Zeiten begrenzt; `truncated` meldet weitere Treffer.
+Statistiken aggregieren den ganzen Zeitraum und liefern höchstens 50 Einträge je
+Häufigkeitsliste; Katalogauszüge sind ebenfalls begrenzt. Jeder erfolgreiche Leseaufruf
+und erfolglose Datensatzabruf schreibt `alarm_ingest.mcp_gelesen` mit Benutzer, Anzahl und
+Filtermetadaten, ohne Alarmtexte oder eingegebene Freitextfragmente.
+
+Das gemeinsame Limit aller fünf Werkzeuge beträgt 300 Leseaufrufe pro Stunde und Benutzer,
+unabhängig vom OAuth-Client. Wie bei den HTTP-Limits sorgt `REDIS_URL` im Mehrworkerbetrieb
+für einen gemeinsamen Zähler. Ohne Redis zählt jeder Prozess separat (Entwicklungsbetrieb).
+Bei Redis-Ausfall wird der Export gesperrt, statt ein zusätzliches lokales Kontingent zu öffnen.
+Kein Werkzeug aktiviert Regeln, verarbeitet Alarme neu oder löst Einsätze oder Alarmierung aus.
