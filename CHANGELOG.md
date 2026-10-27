@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Systemadministration:** Separater lesender System-Admin-MCP unter `/mcp/admin` mit sieben Diagnosewerkzeugen, eigenem OAuth, optionaler TOTP-/Recovery-Anmeldung und expliziten globalen/persoenlichen Freigaben (Default AUS). Migration 0326.
+
 - **Systemadministration:** Optionale TOTP-2FA (Standard AUS) mit Recovery-Codes, zentraler Session-Pruefung, Widerruf und lokalem CLI-Notfallreset. Aktivierung erst nach Einrichtung aller aktiven Systemadministratoren.
 
 - **SMS-Gateway und Windows-Druckagent:** Synchrone DB-Aufrufe blockieren die WebSocket-Event-Loop nicht mehr. SMS-Reconnects ersetzen alte Sockets desselben Tokens; Idle-Pings und ein Tot-Timeout bereinigen verwaiste Verbindungen. Trennungslogs enthalten Close-Code, Grund und Dauer. Neuer konfigurierbarer Loop-Lag-Monitor und Gunicorn-Worker mit 60 Sekunden WebSocket-Pong-Timeout erleichtern Diagnose und stabilisieren Keepalive.

@@ -68,6 +68,32 @@
     </div>
   </section>
 
+  <section class="card mb-4">
+    <div class="card-header"><h2>System-Admin-MCP (nur lesend)</h2></div>
+    <div class="card-body">
+      <p>Standard: AUS. Verbindungs-URL: <code>{{ admin_mcp_url }}</code></p>
+      <p>Nur persoenliche Systemadministratoren mit expliziter Freigabe. Aktivieren eines Zugangs verlangt bei aktiver 2FA eine hoechstens 5 Minuten alte MFA-Pruefung.</p>
+      <form method="post" action="/admin/system-einstellungen/admin-mcp">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <select name="enabled" class="form-input" aria-label="Admin-MCP systemweit">
+          <option value="false">Inaktiv</option>
+          <option value="true" {% if settings.get('admin_mcp_enabled') == 'true' %}selected{% endif %}>Aktiv</option>
+        </select>
+        <button class="btn btn--primary" type="submit">Admin-MCP-Schalter speichern</button>
+      </form>
+      <ul>{% for admin, confirmed in mfa_admins %}{% if not admin.is_device %}<li>
+        {{ admin.display_name }}: {{ 'Freigegeben' if admin.admin_mcp_access else 'Gesperrt' }}
+        <form method="post" action="/admin/system-einstellungen/admin-mcp/zugang" style="display:inline">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="user_id" value="{{ admin.id }}">
+          <input type="hidden" name="enabled" value="{{ 'false' if admin.admin_mcp_access else 'true' }}">
+          <button class="btn btn--secondary" type="submit">{{ 'Sperren' if admin.admin_mcp_access else 'Freigeben' }}</button>
+        </form>
+      </li>{% endif %}{% endfor %}</ul>
+      <p>Jede Zugangsaenderung widerruft die Admin-MCP-Tokens dieses Benutzers. Danach erneut verbinden.</p>
+    </div>
+  </section>
+
   <form method="post" action="/admin/system-einstellungen">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
@@ -473,7 +499,7 @@
 
     {# ── Benutzerdefinierte Einstellungen ─────────────────────────────── #}
     {% set known_keys_list = [
-      'admin_2fa_enabled',
+      'admin_2fa_enabled', 'admin_mcp_enabled',
       'smtp_host','smtp_port','smtp_user','smtp_password','smtp_from','smtp_starttls','smtp_timeout',
       'resend_enabled','resend_api_key','resend_from_domain','resend_inbound_domain','resend_inbound_webhook_secret',
       'vapid_public_key','vapid_private_key','vapid_email','enable_push',
