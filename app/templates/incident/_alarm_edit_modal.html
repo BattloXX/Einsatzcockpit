@@ -13,6 +13,22 @@
   <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">{{ icon("x", size="sm") }}</button>
 </div>
 <div class="modal__body">
+  {% if teams_statusmeldung %}
+  <p role="status">{{ teams_statusmeldung }}</p>
+  {% endif %}
+  {% if teams_job and teams_job.status in ("uncertain", "failed") %}
+  <div class="form-group" style="margin-bottom:1rem">
+    <label class="form-label">Teams-Alarmkarte</label>
+    {% set teams_warnung = "Die Zustellung der Teams-Alarmkarte ist unklar oder fehlgeschlagen. Vor dem erneuten Senden bitte im Teams-Kanal pruefen, ob die Karte angekommen ist - sonst entsteht eine Doppelkarte." %}
+    <p>{{ teams_warnung }}</p>
+    <form hx-post="/einsatz/{{ incident.id }}/alarm/teams-erneut"
+          hx-confirm="{{ teams_warnung }}"
+          hx-target="#cardDetailBody" hx-swap="innerHTML">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--secondary btn--sm" style="max-width:100%;white-space:normal">Teams-Karte erneut senden</button>
+    </form>
+  </div>
+  {% endif %}
   {% if incident.address_street or incident.caller_name or incident.caller_phone %}
   <div class="form-group" style="margin-bottom:1rem;padding:10px 12px;background:var(--surface-elevated,#1e2130);border-radius:6px">
     <label class="form-label" style="margin-bottom:.35rem;display:block">Übersicht</label>
