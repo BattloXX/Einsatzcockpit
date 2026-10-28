@@ -223,6 +223,8 @@ def test_07_identischer_inhalt_auch_nach_tagen(cloud):
 
 
 def test_08_folgenachrichten_nachalarm_und_manuelle_adresse(cloud):
+    # Regression: eine globale Ersetzung von f2 veraendert auch diese Einsatznummer.
+    cloud.number = "f20000009"
     text = cloud.number + " f2 wolfurt fruehlingstrasse 7 > brand"
     first = cloud.post(payload(cloud, text=text))
     incident_id = first["einsatz_id"]
@@ -251,7 +253,7 @@ def test_08_folgenachrichten_nachalarm_und_manuelle_adresse(cloud):
             IncidentLog.text.like("Alarmupdate v2: Meldebild ergaenzt%")).count() == 1
     for seq, code, suffix, count in ((3, "f2,r2", "neu", 8), (4, "f2,r2", "nochmals", 8),
                                       (5, "f3,r2", "erhoeht", 12)):
-        result = cloud.post(payload(cloud, sequence=seq, text=text.replace("f2", code) + " > " + suffix))
+        result = cloud.post(payload(cloud, sequence=seq, text=text.replace(" f2 ", f" {code} ", 1) + " > " + suffix))
         _, inc = state(cloud, result)
         assert inc.id == incident_id and inc.address_street == "Manuelle Gasse"
         assert len(jobs(cloud, inc.id)) == count

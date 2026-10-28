@@ -149,21 +149,21 @@ def execute_check(bind, check: Check, seconds: float = CHECK_TIMEOUT, runtime: d
                 return f"SET STATEMENT max_statement_time={remaining:.3f} FOR {statement}", parameters
             return statement, parameters
 
-        event.listen(connection, "before_cursor_execute", guard, retval=True)
-        try:
-            with Session(bind=connection, autoflush=False) as db:
-                db.info["current_org_id"] = None
-                try:
-                    result = check.fn(db, budget)
-                    budget.tick()
-                    result.vollstaendig &= budget.complete
-                    return result
-                finally:
-                    db.rollback()
-        finally:
-            event.remove(connection, "before_cursor_execute", guard)
-            if dialect.name == "sqlite":
-                raw.set_progress_handler(None, 0)
+        with Session(bind=connection, autoflush=False) as db:
+            db.info["current_org_id"] = None
+            event.listen(connection, "before_cursor_execute", guard, retval=True)
+            try:
+                result = check.fn(db, budget)
+                budget.tick()
+                result.vollstaendig &= budget.complete
+                return result
+            finally:
+                event.remove(connection, "before_cursor_execute", guard)
+                # Das abgelaufene SELECT-Budget darf den ROLLBACK nicht abbrechen.
+                # SQLAlchemy kann eine invalidierte Verbindung bereits geschlossen haben.
+                if dialect.name == "sqlite" and not connection.invalidated:
+                    raw.set_progress_handler(None, 0)
+                db.rollback()
 
 
 def _process_check(sender, url: str, check: Check, seconds: float, runtime: dict):
