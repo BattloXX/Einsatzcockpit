@@ -14,6 +14,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import TextClause
 
+from app.services.db_transactions import ist_wiederholbar
+
 log = logging.getLogger("einsatzleiter.storage")
 
 _UNLIMITED = 2**62  # sentinel: effectively no upper bound
@@ -32,21 +34,13 @@ def _dialect(db: Session) -> str:
     return db.get_bind().dialect.name  # type: ignore[union-attr]
 
 
-def _is_retryable_lock_error(exc: OperationalError) -> bool:
-    orig = getattr(exc, "orig", None)
-    args = getattr(orig, "args", None)
-    if not args:
-        return False
-    return args[0] in _RETRYABLE_MYSQL_ERRNOS
-
-
 def _execute(db: Session, stmt: TextClause, params: dict):
-    """db.execute mit kurzem Retry auf transiente MariaDB-Sperrkonflikte."""
+    """Nur das Statement wiederholen; kein Rollback der aufrufenden Transaktion."""
     for versuch in range(1, _MAX_RETRIES + 1):
         try:
             return db.execute(stmt, params)
         except OperationalError as exc:
-            if versuch >= _MAX_RETRIES or not _is_retryable_lock_error(exc):
+            if not ist_wiederholbar(exc, codes=_RETRYABLE_MYSQL_ERRNOS) or versuch >= _MAX_RETRIES:
                 raise
             log.warning(
                 "org_storage_usage: transienter Sperrkonflikt (Versuch %d/%d), neu versuchen",

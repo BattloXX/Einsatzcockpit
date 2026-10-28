@@ -87,3 +87,5 @@ app.routers.ui_wasserstelle:_ERLAUBTE_TYPEN
 # Alarm-Parser: reine Leistungs-Caches mit kurzer TTL (10 min Katalog, 60 s Regelsatz); Wahrheit liegt in der DB
 app.services.alarm_parser.katalog:_cache
 app.services.alarm_parser.laufzeit:_cache
+# DB-Wiederholungen: reiner Diagnosezaehler je Worker (Logzeile bleibt Wahrheit), keine Steuerung
+app.services.db_transactions:_retry_zaehler
