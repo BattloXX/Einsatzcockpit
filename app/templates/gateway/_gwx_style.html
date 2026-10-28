@@ -2,7 +2,7 @@
 /* ── Print-Gateway · taktisches Dark-Layout (scoped auf .gwx) ───────────────────
    Bewusst dieselbe Palette/Formsprache wie die Wasserstellen-Verwaltung (.wsx),
    damit die Betriebs-Admin-Werkzeuge als ein Satz wirken. Keine externen Icon-/
-   Font-Bibliotheken – nur App-Mittel + Emoji. */
+   Font-Bibliotheken – nur App-Mittel und das Icon-System. */
 .gwx {
   --g-bg: #081425; --g-s1: #111c2d; --g-s2: #152031; --g-s3: #1f2a3c;
   --g-high: #2a3548; --g-line: #424754; --g-line2: #55606f;
@@ -206,4 +206,42 @@
 .gwx-tabs__item { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; color: var(--g-muted); text-decoration: none; border-bottom: 2px solid transparent; font-size: .82rem; font-weight: 600; }
 .gwx-tabs__item:hover { color: var(--g-text); background: var(--g-s2); }
 .gwx-tabs__item--active { color: var(--g-primary); border-bottom-color: var(--g-primary-c); }
+/* Alarmempfang: auch nach HTMX-Swaps innerhalb desselben Gwx-Rahmens. */
+.gwx-reception .gwx-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.gwx-reception .gwx-col-12, .gwx-reception .gwx-field { min-width: 0; }
+.gwx-reception .gwx-stack { display: flex; flex-direction: column; gap: 16px; }
+.gwx-reception .gwx-stack > *, .gwx-reception .gwx-panel__t { margin: 0; }
+.gwx-reception .gwx-brand { min-width: 0; }
+.gwx-reception .gwx-brand__t, .gwx-reception .gwx-brand__s { overflow-wrap: anywhere; }
+.gwx-reception .gwx-table-wrap { max-width: 100%; overflow-x: auto; }
+.gwx-reception .gwx-table { min-width: 720px; }
+.gwx-reception .gwx-table td { vertical-align: top; overflow-wrap: anywhere; }
+.gwx-reception .gwx-table td form + form { margin-top: 8px; }
+.gwx-reception .gwx-reception-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 16px; margin: 0; }
+.gwx-reception .gwx-reception-meta dt, .gwx-reception .gwx-reception-fields dt { color: var(--g-muted); font-size: .74rem; }
+.gwx-reception .gwx-reception-meta dd { margin: 5px 0 0; font-family: var(--g-mono); font-size: .82rem; overflow-wrap: anywhere; }
+.gwx-reception .gwx-reception-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 8px 16px; }
+.gwx-reception .gwx-reception-fields dd { margin: 0; }
+.gwx-reception .gwx-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--g-bg); border: 1px solid var(--g-line); border-radius: 6px; padding: 12px; font-family: var(--g-mono); font-size: .78rem; max-width: 100%; }
+.gwx-reception .gwx-pre--hex { white-space: pre; overflow-x: auto; }
+.gwx-reception .gwx-break { overflow-wrap: anywhere; }
+.gwx-reception summary { cursor: pointer; color: var(--g-primary); }
+.gwx-reception details > .gwx-pre { margin-top: 10px; }
+.gwx-reception textarea:focus-visible, .gwx-reception .gwx-btn:focus-visible, .gwx-reception a:focus-visible, .gwx-reception summary:focus-visible { outline: 2px solid var(--g-primary); outline-offset: 2px; }
+.gwx-reception textarea[readonly] { color: var(--g-muted); }
+[data-theme="light"] .gwx-reception {
+  --g-bg: #f2f5fa; --g-s1: #ffffff; --g-s2: #eaf0f8; --g-s3: #e1e9f4;
+  --g-high: #d7e2f2; --g-line: #c3cddd; --g-line2: #8999b0;
+  --g-text: #17273e; --g-muted: #45546a; --g-dim: #58667c;
+  --g-primary: #235ba8; --g-green: #17663c; --g-amber: #875100; --g-red: #ac2929;
+}
+@media (max-width: 760px) {
+  .gwx-reception .gwx-body { padding: 12px 10px 28px; }
+  .gwx-reception .gwx-bar { padding: 12px 10px; }
+  .gwx-reception .gwx-pills { width: 100%; }
+  .gwx-reception .gwx-formgrid { grid-template-columns: 1fr; }
+  .gwx-reception .gwx-tiles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }
+  .gwx-reception .gwx-reception-fields { grid-template-columns: minmax(0, 1fr); }
+  .gwx-reception .gwx-btn { white-space: normal; }
+}
 </style>

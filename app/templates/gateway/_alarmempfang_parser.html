@@ -1,46 +1,50 @@
 {% set base = '/gateway/' ~ gw.id ~ '/alarmempfang/parser' %}
 {% macro postform(aktion) %}action="{{ base }}/{{ aktion }}" method="post" hx-post="{{ base }}/{{ aktion }}" hx-target="#alarm-parser" hx-swap="outerHTML"{% endmacro %}
 {% macro csrf() %}<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% endmacro %}
-<section id="alarm-parser" class="mt-6 space-y-4" aria-live="polite" x-data="{ veraltet: false }" @alarm-parser-changed.window="veraltet = true">
-  <p x-show="veraltet" x-cloak>Die Parser-Verwaltung wurde geaendert.
+<section id="alarm-parser" class="gwx-panel gwx-col-12" aria-live="polite" x-data="{ veraltet: false }" @alarm-parser-changed.window="veraltet = true">
+  <div class="gwx-panel__hd"><div>
+      <h2 class="gwx-panel__t">{{ icon('code', size='md') }} Parser</h2>
+      <div class="gwx-panel__sub">Regelsätze und Testfälle für die gesamte Organisation.</div>
+    </div></div>
+  <div class="gwx-panel__bd gwx-stack">
+  <p class="gwx-alert gwx-alert--info" x-show="veraltet" x-cloak>Die Parser-Verwaltung wurde geändert.
     <button class="gwx-btn" type="button" hx-get="{{ base }}{% if auswahl %}?version={{ auswahl.version }}{% endif %}" hx-target="#alarm-parser" hx-swap="outerHTML">Aktuellen Stand laden (ungespeicherte Eingaben verwerfen)</button>
   </p>
-  <h2>Parser</h2>
-  <p>Regeln gelten fuer die gesamte Organisation und nur fuer kuenftige Verarbeitung. Bestehende Einsaetze aendern sich erst durch Neu verarbeiten.</p>
-  {% if meldung %}<p role="status" class="p-3 border rounded">{{ meldung }}</p>{% endif %}
-  <form {{ postform('entwurf') }}>{{ csrf() }}<button class="gwx-btn inline-flex gap-2" type="submit">{{ icon('plus') }} Entwurf aus aktivem Satz anlegen</button></form>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
+  <p>Regeln gelten für die gesamte Organisation und nur für künftige Verarbeitung. Bestehende Einsätze ändern sich erst durch Neu verarbeiten.</p>
+  {% if meldung %}<p role="status" class="gwx-alert gwx-alert--info">{{ meldung }}</p>{% endif %}
+  <form {{ postform('entwurf') }}>{{ csrf() }}<button class="gwx-btn" type="submit">{{ icon('plus') }} Entwurf aus aktivem Satz anlegen</button></form>
+  <div class="gwx-table-wrap">
+    <table class="gwx-table">
       <thead><tr><th>Version</th><th>Status</th><th>Quelle</th><th>Notiz</th><th>Erstellt</th><th>Ersteller</th><th>Aktiviert</th><th>Ansicht</th></tr></thead>
       <tbody>
         <tr><td>0</td><td>Eingebaut{% if aktiv_version == '0' %} (aktiv){% endif %}</td><td>Code</td><td>Standard-Regelsatz</td><td>-</td><td>-</td><td>-</td><td></td></tr>
         {% for v in versionen %}
         <tr><td>{{ v.version }}</td><td>{{ v.status }}</td><td>{{ v.quelle }}</td><td>{{ v.notiz or '-' }}</td><td>{{ v.erstellt_am|local_datetime_sec }}</td><td>{{ ersteller.get(v.erstellt_von_user_id, v.erstellt_von_user_id or '-') }}</td><td>{{ v.aktiviert_am|local_datetime_sec if v.aktiviert_am else '-' }}</td>
-          <td><a href="{{ base }}?version={{ v.version }}" hx-get="{{ base }}?version={{ v.version }}" hx-target="#alarm-parser" hx-swap="outerHTML">Oeffnen</a></td></tr>
+          <td><a href="{{ base }}?version={{ v.version }}" hx-get="{{ base }}?version={{ v.version }}" hx-target="#alarm-parser" hx-swap="outerHTML">Öffnen</a></td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% if auswahl %}
-  <h3>Version {{ auswahl.version }} ({{ auswahl.status }})</h3>
-  <form {{ postform('speichern') }} class="space-y-2">
+  <h3 class="gwx-sechd">Version {{ auswahl.version }} ({{ auswahl.status }})</h3>
+  <form {{ postform('speichern') }} class="gwx-stack">
     {{ csrf() }}<input type="hidden" name="version" value="{{ auswahl.version }}">
-    <label class="block">Regeln (JSON)<textarea class="block w-full font-mono" name="regeln" rows="20" {% if auswahl.status != 'entwurf' %}readonly{% endif %}>{{ regeln_json }}</textarea></label>
-    <label class="block">Notiz<textarea class="block w-full" name="notiz" {% if auswahl.status != 'entwurf' %}readonly{% endif %}>{{ notiz or '' }}</textarea></label>
+    <label class="gwx-field">Regeln (JSON)<textarea class="gwx-input gwx-input--mono" name="regeln" rows="20" {% if auswahl.status != 'entwurf' %}readonly{% endif %}>{{ regeln_json }}</textarea></label>
+    <label class="gwx-field">Notiz<textarea class="gwx-input" name="notiz" {% if auswahl.status != 'entwurf' %}readonly{% endif %}>{{ notiz or '' }}</textarea></label>
     {% if auswahl.status == 'entwurf' %}<button class="gwx-btn" type="submit">Speichern und validieren</button>{% endif %}
   </form>
-  <h4>Regel-Diff gegen aktiv (Version {{ aktiv_version }})</h4>
-  <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Feld</th><th>Aenderung</th><th>Aktiv</th><th>Auswahl</th></tr></thead><tbody>
-    {% for d in regeldiff %}<tr><td>{{ d.feld }}</td><td>{{ d.art }}</td><td class="break-all">{{ d.vorher|tojson }}</td><td class="break-all">{{ d.nachher|tojson }}</td></tr>{% else %}<tr><td colspan="4">Keine Regelaenderung</td></tr>{% endfor %}
+  <h4 class="gwx-sechd">Regel-Diff gegen aktiv (Version {{ aktiv_version }})</h4>
+  <div class="gwx-table-wrap"><table class="gwx-table"><thead><tr><th>Feld</th><th>Änderung</th><th>Aktiv</th><th>Auswahl</th></tr></thead><tbody>
+    {% for d in regeldiff %}<tr><td>{{ d.feld }}</td><td>{{ d.art }}</td><td class="gwx-break">{{ d.vorher|tojson }}</td><td class="gwx-break">{{ d.nachher|tojson }}</td></tr>{% else %}<tr><td colspan="4">Keine Regeländerung</td></tr>{% endfor %}
   </tbody></table></div>
-  <p>Der Probelauf und die Aktivierung pruefen die gespeicherten Regeln gegen bis zu 200 Rohdatensaetze der Organisation und alle aktiven Testfaelle (Zeitlimit 10 Sekunden).</p>
-  <form {{ postform('probelauf') }}>{{ csrf() }}<input type="hidden" name="version" value="{{ auswahl.version }}"><button class="gwx-btn inline-flex gap-2" type="submit">{{ icon('player-play') }} Probelauf</button></form>
+  <p>Der Probelauf und die Aktivierung prüfen die gespeicherten Regeln gegen bis zu 200 Rohdatensätze der Organisation und alle aktiven Testfälle (Zeitlimit 10 Sekunden).</p>
+  <form {{ postform('probelauf') }}>{{ csrf() }}<input type="hidden" name="version" value="{{ auswahl.version }}"><button class="gwx-btn" type="submit">{{ icon('player-play') }} Probelauf</button></form>
   {% if auswahl.status in ['entwurf', 'archiviert'] %}
-  <form {{ postform('aktivieren' if auswahl.status == 'entwurf' else 'zuruecksetzen') }} class="space-y-2">
+  <form {{ postform('aktivieren' if auswahl.status == 'entwurf' else 'zuruecksetzen') }} class="gwx-stack">
     {{ csrf() }}<input type="hidden" name="version" value="{{ auswahl.version }}">
-    <label class="block"><input type="checkbox" name="override"> Testfall-Fehler und Regressionen bewusst uebergehen (Override)</label>
-    <label class="block">Begruendung (bei Override erforderlich)<textarea class="block w-full" name="begruendung" rows="2"></textarea></label>
-    <button class="gwx-btn" type="submit">{{ 'Aktivieren' if auswahl.status == 'entwurf' else 'Auf diese Vorversion zuruecksetzen' }}</button>
+    <label class="gwx-check"><input type="checkbox" name="override"> Testfall-Fehler und Regressionen bewusst übergehen (Override)</label>
+    <label class="gwx-field">Begründung (bei Override erforderlich)<textarea class="gwx-input" name="begruendung" rows="2"></textarea></label>
+    <button class="gwx-btn" type="submit">{{ 'Aktivieren' if auswahl.status == 'entwurf' else 'Auf diese Vorversion zurücksetzen' }}</button>
   </form>
   {% endif %}
   {% if auswahl.status == 'entwurf' %}
@@ -48,26 +52,27 @@
   {% endif %}
   {% endif %}
   {% if ergebnis %}
-  <h3>Probelauf-Ergebnis</h3>
-  <p>Neu korrekt: {{ ergebnis.zusammenfassung.neu_korrekt }} | Unveraendert: {{ ergebnis.zusammenfassung.unveraendert }} | Regressionen: {{ ergebnis.zusammenfassung.regression }} | Testfall-Fehler: {{ ergebnis.zusammenfassung.testfall_fehler }}</p>
-  <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Datensatz</th><th>Klassifikation</th><th>Test vorher / jetzt</th><th>Feld-Diff (aktiv / Auswahl)</th><th>Erwartungsfehler</th></tr></thead><tbody>
+  <h3 class="gwx-sechd">Probelauf-Ergebnis</h3>
+  <p>Neu korrekt: {{ ergebnis.zusammenfassung.neu_korrekt }} | Unverändert: {{ ergebnis.zusammenfassung.unveraendert }} | Regressionen: {{ ergebnis.zusammenfassung.regression }} | Testfall-Fehler: {{ ergebnis.zusammenfassung.testfall_fehler }}</p>
+  <div class="gwx-table-wrap"><table class="gwx-table"><thead><tr><th>Datensatz</th><th>Klassifikation</th><th>Test vorher / jetzt</th><th>Feld-Diff (aktiv / Auswahl)</th><th>Erwartungsfehler</th></tr></thead><tbody>
     {% for r in ergebnis.datensaetze %}<tr {% if r.klassifikation == 'regression' %}class="font-bold"{% endif %}><td>{{ r.art }} #{{ r.id }} {{ r.titel }}</td><td>{{ r.klassifikation }}</td><td>{% if r.art == 'testfall' %}{{ 'bestanden' if r.bestand else 'fehlgeschlagen' }} / {{ 'bestanden' if r.besteht else 'fehlgeschlagen' }}{% else %}-{% endif %}</td><td>{% for d in r.diff %}<div>{{ d.feld }}: {{ d.vorher|tojson }} / {{ d.nachher|tojson }}</div>{% endfor %}</td><td>{% for d in r.erwartungsfehler %}<div>{{ d.feld }}: erwartet {{ d.erwartet|tojson }}, erhalten {{ d.tatsaechlich|tojson }}</div>{% endfor %}</td></tr>{% endfor %}
   </tbody></table></div>
   {% endif %}
-  <h3>Testfaelle</h3>
-  <p>Beim Speichern werden Telefonnummern, E-Mail-Adressen, IBAN und erkannte Namen nach Notrufer, Melder oder Anrufer durch Platzhalter ersetzt. Freitext vor dem Speichern auf weitere Personendaten pruefen. Nur angegebene Ergebnisfelder werden verglichen.</p>
-  <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Titel / Quelle</th><th>Status</th><th>Rohtext / Erwartet</th><th>Aktionen</th></tr></thead><tbody>
-    {% for t in testfaelle %}<tr><td>{{ t.titel }} ({{ t.quelle }})</td><td>{{ 'aktiv' if t.aktiv else 'inaktiv' }}</td><td><pre class="whitespace-pre-wrap">{{ t.rohtext }}</pre><pre class="whitespace-pre-wrap">{{ t.erwartet|tojson(indent=2) }}</pre></td><td>
+  <h3 class="gwx-sechd">Testfälle</h3>
+  <p>Beim Speichern werden Telefonnummern, E-Mail-Adressen, IBAN und erkannte Namen nach Notrufer, Melder oder Anrufer durch Platzhalter ersetzt. Freitext vor dem Speichern auf weitere Personendaten prüfen. Nur angegebene Ergebnisfelder werden verglichen.</p>
+  <div class="gwx-table-wrap"><table class="gwx-table"><thead><tr><th>Titel / Quelle</th><th>Status</th><th>Rohtext / Erwartet</th><th>Aktionen</th></tr></thead><tbody>
+    {% for t in testfaelle %}<tr><td>{{ t.titel }} ({{ t.quelle }})</td><td>{{ 'aktiv' if t.aktiv else 'inaktiv' }}</td><td><pre class="gwx-pre">{{ t.rohtext }}</pre><pre class="gwx-pre">{{ t.erwartet|tojson(indent=2) }}</pre></td><td>
       <form {{ postform('testfall-schalten') }}>{{ csrf() }}<input type="hidden" name="testfall_id" value="{{ t.id }}"><button class="gwx-btn" type="submit">{{ 'Deaktivieren' if t.aktiv else 'Aktivieren' }}</button></form>
-      <form {{ postform('testfall-loeschen') }}>{{ csrf() }}<input type="hidden" name="testfall_id" value="{{ t.id }}"><button class="gwx-btn" type="submit">Loeschen</button></form>
+      <form {{ postform('testfall-loeschen') }}>{{ csrf() }}<input type="hidden" name="testfall_id" value="{{ t.id }}"><button class="gwx-btn" type="submit">Löschen</button></form>
     </td></tr>{% endfor %}
   </tbody></table></div>
-  <form {{ postform('testfall-anlegen') }} class="space-y-2">
+  <form {{ postform('testfall-anlegen') }} class="gwx-stack">
     {{ csrf() }}
-    <label class="block">Titel<input class="block w-full" name="titel" maxlength="200" required></label>
-    <label class="block">Alarmempfang-ID dieses Gateways (optional; ersetzt manuellen Rohtext)<input class="block" name="ingest_id" type="number" min="1"></label>
-    <label class="block">Manueller Rohtext<textarea class="block w-full" name="rohtext" rows="3" maxlength="65536"></textarea></label>
-    <label class="block">Erwartete Felder (JSON, zum Beispiel {"stichwort": "f2"})<textarea class="block w-full font-mono" name="erwartet" rows="3" required>{}</textarea></label>
+    <label class="gwx-field">Titel<input class="gwx-input" name="titel" maxlength="200" required></label>
+    <label class="gwx-field">Alarmempfang-ID dieses Gateways (optional; ersetzt manuellen Rohtext)<input class="gwx-input" name="ingest_id" type="number" min="1"></label>
+    <label class="gwx-field">Manueller Rohtext<textarea class="gwx-input" name="rohtext" rows="3" maxlength="65536"></textarea></label>
+    <label class="gwx-field">Erwartete Felder (JSON, zum Beispiel {"stichwort": "f2"})<textarea class="gwx-input gwx-input--mono" name="erwartet" rows="3" required>{}</textarea></label>
     <button class="gwx-btn" type="submit">Anonymisierten Testfall anlegen</button>
   </form>
+  </div>
 </section>
