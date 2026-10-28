@@ -40,6 +40,7 @@ from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontak
 from app.mcp.tools import mitglieder as _mitglieder  # noqa: F401 - registriert Mitglieder-Lesetools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
+from app.mcp.tools import objekt_karte as _objekt_karte  # noqa: F401 - registriert Karten-Lesetools
 from app.mcp.tools import organisation as _organisation  # noqa: F401 - registriert Organisations-Tool
 from app.mcp.tools import strassensperren as _strassensperren  # noqa: F401 - registriert Strassensperren-Tools
 from app.mcp.tools import suche as _suche  # noqa: F401 - registriert zentrale Suche
@@ -2327,3 +2328,15 @@ async def alarm_parser_testfall_anlegen(
 ) -> dict[str, object]:
     return await _call_registered_tool("alarm_parser_testfall_anlegen", titel=titel, erwartet=erwartet,
                                        ingest_id=ingest_id, rohtext=rohtext)
+
+
+@server.tool(name="objekt_karte_lesen", description=TOOLS["objekt_karte_lesen"].description)
+async def objekt_karte_lesen(
+    objekt_id: int, arbeitskopie: bool = False, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("objekt_karte_lesen", objekt_id=objekt_id, arbeitskopie=arbeitskopie)
+
+
+@server.tool(name="objekt_karte_symbolkatalog", description=TOOLS["objekt_karte_symbolkatalog"].description)
+async def objekt_karte_symbolkatalog(ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("objekt_karte_symbolkatalog")
