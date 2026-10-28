@@ -54,7 +54,7 @@ def _cfg(**overrides) -> TeamsAlarmConfig:
 def _fake_webhook(calls):
     async def _inner(webhook_url, incident, cfg, *, base_url, org):
         calls.append(incident.id)
-        return True, False, None
+        return True, False, None, False
     return _inner
 
 
