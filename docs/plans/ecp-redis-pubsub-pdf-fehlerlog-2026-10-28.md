@@ -118,3 +118,20 @@ bisherigen Defaults als Obergrenze.
 
 - Frist für ausbleibende PONGs (Vorschlag 15 s) und Queue-Größe (Vorschlag 1000).
 - PDF-Parallelität (Vorschlag 2); abhängig vom RAM des Servers.
+
+## Ergebnis der Umsetzung (2026-10-28)
+
+- Teil C (#772) und Teil A R1-R6/R8 (#774) gemergt. Die 30-Minuten-Abnahme auf dem
+  Test-ECP steht noch aus (Subscriber nutzt jetzt `protocol=2`, dort gegenpruefen).
+- Teil B (PDF-Auslagerung) bewusst **nicht umgesetzt**: Eine AST-Analyse (Fixpunkt ueber
+  alle Funktionen, die `write_pdf` direkt oder indirekt aufrufen) findet in `app/` keine
+  `async def`, die WeasyPrint aufruft. Die PDF-Routen sind synchron und laufen im
+  Threadpool. Die zwei Namenstreffer (`einsatz_dokument_zuordnen`,
+  `dokumentdruck_vorbereiten` in `app/mcp/tools/einsatzwissen.py`) nutzen nur `pypdf`.
+  Offene Hypothese: GIL-Konkurrenz durch WeasyPrint-Threads verzoegert den Loop. Erst mit
+  den Watchdog-Logs (Taskname, Stack) belegen, dann ggf. Prozess-Pool statt `to_thread`.
+- L2 DIBOS-Mitglieder: Zuordnung nur ueber exakte `Member.sybos_id`; die Spalte ist nicht
+  eindeutig. Gehaertet: ID als bereinigter Text vergleichen (Zahl vs. "007"), bei mehreren
+  Treffern keine Zuordnung (Freitext) mit Warnung ohne Namen. Namensabgleich bewusst nicht
+  eingefuehrt (Fehlzuordnungsrisiko). Offen: Anteil der `mitglied_id IS NULL`-Rueckmeldungen
+  in Produktion pruefen.

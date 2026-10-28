@@ -601,15 +601,24 @@ def _match_member_by_sybos(db: Session, org_id: int, sybos_id: str | None):
     ui_admin.py::import_members_excel). idSybos ist nur für sybos-angebundene
     Dienststellen befüllt — ohne Treffer bleibt die Rückmeldung ein
     Freitext-Eintrag (Teilnahme.freitext_name)."""
+    # DIBOS liefert die ID teils als Zahl; als Zahl verglichen wuerde MariaDB "007" und 7
+    # gleichsetzen. Deshalb immer als bereinigter Text vergleichen.
+    sybos_id = str(sybos_id).strip() if sybos_id is not None else ""
     if not sybos_id:
         return None
     from app.models.master import Member
-    return (
+    treffer = (
         db.query(Member)
         .filter(Member.org_id == org_id, Member.sybos_id == sybos_id)
         .execution_options(include_all_tenants=True)
-        .first()
+        .limit(2)
+        .all()
     )
+    if len(treffer) > 1:
+        # Die Spalte ist nicht eindeutig: nicht raten, sondern als Freitext fuehren.
+        logger.warning("DIBOS-syBOS-ID mehrdeutig, keine Zuordnung (org_id=%s)", org_id)
+        return None
+    return treffer[0] if treffer else None
 
 
 def _find_teilnahme(db: Session, org_id: int, incident_id: int, dibos_response_id, mitglied_id: int | None):
