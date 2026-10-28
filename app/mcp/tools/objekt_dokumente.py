@@ -388,7 +388,9 @@ def _seite(dokument: ObjektDokument, nr: int, context: MCPContext) -> ObjektDoku
 @register_tool(
     name="objekt_dokument_seite_ansehen",
     description=("Liest einen Plan visuell Seite fuer Seite, etwa BMZ, FBF, Laufkarten und Schluesselsafe-Standorte. "
-                 "volltext ist OCR und kann Fehler enthalten."),
+                 "Zuerst objekt_dokumente_auflisten; aktuelle Planversion waehlen. "
+                 "volltext ist OCR und kann Fehler enthalten. Fuer lagegenaue Symbole danach "
+                 "objekt_karte_referenzpunkte verwenden; Koordinaten nie erfinden."),
     required_roles=("objekt_verwalter",), module_check=objekt_modul_aktiv,
 )
 async def objekt_dokument_seite_ansehen(context: MCPContext, dokument_id: int, seite: int,
