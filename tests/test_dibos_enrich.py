@@ -686,3 +686,38 @@ def test_enrich_ignores_response_older_than_stored_change_date():
     row = check_db.query(Teilnahme).filter(Teilnahme.bezug_id == incident_id).first()
     assert row.rsvp_status == "abgesagt"  # unverändert, der neuere Stand bleibt
     check_db.close()
+
+
+def _mitglied(db, nachname: str, sybos_id: str):
+    from app.models.master import Member
+
+    mitglied = Member(org_id=ORG_ID, firstname="Test", lastname=nachname, sybos_id=sybos_id)
+    db.add(mitglied)
+    db.flush()
+    return mitglied
+
+
+def test_sybos_zuordnung_normalisiert_zahl_und_leerzeichen():
+    db = _session()
+    try:
+        mitglied = _mitglied(db, "SybosNorm", "4711")
+        assert dibos_enrich._match_member_by_sybos(db, ORG_ID, 4711) is mitglied
+        assert dibos_enrich._match_member_by_sybos(db, ORG_ID, " 4711 ") is mitglied
+        assert dibos_enrich._match_member_by_sybos(db, ORG_ID, "   ") is None
+        assert dibos_enrich._match_member_by_sybos(db, ORG_ID, None) is None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sybos_zuordnung_mehrdeutig_wird_nicht_geraten(caplog):
+    db = _session()
+    try:
+        _mitglied(db, "SybosDoppelA", "5812")
+        _mitglied(db, "SybosDoppelB", "5812")
+        assert dibos_enrich._match_member_by_sybos(db, ORG_ID, "5812") is None
+        assert "mehrdeutig" in caplog.text
+        assert "SybosDoppel" not in caplog.text
+    finally:
+        db.rollback()
+        db.close()
