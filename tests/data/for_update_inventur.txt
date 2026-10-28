@@ -31,6 +31,7 @@ app/services/mail_zuordnung_service.py | 2 | Sperrt ordne_zu, uebernehme_in_eins
 app/services/mailing_dispatch_loop.py | 2 | Sperrt dispatch_once; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
 app/services/media_service.py | 2 | Sperrt store_upload_for_katplan_anhang; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
 app/services/objekt_dokument_service.py | 3 | Worker-Claim: tests/mariadb/test_high_risk_snapshot_claims.py; DB-Retry ohne erneutes Rendern.
+app/services/objekt_karte_freigabe_service.py | 3 | Sperrt Objekt und Marker in freigeben sowie Vorschlaege in _laden; Parallelfreigabe: tests/mariadb/test_objekt_karte_freigabe_parallel.py; kein automatischer Retry - Freigabe ist atomar, bei Konflikt/Lock-Timeout bekommt der Aufrufer einen Fehler und wiederholt bewusst.
 app/services/objekt_pflege_service.py | 2 | Sperrt freigabe_transaktion, verwerfen_transaktion; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
 app/services/planspiel_engine.py | 2 | Sperrt ereignis_ausfuehren; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
 app/services/print_agent_service.py | 1 | Sperrt lease_jobs; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
