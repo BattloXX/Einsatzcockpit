@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.fehlerlog import log_fehler
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
@@ -387,7 +388,11 @@ async def _run_claimed(job_id: int, generation: int) -> None:
             }[job.channel]
             outcome, reason = await sender(db, incident, job)
         except Exception as exc:
-            logger.error("Alarmkanal fehlgeschlagen (job=%s, error=%s)", job.id, type(exc).__name__)
+            log_fehler(
+                logger, "Alarmkanal fehlgeschlagen", exc, level=logging.ERROR,
+                job_id=job.id, incident_id=incident.id, org_id=job.org_id,
+                channel=job.channel, versuch=job.attempt_count,
+            )
             now = _now()
             retry_at = _retry_at(job.channel, job.attempt_count, now)
             job.status = "retry" if retry_at else "failed"
@@ -450,7 +455,7 @@ async def _run_claimed(job_id: int, generation: int) -> None:
         _finish_if_done(db, incident, job.org_id, job.context.get("triggered_by_user_id"))
     except Exception as exc:
         db.rollback()
-        logger.error("Alarm-Outbox fehlgeschlagen (job=%s, error=%s)", job_id, type(exc).__name__)
+        log_fehler(logger, "Alarm-Outbox fehlgeschlagen", exc, level=logging.ERROR, job_id=job_id)
     finally:
         db.close()
 
