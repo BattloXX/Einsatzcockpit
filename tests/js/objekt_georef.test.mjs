@@ -34,6 +34,14 @@ class Element {
   set innerHTML(_) { throw new Error("Rohdaten-innerHTML im Editor"); }
   replaceChildren() { this.childNodes = []; this.text = ""; }
   setAttribute(k, v) { this[k] = v; }
+  get classList() {
+    const el = this;
+    return { toggle(name, an) {
+      const namen = (el.className || "").split(/\s+/).filter((n) => n && n !== name);
+      if (an) { namen.push(name); }
+      el.className = namen.join(" ");
+    } };
+  }
   addEventListener(k, fn) { this.events[k] = fn; }
   showModal() { this.open = true; }
   close() { this.open = false; this.events.close(); }

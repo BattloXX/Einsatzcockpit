@@ -14,11 +14,13 @@
     <h1>Georeferenzierung · {{ seite.dokument.dateiname_original }} · Seite {{ seiten_nr }}</h1>
     <a href="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ seite.id }}" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück zur Dokumentenseite</a>
   </div>
+  <div class="section">
   <div id="georef-editor" data-objekt-id="{{ objekt.id }}" data-dokument-id="{{ dokument_id }}"
        data-seite="{{ seiten_nr }}" data-basis-url="{{ basis_url }}"
        data-lat="{{ startpunkt.lat if startpunkt else '' }}" data-lng="{{ startpunkt.lng if startpunkt else '' }}"
        data-zurueck-url="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ seite.id }}"
        data-csrf="{{ csrf }}"></div>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}

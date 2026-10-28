@@ -76,35 +76,36 @@
       var b = el("button", text, aktionen, "btn btn--ghost btn--xs");
       b.type = "button"; b.onclick = fn; return b;
     }
-    el("h3", "Georeferenz · Seite " + opts.seite, dialog);
-    var status = el("p", "Plan wird geladen ...", dialog);
+    if (!seitenModus) { el("h3", "Georeferenz · Seite " + opts.seite, dialog); }
+    var status = el("p", "Plan wird geladen ...", dialog, "ogx__status");
     status.setAttribute("role", "status");
-    var hinweise = el("ul", null, dialog);
+    var hinweise = el("ul", null, dialog, "ogx__hinweise");
     hinweise.setAttribute("role", "status");
-    var quelleStatus = el("p", "", dialog);
-    var netz = el("p", "", dialog);
-    var modellLabel = el("label", "Transformationsmodell ", dialog);
+    var quelleStatus = el("p", "", dialog, "ogx__meta");
+    var netz = el("p", "", dialog, "ogx__meta");
+    el("p", "Zuerst im Plan klicken, dann den Gegenpunkt auf der Karte wählen. Gebäudeecken rasten ein. Nummerierte Punkte können verschoben werden.", dialog, "ogx__hilfe");
+    var anweisung = el("p", "Punkt im Plan wählen.", dialog, "ogx__anweisung");
+    anweisung.setAttribute("aria-live", "polite");
+    var leiste = el("div", null, dialog, "ogx__leiste");
+    var modellLabel = el("label", "Transformationsmodell ", leiste, "ogx__feld");
     var modell = el("select", null, modellLabel, "form-select");
     [["aehnlichkeit", "Ähnlichkeit (ab 3 Paaren)"], ["affin", "Affin (ab 4 Paaren)"],
       ["homographie", "Homographie (ab 6 Paaren)"]].forEach(function (item) {
       var o = el("option", item[1], modell); o.value = item[0];
     });
-    el("p", "Zuerst im Plan klicken, dann den Gegenpunkt auf der Karte wählen. Gebäudeecken rasten ein. Nummerierte Punkte können verschoben werden.", dialog);
-    var anweisung = el("p", "Punkt im Plan wählen.", dialog);
-    anweisung.setAttribute("aria-live", "polite");
     var layout = el("div", null, dialog, "ogx__layout");
     var planDiv = el("div", null, layout, "ogx__karte");
     planDiv.setAttribute("aria-label", "Planseite mit Zoom und Verschieben");
     var mapDiv = el("div", null, layout, "ogx__karte");
     mapDiv.setAttribute("aria-label", "Karte mit Referenzpunkten");
-    var liste = el("div", null, dialog);
+    var liste = el("div", null, dialog, "ogx__paare");
     var aktionen = el("div", null, dialog, "ogx__aktionen");
     var paare = [], pending = null, plan, map, meta, revision = 0, generation = 0, offen = true;
     var marker = [], vorgemerkt = null, saving = false, hatGeoref = false;
     var vorschau = null, ecken = null, erstmals = true;
-    var overlayLabel = el("label", "Plan über Karte legen ", dialog);
+    var overlayLabel = el("label", "Plan über Karte legen ", leiste, "ogx__feld ogx__feld--check");
     var overlayAn = el("input", null, overlayLabel); overlayAn.type = "checkbox";
-    var deckLabel = el("label", "Deckkraft ", dialog);
+    var deckLabel = el("label", "Deckkraft ", leiste, "ogx__feld");
     var deckkraft = el("input", null, deckLabel); deckkraft.type = "range";
     deckkraft.min = "0"; deckkraft.max = "100"; deckkraft.value = "50";
     overlayAn.onchange = zeigeVorschau; deckkraft.oninput = zeigeVorschau;
@@ -134,8 +135,9 @@
       anweisung.textContent = s.text;
       var aktiv = s.aktiv || (zusatz ? "plan" : "");
       if (zusatz && !pending && paare.length >= 4) { anweisung.textContent = "Weiteren Punkt im Plan wählen."; }
-      planDiv.className = "ogx__karte" + (aktiv === "plan" ? " ogx__aktiv" : "");
-      mapDiv.className = "ogx__karte" + (aktiv === "karte" ? " ogx__aktiv" : "");
+      // classList statt className: Leaflet setzt am Container eigene Klassen (leaflet-container).
+      planDiv.classList.toggle("ogx__aktiv", aktiv === "plan");
+      mapDiv.classList.toggle("ogx__aktiv", aktiv === "karte");
       weitere.hidden = paare.length < 4 || !!pending;
       zurueck.disabled = saving || !paare.length;
     }
@@ -265,7 +267,7 @@
           p.quelle = map.hasLayer(ortho) ? "orthofoto_klick" : "manuell";
           p.beschreibung = "Verschobener Kartenpunkt"; pruefen();
         });
-        var row = el("p", (i + 1) + ": " + p.quelle + " · " + p.beschreibung + " ", liste);
+        var row = el("p", (i + 1) + ": " + p.quelle + " · " + p.beschreibung + " ", liste, "ogx__paar");
         row.dataset.punkt = String(p.id);
         var del = el("button", "Paar löschen", row, "btn btn--ghost btn--xs");
         del.type = "button"; del.onclick = function () { if (saving) { return; } paare.splice(i, 1); pruefen(); };
