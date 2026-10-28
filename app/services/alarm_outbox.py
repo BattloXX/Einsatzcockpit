@@ -17,7 +17,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
 from app.services.background_runtime import create_leader_task
-from app.services.db_transactions import retry_claim
+from app.services.db_transactions import commit_db_operation, retry_claim
 from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger("einsatzleiter.alarm_outbox")
@@ -74,6 +74,43 @@ def _address(incident: Incident) -> str:
         f"{incident.address_street or ''} {incident.address_no or ''}, "
         f"{incident.address_city or ''}"
     ).strip(", ").strip()
+
+
+def teams_manuell_erneut(db: Session, incident_id: int, org_id: int, user_id: int) -> str:
+    """Fordert den Erstalarm einmalig neu an; der Aufrufer uebergibt eine saubere Session."""
+    from app.core.audit import write_audit
+
+    def anfordern() -> str:
+        # Nach einem Rollback auch bereits geladene Objekte neu aus der DB lesen.
+        job = db.query(IncidentAlarmJob).filter(
+            IncidentAlarmJob.incident_id == incident_id, IncidentAlarmJob.org_id == org_id,
+            IncidentAlarmJob.channel == "teams", IncidentAlarmJob.variant == "",
+        ).populate_existing().first()
+        if job is None:
+            return "nicht_gefunden"
+        if job.status not in ("uncertain", "failed"):
+            return "nicht_noetig"
+        kontext = dict(job.context or {})
+        kontext["manual_resend"] = True
+        ergebnis = db.execute(update(IncidentAlarmJob).where(
+            IncidentAlarmJob.id == job.id, IncidentAlarmJob.org_id == org_id,
+            IncidentAlarmJob.channel == "teams", IncidentAlarmJob.variant == "",
+            IncidentAlarmJob.status.in_(("uncertain", "failed")),
+        ).values(status="pending", next_attempt_at=_now(), finished_at=None,
+                 lease_until=None, last_error=None, context=kontext))
+        if getattr(ergebnis, "rowcount", 0) != 1:
+            return "nicht_noetig"
+        db.add(IncidentLog(
+            incident_id=incident_id, author_name="System", level="info",
+            text="Teams-Alarmkarte manuell erneut angefordert",
+        ))
+        write_audit(
+            db, "incident.alarm_teams_resend", org_id=org_id, user_id=user_id,
+            incident_id=incident_id, payload={"job_id": job.id, "manual_resend": True},
+        )
+        return "ok"
+
+    return commit_db_operation(db, anfordern, label="teams_manuell_erneut")
 
 
 def enqueue_incident_alarm(

@@ -35,6 +35,7 @@ from app.models.incident import (
     PERSON_STATUS_VALUES,
     UNIT_STATUS_VALUES,
     Incident,
+    IncidentAlarmJob,
     IncidentChange,
     IncidentColumn,
     IncidentCommLog,
@@ -767,11 +768,46 @@ def alarm_edit_modal(
     _=Depends(require_role("incident_leader", "admin")),
 ):
     incident = _incident_or_404(incident_id, db)
+    return _alarm_modal_antwort(request, db, incident)
+
+
+def _alarm_modal_antwort(request: Request, db: Session, incident: Incident, statusmeldung: str = ""):
+    """Gemeinsames Modal mit aktuellem Teams-Status rendern."""
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
+    teams_job = db.query(IncidentAlarmJob).filter(
+        IncidentAlarmJob.incident_id == incident.id,
+        IncidentAlarmJob.org_id == request.state.user.org_id,
+        IncidentAlarmJob.channel == "teams", IncidentAlarmJob.variant == "",
+    ).first()
     return templates.TemplateResponse(request, "incident/_alarm_edit_modal.html", {
         "incident": incident,
         "alarm_types": alarm_types,
+        "teams_job": teams_job,
+        "teams_statusmeldung": statusmeldung,
     })
+
+
+@router.post("/einsatz/{incident_id}/alarm/teams-erneut", response_class=HTMLResponse)
+def alarm_teams_erneut(
+    incident_id: int, request: Request, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Teams-Erstalarm nach ausdruecklicher Pruefung erneut anfordern."""
+    from app.services.alarm_outbox import process_incident_alarm, teams_manuell_erneut
+
+    incident = _require_open_incident(incident_id, db)
+    user = request.state.user
+    ergebnis = teams_manuell_erneut(db, incident.id, user.org_id, user.id)
+    if ergebnis == "nicht_gefunden":
+        raise HTTPException(404, "Teams-Alarmkarte nicht gefunden")
+    if ergebnis == "ok":
+        background_tasks.add_task(process_incident_alarm, incident.id)
+    statusmeldung = (
+        "Teams-Karte wird erneut gesendet." if ergebnis == "ok"
+        else "Erneutes Senden ist nicht noetig."
+    )
+    return _alarm_modal_antwort(request, db, incident, statusmeldung)
 
 
 @router.post("/einsatz/{incident_id}/alarm", response_class=HTMLResponse)
