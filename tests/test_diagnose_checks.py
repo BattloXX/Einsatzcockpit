@@ -1,7 +1,9 @@
 """Jeder registrierte Check: positive/negative Daten und unveraenderter Fachbestand."""
 import json
+import sqlite3
 from datetime import timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from alembic.script import ScriptDirectory
@@ -151,18 +153,62 @@ def test_orm_flush_guard(diag_engine):
     assert not snapshot(diag_engine)["fire_dept"]
 
 
-def test_sqlite_timeout_and_row_budget(diag_engine):
+def test_sqlite_timeout_and_row_budget(diag_engine, monkeypatch):
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(registry, "time", SimpleNamespace(monotonic=lambda: clock.now))
+    entered = False
+
+    def expire():
+        nonlocal entered
+        entered = True
+        clock.now = 11.0
+        return 1
+
     def slow(db, budget):
-        # SELECT mit grossem kartesischen Produkt wird im SQLite-VM-Handler beendet.
-        db.execute(text("SELECT count(*) FROM json_each(:v) a, json_each(:v) b, json_each(:v) c"),
-                   {"v": json.dumps(list(range(500)))}).all()
-        return registry.CheckResult()
-    with pytest.raises((TimeoutError, OperationalError)):
-        registry.execute_check(diag_engine, registry.Check("slow", "test", "", "leicht", slow), 0.001)
+        db.connection().connection.driver_connection.create_function("expire_budget", 0, expire)
+        # Die Frist laeuft erst IN der SELECT ab, nicht beim Connect/SQL-Guard.
+        db.execute(text("SELECT sum(expire_budget()) FROM json_each(:v) a, json_each(:v) b"),
+                   {"v": json.dumps(list(range(100)))}).all()
+        pytest.fail("SQLite-Progress-Handler hat die SELECT nicht abgebrochen")
+
+    with pytest.raises(OperationalError, match="interrupted"):
+        registry.execute_check(diag_engine, registry.Check("slow", "test", "", "leicht", slow), 10.0)
+    assert entered
     budget = registry.Budget(rows=2)
     with diag_engine.connect() as connection:
-        assert len(budget.rows(connection, select(text("1")).union_all(select(text("2")), select(text("3"))))) == 2
-    assert not budget.complete
+        assert budget.rows(connection, select(text("1")).union_all(select(text("2")), select(text("3")))) == [
+            (1,), (2,),
+        ]
+    assert budget.remaining == 0 and not budget.complete
+
+
+@pytest.mark.parametrize("invalidate", [False, True], ids=["rollback", "closed-connection"])
+def test_sqlite_timeout_does_not_interrupt_rollback(monkeypatch, invalidate):
+    class ProgressConnection(sqlite3.Connection):
+        def set_progress_handler(self, handler, n):
+            # Erzwingt die sonst zufaellige VM-Grenze waehrend ROLLBACK.
+            super().set_progress_handler(handler, 1 if handler else 0)
+
+    engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(":memory:", factory=ProgressConnection))
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(registry, "time", SimpleNamespace(monotonic=lambda: clock.now))
+
+    def expire_before_cleanup(db, budget):
+        # SQLite fuehrt fuer reine SELECTs im Legacy-Modus sonst kein BEGIN aus.
+        db.connection().connection.driver_connection.execute("BEGIN")
+        assert db.execute(text("SELECT 1")).scalar_one() == 1
+        if invalidate:
+            db.connection().invalidate()
+        clock.now = 11.0
+        return registry.CheckResult()
+
+    try:
+        with pytest.raises(TimeoutError, match="Diagnose-Zeitbudget erreicht"):
+            registry.execute_check(engine, registry.Check("cleanup", "test", "", "leicht", expire_before_cleanup), 10.0)
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT 1")).scalar_one() == 1
+    finally:
+        engine.dispose()
 
 
 def test_registry_refuses_repairs_and_duplicate_ids():
