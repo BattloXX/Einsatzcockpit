@@ -189,8 +189,11 @@ async def _loop_lag_monitor(watchdog: VerzugsWatchdog | None = None) -> None:
 # Auf WARNING setzen (deckt via Logger-Hierarchie auch fontTools.subset/.ttLib/.timer ab).
 # Ebenso die "HTTP Request: ... 200 OK"-Zeilen von httpx/httpcore und das uvicorn-Access-Log,
 # die den Log-Puffer fluten; Fehler (WARNING+) bleiben sichtbar.
-for _noisy in ("fontTools", "weasyprint", "PIL", "pdf2image", "httpx", "httpcore", "uvicorn.access"):
+for _noisy in ("weasyprint", "PIL", "pdf2image", "httpx", "httpcore", "uvicorn.access"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
+# fontTools.subset meldet pro PDF-Druck "<Tabelle> NOT subset; dropped" bewusst auf WARNING;
+# WARNING als Schwelle reicht daher nicht (Prod-Log 2026-10-28). Nur ERROR+ durchlassen.
+logging.getLogger("fontTools").setLevel(logging.ERROR)
 
 
 def _install_ws_quiet_exception_handler() -> None:
