@@ -62,11 +62,19 @@ def _laden(db: Session, objekt: Objekt, ids: list[int]) -> list[ObjektKartenVors
 
 def markiere_veraltete(db: Session, objekt: Objekt) -> None:
     """Explizite Mutation; Legacy-Marker ohne gespeicherten Hash bleiben unveraendert."""
+    from app.services.objekt_georef_service import georef_pruefen, neu_berechnen
+
+    for g in db.query(ObjektDokumentGeoref).filter_by(org_id=objekt.org_id, objekt_id=objekt.id).all():
+        if georef_pruefen(db, objekt, g) == "veraltet":
+            g.status = "veraltet"
+            neu_berechnen(db, objekt, g)
     eintraege: list[ObjektKartenVorschlag | ObjektKartenObjekt] = list(
         vservice.vorschlaege_auflisten(db, objekt, "offen"))
     eintraege.extend(karten_objekte_lesen(db, objekt))
     for eintrag in eintraege:
-        if eintrag.quelle_dokument_hash and vservice._veraltet(db, objekt, eintrag):
+        if (not isinstance(eintrag, ObjektKartenVorschlag) or eintrag.georef_id is None) and (
+            eintrag.quelle_dokument_hash and vservice._veraltet(db, objekt, eintrag)
+        ):
             eintrag.position_status = "veraltet"
     db.flush()
 

@@ -19,6 +19,7 @@ from typing import Any, cast
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Body,
     Depends,
     File,
     Form,
@@ -2874,6 +2875,73 @@ def karten_objekt_loeschen(
         return objekt_karte_service.karten_objekt_loeschen(db, objekt, eintrag_id, user_id=user.id)
     except objekt_karte_service.ObjektKartenFehler as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+
+
+@router.get("/{objekt_id}/karte/georef.json")
+def karten_georef_json(
+    objekt_id: int, dokument_id: int, seite: int, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.services.objekt_georef_service import web_georef
+
+    objekt = _objekt_or_404(db, objekt_id, user)
+    try:
+        return web_georef(db, objekt, {"dokument_id": dokument_id, "seite": seite}, user.id, "lesen")
+    except objekt_karte_service.ObjektKartenFehler as exc:
+        raise HTTPException(status_code=422 if exc.status_code == 400 else exc.status_code, detail=str(exc)) from None
+
+
+def _georef_mutation(db, objekt, user, daten, aktion):
+    from app.services.objekt_georef_service import web_georef
+
+    try:
+        antwort = web_georef(db, objekt, daten, user.id, aktion)
+        db.commit()
+        return antwort
+    except objekt_karte_service.ObjektKartenFehler as exc:
+        db.rollback()
+        raise HTTPException(status_code=422 if exc.status_code == 400 else exc.status_code, detail=str(exc)) from None
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/{objekt_id}/karte/georef")
+def karten_georef_setzen(
+    objekt_id: int, daten: Any = Body(...), db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    return _georef_mutation(db, objekt, user, daten, "setzen")
+
+
+@router.post("/{objekt_id}/karte/georef/verwerfen")
+def karten_georef_verwerfen(
+    objekt_id: int, daten: Any = Body(...), db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    return _georef_mutation(db, objekt, user, daten, "verwerfen")
+
+
+@router.get("/{objekt_id}/karte/gebaeude.json")
+def karten_gebaeude_json(
+    objekt_id: int, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.services.objekt_gebaeude_service import gebaeude_umrisse
+
+    objekt = _objekt_or_404(db, objekt_id, user)
+    if objekt.lat is None or objekt.lng is None:
+        raise HTTPException(status_code=422, detail="Objekt hat keine Kartenposition fuer die Gebaeudeabfrage")
+    try:
+        return run_async(gebaeude_umrisse, objekt.lat, objekt.lng)
+    except objekt_karte_service.ObjektKartenFehler as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 @router.get("/{objekt_id}/karte/vorschlaege.json")

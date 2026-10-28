@@ -1,4 +1,12 @@
 <style>
+  .oks-georef { width:min(1300px,96vw);max-height:94vh;overflow:auto;padding:16px;background:var(--surface-mid);color:var(--text);border:1px solid var(--border); }
+  .oks-georef__layout { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+  .oks-georef__karte { height:52vh;min-height:280px;min-width:0; }
+  .oks-georef__gut { color:var(--green); }
+  .oks-georef__fehler { color:var(--red-light); }
+  .oks-georef__nummer { background:var(--surface-high);color:var(--text);border:2px solid var(--red-light);border-radius:50%;text-align:center;font-weight:bold; }
+  @media(max-width:760px) { .oks-georef__layout { grid-template-columns:1fr; } .oks-georef__karte { height:36vh; } }
+
   .oks-review { margin-bottom:12px; }
   .oks-review__inhalt { display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px; }
   .oks-review__layout { grid-template-columns:minmax(280px,380px) minmax(0,1fr); }
