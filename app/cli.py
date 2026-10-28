@@ -20,7 +20,7 @@ from pathlib import Path
 
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.tenant import set_tenant_context
-from app.db import SessionLocal
+from app.db import SessionLocal  # Nutzt die zentrale Engine samt Snapshot-Connect-Listener.
 from app.models.user import ApiKey, Role, SmsGatewayToken, User, UserRole
 
 

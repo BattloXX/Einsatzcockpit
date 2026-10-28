@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import traceback
 from pathlib import Path
@@ -21,6 +22,35 @@ engine = create_engine(
 )
 
 _slow_query_logger = logging.getLogger("einsatzleiter.slow_query")
+_db_logger = logging.getLogger("einsatzleiter.db")
+
+
+def supports_mariadb_snapshot_isolation(server_version: str) -> bool:
+    """Erkennt MariaDB ab 11.6.2, auch mit altem 5.5.5-Kompatibilitaetspraefix."""
+    version = re.search(r"(\d+)\.(\d+)\.(\d+)-MariaDB", server_version, re.IGNORECASE)
+    return version is not None and tuple(map(int, version.groups())) >= (11, 6, 2)
+
+
+def apply_snapshot_isolation_off(dbapi_connection, enabled: bool) -> None:
+    """Stellt fuer Locking-Reads das MariaDB-Verhalten vor 11.6.2 wieder her.
+
+    Auch fuer Connect-Listener anderer Engines verwendbar. Der Schalter laesst
+    bei false die Servervorgabe unveraendert; Fehler verhindern keinen Connect.
+    """
+    if not enabled:
+        return
+    try:
+        get_server_info = getattr(dbapi_connection, "get_server_info", None)
+        if get_server_info is None or not supports_mariadb_snapshot_isolation(get_server_info()):
+            return
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute("SET SESSION innodb_snapshot_isolation=OFF")
+    except Exception as exc:
+        if exc.args and exc.args[0] == 1193:
+            _db_logger.warning("innodb_snapshot_isolation unbekannt (1193); Servervorgabe bleibt aktiv.")
+        else:
+            # Keine Treibertexte protokollieren: diese koennen Zugangsdaten enthalten.
+            _db_logger.warning("Snapshot-Isolation konnte nicht deaktiviert werden (%s).", type(exc).__name__)
 
 
 def register_slow_query_logging(target_engine, threshold_ms: int) -> None:
@@ -65,11 +95,11 @@ register_slow_query_logging(engine, settings.SLOW_QUERY_LOG_MS)
 @event.listens_for(engine, "connect")
 def _set_db_timezone_utc(dbapi_connection, connection_record):
     try:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("SET time_zone = '+00:00'")
-        cursor.close()
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute("SET time_zone = '+00:00'")
     except Exception:
-        pass  # SQLite und andere Backends ignorieren diesen Befehl
+        _db_logger.debug("Session-Zeitzone nicht gesetzt; Backend unterstuetzt SET time_zone nicht.")
+    apply_snapshot_isolation_off(dbapi_connection, settings.DB_SNAPSHOT_ISOLATION_OFF)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
