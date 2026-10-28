@@ -4,13 +4,15 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
-from app.models.master import OrgSettings
+from app.models.master import FireDept, OrgSettings
 from app.models.sms import SmsLog, SmsLogRecipient
+from app.models.teams_bot import TeamsAlarmConfig
 from app.models.user import AuditLog
 from app.services.alarm_outbox import (
     _finish_if_done,
@@ -281,7 +283,7 @@ async def test_teams_retry_then_success(setup_db, monkeypatch):
     db, incident = _db_incident()
     calls = []
     _channels(monkeypatch, calls)
-    results = [TeamsDispatchResult(False, "Timeout", retryable=True), TeamsDispatchResult(True)]
+    results = [TeamsDispatchResult(False, "Connect-Fehler", retryable=True), TeamsDispatchResult(True)]
 
     async def teams(*args, **kwargs):
         return results.pop(0)
@@ -517,3 +519,162 @@ def test_finish_if_done_accepts_legacy_three_terminal_jobs(setup_db):
         ).count() == 1
     finally:
         db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("echter_http_pfad", [False, True])
+async def test_teams_unklare_zustellung_wird_nicht_wiederholt(setup_db, monkeypatch, caplog, echter_http_pfad):
+    from app.services import alarm_outbox, teams_alarm_service
+
+    db, einsatz = _db_incident()
+    versand = teams_alarm_service.post_incident_card
+    _channels(monkeypatch, [])
+    aufrufe = []
+    webhook = "https://example.test/geheimer-webhook"
+    grund = "Lesefehler"
+    konfiguration = None
+    if echter_http_pfad:
+        konfiguration = TeamsAlarmConfig(org_id=1, enabled=True, webhook_url_alarm=webhook)
+        db.add(konfiguration)
+        db.commit()
+
+        class HttpClient:
+            async def post(self, url, json=None):
+                aufrufe.append(url)
+                raise httpx.ReadTimeout(f"Lesefehler {url}")
+
+        grund = "Lesefehler [Webhook]"
+        monkeypatch.setattr(teams_alarm_service, "_teams_http_client", lambda: HttpClient())
+        monkeypatch.setattr(teams_alarm_service, "post_incident_card", versand)
+    else:
+        async def unklarer_versand(*args, **kwargs):
+            aufrufe.append(einsatz.id)
+            return TeamsDispatchResult(False, grund, uncertain=True)
+
+        monkeypatch.setattr(teams_alarm_service, "post_incident_card", unklarer_versand)
+    try:
+        _enqueue(db, einsatz)
+        await process_incident_alarm(einsatz.id)
+        db.expire_all()
+        job = db.query(IncidentAlarmJob).filter_by(incident_id=einsatz.id, channel="teams").one()
+        assert job.status == "uncertain"
+        assert job.attempt_count == 1
+        assert job.finished_at is not None and job.lease_until is None
+        assert len(aufrufe) == 1
+        protokoll = db.query(IncidentLog).filter_by(incident_id=einsatz.id, level="warning").one()
+        assert protokoll.text == (
+            "Alarmierung Teams: Zustellung unklar, nicht automatisch wiederholt: " + grund
+        )
+        assert db.query(AuditLog).filter_by(action="incident.alarm_finished", incident_id=einsatz.id).count() == 1
+        assert db.query(IncidentLog).filter_by(incident_id=einsatz.id, text="Alarmierung abgeschlossen").count() == 1
+        if echter_http_pfad:
+            assert f"Teams-Zustellung unklar, nicht automatisch wiederholt (Einsatz {einsatz.id}," in caplog.text
+            assert webhook not in caplog.text
+
+        # Die Zeit liegt auch hinter allen regulaeren Teams-Retry-Fristen.
+        spaeter = job.next_attempt_at + timedelta(hours=1)
+        monkeypatch.setattr(alarm_outbox, "_now", lambda: spaeter)
+        for _ in range(3):
+            await process_incident_alarm(einsatz.id)
+            await asyncio.gather(*await run_alarm_outbox_once())
+        db.expire_all()
+        assert job.status == "uncertain" and job.attempt_count == 1
+        assert len(aufrufe) == 1
+    finally:
+        db.rollback()
+        if konfiguration is not None:
+            db.delete(konfiguration)
+            db.commit()
+        _aufraeumen(db, einsatz)
+
+
+def test_teams_protokollfehler_nach_versand_bleibt_gesendet(setup_db, monkeypatch, caplog):
+    from app.services import teams_alarm_service
+    from app.services.major_incident_service import create_lage, create_site
+
+    db, einsatz = _db_incident()
+    aufrufe = []
+
+    async def webhook_versand(*args, **kwargs):
+        aufrufe.append(einsatz.id)
+        return True, False, None, False
+
+    def protokollfehler(*args, **kwargs):
+        raise RuntimeError("Kartenprotokoll fehlgeschlagen")
+
+    monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", webhook_versand)
+    monkeypatch.setattr(teams_alarm_service, "_record_card_post", protokollfehler)
+    try:
+        db.add(TeamsAlarmConfig(
+            org_id=1, enabled=True, suppress_card_in_major_incident=True,
+            webhook_url_alarm="https://example.test/webhook",
+        ))
+        lage = create_lage(db, 1, "Protokollfehler-Test")
+        create_site(db, lage, "Stelle", org_id=1, incident_id=einsatz.id)
+        db.flush()
+        ergebnis = asyncio.run(teams_alarm_service.post_incident_card(db, einsatz, base_url="https://example.test"))
+        assert ergebnis == TeamsDispatchResult(True)
+        assert aufrufe == [einsatz.id]
+        assert f"Kartenprotokoll fehlgeschlagen (Einsatz {einsatz.id})" in caplog.text
+    finally:
+        db.rollback()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_teams_gleiche_leitstellennummer_je_organisation(setup_db, monkeypatch):
+    from app.services import teams_alarm_service
+
+    db, einsatz = _db_incident()
+    versand = teams_alarm_service.post_incident_card
+    _channels(monkeypatch, [])
+    monkeypatch.setattr(teams_alarm_service, "post_incident_card", versand)
+    aufrufe = []
+
+    class HttpClient:
+        async def post(self, url, json=None):
+            aufrufe.append(url)
+            return httpx.Response(200)
+
+    monkeypatch.setattr(teams_alarm_service, "_teams_http_client", lambda: HttpClient())
+    zweite_org = FireDept(slug="teams-zweite-org", name="Zweite Organisation")
+    db.add(zweite_org)
+    db.flush()
+    zweiter_einsatz = Incident(
+        primary_org_id=zweite_org.id, alarm_type_code="B2", status="active",
+        lis_operation_number="TEAMS-ORG-TEST",
+    )
+    einsatz.lis_operation_number = zweiter_einsatz.lis_operation_number
+    db.add(zweiter_einsatz)
+    konfigurationen = [TeamsAlarmConfig(
+        org_id=org_id, enabled=True, webhook_url_alarm=f"https://example.test/org/{org_id}",
+    ) for org_id in (1, zweite_org.id)]
+    db.add_all(konfigurationen)
+    db.commit()
+    try:
+        for vorfall in (einsatz, zweiter_einsatz):
+            for _ in range(2):
+                enqueue_incident_alarm(
+                    db, vorfall, org_id=vorfall.primary_org_id, source="test", base_url="https://example.test",
+                )
+            db.commit()
+            await process_incident_alarm(vorfall.id)
+            await process_incident_alarm(vorfall.id)
+        db.expire_all()
+        einsaetze = db.query(Incident).filter_by(lis_operation_number="TEAMS-ORG-TEST").all()
+        assert {vorfall.primary_org_id for vorfall in einsaetze} == {1, zweite_org.id}
+        jobs = db.query(IncidentAlarmJob).filter(
+            IncidentAlarmJob.incident_id.in_([einsatz.id, zweiter_einsatz.id]),
+            IncidentAlarmJob.channel == "teams",
+        ).all()
+        assert len(jobs) == 2
+        assert {job.org_id for job in jobs} == {1, zweite_org.id}
+        assert all(job.status == "sent" and job.attempt_count == 1 for job in jobs)
+        assert sorted(aufrufe) == sorted(konfiguration.webhook_url_alarm for konfiguration in konfigurationen)
+    finally:
+        db.rollback()
+        for konfiguration in konfigurationen:
+            db.delete(konfiguration)
+        db.query(IncidentAlarmJob).filter_by(incident_id=zweiter_einsatz.id).delete()
+        db.commit()
+        _aufraeumen(db, einsatz)

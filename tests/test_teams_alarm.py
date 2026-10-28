@@ -314,7 +314,7 @@ def test_post_incident_card_skips_exercise_when_not_configured(monkeypatch):
 
     async def fake_webhook(*a, **kw):
         calls.append(1)
-        return True, False, None
+        return True, False, None, False
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -338,7 +338,7 @@ def test_post_incident_card_uses_webhook_when_no_bot_binding(monkeypatch):
 
     async def fake_webhook(webhook_url, incident, cfg, *, base_url, org):
         calls.append(webhook_url)
-        return True, False, None
+        return True, False, None, False
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -366,7 +366,7 @@ def test_post_incident_card_bot_binding_falls_back_to_webhook(monkeypatch):
 
     async def fake_webhook(*a, **kw):
         webhook_calls.append(1)
-        return True, False, None
+        return True, False, None, False
 
     monkeypatch.setattr("app.services.teams_bot_service.post_incident_card_via_bot", fake_bot)
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
@@ -399,7 +399,7 @@ def test_post_incident_card_skips_alarm_type_with_teams_alarm_disabled(monkeypat
 
     async def fake_webhook(*a, **kw):
         calls.append(1)
-        return True, False, None
+        return True, False, None, False
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -434,7 +434,7 @@ def test_post_incident_card_refreshes_stale_coords_before_building_card(monkeypa
     async def fake_webhook(webhook_url, incident, cfg, *, base_url, org):
         captured["lat"] = incident.lat
         captured["lng"] = incident.lng
-        return True, False, None
+        return True, False, None, False
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -512,7 +512,7 @@ def test_post_via_webhook_posts_message_card(monkeypatch):
         "https://outlook.office.com/webhook/x", incident, cfg,
         base_url="https://example.com", org=None,
     ))
-    assert result == (True, False, None)
+    assert result == (True, False, None, False)
     assert captured["url"] == "https://outlook.office.com/webhook/x"
     assert captured["json"]["type"] == "message"
     assert captured["json"]["attachments"][0]["contentType"] == "application/vnd.microsoft.card.adaptive"
@@ -528,15 +528,27 @@ def test_post_via_webhook_rejects_non_https_url(monkeypatch):
         "http://insecure.example/webhook", incident, cfg,
         base_url="https://example.com", org=None,
     ))
-    assert result == (False, False, "ungueltige Webhook-URL")
+    assert result == (False, False, "ungueltige Webhook-URL", False)
 
 
 @pytest.mark.parametrize(
     ("response", "expected"),
     [
-        (httpx.Response(503, request=httpx.Request("POST", "https://example.test")), (False, True, "HTTP 503")),
-        (httpx.Response(400, request=httpx.Request("POST", "https://example.test")), (False, False, "HTTP 400")),
-        (httpx.ConnectTimeout("timeout"), (False, True, "timeout")),
+        (httpx.Response(200), (True, False, None, False)),
+        (httpx.Response(429), (False, True, "HTTP 429", False)),
+        (httpx.Response(503), (False, False, "HTTP 503", True)),
+        (httpx.Response(400), (False, False, "HTTP 400", False)),
+        (httpx.ConnectTimeout("timeout"), (False, True, "timeout", False)),
+        (httpx.ConnectError("Connect-Fehler"), (False, True, "Connect-Fehler", False)),
+        (httpx.PoolTimeout("Pool belegt"), (False, True, "Pool belegt", False)),
+        (httpx.ReadTimeout("Lesefehler"), (False, False, "Lesefehler", True)),
+        (httpx.WriteTimeout("Schreibfehler"), (False, False, "Schreibfehler", True)),
+        (httpx.RemoteProtocolError("Protokollfehler"), (False, False, "Protokollfehler", True)),
+        (httpx.ReadError("Lesefehler"), (False, False, "Lesefehler", True)),
+        (httpx.WriteError("Schreibfehler"), (False, False, "Schreibfehler", True)),
+        (httpx.TransportError("Transportfehler"), (False, False, "Transportfehler", True)),
+        (httpx.TimeoutException("Zeit abgelaufen"), (False, False, "Zeit abgelaufen", True)),
+        (httpx.InvalidURL("Ungueltig"), (False, False, "Ungueltig", False)),
     ],
 )
 def test_post_payload_classifies_retryability(monkeypatch, response, expected):

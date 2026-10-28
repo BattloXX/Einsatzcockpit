@@ -252,6 +252,8 @@ async def _send_teams(db: Session, incident: Incident, job: IncidentAlarmJob) ->
         db, incident, base_url=base_url,
         **({"text_prefix": nachalarm_praefix(job)} if job.variant else {}),
     )
+    if result is not None and result.uncertain:
+        return "uncertain", result.reason or "Zustellung unklar"
     if result is None or result.sent:
         return "sent", None
     if result.retryable:
@@ -344,6 +346,8 @@ async def _run_claimed(job_id: int, generation: int) -> None:
                 incident_id=incident.id, author_name="System",
                 level="info" if job.status == "sent" else "warning",
                 text="Alarmierung Teams: gesendet" if job.status == "sent"
+                else f"Alarmierung Teams: Zustellung unklar, nicht automatisch wiederholt: {job.last_error}"
+                if job.status == "uncertain"
                 else f"Alarmierung Teams uebersprungen: {job.last_error}",
             ))
         if job.channel == "mail" and job.status in TERMINAL:
