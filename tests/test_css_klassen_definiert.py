@@ -18,6 +18,14 @@ STYLESHEET_RE = re.compile(
 CLASS_ATTR_RE = re.compile(
     r"\bclass\s*=\s*(['\"])(.*?)\1", re.IGNORECASE | re.DOTALL
 )
+# Per htmx nachgeladene Fragmente: Host-Seite -> Partials, die zur Laufzeit in sie
+# getauscht werden und deren Seitenstyles erben. Nicht per ``include`` eingebunden.
+HTMX_FRAGMENTE = {
+    "gateway/alarmempfang.html": [
+        "gateway/_alarmempfang_detail.html",
+        "gateway/_alarmempfang_parser.html",
+    ],
+}
 MODIFIER_RE = re.compile(r"^[a-z][a-z0-9-]*--[a-z0-9-]+$")
 CSS_CLASS_RE = re.compile(r"\.([a-z][a-z0-9-]*--[a-z0-9-]+)")
 CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
@@ -71,6 +79,8 @@ def test_bem_modifier_sind_in_erreichbarem_css_definiert() -> None:
         name: {ref for ref in EXTENDS_RE.findall(text) + INCLUDE_RE.findall(text) if ref in templates}
         for name, text in templates.items()
     }
+    for host, fragmente in HTMX_FRAGMENTE.items():
+        kanten[host] |= {name for name in fragmente if name in templates}
     referenziert = {ref for refs in kanten.values() for ref in refs}
 
     def abhaengigkeiten(name: str, gesehen: set[str] | None = None) -> set[str]:
