@@ -47,7 +47,11 @@ async def test_redis_tcp_restart_resubscribes_and_db_queue_still_delivers(monkey
         thread.start()
         await until(lambda: ws_bus.status()["connected"])
         last = routing._enqueue(connection, {"type": "after"}, 20, None)
-        assert await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, last))
+        # Publisher und Subscriber erholen sich unabhaengig; ein noch nicht
+        # erkannter Publisher-Abbruch darf den Subscriber nicht mehr abbauen.
+        async with asyncio.timeout(8):
+            while not await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, last)):
+                await asyncio.sleep(0.02)
         await until(lambda: len(socket.sent) == 3)
         await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, last))
         await asyncio.sleep(0.1)
