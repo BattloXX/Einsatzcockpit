@@ -181,6 +181,8 @@ def _get_or_create_incident_for_event(db: Session, org, org_id: int, event: dict
         lis_operation_number=event_number,
     )
     if match:
+        from app.services.alarm_outbox import _protokolliere_doppelten_eingang
+        _protokolliere_doppelten_eingang(db, match, "dibos")
         if match.lis_operation_number != event_number:
             match.lis_operation_number = event_number
             db.flush()
@@ -220,6 +222,8 @@ def _get_or_create_incident_for_event(db: Session, org, org_id: int, event: dict
             .first()
         )
         if winner:
+            from app.services.alarm_outbox import _protokolliere_doppelten_eingang
+            _protokolliere_doppelten_eingang(db, winner, "dibos")
             logger.info(
                 "Race beim Anlegen von Einsatz für DIBOS-Event %s (Org %s) — "
                 "bereits von einem parallelen Poll angelegt, übernehme diesen (%s)",
@@ -839,6 +843,9 @@ def enrich_events_for_org(
                     Incident.primary_org_id == org_id,
                     Incident.lis_operation_number == event_number,
                 ).first()
+            if incident:
+                from app.services.alarm_outbox import _protokolliere_doppelten_eingang
+                _protokolliere_doppelten_eingang(db, incident, "dibos")
             just_created = False
             if not incident and create_incidents:
                 result = _get_or_create_incident_for_event(db, org, org_id, event)
