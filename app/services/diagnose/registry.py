@@ -171,8 +171,14 @@ def _process_check(sender, url: str, check: Check, seconds: float, runtime: dict
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
 
-    # Keine Snapshot-Anpassung: execute_check verbietet Locking-Reads und Mutationen.
+    from app.config import settings
+    from app.db import apply_snapshot_isolation_off
+
     engine = create_engine(url, poolclass=NullPool, hide_parameters=True)
+    # Dieselbe Connect-Regel wie fuer App-Sessions, bevor die SELECT-Sperre
+    # greift. Sonst meldet der Snapshot-Check eine kuenstliche Abweichung.
+    event.listen(engine, "connect", lambda connection, record:
+                 apply_snapshot_isolation_off(connection, settings.DB_SNAPSHOT_ISOLATION_OFF))
     try:
         try:
             sender.send(execute_check(engine, check, seconds, runtime))
@@ -190,13 +196,16 @@ def execute_isolated(bind, check: Check, seconds: float = CHECK_TIMEOUT) -> Chec
     erst Prozessende bestaetigen, dann den naechsten Check zulassen.
     """
     import multiprocessing
+    import os
 
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
     engine = bind.engine
     from app.services import ws_bus
+    from app.services.db_transactions import retry_statistik
 
-    runtime = {"redis": ws_bus.status(), "pool": pool_metrics(engine.pool)}
+    runtime = {"redis": ws_bus.status(), "pool": pool_metrics(engine.pool),
+               "db_retries": retry_statistik(), "worker_pid": os.getpid()}
     process = context.Process(target=_process_check,
         args=(sender, engine.url.render_as_string(hide_password=False), check, seconds, runtime), daemon=True)
     started = False

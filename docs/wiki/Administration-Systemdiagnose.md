@@ -214,3 +214,11 @@ Finding-Key, letzten Claim-Zeitpunkt und Meldezähler. Sie werden wie die übrig
 Diagnosetabellen vom Org-Export ausgeschlossen. Backup und Migrationen müssen
 vor der Aktivierung erledigt sein. Diagnoseaufbewahrung und genaue Checkbudgets
 stehen auf der [MCP-Detailseite](Administration-System-Admin-MCP).
+
+
+## Datenbank-Konflikte und Snapshot-Isolation
+
+Der Check `db.snapshot_isolation` prüft die zentrale MariaDB-Session-Regel und
+zeigt die prozesslokalen Konfliktzähler des ausführenden Workers für 1020,
+1205 und 1213. Schalter, Warnschwelle und Notfall-Rücknahme stehen unter
+[Datenbank: Snapshot-Isolation](Administration-Datenbank-Snapshot-Isolation).
