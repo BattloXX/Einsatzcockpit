@@ -126,6 +126,7 @@ def karten_objekt_update(db: Session, objekt: Objekt, eintrag_id: int, daten: di
         eintrag.geometry_json = _json.dumps(geometry, ensure_ascii=False) if geometry else None
     if "label" in daten:
         eintrag.label = str(daten["label"] or "").strip() or None
+    eintrag.revision += 1
     write_objekt_change(
         db, objekt.id, objekt.org_id, "karte", "symbol_geaendert",
         before=vorher, after=_karten_objekt_dict(eintrag), user_id=user_id,
