@@ -14,12 +14,15 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.queries import visible_incidents_q
+from app.models.incident import Incident
 from app.models.major_incident import (
     IncidentSite,
     MajorIncident,
     MajorIncidentStatus,
     SitePhase,
 )
+from app.models.user import User
 
 PHASE_LABELS = {
     SitePhase.eingegangen: "Eingegangen",
@@ -31,6 +34,31 @@ PHASE_LABELS = {
     SitePhase.erledigt: "Abgeschlossen",
     SitePhase.abgebrochen: "Abgebrochen",
 }
+
+
+def uebernehmbare_einsaetze(db: Session, lage: MajorIncident, user: User) -> list[Incident]:
+    """Sichtbare aktive Einsätze derselben Org und Übungsart ohne aktive GSL-Zuordnung."""
+    adopted_ids = (
+        db.query(IncidentSite.incident_id)
+        .join(MajorIncident, IncidentSite.major_incident_id == MajorIncident.id)
+        .filter(
+            IncidentSite.org_id == lage.org_id,
+            MajorIncident.org_id == lage.org_id,
+            MajorIncident.status == MajorIncidentStatus.active,
+            IncidentSite.incident_id.isnot(None),
+        )
+    )
+    return (
+        visible_incidents_q(db, user)
+        .filter(
+            Incident.primary_org_id == lage.org_id,
+            Incident.status == "active",
+            Incident.is_exercise == lage.is_exercise,
+            ~Incident.id.in_(adopted_ids),
+        )
+        .order_by(Incident.started_at.desc(), Incident.id.desc())
+        .all()
+    )
 
 
 def setze_site_phase(

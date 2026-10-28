@@ -1,0 +1,36 @@
+<div class="modal__header">
+  <h3 class="modal__title" id="einsaetzeUebernehmenTitel">Einsätze übernehmen</h3>
+  <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+</div>
+<form hx-post="/lage/{{ lage.id }}/einsaetze-uebernehmen" hx-swap="none"
+      x-data='{ selected: [], ids: {{ einsaetze|map(attribute="id")|map("string")|list|tojson }} }'
+      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); }">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="modal__body" style="max-height:65vh;overflow-y:auto;">
+    {% if einsaetze %}
+    <label style="display:flex;gap:10px;align-items:center;padding:10px 0;">
+      <input type="checkbox" :checked="selected.length === ids.length"
+             @change="selected = $event.target.checked ? ids.slice() : []">
+      Alle auswählen
+    </label>
+    {% for incident in einsaetze %}
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--border);">
+      <input type="checkbox" name="incident_ids" value="{{ incident.id }}" x-model="selected">
+      <span>
+        <strong>{{ incident.lis_operation_number or incident.nummer or 'Ohne Einsatznummer' }}</strong>
+        · {{ incident.alarm_type_code }}<br>
+        {{ incident.address_street or '' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}<br>
+        {{ (incident.report_text or incident.reason or '')|truncate(160) }}<br>
+        <small>{{ incident.started_at|local_datetime }}</small>
+      </span>
+    </label>
+    {% endfor %}
+    {% else %}
+    <p>Keine übernehmbaren Einsätze vorhanden.</p>
+    {% endif %}
+  </div>
+  <div class="modal__footer">
+    <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
+    <button type="submit" class="btn btn--primary" disabled :disabled="selected.length === 0">Ausgewählte übernehmen</button>
+  </div>
+</form>

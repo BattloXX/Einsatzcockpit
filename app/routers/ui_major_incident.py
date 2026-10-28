@@ -107,11 +107,13 @@ from app.services.einheit_service import (
 )
 from app.services.major_incident_service import (
     PHASE_LABELS,
+    adopt_incident_as_site,
     close_lage,
     create_lage,
     create_site,
     get_active_lage,
     lage_einrichten,
+    uebernehmbare_einsaetze,
 )
 from app.services.site_log_service import dringende_meldungen_fuer_stellen
 
@@ -385,6 +387,8 @@ def lage_board(
         "prio_label": SITE_PRIORITY_LABEL,
         "site_phases": [p.value for p in SitePhase],
         "can_edit": _can_edit(user),
+        "uebernehmbare_einsaetze_count": len(uebernehmbare_einsaetze(db, lage, user))
+        if _can_edit(user) and lage.status == MajorIncidentStatus.active else 0,
         "can_manage": _can_manage(user),
         "open_count": open_count,
         "done_count": done_count,
@@ -406,6 +410,87 @@ def lage_board(
         "org_lat": _org_lat,
         "org_lng": _org_lng,
     })
+
+
+@router.get("/lage/{lage_id}/einsaetze-uebernehmen/knopf", response_class=HTMLResponse)
+def einsaetze_uebernehmen_knopf(
+    request: Request, lage_id: int, mobil: bool = False, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    can_edit = _can_edit(user)
+    kandidaten = (
+        uebernehmbare_einsaetze(db, lage, user)
+        if can_edit and lage.status == MajorIncidentStatus.active else []
+    )
+    return templates.TemplateResponse(request, "incident_major/_einsaetze_uebernehmen_knopf.html", {
+        "lage": lage, "can_edit": can_edit, "uebernehmbare_einsaetze_count": len(kandidaten), "mobil": mobil,
+    })
+
+
+@router.get("/lage/{lage_id}/einsaetze-uebernehmen", response_class=HTMLResponse)
+def einsaetze_uebernehmen_dialog(
+    request: Request, lage_id: int, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    if not _can_edit(user):
+        raise HTTPException(status_code=403, detail="Nur lesender Zugriff")
+    if lage.status != MajorIncidentStatus.active:
+        raise HTTPException(status_code=400, detail="Lage nicht aktiv")
+    return templates.TemplateResponse(request, "incident_major/_einsaetze_uebernehmen_dialog.html", {
+        "lage": lage, "user": user, "einsaetze": uebernehmbare_einsaetze(db, lage, user),
+    })
+
+
+@router.post("/lage/{lage_id}/einsaetze-uebernehmen")
+def einsaetze_uebernehmen(
+    request: Request, lage_id: int, incident_ids: list[str] = Form(default=[]),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    if not _can_edit(user):
+        raise HTTPException(status_code=403, detail="Nur lesender Zugriff")
+    if lage.status != MajorIncidentStatus.active:
+        raise HTTPException(status_code=400, detail="Lage nicht aktiv")
+    auswahl = set(incident_ids)
+    neue_stellen = []
+    for incident in uebernehmbare_einsaetze(db, lage, user):
+        if str(incident.id) not in auswahl:
+            continue
+        site = adopt_incident_as_site(
+            db, lage, incident_id=incident.id,
+            external_key=incident.external_key or f"ui_{incident.id}",
+            alarm_type_code=incident.alarm_type_code, org_id=lage.org_id,
+            ort=incident.address_city, strasse=incident.address_street, hausnr=incident.address_no,
+            lat=incident.lat, lng=incident.lng,
+            einsatzgrund=(incident.report_text or incident.reason or "")[:160] or None,
+        )
+        if site is None:
+            continue
+        site.created_by = user.id
+        db.add(SiteLogEntry(
+            incident_site_id=site.id, kind="status", text="Aus Einsatz übernommen",
+            user_id=user.id, author_name=get_author_name(request),
+        ))
+        write_audit(
+            db, "major_incident.site.adopted", org_id=lage.org_id, user_id=user.id,
+            incident_id=incident.id, payload={"lage_id": lage.id, "site_id": site.id},
+        )
+        neue_stellen.append(site)
+    db.commit()
+    for site in neue_stellen:
+        run_async(gsl_broadcast.stelle_angelegt, db, lage, site.id)
+    if _is_htmx(request):
+        return Response(status_code=204, headers={"HX-Trigger": "einsaetzeUebernommen"})
+    return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 
 # ── Einsatzstelle anlegen ────────────────────────────────────────────────────

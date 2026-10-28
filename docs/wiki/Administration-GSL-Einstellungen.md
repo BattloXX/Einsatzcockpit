@@ -79,4 +79,6 @@ Die Schalter aktivieren das jeweilige GSL-Modul für die Organisation, sofern es
 |---|---|---|
 | Einsätze automatisch als Einsatzstellen in aktiver GSL übernehmen (mi_auto_adopt) | Übernimmt Einsätze als Einsatzstellen in die aktive GSL. | Schalter; Standard aktiviert. |
 
+Bereits angelegte normale Einsätze können auf dem aktiven GSL-Board über "Einsätze übernehmen" nachträglich ausgewählt werden. Der Knopf erscheint bei Bearbeitungsrechten und verfügbaren Einsätzen. Angeboten werden aktive Einsätze der eigenen Organisation mit demselben Übungsstatus, die noch keiner aktiven Lage zugeordnet sind. Die Auswahl wird beim Öffnen aktualisiert; die Einsätze bleiben normale Einsätze und werden mit den neuen Einsatzstellen verknüpft. Diese manuelle Übernahme ist unabhängig von `mi_auto_adopt`.
+
 Die Seite bietet für beide SMS-Vorlagen jeweils **Standard wiederherstellen** und Vorschau; bei aktivem SMS-Bestätigungscode ohne SMS-Anbieter zeigt sie nach dem Speichern eine Warnung.
