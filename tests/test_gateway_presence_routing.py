@@ -76,7 +76,7 @@ def test_purge_old_messages_keeps_boundary_and_fresh_rows(retention_messages):
     assert routing.purge_old_messages() == 0
 
 
-@pytest.mark.parametrize("kind,ttl", [("sms", 60), ("linux", 90), ("windows_agent", 90)])
+@pytest.mark.parametrize("kind,ttl", [("sms", 90), ("linux", 90), ("windows_agent", 90)])
 def test_presence_kind_ttl_for_begin_and_touch(kind, ttl):
     connection, socket = bind(kind)
     try:
@@ -259,7 +259,12 @@ print(json.dumps(asyncio.run(run())),flush=True)
 
 
 @pytest.mark.parametrize("kind", ["sms", "linux", "windows_agent"])
-def test_real_ws_reconnect_old_disconnect_and_revocation(client, kind):
+def test_real_ws_reconnect_old_disconnect_and_revocation(client, kind, monkeypatch):
+    if kind == "sms":
+        from app.routers import ws
+
+        # Widerruf wird innerhalb der Touch-Drosselung im Idle-Zweig erkannt.
+        monkeypatch.setattr(ws, "SMS_GATEWAY_IDLE_PING_S", 0.05)
     data = _anlegen(998902, kind="linux" if kind == "sms" else kind, routen=False)
     model = Gateway
     gid = data["gateway_id"]
@@ -294,8 +299,10 @@ def test_real_ws_reconnect_old_disconnect_and_revocation(client, kind):
                     row.device_token_hash = None
                 db.commit()
             with pytest.raises(WebSocketDisconnect):
-                new.send_json({"type": "ping"})
-                new.receive_json()
+                if kind != "sms":
+                    new.send_json({"type": "ping"})
+                while True:
+                    new.receive_json()
     assert not routing.targets(kind, data["org_id"], gid)
 
 

@@ -21,6 +21,7 @@ from app.db import SessionLocal
 from app.models.gateway import GatewayMessage
 from app.services import gateway_presence as presence
 from app.services import ws_bus
+from app.services.db_transactions import mit_neuer_session_wiederholen
 from app.services.loop_utils import start_loop_task, stop_loop_task
 
 logger = logging.getLogger("einsatzleiter.gateway_routing")
@@ -65,11 +66,14 @@ def targets(kind: str, org_id: int, gateway_id: int | None = None) -> list[prese
 
 
 def begin(kind: str, org_id: int, gateway_id: int, token_hash: str) -> presence.Connection | None:
-    with _db() as db:
-        cid = uuid4().hex
+    cid = uuid4().hex
+
+    def versuch(db):
         if not presence.begin(db, kind, org_id, gateway_id, token_hash, cid):
             return None
         return next((c for c in presence.connections(db, kind, org_id, gateway_id) if c.connection_id == cid), None)
+
+    return mit_neuer_session_wiederholen(versuch, sitzungsfabrik=_db)
 
 
 def state(connection: presence.Connection, token_hash: str) -> str:
@@ -80,15 +84,19 @@ def state(connection: presence.Connection, token_hash: str) -> str:
 
 
 def touch(connection: presence.Connection, token_hash: str) -> bool:
-    with _db() as db:
+    def versuch(db):
         return presence.touch(
             db, connection.kind, connection.org_id, connection.gateway_id, token_hash, connection.connection_id
         )
 
+    return mit_neuer_session_wiederholen(versuch, sitzungsfabrik=_db)
+
 
 def end(connection: presence.Connection) -> bool:
-    with _db() as db:
+    def versuch(db):
         return presence.end(db, connection.kind, connection.org_id, connection.gateway_id, connection.connection_id)
+
+    return mit_neuer_session_wiederholen(versuch, sitzungsfabrik=_db)
 
 
 def enqueue_in(db, connection: presence.Connection, message: dict, ttl: float, job_key: str | None) -> str:

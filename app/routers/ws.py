@@ -18,6 +18,7 @@ from uuid import uuid4
 
 import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy.exc import OperationalError
 
 from app.core.permissions import can_access_incident, has_role
 from app.core.security import hash_api_key, pruefe_geraete_session, session_security, unsign_session, valid_mfa
@@ -365,32 +366,6 @@ def _resolve_sms_gateway_token(websocket: WebSocket) -> SmsGatewayToken | None:
         db.close()
 
 
-def _touch_sms_gateway_token(token_id: int) -> None:
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        tok = db.get(SmsGatewayToken, token_id)
-        if tok:
-            tok.last_used_at = datetime.now(UTC)
-            db.commit()
-    finally:
-        db.close()
-
-
-def _heartbeat_sms_gateway_token(token_id: int) -> None:
-    """Persistiert hoechstens einmal je Minute einen echten WS-Heartbeat."""
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        tok = db.get(SmsGatewayToken, token_id)
-        now = datetime.now(UTC).replace(tzinfo=None)
-        if tok and (tok.last_heartbeat_at is None or now - tok.last_heartbeat_at >= timedelta(seconds=60)):
-            tok.last_heartbeat_at = now
-            db.commit()
-    finally:
-        db.close()
-
-
 def _sms_receive_enabled(org_id: int) -> bool:
     """Liest OrgSettings.sms_receive_enabled – bestimmt ob die App RECEIVE_SMS anfordern soll."""
     from app.models.master import OrgSettings
@@ -433,9 +408,17 @@ async def sms_gateway_ws(websocket: WebSocket):
 
     org_id = token.org_id
     token_id = token.id
-    await asyncio.to_thread(_touch_sms_gateway_token, token_id)
-
-    connection = await asyncio.to_thread(gateway_routing.begin, "sms", org_id, token_id, token.token_hash)
+    beginn = time.monotonic()
+    try:
+        connection = await asyncio.to_thread(gateway_routing.begin, "sms", org_id, token_id, token.token_hash)
+    except OperationalError as exc:
+        logger.warning(
+            "SMS-Gateway Aufbau fehlgeschlagen (org_id=%s, token_id=%s, connection_id=%s, "
+            "worker_id=%s, code=1013, error_type=%s, duration_s=%.1f)",
+            org_id, token_id, None, gateway_presence.worker_id(), type(exc).__name__, time.monotonic() - beginn,
+        )
+        await websocket.close(code=1013)
+        return
     if connection is None:
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
         return
@@ -446,6 +429,7 @@ async def sms_gateway_ws(websocket: WebSocket):
         raise
     gateway_routing.attach(connection, token.token_hash, websocket)
     connected_at = last_received = time.monotonic()
+    letzter_touch = letzte_touch_warnung = -float("inf")
     # Registry vor dem ersten await aktualisieren: auch parallele Reconnects
     # koennen damit nur einen Slot je Token belegen.
     replaced = [ws for tid, ws in _sms_gateways[org_id] if tid == token_id]
@@ -462,8 +446,10 @@ async def sms_gateway_ws(websocket: WebSocket):
                 await old.close(code=1012, reason="replaced")
             except Exception as exc:
                 logger.warning(
-                    "SMS-Gateway ersetzt, Schliessen fehlgeschlagen (org_id=%s, token_id=%s, %s): %s",
-                    org_id, token_id, type(exc).__name__, exc,
+                    "SMS-Gateway ersetzt, Schliessen fehlgeschlagen (org_id=%s, token_id=%s, "
+                    "connection_id=%s, worker_id=%s, error_type=%s, duration_s=%.1f)",
+                    org_id, token_id, connection.connection_id, connection.worker_id,
+                    type(exc).__name__, time.monotonic() - connected_at,
                 )
         _start_sms_nachversand(org_id)
 
@@ -482,16 +468,31 @@ async def sms_gateway_ws(websocket: WebSocket):
                     await websocket.close(code=4408, reason="idle timeout")
                     logger.info(
                         "SMS-Gateway getrennt (org_id=%s, token_id=%s, code=4408, "
-                        "reason=idle timeout, duration_s=%.1f)",
+                        "reason=idle timeout, duration_s=%.1f, connection_id=%s, worker_id=%s)",
                         org_id, token_id, time.monotonic() - connected_at,
+                        connection.connection_id, connection.worker_id,
                     )
                     break
                 await websocket.send_text(json.dumps({"type": "ping"}))
                 continue
             last_received = time.monotonic()
-            if not await asyncio.to_thread(gateway_routing.touch, connection, token.token_hash):
-                await websocket.close(code=4401)
-                break
+            if last_received - letzter_touch >= 15:
+                letzter_touch = last_received
+                try:
+                    gueltig = await asyncio.to_thread(gateway_routing.touch, connection, token.token_hash)
+                except OperationalError as exc:
+                    if last_received - letzte_touch_warnung >= 60:
+                        letzte_touch_warnung = last_received
+                        logger.warning(
+                            "SMS-Gateway Praesenz-Touch fehlgeschlagen (org_id=%s, token_id=%s, "
+                            "connection_id=%s, worker_id=%s, error_type=%s, duration_s=%.1f)",
+                            org_id, token_id, connection.connection_id, connection.worker_id,
+                            type(exc).__name__, time.monotonic() - connected_at,
+                        )
+                else:
+                    if gueltig is False:
+                        await websocket.close(code=4401)
+                        break
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
@@ -534,13 +535,17 @@ async def sms_gateway_ws(websocket: WebSocket):
 
     except WebSocketDisconnect as exc:
         logger.info(
-            "SMS-Gateway getrennt (org_id=%s, token_id=%s, code=%s, reason=%s, duration_s=%.1f)",
+            "SMS-Gateway getrennt (org_id=%s, token_id=%s, code=%s, reason=%s, duration_s=%.1f, "
+            "connection_id=%s, worker_id=%s)",
             org_id, token_id, exc.code, getattr(exc, "reason", ""), time.monotonic() - connected_at,
+            connection.connection_id, connection.worker_id,
         )
     except Exception as exc:
         logger.warning(
-            "SMS-Gateway Fehler (org_id=%s, token_id=%s, duration_s=%.1f, %s): %s",
-            org_id, token_id, time.monotonic() - connected_at, type(exc).__name__, exc,
+            "SMS-Gateway Fehler (org_id=%s, token_id=%s, duration_s=%.1f, "
+            "connection_id=%s, worker_id=%s, error_type=%s)",
+            org_id, token_id, time.monotonic() - connected_at,
+            connection.connection_id, connection.worker_id, type(exc).__name__,
         )
         raise
     finally:

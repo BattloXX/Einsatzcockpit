@@ -23,7 +23,7 @@ from app.models.user import SmsGatewayToken
 SMS = "sms"
 TTL_S = 90
 # Cloud pingt nach 30 s Leerlauf; Apps antworten mit pong: touch etwa alle 30 s.
-SMS_TTL_S = 60
+SMS_TTL_S = 90
 
 
 def utc(now: datetime | None = None) -> datetime:

@@ -67,6 +67,29 @@ def mit_wiederholung[T](
     raise AssertionError("DB-Wiederholung ohne Ergebnis")
 
 
+def mit_neuer_session_wiederholen[T](
+    funktion: Callable[[Session], T], *, sitzungsfabrik: Callable[[], Session],
+) -> T:
+    """Wiederholt reine DB-Schritte mit neuer Session je Versuch.
+
+    Rollback und Schliessen erfolgen vor der Wartezeit; der Callback besitzt
+    seinen Commit. Keine Versand-, Datei- oder Broadcast-Wirkungen wiederholen.
+    """
+    for versuch in range(3):
+        try:
+            with sitzungsfabrik() as db:
+                try:
+                    return funktion(db)
+                except OperationalError:
+                    db.rollback()
+                    raise
+        except OperationalError as exc:
+            if not ist_wiederholbar(exc) or versuch == 2:
+                raise
+            time.sleep(0.01 * (versuch + 1) + secrets.randbelow(10) / 1000)
+    raise AssertionError("DB-Wiederholung ohne Ergebnis")
+
+
 def retry_claim[T](db: Session, operation: Callable[[], T]) -> T:
     """Nur eigenstaendige DB-Claims ohne Aussenwirkung und mit eigenem Commit.
 
