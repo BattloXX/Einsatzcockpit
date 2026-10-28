@@ -1406,7 +1406,7 @@ async def incident_hydranten(incident_id: int, request: Request, db: Session = D
 
     from app.core.timezones import format_local_datetime
     from app.services.hydrant_service import (
-        fetch_osm_hydranten,
+        fetch_osm_hydranten_ergebnis,
         manuelle_objekt_hydranten,
         merge_hydranten,
     )
@@ -1465,23 +1465,31 @@ async def incident_hydranten(incident_id: int, request: Request, db: Session = D
 
     osm: list = []
     stand = incident.hydranten_stand
+    veraltet = False
     if enabled and lat is not None and lng is not None:
-        osm = await fetch_osm_hydranten(
+        ergebnis = await fetch_osm_hydranten_ergebnis(
             lat, lng,
             radius_m=settings.HYDRANT_RADIUS_EINSATZINFO_M,
             max_results=settings.HYDRANT_MAX_EINSATZINFO,
         )
+        osm = ergebnis.items
+        veraltet = ergebnis.veraltet
         if osm:
+            stand = ergebnis.stand
+        if osm and not veraltet:
             incident.hydranten_json = _json.dumps(osm)
-            incident.hydranten_stand = datetime.now(UTC)
+            incident.hydranten_stand = ergebnis.stand
             stand = incident.hydranten_stand
             db.commit()
-        elif incident.hydranten_json:  # Overpass-Ausfall → letzte Momentaufnahme
+        elif not osm and incident.hydranten_json:  # Overpass-Ausfall → letzte Momentaufnahme
             try:
                 osm = _json.loads(incident.hydranten_json)
+                stand = incident.hydranten_stand
+                veraltet = True
             except Exception:
                 osm = []
     elif incident.hydranten_json:
+        veraltet = True
         try:
             osm = _json.loads(incident.hydranten_json)
         except Exception:
@@ -1508,7 +1516,9 @@ async def incident_hydranten(incident_id: int, request: Request, db: Session = D
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     return {
         "hydranten": merge_hydranten(merge_hydranten(stammdaten, osm), manuell),
-        "stand": format_local_datetime(stand, org) if stand else None,
+        "stand": ((format_local_datetime(stand, org) + (" (veraltet)" if veraltet else ""))
+                  if stand else ("veraltet" if veraltet else None)),
+        "veraltet": veraltet,
         "zentrum": ({"lat": lat, "lng": lng} if lat is not None and lng is not None else None),
         "aktiv": enabled,
     }
