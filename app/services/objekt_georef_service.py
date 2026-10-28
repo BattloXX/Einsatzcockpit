@@ -14,7 +14,9 @@ import math
 from typing import Any
 
 from PIL import Image
-from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from sqlalchemy.orm import Query, Session
+from sqlalchemy.orm.attributes import get_history
 
 from app.models.objekt import Objekt, ObjektDokumentGeoref, ObjektDokumentSeite
 from app.services.objekt_karte_service import ObjektKartenFehler
@@ -265,6 +267,42 @@ def georef_dict(db: Session, objekt: Objekt, g: ObjektDokumentGeoref) -> dict:
     return daten
 
 
+def seiten_sperrabfrage(db: Session, objekt: Objekt, dokument_id: int, seite: int) -> Query:
+    """Objekt-Mutex mit aktuellem Seitenstand im selben Locking Read.
+
+    Ein normaler SELECT nach dem Mutex liest unter REPEATABLE READ weiterhin
+    den alten Snapshot. Skalare Spalten umgehen zusaetzlich den ORM-Cache.
+    Keine Subqueries: deren Lesesicht waere wiederum der alte Snapshot.
+    """
+    return db.query(
+        Objekt.id, ObjektDokumentSeite.rotation,
+        ObjektDokumentGeoref.id.label("georef_id"), ObjektDokumentGeoref.revision,
+        ObjektDokumentGeoref.status,
+    ).outerjoin(ObjektDokumentSeite, and_(
+        ObjektDokumentSeite.objekt_id == Objekt.id,
+        ObjektDokumentSeite.org_id == Objekt.org_id,
+        ObjektDokumentSeite.dokument_id == dokument_id,
+        ObjektDokumentSeite.seiten_nr == seite,
+    )).outerjoin(ObjektDokumentGeoref, and_(
+        ObjektDokumentGeoref.objekt_id == Objekt.id,
+        ObjektDokumentGeoref.org_id == Objekt.org_id,
+        ObjektDokumentGeoref.dokument_id == dokument_id,
+        ObjektDokumentGeoref.seite == seite,
+    )).filter(Objekt.id == objekt.id, Objekt.org_id == objekt.org_id)
+
+
+def seitenstand_pruefen(stand: list, seite: ObjektDokumentSeite, g: ObjektDokumentGeoref | None) -> None:
+    """Bei altem Snapshot abbrechen; weder impliziter Commit noch Retry."""
+    aktuell = max(stand, key=lambda zeile: zeile.revision or 0)
+    # Eigene, noch nicht geflushte Drehung gegen ihren geladenen Basiswert pruefen.
+    rotation = get_history(seite, "rotation")
+    basis_rotation = rotation.deleted[0] if rotation.deleted else seite.rotation
+    if aktuell.rotation != basis_rotation:
+        raise ObjektKartenFehler("Dokumentseite wurde inzwischen gedreht; Editor neu oeffnen", 409)
+    if (aktuell.georef_id, aktuell.status) != (g.id if g else None, g.status if g else None):
+        raise ObjektKartenFehler("Georeferenz wurde inzwischen geaendert; Ansicht neu laden", 409)
+
+
 def referenzpunkte(
     db: Session,
     objekt: Objekt,
@@ -274,11 +312,16 @@ def referenzpunkte(
     punkte: list[dict] | None,
     modell: str | None,
     user_id: int,
+    *, pruefen: bool = False, nur_gueltig: bool = False, expected_revision: int | None = None,
+    expected_rotation: int | None = None,
 ) -> dict:
     from app.services.objekt_karte_vorschlag_service import _dokument, _hash
 
     if type(seite) is not int or seite < 1:
         raise ObjektKartenFehler("Positive Seitennummer erforderlich")
+    stand = None
+    if aktion != "lesen" and not pruefen:
+        stand = seiten_sperrabfrage(db, objekt, dokument_id, seite).with_for_update().all()
     dokument = _dokument(db, objekt, dokument_id)
     s = _seite(db, objekt, dokument_id, seite)
     g = (
@@ -287,14 +330,28 @@ def referenzpunkte(
         .order_by(ObjektDokumentGeoref.revision.desc())
         .first()
     )
+    if stand is not None:
+        seitenstand_pruefen(stand, s, g)
+    breite, hoehe = _bildgroesse(s)
+    meta = {"bildgroesse": [breite, hoehe], "rotation": s.rotation,
+            "seitenbild_url": f"/objekt-medien/seite/{s.id}/bild?rotation={s.rotation}",
+            "schwellen": {"rmse_m": MAX_RMSE_M, "max_fehler_m": MAX_FEHLER_M}}
     if aktion == "lesen":
-        return {"georeferenz": georef_dict(db, objekt, g) if g else None}
+        return {"georeferenz": georef_dict(db, objekt, g) if g else None, **meta}
+    if expected_revision is not None and expected_revision != (g.revision if g else 0):
+        raise ObjektKartenFehler("Georeferenz wurde inzwischen geaendert", 409)
+    if expected_rotation is not None and expected_rotation != s.rotation:
+        raise ObjektKartenFehler("Dokumentseite wurde inzwischen gedreht; Editor neu oeffnen", 409)
+    vorher = g
     if aktion == "verwerfen":
         if g is None:
             raise ObjektKartenFehler("Georeferenz nicht gefunden")
+        if pruefen:
+            daten = georef_dict(db, objekt, g)
+            daten.update(status="abgelehnt", ablehngrund="Manuell verworfen")
+            return {"georeferenz": daten, **meta}
         g.status, g.ablehngrund = "abgelehnt", "Manuell verworfen"
     elif aktion == "setzen":
-        breite, hoehe = _bildgroesse(s)
         hashwert = _hash(dokument)
         if not hashwert or not dokument.ist_aktuelle_version:
             raise ObjektKartenFehler("Aktuelles Quelldokument nicht lesbar")
@@ -304,6 +361,12 @@ def referenzpunkte(
             p = json.loads(ergebnis["parameter_json"])
             p.update(rotation=s.rotation, bildgroesse=[breite, hoehe])
             ergebnis["parameter_json"] = json.dumps(p)
+        if pruefen:
+            return {"georeferenz": {"status": ergebnis["status"], "ablehngrund": ergebnis["ablehngrund"],
+                    "rmse_m": ergebnis["rmse_m"], "max_fehler_m": ergebnis["max_fehler_m"],
+                    "residuen": json.loads(ergebnis["residuen_json"])}, **meta}
+        if nur_gueltig and ergebnis["status"] != "gueltig":
+            raise ObjektKartenFehler(ergebnis["ablehngrund"], 422)
         revision = g.revision + 1 if g else 1
         if g and g.status == "gueltig":
             g.status = "veraltet"
@@ -323,4 +386,71 @@ def referenzpunkte(
     else:
         raise ObjektKartenFehler("Unbekannte Aktion")
     db.flush()
-    return {"georeferenz": georef_dict(db, objekt, g)}
+    if vorher and vorher.id != g.id:
+        # Nach Drehung sind auch die Bildkoordinaten der Vorschlaege unbrauchbar.
+        parameter = json.loads(vorher.parameter_json or "{}")
+        kompatibel = (parameter.get("rotation") == s.rotation
+                      and parameter.get("bildgroesse") == [breite, hoehe]
+                      and vorher.dokument_hash == g.dokument_hash)
+        neu_berechnen(db, objekt, vorher, ersatz=g if kompatibel and g.status == "gueltig" else None)
+    neu_berechnen(db, objekt, g)
+    return {"georeferenz": georef_dict(db, objekt, g), **meta}
+
+
+def neu_berechnen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref,
+                  *, ersatz: ObjektDokumentGeoref | None = None) -> None:
+    """Offene Planpositionen aktualisieren; ungueltige Positionen als Altwerte behalten."""
+    from app.models.objekt import ObjektKartenVorschlag
+
+    ziel = ersatz or g
+    gueltig = georef_pruefen(db, objekt, ziel) == "gueltig"
+    for v in db.query(ObjektKartenVorschlag).filter_by(
+        org_id=objekt.org_id, objekt_id=objekt.id, georef_id=g.id, freigabe_status="offen"
+    ).all():
+        if v.position_methode == "manuell_korrigiert":
+            continue
+        warnungen = [w for w in json.loads(v.warnungen_json or "[]") if not w["code"].startswith("georef_")]
+        if gueltig and v.bild_x is not None and v.bild_y is not None:
+            v.georef_id = ziel.id
+            v.lat, v.lng, v.genauigkeit_m = bild_zu_geo(ziel, v.bild_x, v.bild_y)
+            v.position_status = "vorgeschlagen"
+            if v.genauigkeit_m > MAX_POSITIONSUNSICHERHEIT_M:
+                v.position_status = "pruefung_erforderlich"
+                warnungen.append({"code": "georef_ungenau"})
+        else:
+            v.position_status = "pruefung_erforderlich"
+            warnungen.append({"code": "georef_ungueltig"})
+        v.warnungen_json = json.dumps(warnungen)
+    db.flush()
+
+
+def seite_veralten(db: Session, objekt: Objekt, seite: ObjektDokumentSeite) -> None:
+    for g in db.query(ObjektDokumentGeoref).filter_by(
+        org_id=objekt.org_id, objekt_id=objekt.id, dokument_id=seite.dokument_id, seite=seite.seiten_nr
+    ).all():
+        g.status, g.ablehngrund = "veraltet", "Dokumentseite wurde gedreht; Bildkoordinaten neu erfassen"
+        neu_berechnen(db, objekt, g)
+
+
+def web_georef(db: Session, objekt: Objekt, daten: Any, user_id: int, aktion: str = "setzen") -> dict:
+    """Strikte Web-Eingabe; MCP darf weiterhin abgelehnte Saetze dokumentieren."""
+    if not isinstance(daten, dict):
+        raise ObjektKartenFehler("JSON-Objekt erforderlich", 422)
+    for name in ("dokument_id", "seite"):
+        if type(daten.get(name)) is not int or daten[name] < 1:
+            raise ObjektKartenFehler(f"{name}: positive Ganzzahl erforderlich", 422)
+    if aktion == "setzen" and not isinstance(daten.get("punkte"), list):
+        raise ObjektKartenFehler("punkte: Liste erforderlich", 422)
+    if type(daten.get("pruefen", False)) is not bool:
+        raise ObjektKartenFehler("pruefen: Wahrheitswert erforderlich", 422)
+    if "expected_revision" in daten and (type(daten["expected_revision"]) is not int
+                                        or daten["expected_revision"] < 0):
+        raise ObjektKartenFehler("expected_revision: Ganzzahl erforderlich", 422)
+    if "expected_rotation" in daten and (type(daten["expected_rotation"]) is not int
+                                        or daten["expected_rotation"] not in {0, 90, 180, 270}):
+        raise ObjektKartenFehler("expected_rotation: ungueltige Drehung", 422)
+    return referenzpunkte(db, objekt, daten["dokument_id"], daten["seite"], aktion,
+                          daten.get("punkte"), daten.get("modell"), user_id,
+                          pruefen=daten.get("pruefen", False), nur_gueltig=True,
+                          expected_revision=daten.get("expected_revision"),
+                          expected_rotation=daten.get("expected_rotation"))

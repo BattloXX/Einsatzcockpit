@@ -95,10 +95,11 @@ def vorschlag_dict(v: ObjektKartenVorschlag, db: Session | None = None, objekt: 
         g = db.query(ObjektDokumentGeoref).filter_by(
             id=v.georef_id, org_id=objekt.org_id, objekt_id=objekt.id).first()
         status = georef_pruefen(db, objekt, g) if g else "veraltet"
-        if status != "gueltig":
+        if status != "gueltig" and v.position_methode != "manuell_korrigiert":
+            daten["altposition"] = {"lat": v.lat, "lng": v.lng, "genauigkeit_m": v.genauigkeit_m}
             daten.update(lat=None, lng=None, genauigkeit_m=None,
                          position_status="veraltet" if v.position_status == "veraltet" else "pruefung_erforderlich")
-            daten["warnungen"] = daten["warnungen"] + [{"code": "georef_" + status}]
+            daten["warnungen"] = daten["warnungen"] + [{"code": "georef_ungueltig"}, {"code": "georef_" + status}]
     return daten
 
 

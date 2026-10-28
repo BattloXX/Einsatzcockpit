@@ -22,6 +22,7 @@ from app.models.objekt import (
     GEFAHR_PIKTOGRAMME,
     Objekt,
     ObjektDokument,
+    ObjektDokumentGeoref,
     ObjektDokumentSeite,
 )
 from app.models.user import User
@@ -469,8 +470,23 @@ def seite_drehen(
     )
     if seite is None:
         raise HTTPException(status_code=404, detail="Seite nicht gefunden")
+    from app.services.objekt_georef_service import seiten_sperrabfrage, seitenstand_pruefen
+    from app.services.objekt_karte_service import ObjektKartenFehler
+
+    stand = seiten_sperrabfrage(db, objekt, seite.dokument_id, seite.seiten_nr).with_for_update().all()
+    g = db.query(ObjektDokumentGeoref).filter_by(
+        org_id=objekt.org_id, objekt_id=objekt.id, dokument_id=seite.dokument_id, seite=seite.seiten_nr,
+    ).order_by(ObjektDokumentGeoref.revision.desc()).first()
+    try:
+        seitenstand_pruefen(stand, seite, g)
+    except ObjektKartenFehler as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
     delta = 90 if richtung == "rechts" else -90
     seite.rotation = ((seite.rotation or 0) + delta) % 360
+    from app.services.objekt_georef_service import seite_veralten
+
+    seite_veralten(db, objekt, seite)
     seite.klassifiziert_von_id = user.id
     seite.klassifiziert_am = datetime.now(UTC)
     db.commit()
