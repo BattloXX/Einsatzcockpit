@@ -91,3 +91,5 @@ app.services.alarm_parser.laufzeit:_cache
 app.services.db_transactions:_retry_zaehler
 # Duplikat-Audit: pro Worker gedrosselt (1 Eintrag je Einsatz/Quelle/Stunde); nur Protokoll, keine Steuerung, Wahrheit bleibt die DB
 app.services.alarm_outbox:_duplikat_audit_zeiten
+# Hydranten: lokale Single-Flight-Sperren je Event-Loop (worker-uebergreifend sichert shared_cache.lock)
+app.services.hydrant_service:_flights
