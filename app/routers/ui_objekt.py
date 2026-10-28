@@ -2863,6 +2863,81 @@ def karten_objekt_loeschen(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
+@router.get("/{objekt_id}/karte/vorschlaege.json")
+def karten_vorschlaege_json(
+    objekt_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.services import objekt_karte_freigabe_service as service
+
+    objekt = _objekt_or_404(db, objekt_id, user)
+    try:
+        service.markiere_veraltete(db, objekt)
+        antwort = {"vorschlaege": service.review_liste(db, objekt)}
+        db.commit()
+        return antwort
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _karten_review_mutation(db, objekt, user, daten, aktion, vorschlag_id=None):
+    from app.services import objekt_karte_freigabe_service as service
+
+    try:
+        if not isinstance(daten, dict):
+            raise objekt_karte_service.ObjektKartenFehler("JSON-Objekt erforderlich", 422)
+        if aktion == "freigeben":
+            antwort = service.freigeben(db, objekt, daten.get("ids", daten.get("vorschlag_ids")), user,
+                                        daten.get("bestaetigte_warnungen", {}), "ui")
+        elif aktion == "ablehnen":
+            antwort = service.ablehnen(db, objekt, [vorschlag_id], daten.get("grund"), user, "ui")
+        else:
+            antwort = service.vorschlag_korrigieren(db, objekt, vorschlag_id, daten.get("lat"), daten.get("lng"),
+                                                   daten.get("rotation", 0), daten.get("label"), user, "ui")
+        db.commit()
+        return antwort
+    except objekt_karte_service.ObjektKartenFehler as exc:
+        db.rollback()
+        detail = ({"meldung": str(exc), "ergebnisse": exc.ergebnisse}
+                  if isinstance(exc, service.FreigabeFehler) else str(exc))
+        raise HTTPException(status_code=exc.status_code, detail=detail) from None
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/{objekt_id}/karte/vorschlaege/freigeben")
+def karten_vorschlaege_freigeben(
+    objekt_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    return _karten_review_mutation(db, objekt, user, run_async(request.json), "freigeben")
+
+
+@router.post("/{objekt_id}/karte/vorschlaege/{vorschlag_id}/korrigieren")
+def karten_vorschlag_korrigieren(
+    objekt_id: int, vorschlag_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    return _karten_review_mutation(db, objekt, user, run_async(request.json), "korrigieren", vorschlag_id)
+
+
+@router.post("/{objekt_id}/karte/vorschlaege/{vorschlag_id}/ablehnen")
+def karten_vorschlag_ablehnen(
+    objekt_id: int, vorschlag_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    return _karten_review_mutation(db, objekt, user, run_async(request.json), "ablehnen", vorschlag_id)
+
+
 # ── PR5: Einsatz-Verknuepfung (Board-Panel) ────────────────────────────────────
 # Match bestaetigen/loesen: incident_leader ODER objekt_verwalter (Entscheidung).
 
