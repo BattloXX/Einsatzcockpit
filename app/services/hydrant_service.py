@@ -14,18 +14,28 @@ Distanz/Richtung werden relativ zum Bezugspunkt (Einsatz-/Objektkoordinate) bere
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
 import math
+import random
 import time
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from weakref import WeakKeyDictionary
 
 import httpx
 
 from app.config import settings
+from app.services import shared_cache
 
 logger = logging.getLogger(__name__)
 
-# In-Memory-Cache: key = (lat_gerundet, lng_gerundet, radius) → (timestamp, liste)
-_cache: dict[tuple[float, float, int], tuple[float, list[dict]]] = {}
+# Lokaler TTL-Cache und Sperren je Event-Loop.
+_cache: dict[str, tuple[dict, float]] = {}
+_flights: WeakKeyDictionary = WeakKeyDictionary()
 
 _HIMMELSRICHTUNGEN = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
 
@@ -83,41 +93,246 @@ def _overpass_query(lat: float, lng: float, radius_m: int, max_results: int) -> 
     )
 
 
+@dataclass(frozen=True)
+class HydrantErgebnis:
+    """Hydranten samt Herkunft und Zeitpunkt der letzten erfolgreichen Abfrage."""
+
+    items: list[dict]
+    veraltet: bool
+    stand: datetime | None
+    quelle: str
+
+
+def _lokal_lesen(schluessel: str):
+    eintrag = _cache.get(schluessel)
+    if eintrag and eintrag[1] > time.time():
+        return eintrag[0]
+    _cache.pop(schluessel, None)
+    return None
+
+
+def _lokal_setzen(schluessel: str, wert: dict, ttl: float):
+    # Abgelaufene Eintraege entfernen und auch bei vielen Koordinaten begrenzen.
+    if len(_cache) >= 2048:
+        jetzt = time.time()
+        for key in list(_cache):
+            if _cache[key][1] <= jetzt:
+                _cache.pop(key, None)
+        while len(_cache) >= 2048:
+            _cache.pop(next(iter(_cache)))
+    _cache[schluessel] = (wert, time.time() + ttl)
+
+
+async def _redis_lesen(schluessel: str):
+    if settings.REDIS_URL:
+        try:
+            return await shared_cache.get_entry(schluessel)
+        except Exception:
+            shared_cache.redis_error()
+    return None
+
+
+async def _lesen(schluessel: str, *, redis_zuerst: bool = False):
+    lokal = _lokal_lesen(schluessel)
+    if lokal is not None and not redis_zuerst:
+        return lokal
+    eintrag = await _redis_lesen(schluessel)
+    if eintrag is not None:
+        wert, rest = eintrag
+        _lokal_setzen(schluessel, wert, rest)
+        return wert
+    return lokal
+
+
+async def _setzen(schluessel: str, wert: dict, ttl: int):
+    _lokal_setzen(schluessel, wert, ttl)
+    if settings.REDIS_URL:
+        try:
+            await shared_cache.set(schluessel, wert, ttl)
+        except Exception:
+            shared_cache.redis_error()
+
+
+@asynccontextmanager
+async def _worker_sperre(schluessel: str):
+    if not settings.REDIS_URL:
+        yield
+        return
+    kontext = shared_cache.lock(schluessel)
+    try:
+        await kontext.__aenter__()
+    except shared_cache.LockTimeout:
+        raise
+    except Exception:
+        shared_cache.redis_error()
+        yield
+        return
+    try:
+        yield
+    finally:
+        try:
+            await kontext.__aexit__(None, None, None)
+        except Exception:
+            shared_cache.redis_error()
+
+
+@asynccontextmanager
+async def _sperre(schluessel: str):
+    sperren = _flights.setdefault(asyncio.get_running_loop(), {})
+    # Benutzer zaehlen, damit eine Sperre mit Wartenden nie entfernt wird.
+    if schluessel not in sperren:
+        for key, (_, nutzer) in list(sperren.items()):
+            if nutzer == 0:
+                del sperren[key]
+                if len(sperren) < 1024:
+                    break
+        sperren[schluessel] = (asyncio.Lock(), 0)
+    sperre, nutzer = sperren[schluessel]
+    sperren[schluessel] = (sperre, nutzer + 1)
+    try:
+        async with sperre:
+            async with _worker_sperre(schluessel):
+                yield
+    finally:
+        sperren[schluessel] = (sperre, sperren[schluessel][1] - 1)
+        if sperren[schluessel][1] == 0:
+            del sperren[schluessel]
+
+
+def _als_ergebnis(eintrag: dict | None, quelle: str) -> HydrantErgebnis:
+    if eintrag is None:
+        return HydrantErgebnis([], True, None, "leer")
+    return HydrantErgebnis(eintrag["items"], quelle == "veraltet", eintrag["stand"], quelle)
+
+
+async def _frisch(schluessel: str) -> HydrantErgebnis | None:
+    lokal = _lokal_lesen(schluessel)
+    if lokal is not None:
+        return _als_ergebnis(lokal, "cache")
+    eintrag = await _redis_lesen(schluessel)
+    if eintrag is not None:
+        wert, rest = eintrag
+        _lokal_setzen(schluessel, wert, rest)
+        alt_key = schluessel.replace("hydranten:", "hydranten-stale:", 1)
+        rest_alt = settings.HYDRANT_STALE_TTL_SECONDS - (time.time() - wert["stand"].timestamp())
+        if rest_alt > 0:
+            _lokal_setzen(alt_key, wert, rest_alt)
+        return _als_ergebnis(wert, "redis")
+    return None
+
+
+def _wartezeit(exc: Exception, anzahl: int) -> int:
+    maximum = settings.HYDRANT_BACKOFF_MAX_SECONDS
+    basis = min(maximum, 60 * 2 ** min(anzahl - 1, 10))
+    wartezeit = basis * random.uniform(0.8, 1.2)
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        retry = exc.response.headers.get("Retry-After", "")
+        try:
+            sekunden = float(retry)
+        except ValueError:
+            try:
+                sekunden = parsedate_to_datetime(retry).timestamp() - time.time()
+            except (ValueError, TypeError, OverflowError):
+                sekunden = 0
+        # Retry-After ist eine Mindestwartezeit, auch bei negativem Jitter.
+        wartezeit = max(wartezeit, sekunden)
+    return max(1, math.ceil(min(maximum, wartezeit)))
+
+
+async def _fehler(schluessel: str, breaker_key: str, zustand: dict, exc: Exception, start: float):
+    logger.warning("Overpass-Hydrantenabfrage fehlgeschlagen: klasse=%s dauer=%.3fs",
+                   type(exc).__name__, time.monotonic() - start)
+    jetzt = time.time()
+    vorher = await _lesen(schluessel + ":negativ") or {}
+    anzahl = vorher.get("anzahl", 0) + 1
+    pause = _wartezeit(exc, anzahl)
+    await _setzen(schluessel + ":negativ", {"anzahl": anzahl, "bis": jetzt + pause},
+                  max(settings.HYDRANT_BACKOFF_MAX_SECONDS * 2, pause))
+    fehler = [zeit for zeit in zustand.get("fehler", [])
+              if jetzt - zeit <= settings.HYDRANT_BREAKER_WINDOW_SECONDS]
+    fehler.append(jetzt)
+    offen = zustand.get("offen_bis", 0)
+    if len(fehler) >= settings.HYDRANT_BREAKER_FAILS or offen:
+        if not offen or offen <= jetzt:
+            logger.warning("Hydranten-Breaker offen")
+        offen = jetzt + settings.HYDRANT_BREAKER_OPEN_SECONDS
+    await _setzen(breaker_key, {"fehler": fehler, "offen_bis": offen},
+                  max(settings.HYDRANT_BREAKER_WINDOW_SECONDS, settings.HYDRANT_BREAKER_OPEN_SECONDS) * 2)
+
+
+async def fetch_osm_hydranten_ergebnis(
+    lat: float, lng: float, radius_m: int | None = None, max_results: int | None = None,
+) -> HydrantErgebnis:
+    """Begrenzt Wartezeit, buendelt Abfragen und liefert gekennzeichnete Altdaten."""
+    radius = int(radius_m or settings.HYDRANT_RADIUS_M)
+    limit = int(max_results or settings.HYDRANT_MAX)
+    schluessel = f"hydranten:{lat:.4f}:{lng:.4f}:{radius}:{limit}"
+    alt_key = schluessel.replace("hydranten:", "hydranten-stale:", 1)
+    # URL nur gehasht ablegen, keine moeglichen Zugangsdaten im Schluessel.
+    breaker_key = "hydranten-breaker:" + hashlib.sha256(settings.HYDRANT_OVERPASS_URL.encode()).hexdigest()
+    alt = _lokal_lesen(alt_key)
+    start = time.monotonic()
+    try:
+        async with asyncio.timeout(settings.HYDRANT_TOTAL_TIMEOUT_SECONDS):
+            frisch = await _frisch(schluessel)
+            if frisch is not None:
+                return frisch
+            alt = await _lesen(alt_key, redis_zuerst=True)
+            negativ = await _lesen(schluessel + ":negativ")
+            if negativ and negativ["bis"] > time.time():
+                return _als_ergebnis(alt, "veraltet")
+            async with _sperre(schluessel):
+                frisch = await _frisch(schluessel)
+                if frisch is not None:
+                    return frisch
+                # Globale Sperre schuetzt Fehlerzaehler und genau eine Half-Open-Probe.
+                async with _sperre(breaker_key):
+                    negativ = await _lesen(schluessel + ":negativ", redis_zuerst=True)
+                    zustand = await _lesen(breaker_key, redis_zuerst=True) or {}
+                    if ((negativ and negativ["bis"] > time.time())
+                            or zustand.get("offen_bis", 0) > time.time()):
+                        return _als_ergebnis(alt, "veraltet")
+                    try:
+                        # Reserve fuer Fehlercache und Redis innerhalb des Gesamtbudgets.
+                        rest = settings.HYDRANT_TOTAL_TIMEOUT_SECONDS - (time.monotonic() - start)
+                        async with asyncio.timeout(max(0, rest * 0.8)):
+                            async with httpx.AsyncClient(
+                                headers={"User-Agent": settings.HYDRANT_USER_AGENT},
+                                timeout=settings.HYDRANT_TIMEOUT_SECONDS,
+                            ) as client:
+                                resp = await client.post(
+                                    settings.HYDRANT_OVERPASS_URL,
+                                    data={"data": _overpass_query(lat, lng, radius, limit)},
+                                )
+                                resp.raise_for_status()
+                                daten = resp.json()
+                        items = parse_overpass_elements(daten.get("elements", []), lat, lng, max_results=limit)
+                    except Exception as exc:
+                        await _fehler(schluessel, breaker_key, zustand, exc, start)
+                        return _als_ergebnis(alt, "veraltet")
+                    if zustand.get("offen_bis"):
+                        logger.info("Hydranten-Breaker geschlossen")
+                    fehler = ([] if zustand.get("offen_bis") else [
+                        zeit for zeit in zustand.get("fehler", [])
+                        if time.time() - zeit <= settings.HYDRANT_BREAKER_WINDOW_SECONDS
+                    ])
+                    await _setzen(breaker_key, {"fehler": fehler, "offen_bis": 0},
+                                  settings.HYDRANT_BREAKER_WINDOW_SECONDS)
+                    await _setzen(schluessel + ":negativ", {"anzahl": 0, "bis": 0}, 1)
+                    eintrag = {"items": items, "stand": datetime.now(UTC)}
+                    await _setzen(alt_key, eintrag, settings.HYDRANT_STALE_TTL_SECONDS)
+                    await _setzen(schluessel, eintrag, settings.HYDRANT_CACHE_TTL_SECONDS)
+                    return _als_ergebnis(eintrag, "frisch")
+    except (TimeoutError, shared_cache.LockTimeout):
+        # Keine weitere Redis-Wartezeit nach Ablauf des harten Gesamtbudgets.
+        return _als_ergebnis(alt or _lokal_lesen(alt_key), "veraltet")
+
+
 async def fetch_osm_hydranten(
     lat: float, lng: float, radius_m: int | None = None, max_results: int | None = None,
 ) -> list[dict]:
-    """Holt OSM-Hydranten im Umkreis (mit TTL-Cache). Gibt [] bei Fehler zurück.
-
-    `radius_m`/`max_results` überschreiben die Standardwerte (z.B. 2-km-Radius für die
-    Einsatzinfo-Karte). Rückgabe je Eintrag:
-    {id, lat, lng, typ, ref, entfernung_m, richtung, quelle}.
-    """
-    radius = int(radius_m or settings.HYDRANT_RADIUS_M)
-    limit = int(max_results or settings.HYDRANT_MAX)
-    ckey = (round(lat, 4), round(lng, 4), radius)
-    now = time.time()
-    cached = _cache.get(ckey)
-    if cached and (now - cached[0]) < settings.HYDRANT_CACHE_TTL_SECONDS:
-        return cached[1]
-
-    try:
-        async with httpx.AsyncClient(
-            headers={"User-Agent": settings.HYDRANT_USER_AGENT},
-            timeout=settings.HYDRANT_TIMEOUT_SECONDS,
-        ) as client:
-            resp = await client.post(
-                settings.HYDRANT_OVERPASS_URL,
-                data={"data": _overpass_query(lat, lng, radius, limit)},
-            )
-            resp.raise_for_status()
-            daten = resp.json()
-    except Exception as exc:  # Overpass down / Timeout / Netzfehler → leer, Aufrufer nutzt Fallback
-        logger.warning("Overpass-Hydrantenabfrage fehlgeschlagen: %s", exc)
-        return []
-
-    ergebnisse = parse_overpass_elements(daten.get("elements", []), lat, lng, max_results=limit)
-    _cache[ckey] = (now, ergebnisse)
-    return ergebnisse
+    """Kompatible Listen-Schnittstelle fuer bestehende Aufrufer."""
+    return (await fetch_osm_hydranten_ergebnis(lat, lng, radius_m, max_results)).items
 
 
 def parse_overpass_elements(

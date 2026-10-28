@@ -269,7 +269,13 @@ class Settings(BaseSettings):
     HYDRANT_RADIUS_EINSATZINFO_M: int = 2000  # Erweiterter Radius für die Einsatzinfo-Karte
     HYDRANT_RADIUS_INFOSCREEN_M: int = 800  # OSM-Umkreis für den Wandmonitor
     HYDRANT_TIMEOUT_SECONDS: float = 8.0
-    HYDRANT_CACHE_TTL_SECONDS: int = 3600  # In-Memory-Cache je gerundeter Koordinate
+    HYDRANT_CACHE_TTL_SECONDS: int = 3600  # Frischer Lokal-/Redis-Cache je Koordinate, Radius und Limit
+    HYDRANT_STALE_TTL_SECONDS: int = 604800  # Altdaten sieben Tage aufbewahren
+    HYDRANT_TOTAL_TIMEOUT_SECONDS: float = 10.0  # Gesamtbudget inkl. Sperren, groesser als HYDRANT_TIMEOUT_SECONDS
+    HYDRANT_BACKOFF_MAX_SECONDS: int = 900  # Fehlerpause ab 60 s, exponentiell mit Jitter
+    HYDRANT_BREAKER_FAILS: int = 3  # Fehler bis zum globalen Overpass-Schutz
+    HYDRANT_BREAKER_WINDOW_SECONDS: int = 300  # Zeitfenster fuer die Fehlerzaehlung
+    HYDRANT_BREAKER_OPEN_SECONDS: int = 120  # Pause vor genau einer erneuten Probe
     HYDRANT_MAX: int = 40  # max. zurückgegebene Entnahmestellen (Standard)
     HYDRANT_MAX_EINSATZINFO: int = 120  # max. Entnahmestellen im 2-km-Radius (Liste lädt nach)
     HYDRANT_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
