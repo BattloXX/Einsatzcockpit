@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from sqlalchemy import (
     BigInteger,
@@ -820,6 +820,9 @@ class ObjektDokumentGeoref(TenantScoped, Base):
     Ersetzen entwertet den vorherigen Satz, dessen ID fuer Vorschlaege erhalten bleibt.
     Keine partielle Unique-Bedingung: damit auch unter MariaDB eindeutig.
     """
+    # Direkte Konstruktion aus dem Berechnungsergebnis bleibt moeglich; keine Datenbankspalte.
+    hinweise: ClassVar[list[dict] | None] = None
+
     __tablename__ = "objekt_dokument_georef"
     __table_args__ = (UniqueConstraint("org_id", "dokument_id", "seite", "revision", name="uq_objekt_georef_revision"),)
 

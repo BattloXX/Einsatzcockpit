@@ -18,7 +18,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
 from sqlalchemy.orm.attributes import get_history
 
-from app.models.objekt import Objekt, ObjektDokumentGeoref, ObjektDokumentSeite
+from app.models.objekt import Objekt, ObjektDokument, ObjektDokumentGeoref, ObjektDokumentSeite
 from app.services.objekt_karte_service import ObjektKartenFehler
 
 ERDRADIUS_M = 6371000.0
@@ -103,6 +103,34 @@ def _massstab(p: dict, x: float, y: float) -> tuple[float, float, float]:
     gross = math.sqrt(max(0, (spur + math.sqrt(max(0, spur**2 - 4 * det**2))) / 2))
     klein = abs(det) / gross if gross else 0
     return det, gross, klein
+
+
+def _hinweise(punkte: list[dict], status: str, max_fehler_m: float | None) -> list[dict]:
+    hinweise = []
+    if len(punkte) < 4:
+        hinweise.append({"code": "wenige_punkte", "text": "Mindestens vier Referenzpunkte verbessern die Kontrolle."})
+    flaeche = _flaeche([(p["x"], p["y"]) for p in punkte])
+    if MIN_HUELLFLAECHE <= flaeche < 0.10:
+        hinweise.append({"code": "punkte_eng", "text": "Referenzpunkte breiter ueber den Plan verteilen."})
+    if status == "gueltig" and max_fehler_m is not None and max_fehler_m > 1.0:
+        hinweise.append({"code": "restfehler_hoch", "text": "Einzelne Restfehler liegen ueber 1 m; Zuordnung pruefen."})
+    if not any(p.get("quelle") in {"osm_gebaeude", "orthofoto_klick", "dokument_koordinate"} for p in punkte):
+        hinweise.append({"code": "nur_freie_klicks",
+                         "text": "Referenzpunkte mit Gebaeudeecken oder belegten Koordinaten absichern."})
+    return hinweise
+
+
+def _vorschau_ecken(status: str, parameter_json: str | None) -> dict:
+    if status != "gueltig" or not parameter_json:
+        return {}
+    p = json.loads(parameter_json)
+    faktor = ERDRADIUS_M * math.pi / 180
+    ecken = []
+    for x, y in ((0, 0), (1, 0), (1, 1), (0, 1)):
+        ost, nord = _abbilden(p, x, y)
+        ecken.append({"x": x, "y": y, "lat": p["lat0"] + nord / faktor,
+                      "lng": p["lng0"] + ost / (faktor * math.cos(math.radians(p["lat0"])))})
+    return {"vorschau_ecken": ecken}
 
 
 def transformation_berechnen(punkte: list[dict], breite: int, hoehe: int, modell: str = "aehnlichkeit") -> dict:
@@ -195,6 +223,7 @@ def transformation_berechnen(punkte: list[dict], breite: int, hoehe: int, modell
         ergebnis["status"] = "gueltig"
     except ObjektKartenFehler as exc:
         ergebnis["ablehngrund"] = str(exc)
+    ergebnis["hinweise"] = _hinweise(punkte, ergebnis["status"], ergebnis["max_fehler_m"])
     return ergebnis
 
 
@@ -239,14 +268,15 @@ def _bildgroesse(seite: ObjektDokumentSeite) -> tuple[int, int]:
     return (hoehe, breite) if seite.rotation % 180 else (breite, hoehe)
 
 
-def georef_pruefen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref) -> str:
+def georef_pruefen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref, *,
+                   dokument: ObjektDokument | None = None, seite: ObjektDokumentSeite | None = None) -> str:
     """Veraltet nur melden, ohne Schreibwirkung fuer lesende MCP-Tools."""
     from app.services.objekt_karte_vorschlag_service import _dokument, _hash
 
-    dokument = _dokument(db, objekt, g.dokument_id)
+    dokument = dokument if dokument is not None else _dokument(db, objekt, g.dokument_id)
     if not dokument.ist_aktuelle_version or _hash(dokument) != g.dokument_hash:
         return "veraltet"
-    s = _seite(db, objekt, g.dokument_id, g.seite)
+    s = seite if seite is not None else _seite(db, objekt, g.dokument_id, g.seite)
     try:
         breite, hoehe = _bildgroesse(s)
     except ObjektKartenFehler:
@@ -264,6 +294,8 @@ def georef_dict(db: Session, objekt: Objekt, g: ObjektDokumentGeoref) -> dict:
     for name in ("erstellt_am", "geprueft_am"):
         daten[name] = daten[name].isoformat() if daten[name] else None
     daten["status"] = georef_pruefen(db, objekt, g)
+    daten["hinweise"] = _hinweise(daten["referenzpunkte"] or [], daten["status"], g.max_fehler_m)
+    daten.update(_vorschau_ecken(daten["status"], g.parameter_json))
     return daten
 
 
@@ -349,6 +381,8 @@ def referenzpunkte(
         if pruefen:
             daten = georef_dict(db, objekt, g)
             daten.update(status="abgelehnt", ablehngrund="Manuell verworfen")
+            daten.pop("vorschau_ecken", None)
+            daten["hinweise"] = _hinweise(daten["referenzpunkte"] or [], "abgelehnt", g.max_fehler_m)
             return {"georeferenz": daten, **meta}
         g.status, g.ablehngrund = "abgelehnt", "Manuell verworfen"
     elif aktion == "setzen":
@@ -364,12 +398,14 @@ def referenzpunkte(
         if pruefen:
             return {"georeferenz": {"status": ergebnis["status"], "ablehngrund": ergebnis["ablehngrund"],
                     "rmse_m": ergebnis["rmse_m"], "max_fehler_m": ergebnis["max_fehler_m"],
-                    "residuen": json.loads(ergebnis["residuen_json"])}, **meta}
+                    "residuen": json.loads(ergebnis["residuen_json"]), "hinweise": ergebnis["hinweise"],
+                    **_vorschau_ecken(ergebnis["status"], ergebnis["parameter_json"])}, **meta}
         if nur_gueltig and ergebnis["status"] != "gueltig":
             raise ObjektKartenFehler(ergebnis["ablehngrund"], 422)
         revision = g.revision + 1 if g else 1
         if g and g.status == "gueltig":
             g.status = "veraltet"
+        ergebnis.pop("hinweise")  # Hinweise werden ausschliesslich fuer die Antwort abgeleitet.
         g = ObjektDokumentGeoref(
             org_id=objekt.org_id,
             objekt_id=objekt.id,
