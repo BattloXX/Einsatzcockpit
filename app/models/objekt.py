@@ -813,6 +813,35 @@ class ObjektKartenObjekt(TenantScoped, Base):
     geprueft_am: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class ObjektDokumentGeoref(TenantScoped, Base):
+    """Versionen je Org/Dokument/Seite; hoechste Revision ist der aktuelle Satz.
+
+    Ersetzen entwertet den vorherigen Satz, dessen ID fuer Vorschlaege erhalten bleibt.
+    Keine partielle Unique-Bedingung: damit auch unter MariaDB eindeutig.
+    """
+    __tablename__ = "objekt_dokument_georef"
+    __table_args__ = (UniqueConstraint("org_id", "dokument_id", "seite", "revision", name="uq_objekt_georef_revision"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    objekt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"))
+    dokument_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt_dokument.id", ondelete="CASCADE"))
+    seite: Mapped[int] = mapped_column(Integer)
+    dokument_hash: Mapped[str] = mapped_column(String(64))
+    referenzpunkte_json: Mapped[str] = mapped_column(Text)
+    modell: Mapped[str] = mapped_column(String(20))
+    parameter_json: Mapped[str | None] = mapped_column(Text)
+    rmse_m: Mapped[float | None] = mapped_column(Float)
+    max_fehler_m: Mapped[float | None] = mapped_column(Float)
+    residuen_json: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20))
+    ablehngrund: Mapped[str | None] = mapped_column(Text)
+    erstellt_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+    geprueft_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    geprueft_am: Mapped[datetime | None] = mapped_column(DateTime)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+
 class ObjektKartenVorschlag(TenantScoped, Base):
     """Pruefbare Vorschlaege; produktive Marker werden separat freigegeben."""
     __tablename__ = "objekt_karten_vorschlag"
@@ -823,6 +852,11 @@ class ObjektKartenVorschlag(TenantScoped, Base):
     basis_marker_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("objekt_karten_objekt.id", ondelete="SET NULL")
     )
+    georef_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_dokument_georef.id", ondelete="SET NULL")
+    )
+    bild_x: Mapped[float | None] = mapped_column(Float)
+    bild_y: Mapped[float | None] = mapped_column(Float)
     operation: Mapped[str] = mapped_column(String(20), nullable=False)
     symbol_code: Mapped[str] = mapped_column(String(40), nullable=False)
     label: Mapped[str | None] = mapped_column(String(100))

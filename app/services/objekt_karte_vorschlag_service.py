@@ -24,7 +24,8 @@ MAX_ABSTAND_OBJEKT_M = 2000
 DUBLETTEN_ABSTAND_M = 3
 FREIGABE_STATUS = {"offen", "angenommen", "abgelehnt", "ersetzt"}
 _FELDER = {
-    "basis_marker_id", "operation", "symbol_code", "label", "rotation", "lat", "lng", "geometry_json",
+    "georef_id", "bild_x", "bild_y", "basis_marker_id", "operation", "symbol_code", "label", "rotation", "lat", "lng",
+    "geometry_json",
     "position_status", "position_methode", "genauigkeit_m", "erkennungs_konfidenz", "quelle_dokument_id",
     "quelle_seite", "quelle_ausschnitt", "quelle_dokument_hash", "begruendung", "expected_revision", "quelle",
 }
@@ -79,11 +80,20 @@ def _veraltet(db: Session, objekt: Objekt, v: ObjektKartenVorschlag) -> bool:
     return aktuell is None or bool(v.quelle_dokument_hash and _hash(aktuell) != v.quelle_dokument_hash)
 
 
-def vorschlag_dict(v: ObjektKartenVorschlag) -> dict[str, Any]:
+def vorschlag_dict(v: ObjektKartenVorschlag, db: Session | None = None, objekt: Objekt | None = None) -> dict[str, Any]:
     daten = {name: getattr(v, name) for name in _FELDER}
     daten.update(id=v.id, objekt_id=v.objekt_id, freigabe_status=v.freigabe_status,
                  warnungen=json.loads(v.warnungen_json or "[]"), erstellt_von=v.erstellt_von,
                  erstellt_am=v.erstellt_am.isoformat() if v.erstellt_am else None)
+    if (v.georef_id is not None or v.position_methode == "plan_georeferenzierung") and db is not None and objekt:
+        from app.models.objekt import ObjektDokumentGeoref
+        from app.services.objekt_georef_service import georef_pruefen
+        g = db.query(ObjektDokumentGeoref).filter_by(
+            id=v.georef_id, org_id=objekt.org_id, objekt_id=objekt.id).first()
+        status = georef_pruefen(db, objekt, g) if g else "veraltet"
+        if status != "gueltig":
+            daten.update(lat=None, lng=None, genauigkeit_m=None, position_status="pruefung_erforderlich")
+            daten["warnungen"] = daten["warnungen"] + [{"code": "georef_" + status}]
     return daten
 
 
@@ -213,20 +223,64 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
     bestand = {k: getattr(v, k) for k in _FELDER} if v else {}
     if "quelle_dokument_id" in daten and daten["quelle_dokument_id"] != bestand.get("quelle_dokument_id"):
         bestand["quelle_dokument_hash"] = None
+    if daten.get("georef_id") is not None and any(
+        daten.get(k) is not None for k in ("lat", "lng", "geometry", "geometry_json")
+    ):
+        raise ObjektKartenFehler("georef_id und Geokoordinaten gleichzeitig sind nicht erlaubt")
+    if bestand.get("georef_id") is not None and any(
+        daten.get(k) is not None for k in ("lat", "lng", "geometry", "geometry_json")
+    ):
+        raise ObjektKartenFehler("Georeferenz vor direkter Koordinateneingabe entfernen")
+    if daten.get("georef_id", bestand.get("georef_id")) is not None:
+        bestand.update(lat=None, lng=None, geometry_json=None)
     # Die alternative geometry-Eingabe ersetzt auch bestehende Geometrie.
     d = _validiere(db, objekt, bestand | daten)
+    georef_warnung = None
+    if d.get("georef_id") is not None:
+        from app.models.objekt import ObjektDokumentGeoref
+        from app.services.objekt_georef_service import (
+            MAX_POSITIONSUNSICHERHEIT_M,
+            bild_zu_geo,
+            georef_pruefen,
+        )
+        if type(d["georef_id"]) is not int or d["georef_id"] < 1:
+            raise ObjektKartenFehler("georef_id: positive Ganzzahl erforderlich")
+        g = db.query(ObjektDokumentGeoref).filter_by(
+            id=d["georef_id"], org_id=objekt.org_id, objekt_id=objekt.id).first()
+        if g is None:
+            raise ObjektKartenFehler("Georeferenz nicht gefunden")
+        x = _zahl(d.get("bild_x"), "bild_x", 0, 1)
+        y = _zahl(d.get("bild_y"), "bild_y", 0, 1)
+        for feld, wert in (("quelle_dokument_id", g.dokument_id), ("quelle_seite", g.seite)):
+            if d.get(feld) is not None and d[feld] != wert:
+                raise ObjektKartenFehler("Georeferenz und Quelldokument/Seite widersprechen sich")
+            d[feld] = wert
+        d.update(lat=None, lng=None, genauigkeit_m=None, position_status="pruefung_erforderlich",
+                 position_methode="plan_georeferenzierung", quelle_dokument_hash=g.dokument_hash)
+        status = georef_pruefen(db, objekt, g)
+        if status == "gueltig":
+            d["lat"], d["lng"], d["genauigkeit_m"] = bild_zu_geo(g, x, y)
+            if d["genauigkeit_m"] <= MAX_POSITIONSUNSICHERHEIT_M:
+                d["position_status"] = "vorgeschlagen"
+            else:
+                georef_warnung = "georef_ungenau"
+        else:
+            georef_warnung = "georef_" + status
+    elif d.get("bild_x") is not None or d.get("bild_y") is not None:
+        raise ObjektKartenFehler("Bildkoordinaten benoetigen georef_id")
     if v is None:
         schluessel: tuple[str, ...] = (
-            "quelle", "quelle_dokument_id", "quelle_seite", "quelle_ausschnitt", "quelle_dokument_hash",
-            "symbol_code", "lat", "lng", "geometry_json", "operation", "basis_marker_id", "expected_revision",
+            "georef_id", "bild_x", "bild_y", "quelle", "quelle_dokument_id", "quelle_seite", "quelle_ausschnitt",
+            "quelle_dokument_hash", "symbol_code", "lat", "lng", "geometry_json", "operation", "basis_marker_id",
+            "expected_revision",
         )
         # Unverortete Kandidaten mit verschiedenen Labels bleiben unterscheidbar.
         if d.get("lat") is None and d["geometry_json"] is None:
             schluessel += ("label",)
         identisch = next((a for a in alle if all(getattr(a, k) == d.get(k) for k in schluessel)), None)
         if identisch:
-            return vorschlag_dict(identisch)
-    warnungen: list[dict[str, Any]] = []
+            return vorschlag_dict(identisch, db, objekt)
+    warnungen: list[dict[str, Any]] = [{"code": georef_warnung}] if georef_warnung else []
     if _abstand(d.get("lat"), d.get("lng"), objekt.lat, objekt.lng) > MAX_ABSTAND_OBJEKT_M and all(
         w is not None for w in (d.get("lat"), d.get("lng"), objekt.lat, objekt.lng)
     ):
@@ -267,7 +321,7 @@ def vorschlag_verwerfen(db: Session, objekt: Objekt, vorschlag_id: int, *, user_
     write_objekt_change(db, objekt.id, objekt.org_id, "karte", "vorschlag_verworfen", before=vorher,
                         after=vorschlag_dict(v), user_id=user_id, quelle="mcp")
     db.flush()
-    return vorschlag_dict(v)
+    return vorschlag_dict(v, db, objekt)
 
 
 def pruefe_karte(db: Session, objekt: Objekt) -> dict:
@@ -278,8 +332,8 @@ def pruefe_karte(db: Session, objekt: Objekt) -> dict:
                  if _dublette(a.typ, a.label, a.lat, a.lng, b.typ, b.label, b.lat, b.lng)]
     vorschlaege = []
     for v in vorschlaege_auflisten(db, objekt, "offen"):
-        daten = vorschlag_dict(v)
-        if _veraltet(db, objekt, v):
+        daten = vorschlag_dict(v, db, objekt)
+        if v.georef_id is None and _veraltet(db, objekt, v):
             daten["position_status"] = "veraltet"
         vorschlaege.append(daten)
     return {"dubletten": dubletten, "marker_ohne_koordinaten": [m.id for m in marker if m.lat is None or m.lng is None],

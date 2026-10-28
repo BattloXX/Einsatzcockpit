@@ -68,6 +68,8 @@ async def objekt_karte_symbolkatalog(context: MCPContext) -> dict[str, object]:
         "Vorschläge ändern die produktive Karte nicht. Freigabe erfolgt separat durch Berechtigte. "
         "pruefen=true: Trockenlauf mit Rollback. aendern: genau ein Eintrag und vorschlag_id. "
         "Eintrag: symbol_code, operation (hinzufuegen|aendern|entfernen), lat/lng oder geometry, label, "
+        "georef_id, bild_x, bild_y (normiert 0..1, Ursprung oben links). Mit georef_id keine lat/lng oder geometry; "
+        "der Server rechnet um. Ohne gueltige Georeferenz keine Position. "
         "rotation, position_methode, genauigkeit_m, erkennungs_konfidenz (0..1), quelle_dokument_id, "
         "quelle_seite, quelle_ausschnitt ([x0,y0,x1,y1], 0..1), begruendung. "
         "Markeränderungen benötigen basis_marker_id und expected_revision. filter_status ist der Freigabestatus."
@@ -94,7 +96,7 @@ async def objekt_karte_vorschlaege(
     objekt = service.produktives_objekt(db, context.org_id, objekt_id)
     if aktion == "auflisten":
         return {"vorschlaege": [
-            service.vorschlag_dict(v) for v in service.vorschlaege_auflisten(db, objekt, filter_status)
+            service.vorschlag_dict(v, db, objekt) for v in service.vorschlaege_auflisten(db, objekt, filter_status)
         ]}
     if vorschlaege is not None and (not isinstance(vorschlaege, list) or len(vorschlaege) > 30
                                    or any(not isinstance(v, dict) for v in vorschlaege)):
@@ -134,3 +136,74 @@ async def objekt_karte_pruefen(context: MCPContext, objekt_id: int) -> dict[str,
     from app.services.objekt_karte_vorschlag_service import produktives_objekt, pruefe_karte
 
     return pruefe_karte(context.db, produktives_objekt(context.db, context.org_id, objekt_id))
+
+
+@register_tool(
+    name="objekt_karte_referenzpunkte",
+    description=(
+        "Setzt, liest oder verwirft Georeferenzen einer Planseite. Bildkoordinaten x,y normiert 0..1, "
+        "Ursprung oben links auf der gerenderten, angezeigten Seite. Mindestens 3 gut verteilte, eindeutig "
+        "identifizierte Punkte (affin: 4, Homographie: 6). Quellen: OSM-Ecken (osm_gebaeude), "
+        "Orthofoto-Klick (orthofoto_klick), dokumentierte Koordinate (dokument_koordinate), manuell. "
+        "Punkte: id, x, y, lat, lng, quelle, beschreibung. Keine Koordinaten schaetzen oder selbst umrechnen. "
+        "Restfehler beachten; abgelehnte/veraltete Referenzen ergeben keine Position. pruefen=true: Rollback."
+    ),
+    required_roles=EINSATZ_LESE_ROLLEN,
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_karte_referenzpunkte(
+    context: MCPContext, objekt_id: int, dokument_id: int, seite: int, aktion: str,
+    punkte: list[dict] | None = None, modell: str | None = None, pruefen: bool = False,
+) -> dict[str, object]:
+    from app.core.permissions import has_role
+    from app.mcp.context import MCPPermissionError
+    from app.services.objekt_georef_service import referenzpunkte
+    from app.services.objekt_karte_vorschlag_service import produktives_objekt
+
+    if aktion not in {"setzen", "lesen", "verwerfen"}:
+        raise ValueError("Unbekannte Aktion")
+    if context.org_id != context.user.org_id:
+        raise MCPPermissionError("Organisation stimmt nicht ueberein")
+    if aktion != "lesen" and not has_role(context.user, "objekt_verwalter"):
+        raise MCPPermissionError("Objektverwaltung erforderlich")
+    db = context.db
+    objekt = produktives_objekt(db, context.org_id, objekt_id)
+    try:
+        antwort = referenzpunkte(db, objekt, dokument_id, seite, aktion, punkte, modell, context.user.id)
+        if aktion != "lesen":
+            antwort["gespeichert"] = not pruefen
+            if pruefen:
+                db.rollback()
+            else:
+                db.commit()
+        return antwort
+    except Exception:
+        db.rollback()
+        raise
+
+
+@register_tool(
+    name="objekt_karte_gebaeude_umrisse",
+    description=("Liest OSM-Gebaeudeumrisse mit nummerierten Ecken als Referenzquelle. "
+                 "Nur eindeutig im Plan identifizierte OSM-Ecken verwenden, keine Koordinaten schaetzen. "
+                 "Mindestens 3 gut verteilte Referenzpunkte nutzen und Restfehler beachten. "
+                 "Alternativen: Orthofoto-Klick oder dokumentierte Koordinate."),
+    required_roles=EINSATZ_LESE_ROLLEN,
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_karte_gebaeude_umrisse(context: MCPContext, objekt_id: int, radius_m: int = 150) -> dict:
+    from app.config import settings
+    from app.mcp.context import MCPPermissionError
+    from app.models.master import OrgSettings
+    from app.services.objekt_gebaeude_service import gebaeude_umrisse
+    from app.services.objekt_karte_vorschlag_service import produktives_objekt
+
+    if context.org_id != context.user.org_id:
+        raise MCPPermissionError("Organisation stimmt nicht ueberein")
+    objekt = produktives_objekt(context.db, context.org_id, objekt_id)
+    if objekt.lat is None or objekt.lng is None:
+        raise ValueError("Objekt hat keine belastbare Bezugskoordinate")
+    org_settings = context.db.query(OrgSettings).filter_by(org_id=context.org_id).first()
+    if not settings.HYDRANT_ENABLED or (org_settings is not None and not org_settings.hydrant_layer_enabled):
+        raise ValueError("OSM-/Overpass-Abfragen sind fuer diese Organisation deaktiviert")
+    return await gebaeude_umrisse(objekt.lat, objekt.lng, radius_m)

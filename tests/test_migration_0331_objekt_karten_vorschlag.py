@@ -36,6 +36,8 @@ def test_upgrade_downgrade_legacy_und_fk_typen(tmp_path):
                     assert fk.ondelete in {"CASCADE", "SET NULL"}
             spalten = {c["name"]: c for c in sa.inspect(conn).get_columns("objekt_karten_vorschlag")}
             for c in ObjektKartenVorschlag.__table__.columns:
+                if c.name in {"georef_id", "bild_x", "bild_y"}:  # Ab Migration 0332
+                    continue
                 assert spalten[c.name]["nullable"] == c.nullable
             with Operations.context(MigrationContext.configure(conn)):
                 migration.downgrade()
