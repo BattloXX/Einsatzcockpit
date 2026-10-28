@@ -1,0 +1,45 @@
+# FOR-UPDATE-Inventur Phase 3: Pfad | Anzahl | Begruendung/Test/Retry-Entscheidung
+# Baseline darf nur schrumpfen. Neue Locks brauchen MariaDB-Test und bewusste Retry-Entscheidung.
+# AST-Aufrufe with_for_update sowie SQL-Literale FOR UPDATE; Kommentare bleiben unberuecksichtigt.
+app/admin_mcp/diagnose_tools.py | 1 | Sperrt collect_diagnose; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/admin_mcp/provider.py | 2 | Sperrt exchange_authorization_code, exchange_refresh_token; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/admin_mcp/router.py | 1 | Sperrt _flow; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/mcp/tools/alarm_parser.py | 2 | Sperrt _org_sperren, alarm_parser_entwurf_aendern; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/routers/ui_gateway.py | 6 | Sperrt gateway_offline_alarme, resolve_uncertain_job, gateway_alarmempfang_aktion, gateway_parser_aktion; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/routers/ui_objekt_dokumente.py | 1 | Sperrt dokument_erneut_verarbeiten; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/routers/ws.py | 3 | Sperrt _apply_job_status, _linux_report, _agent_call; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/alarm_apply_service.py | 3 | Sperrt verarbeite_neu, wende_an, nummer_treffer; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/alarm_outbox.py | 2 | Sperrt enqueue_nachalarmierung; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/alarm_parser/laufzeit.py | 3 | Sperrt _sperre_org, lege_entwurf_an, aktiviere_regelsatz; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/api_message_dispatch_loop.py | 1 | Sperrt dispatch_once; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/diagnose/registry.py | 1 | SQL-Pruefung von Sperrabfragen; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/einheit_service.py | 2 | Einheiten-Uebernahme: tests/mariadb/test_high_risk_snapshot_claims.py; Mutex und fachlicher Konflikt, Retry am Transaktionsrand.
+app/services/einsatz_dokument_service.py | 3 | Sperrt ziel, dokument, endgueltig_entfernen; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/gateway_presence.py | 1 | Presence/Heartbeat-Fencing: tests/mariadb/test_high_risk_snapshot_claims.py; aktuelle Verbindung gewinnt, kein blinder Retry.
+app/services/github_token.py | 1 | Sperrt observe; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/gk_zugang_service.py | 6 | Sperrt stelle_zugang_aus, stelle_qr_zugang_aus, widerrufe, verlaengere; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/incident_qr_service.py | 4 | Sperrt get_or_create_qr_principal, einsatz_qr_login_url, lage_qr_login_url; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/incident_service.py | 1 | Sperrt _lock_column_for_insert; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/katplan_akteur_service.py | 1 | Sperrt akteure; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/katplan_anhang_service.py | 1 | Sperrt _bindung; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/katplan_quelle_service.py | 6 | Sperrt quelle_hochladen, verarbeite_quelle, quelle_entfernen; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/lagedokument_collab.py | 1 | Sperrt _save_ydoc_state; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/linux_print_service.py | 4 | Sperrt prepare, reconcile, print_intent; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/mail_weiterleitung_service.py | 1 | Sperrt beanspruche; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/mail_zuordnung_loop.py | 1 | Sperrt _claim_waiting_mails; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/mail_zuordnung_service.py | 2 | Sperrt ordne_zu, uebernehme_in_einsatz; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/mailing_dispatch_loop.py | 2 | Sperrt dispatch_once; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/media_service.py | 2 | Sperrt store_upload_for_katplan_anhang; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/objekt_dokument_service.py | 3 | Worker-Claim: tests/mariadb/test_high_risk_snapshot_claims.py; DB-Retry ohne erneutes Rendern.
+app/services/objekt_pflege_service.py | 2 | Sperrt freigabe_transaktion, verwerfen_transaktion; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/planspiel_engine.py | 2 | Sperrt ereignis_ausfuehren; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/print_agent_service.py | 1 | Sperrt lease_jobs; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/print_dispatcher.py | 3 | Sperrt create_print_job, mark_job_failed; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/repair/actions.py | 1 | Sperrt _row; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/repair/registry.py | 1 | SQL-Pruefung von Sperrabfragen; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/repair/runner.py | 2 | Reparatur-Claim: tests/mariadb/test_high_risk_snapshot_claims.py; Konflikt ablehnen, Freigabe nicht wiederholen.
+app/services/resource_service.py | 4 | Einheiten-Mutex: tests/mariadb/test_high_risk_snapshot_claims.py; status_transaktion wiederholt DB-Konflikte.
+app/services/ressource_pflege_service.py | 9 | Sperrt _umbuchen, _ausstattung_umbuchen, verband_bilden, verband_aufloesen, einheit_aufteilen; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/sms_dispatch_service.py | 1 | Sperrt dispatch_einsatzinfo; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/sms_outbox.py | 11 | SMS-Claim/Versand-Fencing: tests/mariadb/test_high_risk_snapshot_claims.py; kein Retry nach Versandwirkung.
+app/services/totp_service.py | 1 | Sperrt verify; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
