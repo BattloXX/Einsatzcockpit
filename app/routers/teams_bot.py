@@ -10,18 +10,25 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import unicodedata
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.audit import write_audit
 from app.core.permissions import can_access_incident
+from app.core.rate_limit import limiter
+from app.core.security import sign_session, verify_pin
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident
 from app.models.master import FireDept
 from app.models.teams_bot import AlarmToken
+from app.routers.auth import _set_session_cookie
+from app.services import alarmlink_login_service as login_guard
+from app.services.incident_qr_service import ensure_incident_qr_token, get_or_create_qr_principal
 
 logger = logging.getLogger("einsatzleiter.teams_bot")
 
@@ -80,6 +87,62 @@ def alarm_summary(token: str, request: Request, db: Session = Depends(get_db)):
         ),
         "map_png_url": f"/api/v1/teams/map/{token}.png",
     })
+
+
+def _login_incident(db: Session, token: str) -> tuple[AlarmToken, Incident]:
+    alarm, incident = _resolve_alarm_token(db, token)
+    if incident.status != "active":
+        raise HTTPException(status_code=403, detail="Dieser Einsatz ist beendet. Keine Anmeldung möglich.")
+    return alarm, incident
+
+
+def _login_form(request: Request, token: str, incident: Incident, *, error: str = "", status_code: int = 200):
+    return templates.TemplateResponse(request, "public/alarm_login.html", {
+        "incident": incident, "token": token, "error": error,
+    }, status_code=status_code)
+
+
+@router.get("/alarm/{token}/anmelden", response_class=HTMLResponse)
+def alarm_login_page(token: str, request: Request, db: Session = Depends(get_db)):
+    _alarm, incident = _login_incident(db, token)
+    error = login_guard.SPERRHINWEIS if login_guard.gesperrt(incident.id) else ""
+    return _login_form(request, token, incident, error=error)
+
+
+@router.post("/alarm/{token}/anmelden")
+@(limiter.limit("5/15minutes") if limiter else lambda f: f)
+def alarm_login_submit(
+    token: str,
+    request: Request,
+    pin: str = Form(""),
+    display_name: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    alarm, incident = _login_incident(db, token)
+    if not incident.access_pin_hash or incident.primary_org_id is None:
+        return _login_form(request, token, incident,
+                           error="Für diesen Einsatz ist kein Gastzugang verfügbar.", status_code=403)
+    if login_guard.gesperrt(incident.id):
+        return _login_form(request, token, incident, error=login_guard.SPERRHINWEIS, status_code=429)
+    if not verify_pin(pin.strip(), incident.access_pin_hash):
+        locked = login_guard.fehlversuch(incident.id)
+        return _login_form(request, token, incident,
+                           error=login_guard.SPERRHINWEIS if locked else "Falsche PIN. Bitte erneut versuchen.",
+                           status_code=429 if locked else 403)
+    name = "".join(c for c in display_name if not unicodedata.category(c).startswith("C")).strip()[:120].rstrip()
+    if not name:
+        return _login_form(request, token, incident, error="Bitte deinen Namen eingeben.", status_code=422)
+    principal = get_or_create_qr_principal(db, incident.primary_org_id)
+    ensure_incident_qr_token(db, incident, issuing_user_id=principal.id)
+    session = sign_session(principal.id, qr=True, incident_id=incident.id,
+                           display_name=name, alarm_token_id=alarm.id)
+    write_audit(db, "auth.alarmlink_login", org_id=incident.primary_org_id,
+                user_id=principal.id, incident_id=incident.id,
+                payload={"display_name": name}, ip=request.client.host if request.client else None)
+    db.commit()
+    response = RedirectResponse(f"/einsatz/{incident.id}", status_code=302)
+    _set_session_cookie(response, session)
+    return response
 
 
 # ── Hydranten (No-Login, für die öffentliche Einsatzinfo-Karte) ─────────────────

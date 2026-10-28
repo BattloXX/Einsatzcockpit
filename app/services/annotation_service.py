@@ -20,7 +20,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.core.permissions import has_role
+from app.core.permissions import can_access_incident, has_role
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.user import User
 
@@ -44,13 +44,7 @@ class MediaSpec:
 
 
 def _may_access_incident(user: User, incident) -> bool:  # type: ignore[no-untyped-def]
-    if incident is None:
-        return False
-    if has_role(user, "system_admin"):
-        return True
-    if user.org_id and incident.primary_org_id == user.org_id:
-        return True
-    return any(io.org_id == user.org_id for io in (incident.collaborating_orgs or []))
+    return incident is not None and can_access_incident(user, incident)
 
 
 def _access_incident(db: Session, user: User, media) -> bool:  # type: ignore[no-untyped-def]

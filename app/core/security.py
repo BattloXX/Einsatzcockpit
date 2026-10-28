@@ -231,6 +231,7 @@ def sign_session(
     lage_id: int | None = None,
     display_name: str | None = None,
     device_token_id: int | None = None,
+    alarm_token_id: int | None = None,
     mfa_at: int | None = None,
     session_epoch: int = 0,
     session_started_at: int | None = None,
@@ -241,6 +242,8 @@ def sign_session(
             payload["i"] = incident_id  # type: ignore[index]
         if lage_id is not None:
             payload["l"] = lage_id  # type: ignore[index]
+        if alarm_token_id is not None:
+            payload["alarm"] = alarm_token_id  # type: ignore[index]
         if display_name:
             payload["n"] = display_name  # type: ignore[index]
     elif device:
@@ -269,6 +272,14 @@ def session_security(token: str) -> tuple[int, int | None, int] | None:
     if isinstance(data, dict):
         return data.get("e", 0), data.get("m"), data.get("a", int(timestamp.timestamp()))
     return 0, None, int(timestamp.timestamp())
+
+
+def session_alarm_token_id(token: str) -> int | None:
+    """Optionale Alarm-Link-Bindung, ohne das bestehende Session-Tupel zu aendern."""
+    if unsign_session(token) is None:
+        return None
+    data = _signer.loads(token)
+    return data.get("alarm") if isinstance(data, dict) else None
 
 
 def valid_mfa(mfa_at: int | None, started_at: int) -> bool:

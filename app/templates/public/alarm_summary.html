@@ -59,18 +59,17 @@
           {{ icon("map") }} In Google Maps öffnen
         </a>
         {% endif %}
-        <a href="/einsatz/{{ incident.id }}" class="btn btn--secondary btn--full">
-          {{ icon("device-desktop") }} Einsatz-Board öffnen
-        </a>
       </div>
       <div id="alarm-hydranten"></div>
-      {% else %}
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <a href="/einsatz/{{ incident.id }}" class="btn btn--secondary btn--full">
-          {{ icon("device-desktop") }} Einsatz-Board öffnen
-        </a>
-      </div>
       {% endif %}
+
+      <h2 style="font-size:1.05rem;margin:18px 0 12px;">Teilnehmen</h2>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <a href="/login?next=/einsatz/{{ incident.id }}" class="btn btn--secondary btn--full">Mit eigenem Konto anmelden</a>
+        {% if incident.access_pin_hash and incident.status == 'active' %}
+        <a href="/alarm/{{ token }}/anmelden" class="btn btn--primary btn--full">Mit PIN und Namen anmelden</a>
+        {% endif %}
+      </div>
 
       <p style="text-align:center;margin-top:18px;font-size:.78rem;color:var(--text-muted);">
         Diese Übersicht enthält keine Mannschafts- oder Personendaten.

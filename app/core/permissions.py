@@ -73,6 +73,11 @@ def require_role(*roles: str) -> Callable:
         user = getattr(request.state, "user", None)
         if user is None:
             raise HTTPException(status_code=401, detail="Nicht angemeldet")
+        qr_incident_id = getattr(request.state, "qr_incident_id", None)
+        if qr_incident_id is not None:
+            target = request.path_params.get("incident_id") or request.query_params.get("incident_id")
+            if target is not None and str(target) != str(qr_incident_id):
+                raise HTTPException(status_code=403, detail="Gastzugang gilt nur für den angemeldeten Einsatz")
         user_roles = {r.code for r in user.roles}
         # system_admin bypasses all role checks
         if "system_admin" in user_roles:
@@ -134,6 +139,9 @@ def has_role(user, *roles: str) -> bool:
 def can_access_incident(user, incident) -> bool:
     """Check if user can access an incident (own org or collaborating org)."""
     if user is None:
+        return False
+    qr_incident_id = getattr(user, "qr_incident_id", None)
+    if qr_incident_id is not None and incident.id != qr_incident_id:
         return False
     user_roles = {r.code for r in user.roles}
     if "system_admin" in user_roles:

@@ -3,9 +3,10 @@
 import asyncio
 import logging
 import os
+import re
 import secrets as _secrets
 from contextlib import AsyncExitStack, asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -560,8 +561,9 @@ async def api_redoc(request: Request, _=Depends(_require_system_admin)):
 class _QrUser:
     """Wraps a User for QR-Code sessions, exposing only the recorder role."""
 
-    def __init__(self, user, recorder_role):
+    def __init__(self, user, recorder_role, incident_id=None):
         self._user = user
+        self.qr_incident_id = incident_id
         self.roles = [recorder_role] if recorder_role else []
 
     def __getattr__(self, name):
@@ -675,11 +677,25 @@ async def _session_mit_kontext(request: Request, call_next):
                             .first()
                         )
                         inc = db.get(Incident, qr_incident_id) if db_token else None
-                        if not db_token or not inc or inc.status != "active":
+                        from app.core.security import session_alarm_token_id
+                        from app.models.teams_bot import AlarmToken
+
+                        alarm_id = session_alarm_token_id(token)
+                        alarm_valid = True
+                        if alarm_id is not None:
+                            alarm = db.get(AlarmToken, alarm_id)
+                            jetzt = datetime.now(UTC).replace(tzinfo=None)
+                            alarm_valid = bool(
+                                alarm and alarm.incident_id == qr_incident_id
+                                and alarm.gueltig(jetzt=jetzt)
+                                and alarm.created_at + timedelta(days=settings.ALARM_LINK_TTL_DAYS) >= jetzt
+                                and inc and inc.access_pin_hash
+                            )
+                        if not db_token or not inc or inc.status != "active" or not alarm_valid:
                             user = None  # Incident closed or token revoked → logged out
                         else:
                             recorder = db.query(Role).filter(Role.code == "recorder").first()
-                            user = _QrUser(user, recorder)  # type: ignore[assignment]
+                            user = _QrUser(user, recorder, qr_incident_id)  # type: ignore[assignment]
                     else:
                         user = None  # QR session without incident_id or lage_id → force re-login
                 elif user and is_device:
@@ -849,6 +865,13 @@ async def _session_mit_kontext(request: Request, call_next):
             request.state.accounts.sort(key=lambda account: not account["is_active_account"])
 
     try:
+        # Auch Endpunkte ohne Rollen-Dependency muessen die QR-Einsatzbindung beachten.
+        qr_scope = request.state.qr_incident_id
+        target = re.search(r"/(?:einsatz|incidents)/(\d+)(?:/|$)", request.url.path)
+        target_id = target[1] if target else request.query_params.get("incident_id")
+        if (request.state.user is not None and qr_scope is not None
+                and target_id is not None and target_id != str(qr_scope)):
+            return JSONResponse({"detail": "Gastzugang gilt nur für den angemeldeten Einsatz"}, status_code=403)
         response = await call_next(request)
     finally:
         reset_request_client_id(client_token)

@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Alarm-Link:** Gast-Anmeldung mit Einsatz-PIN und Namen direkt über Teams-/SMS-Link; IP-Limit und einsatzweite Fehlversuchssperre. QR-/Gastzugänge gelten ausschließlich für ihren Einsatz; Alarm-Link-Gastzugänge enden auch bei Ablauf oder Widerruf des Links. Keine Migration.
+
 - **Alarmierung und Druck:** MariaDB-Snapshot-Konflikte (1020) beim Alarm-Claim begrenzt wiederholen; Druck-Deduplizierung liest den konkurrierenden Gewinner unter bestehender Zeilensperre, ohne Fachaenderungen der aufrufenden Transaktion zu verwerfen.
 
 - **Einheitenmodus:** Offline-Outbox prüft den aktuellen Zugang vor jedem Versand, auch bei parallelem Reconnect und Retry. Abgelaufene Zugänge behalten Einträge lokal als `blockiert_zugang`, ohne vorherigen POST.
