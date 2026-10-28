@@ -2357,3 +2357,22 @@ async def objekt_karte_vorschlaege(
 @server.tool(name="objekt_karte_pruefen", description=TOOLS["objekt_karte_pruefen"].description)
 async def objekt_karte_pruefen(objekt_id: int, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("objekt_karte_pruefen", objekt_id=objekt_id)
+
+
+@server.tool(name="objekt_karte_referenzpunkte", description=TOOLS["objekt_karte_referenzpunkte"].description)
+async def objekt_karte_referenzpunkte(
+    objekt_id: int, dokument_id: int, seite: int, aktion: str,
+    punkte: list[dict] | None = None, modell: str | None = None,
+    pruefen: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_karte_referenzpunkte", objekt_id=objekt_id, dokument_id=dokument_id, seite=seite,
+        aktion=aktion, punkte=punkte, modell=modell, pruefen=pruefen,
+    )
+
+
+@server.tool(name="objekt_karte_gebaeude_umrisse", description=TOOLS["objekt_karte_gebaeude_umrisse"].description)
+async def objekt_karte_gebaeude_umrisse(
+    objekt_id: int, radius_m: int = 150, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("objekt_karte_gebaeude_umrisse", objekt_id=objekt_id, radius_m=radius_m)
