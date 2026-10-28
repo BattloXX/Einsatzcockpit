@@ -2716,6 +2716,17 @@ def symbol_loeschen(
 # ── Abschnitt: Lagekarte (PR4) ─────────────────────────────────────────────────
 
 
+def _karten_review_context(db: Session, objekt: Objekt, ctx: dict) -> None:
+    if not ctx["ist_verwalter"]:
+        return
+    from app.models.objekt import ObjektKartenVorschlag
+
+    ctx["karten_vorschlag_count"] = db.query(ObjektKartenVorschlag).filter_by(
+        objekt_id=objekt.id, org_id=objekt.org_id, freigabe_status="offen").count()
+    ctx["karten_freigabe_gesperrt"] = bool(
+        objekt.entwurf_von_id or hole_arbeitskopie(db, objekt))
+
+
 @router.get("/{objekt_id}/karte", response_class=HTMLResponse)
 def karte_editor(
     objekt_id: int,
@@ -2729,6 +2740,7 @@ def karte_editor(
     objekt = _objekt_or_404(db, objekt_id, user)
     ctx = _detail_context(request, db, user, objekt)
     ctx["symbol_typen"] = lade_symbol_labels(db, objekt.org_id)
+    _karten_review_context(db, objekt, ctx)
     return templates.TemplateResponse(request, "objekt/karte.html", ctx)
 
 
@@ -2764,6 +2776,7 @@ def karte_tab_partial(
     objekt = _objekt_or_404(db, objekt_id, user)
     ctx = _detail_context(request, db, user, objekt)
     ctx["symbol_typen"] = lade_symbol_labels(db, objekt.org_id)
+    _karten_review_context(db, objekt, ctx)
     return templates.TemplateResponse(request, "objekt/_karte_tab.html", ctx)
 
 
@@ -2874,7 +2887,8 @@ def karten_vorschlaege_json(
     objekt = _objekt_or_404(db, objekt_id, user)
     try:
         service.markiere_veraltete(db, objekt)
-        antwort = {"vorschlaege": service.review_liste(db, objekt)}
+        antwort = {"vorschlaege": service.review_liste(db, objekt),
+                   "freigabe_gesperrt": bool(objekt.entwurf_von_id or hole_arbeitskopie(db, objekt))}
         db.commit()
         return antwort
     except Exception:

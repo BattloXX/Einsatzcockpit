@@ -250,7 +250,13 @@ def review_liste(db: Session, objekt: Objekt, status_filter: str | None = None) 
         g = db.query(ObjektDokumentGeoref).filter_by(
             id=v.georef_id, objekt_id=objekt.id, org_id=objekt.org_id).first() if v.georef_id else None
         from app.services.objekt_georef_service import georef_dict
+        dokument = (db.query(ObjektDokument).filter_by(
+            id=v.quelle_dokument_id, objekt_id=objekt.id, org_id=objekt.org_id).first()
+            if v.quelle_dokument_id else None)
+        seite = next((s for s in dokument.seiten if s.seiten_nr == v.quelle_seite), None) if dokument else None
         antwort.append(vservice.vorschlag_dict(v, db, objekt) | {
+            "quelle_dokument_name": dokument.dateiname_original if dokument else None,
+            "quelle_seite_id": seite.id if seite else None,
             "basis_marker": marker.get(v.basis_marker_id) if v.basis_marker_id else None,
             "georeferenz": georef_dict(db, objekt, g) if g else None})
     return antwort
