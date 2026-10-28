@@ -3,12 +3,13 @@
 {% block title %}Übersicht – Einsatzleiter FF Wolfurt{% endblock %}
 {% block content %}
 {% set user_roles = user.roles|map(attribute='code')|list %}
+{% set kann_gsl = ('incident_leader' in user_roles or 'admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
 {% set is_admin = ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
 <div class="page-header">
   <h2 class="page-title">Übersicht</h2>
   {% if darf_einsatz_anlegen %}
   <button class="btn btn--primary" @click="$refs.newIncidentModal.showModal()">
-    + Neuer Einsatz
+    + Einsatz{% if kann_gsl %} / GSL{% endif %} starten
   </button>
   {% endif %}
 </div>
@@ -123,13 +124,31 @@
 
 <!-- Neuer Einsatz Modal -->
 <dialog class="modal" id="newIncidentModal" x-ref="newIncidentModal" style="max-width:560px;width:95vw">
-  <form method="post" action="/einsatz/neu" class="modal__content" id="newIncidentForm">
+  <form method="post" action="/einsatz/neu" class="modal__content" id="newIncidentForm"
+        x-data="{ modus: 'einsatz' }" :action="modus === 'gsl' ? '/lage/neu' : '/einsatz/neu'">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
-      <h3>Neuer Einsatz</h3>
+      <h3 x-text="modus === 'gsl' ? 'Neue Großschadenslage' : 'Neuer Einsatz'">Neuer Einsatz</h3>
       <button aria-label="Schließen" type="button" formnovalidate @click="$refs.newIncidentModal.close()" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
+      {% if kann_gsl %}
+      <div class="form-group" role="group" aria-label="Art" style="display:flex;gap:6px;">
+        <button type="button" class="btn btn--sm" style="flex:1;" :class="modus === 'einsatz' ? 'btn--primary' : 'btn--ghost'" @click="modus = 'einsatz'">Einsatz</button>
+        <button type="button" class="btn btn--sm" style="flex:1;" :class="modus === 'gsl' ? 'btn--primary' : 'btn--ghost'" @click="modus = 'gsl'">Großschadenslage (GSL)</button>
+      </div>
+      <fieldset :disabled="modus !== 'gsl'" x-show="modus === 'gsl'" x-cloak style="border:0;padding:0;margin:0;min-width:0">
+        <div class="form-group">
+          <label>Bezeichnung</label>
+          <input type="text" name="name" class="form-input" required maxlength="160" placeholder="z. B. Hochwasser Bregenzerach" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Beschreibung (optional)</label>
+          <textarea name="description" class="form-input" rows="3" maxlength="2000" placeholder="Lagebeschreibung, Einsatzschwerpunkte…"></textarea>
+        </div>
+      </fieldset>
+      {% endif %}
+      <fieldset :disabled="modus !== 'einsatz'" x-show="modus === 'einsatz'" style="border:0;padding:0;margin:0;min-width:0">
       <div class="form-group">
         <label>Alarmstichwort</label>
         <select name="alarm_type_code" class="form-select" required>
@@ -148,6 +167,7 @@
         <input type="text" name="report_text" class="form-input" placeholder="Weitere Angaben zur Meldung...">
       </div>
       {% with picker_key = 'neuer-einsatz', picker_incident_id = none %}{% include "incident/_objekt_picker.html" %}{% endwith %}
+      </fieldset>
       <div class="form-group form-group--checkbox">
         <label>
           <input type="checkbox" name="is_exercise" id="newIncIsExercise" value="true"> Übung / Simulation
@@ -156,13 +176,13 @@
       <div class="form-group form-group--checkbox" id="newIncRealConfirmation">
         <label id="newIncRealConfirmationLabel">
           <input type="checkbox" name="confirm_real_incident" id="newIncConfirmReal" value="true">
-          Ich bestätige: Dies ist ein echter Einsatz - SMS-, Teams- und Push-Benachrichtigungen werden jetzt an die Mannschaft ausgelöst.
+          Ich bestätige: Dies ist ein echter Einsatz bzw. eine echte Lage - SMS-, Teams- und Push-Benachrichtigungen werden jetzt an die Mannschaft ausgelöst.
         </label>
       </div>
     </div>
     <div class="modal__footer">
       <button type="button" formnovalidate @click="$refs.newIncidentModal.close()" class="btn btn--ghost">Abbrechen</button>
-      <button type="submit" class="btn btn--primary">Einsatz starten</button>
+      <button type="submit" class="btn btn--primary" x-text="modus === 'gsl' ? 'GSL starten' : 'Einsatz starten'">Einsatz starten</button>
     </div>
   </form>
 </dialog>
