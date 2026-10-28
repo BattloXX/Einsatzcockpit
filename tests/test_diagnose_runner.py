@@ -228,3 +228,14 @@ def test_migration_0327(tmp_path):
         migration.downgrade()
         assert inspect(con).get_table_names() == ["user"]
     engine.dispose()
+
+
+def test_snapshot_process_uses_worker_counters(diag_engine, monkeypatch):
+    import os
+
+    monkeypatch.setattr("app.services.db_transactions.retry_statistik", lambda: {1020: 2, 1213: 8})
+    result = execute_isolated(diag_engine, CHECKS["db.snapshot_isolation"])
+    finding, = result.findings
+    assert finding.schweregrad == "warn"
+    assert finding.evidenz["worker_pid"] == os.getpid()
+    assert finding.evidenz["zaehler"] == {"1020": 2, "1205": 0, "1213": 8}

@@ -36,6 +36,7 @@
 **Systemadministration**
 - [Überblick und Inbetriebnahme](Administration-System-Admin-Ueberblick)
 - [Systemdiagnose](Administration-Systemdiagnose)
+- [Datenbank: Snapshot-Isolation](Administration-Datenbank-Snapshot-Isolation)
 - [System-Admin-MCP](Administration-System-Admin-MCP)
 - [Zwei-Faktor-Authentifizierung](Administration-Zwei-Faktor-Authentifizierung)
 

@@ -94,6 +94,9 @@ ungeklärter Auftrag, niemals als erfolgreiche Ausgabe. Der physische Nachweis
    Die globale DB-Isolation bleibt unverändert. Hintergrund: Seit MariaDB 11.6.2
    ist `innodb_snapshot_isolation` standardmäßig aktiv; das Sperren eines nicht
    zur Lesesicht passenden Datensatzes kann die Transaktion mit 1020 verwerfen.
+   Inzwischen setzt die [zentrale Snapshot-Regel](wiki/Administration-Datenbank-Snapshot-Isolation.md)
+   neue App-Sessions ab MariaDB 11.6.2 auf `innodb_snapshot_isolation=OFF`
+   (`DB_SNAPSHOT_ISOLATION_OFF=true`); die bestehenden READ-COMMITTED-Ableger bleiben erhalten.
    Siehe [MariaDB-Dokumentation](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-system-variables#innodb_snapshot_isolation).
 3. Im ersten vollständigen Lauf schlug eine von zwei parallelen Browser-Meldungen
    mit HTTP 500 fehl (MariaDB 1020 beim INSERT). Meldungs-/Aufgabenanlage sperrt

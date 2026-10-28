@@ -70,6 +70,7 @@ def snapshot(engine):
 def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, monkeypatch, tmp_path, check_id):
     from app.config import settings
     from app.services import ws_bus
+    monkeypatch.setattr("app.services.db_transactions.retry_statistik", lambda: {})
     monkeypatch.setattr(settings, "OBJEKT_MEDIA_DIR", str(tmp_path))
     redis = {"configured": True, "connected": True, "publisher_ok": True, "subscriber_connected": True,
              "reconnects": 0, "publish_failures": 0, "subscriber_failures": 0}
@@ -92,6 +93,8 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
     with factory() as db:
         if check_id == "deploy.version":
             monkeypatch.setattr(settings, "GIT_SHA", "")
+        elif check_id == "db.snapshot_isolation":
+            monkeypatch.setattr("app.services.db_transactions.retry_statistik", lambda: {1020: 1})
         elif check_id == "db.zustand":
             db.execute(text("UPDATE alembic_version SET version_num = 'alt'"))
             db.commit()
@@ -261,3 +264,90 @@ def test_plan_page_references_and_review(diag_engine, factory):
     result = registry.execute_check(diag_engine, check)
     assert any(f.kern == "seitenreferenz" for f in result.findings)
     assert snapshot(diag_engine) == before
+
+
+class SnapshotSession:
+    """Nur die erwarteten SELECTs erlauben, ohne echten MariaDB-Server."""
+    def __init__(self, version="12.3.0-MariaDB", global_wert=1, session_wert=0,
+                 isolation="REPEATABLE-READ", dialect="mysql", is_mariadb=True):
+        self.dialect = SimpleNamespace(name=dialect, is_mariadb=is_mariadb)
+        self.version = version
+        self.werte = (global_wert, session_wert, isolation)
+        self.statements = []
+
+    def get_bind(self):
+        return SimpleNamespace(dialect=self.dialect)
+
+    def execute(self, statement):
+        sql = str(statement)
+        self.statements.append(sql)
+        if sql == "SELECT @@version":
+            return SimpleNamespace(scalar_one=lambda: self.version)
+        assert sql == ("SELECT @@GLOBAL.innodb_snapshot_isolation, "
+                       "@@SESSION.innodb_snapshot_isolation, @@transaction_isolation")
+        return SimpleNamespace(one=lambda: self.werte)
+
+
+@pytest.mark.parametrize("schalter,session_wert,schweregrad", [
+    (True, 0, None), (True, "OFF", None), (True, 1, "warn"), (True, "ON", "warn"),
+    (False, 1, "info"), (False, 0, "info"),
+])
+def test_snapshot_session_rule(monkeypatch, schalter, session_wert, schweregrad):
+    from app.config import settings
+    monkeypatch.setattr(settings, "DB_SNAPSHOT_ISOLATION_OFF", schalter)
+    db = SnapshotSession(session_wert=session_wert)
+    budget = registry.Budget()
+    budget.runtime = {"db_retries": {}, "worker_pid": 42}
+    check = registry.CHECKS["db.snapshot_isolation"]
+    result = check.fn(db, budget)
+    assert check.read_only and result.vollstaendig
+    assert len(db.statements) == 2
+    assert "GLOBAL=ON" in result.hinweis
+    assert "transaction_isolation=REPEATABLE-READ" in result.hinweis
+    assert "1020" in result.hinweis and "1205" in result.hinweis and "1213" in result.hinweis
+    assert [f.schweregrad for f in result.findings] == ([] if schweregrad is None else [schweregrad])
+    if schweregrad:
+        finding = result.findings[0]
+        assert finding.kern == "snapshot_regel"
+        assert "1020" in finding.empfehlung
+        # Schweregrad und Messwerte duerfen den Finding-Key nicht aendern.
+        assert finding.key(check.id) == registry.Finding("snapshot_regel", "").key(check.id)
+
+
+@pytest.mark.parametrize("version,is_mariadb,queries", [
+    ("11.6.1-MariaDB", True, 1), ("10.11.9-MariaDB", True, 1),
+    ("8.4.0", False, 0), ("8.4.0", None, 1),
+])
+def test_snapshot_unsupported_versions(monkeypatch, version, is_mariadb, queries):
+    monkeypatch.setattr("app.services.db_transactions.retry_statistik", lambda: {})
+    db = SnapshotSession(version=version, is_mariadb=is_mariadb)
+    result = registry.CHECKS["db.snapshot_isolation"].fn(db, registry.Budget())
+    assert result.findings == [] and "uebersprungen" in result.hinweis
+    assert len(db.statements) == queries
+
+
+@pytest.mark.parametrize("version", ["11.6.2-MariaDB", "5.5.5-11.6.2-MariaDB", "12.3.0-MariaDB"])
+def test_snapshot_supported_versions(monkeypatch, version):
+    from app.config import settings
+    monkeypatch.setattr(settings, "DB_SNAPSHOT_ISOLATION_OFF", True)
+    monkeypatch.setattr("app.services.db_transactions.retry_statistik", lambda: {})
+    db = SnapshotSession(version=version, global_wert="OFF", session_wert="ON")
+    result = registry.CHECKS["db.snapshot_isolation"].fn(db, registry.Budget())
+    assert result.findings[0].schweregrad == "warn"
+    assert "GLOBAL=OFF" in result.hinweis and "SESSION=ON" in result.hinweis
+
+
+@pytest.mark.parametrize("statistik,schweregrad", [
+    ({}, None), ({1020: 1}, "info"), ({1205: 1}, "info"), ({1213: 1}, "info"),
+    ({1020: 3, 1205: 3, 1213: 3}, "info"), ({1020: 3, 1205: 3, 1213: 4}, "warn"),
+])
+def test_snapshot_sqlite_retry_detail(diag_engine, monkeypatch, statistik, schweregrad):
+    monkeypatch.setattr("app.services.db_transactions.retry_statistik", lambda: statistik)
+    result = registry.execute_check(diag_engine, registry.CHECKS["db.snapshot_isolation"])
+    assert result.vollstaendig and "keine MariaDB" in result.hinweis
+    assert "prozesslokal" in result.hinweis and "seit Prozessstart" in result.hinweis
+    assert [f.schweregrad for f in result.findings] == ([] if schweregrad is None else [schweregrad])
+    if schweregrad:
+        finding = result.findings[0]
+        assert finding.evidenz["zaehler"] == {str(code): statistik.get(code, 0) for code in (1020, 1205, 1213)}
+        assert finding.key("db.snapshot_isolation") == registry.Finding("retry_konflikte", "").key("db.snapshot_isolation")

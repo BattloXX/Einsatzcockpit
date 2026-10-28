@@ -1,6 +1,6 @@
 # Plan: MariaDB 12.3 und Snapshot-Isolation (Fehler 1020) – durchgehend beheben
 
-Stand: 2026-10-28. Produktion und CI laufen mit MariaDB 12.3 (`docker-compose.yml`: `mariadb:12.3`).
+Stand: 2026-10-28. Status: Phasen 1-5 erledigt. Produktion und CI laufen mit MariaDB 12.3 (`docker-compose.yml`: `mariadb:12.3`).
 
 ## Ausgangslage
 

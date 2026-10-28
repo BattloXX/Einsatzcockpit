@@ -39,16 +39,17 @@ def finish(run_id):
         db.commit()
 
 
-def test_four_tools_schema_audit_and_start_limits(client, admin_env):
+@pytest.mark.parametrize("check_id", ["worker.zustand", "db.snapshot_isolation"])
+def test_four_tools_schema_audit_and_start_limits(client, admin_env, check_id):
     token = oauth.tokens(client, admin_env)["access_token"]
     listed = oauth.admin_call(client, token, "tools/list")
     assert all(tool in listed.text for tool in DIAG_TOOLS)
-    start = call(client, token, "admin_diagnose_starten", {"checks": ["worker.zustand"], "umfang": "voll"})
+    start = call(client, token, "admin_diagnose_starten", {"checks": [check_id], "umfang": "voll"})
     run_id = start["evidenz"]["run_id"]
     assert start["korrelations_id"] == start["evidenz"]["korrelations_id"]
     with SessionLocal() as db:
         row = db.get(DiagRun, run_id)
-        assert row.status == "queued" and row.checks == ["worker.zustand"]
+        assert row.status == "queued" and row.checks == [check_id]
         assert row.quelle == "mcp" and row.angefordert_von == admin_env["id"]
     active = call(client, token, "admin_diagnose_starten")
     assert active["evidenz"]["fehler"] == "Rate-Limit erreicht"
