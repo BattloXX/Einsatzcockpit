@@ -1,0 +1,13 @@
+<span id="einsaetze-uebernehmen-knopf{{ '-mobil' if mobil|default(false) else '' }}"
+      {% if mobil|default(false) %}style="width:100%;"{% endif %}
+      hx-get="/lage/{{ lage.id }}/einsaetze-uebernehmen/knopf?mobil={{ 'true' if mobil|default(false) else 'false' }}"
+      hx-trigger="einsaetzeUebernommen from:body, sitePhaseChanged from:body"
+      hx-swap="outerHTML">
+  {% if can_edit and lage.status.value == 'active' and uebernehmbare_einsaetze_count %}
+  <button type="button" class="btn btn--ghost btn--sm"
+          hx-get="/lage/{{ lage.id }}/einsaetze-uebernehmen"
+          hx-trigger="click" hx-target="#einsaetzeUebernehmenContent" hx-swap="innerHTML">
+    Einsätze übernehmen ({{ uebernehmbare_einsaetze_count }})
+  </button>
+  {% endif %}
+</span>

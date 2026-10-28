@@ -198,6 +198,10 @@
   </span>
 {% endblock %}
 
+{% block lage_mobile_actions %}
+  {% with mobil=true %}{% include "incident_major/_einsaetze_uebernehmen_knopf.html" %}{% endwith %}
+{% endblock %}
+
 {% block lage_actions %}
   {# ── Abgebrochen ein-/ausblenden ── #}
   {% if abgebrochen_sites %}
@@ -217,6 +221,7 @@
   <button data-ec-action="open-dialog" data-ec-dialog="neuStelleDialog"
           class="btn btn--primary btn--sm">+ Einsatzstelle</button>
   {% endif %}
+  {% include "incident_major/_einsaetze_uebernehmen_knopf.html" %}
 
   {% if can_manage and lage.status.value == 'active' %}
   <form method="post" action="/lage/{{ lage.id }}/beenden" style="margin:0;"
@@ -228,6 +233,11 @@
 {% endblock %}
 
 {% block lage_content %}
+<dialog class="modal" id="einsaetzeUebernehmenDialog" aria-labelledby="einsaetzeUebernehmenTitel"
+        style="max-width:680px;width:95vw;">
+  <div class="modal__content" id="einsaetzeUebernehmenContent"
+       hx-on::after-swap="var dialog=this.closest('dialog');if(!dialog.open)dialog.showModal()"></div>
+</dialog>
 {% with art="lage", ident=lage.id %}{% include "einsatz_dokumente/_board_dialog.html" %}{% endwith %}
 <div class="lage-wrap">
   {# ── Wetter-Panel ── #}
