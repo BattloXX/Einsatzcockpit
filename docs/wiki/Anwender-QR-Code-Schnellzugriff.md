@@ -53,3 +53,14 @@ Oder per CLI:
 ```bash
 python -m app.cli revoke-tokens --incident-id 42
 ```
+
+## Gast-Anmeldung über Teams-/SMS-Link
+
+Die öffentliche Einsatzinfo bietet unter **Teilnehmen** die Anmeldung mit dem eigenen Konto an.
+Bei einem aktiven Einsatz mit gesetzter Einsatz-PIN ist zusätzlich **Mit PIN und Namen anmelden** verfügbar.
+PIN und Name werden gemeinsam eingegeben; der Gast arbeitet als Bearbeiter (recorder) ausschließlich in diesem Einsatz.
+Der Anzeigename wird bei Einträgen protokolliert. Ohne Einsatz-PIN gibt es diesen Gastzugang nicht.
+
+Pro IP sind fünf Anmeldeversuche in 15 Minuten erlaubt. Nach 20 falschen PIN-Eingaben für denselben Einsatz
+ist die Gast-Anmeldung für 15 Minuten gesperrt (mit Redis gemeinsam für alle Worker, sonst je Prozess).
+Die Session endet bei Einsatzende, Widerruf des QR-Zugangs sowie Ablauf oder Widerruf des Alarm-Links.

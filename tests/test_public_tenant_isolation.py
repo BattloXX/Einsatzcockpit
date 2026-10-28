@@ -1530,3 +1530,30 @@ def test_admin_mcp_discovery_aliases_enthalten_keine_org_daten(client):
             assert "org_id" not in response.text
     assert anonymous[0]["resource"].endswith("/mcp/admin")
     assert anonymous[1]["scopes_supported"] == ["mcp-admin"]
+
+
+def test_alarmlink_anmeldung_scopt_principal_und_session_ueber_token(client):
+    from app.core.security import unsign_session
+    from app.models.user import User
+    from tests.test_alarmlink_login import login, make_alarm
+
+    org_b_id = _setup_zwei_orgs()
+    inc_a, token_a, _ = make_alarm(org_id=1)
+    inc_b, token_b, _ = make_alarm(org_id=org_b_id, pin="5678")
+    page = client.get(f"/alarm/{token_a}/anmelden")
+    assert page.status_code == 200
+    assert f'/alarm/{token_a}/anmelden' in page.text
+    assert token_b not in page.text
+    # Gefaelschte Formular-IDs duerfen den durch den Token bewiesenen Einsatz nicht aendern.
+    response = login(client, token_a, incident_id=str(inc_b), org_id=str(org_b_id))
+    assert response.status_code == 302 and response.headers["location"] == f"/einsatz/{inc_a}"
+    session = unsign_session(client.cookies["session"])
+    assert session[2] == inc_a
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert db.get(User, session[0]).org_id == 1
+    assert client.get(f"/einsatz/{inc_b}", follow_redirects=False).status_code == 403
+    assert client.get(f"/alarm/{token_b}", follow_redirects=False).status_code in (200, 404)
+    client.cookies.delete("session")
+    # PIN der Org A ist fuer den Token der Org B kein Nachweis.
+    assert login(client, token_b).status_code == 403

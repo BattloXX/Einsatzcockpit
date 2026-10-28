@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.permissions import has_role
+from app.core.permissions import can_access_incident, has_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, MessageMedia, PersonMedia, Task, TaskMedia
@@ -22,14 +22,7 @@ _PAGE_SIZE = 24
 
 
 def _user_may_access_incident(user: User, incident: Incident) -> bool:
-    if has_role(user, "system_admin"):
-        return True
-    if user.org_id and incident.primary_org_id == user.org_id:
-        return True
-    for io in (incident.collaborating_orgs or []):
-        if io.org_id == user.org_id:
-            return True
-    return False
+    return can_access_incident(user, incident)
 
 
 @router.get("/medien", response_class=HTMLResponse)
@@ -51,6 +44,10 @@ def media_gallery(
         .join(Incident, TaskMedia.incident_id == Incident.id)
         .options(joinedload(TaskMedia.task).joinedload(Task.incident))
     )
+
+    qr_scope = getattr(request.state, "qr_incident_id", None)
+    if qr_scope is not None:
+        q = q.filter(Incident.id == qr_scope)
 
     if not has_role(user, "system_admin"):
         if not user.org_id:

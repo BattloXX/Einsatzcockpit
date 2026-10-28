@@ -75,9 +75,10 @@ def _aussteller(db: Session, org_id: int, issuing_user_id: int | None) -> User:
     return benutzer
 
 
-def einsatz_qr_login_url(db: Session, incident: Incident, *, issuing_user_id: int | None = None) -> str | None:
+def ensure_incident_qr_token(db: Session, incident: Incident, *, issuing_user_id: int | None = None) -> str:
+    """Sichert den DB-Nachweis fuer eine QR-Session und liefert den signierten Token."""
     if incident.status != "active":
-        return None
+        raise ValueError("Einsatz ist nicht aktiv")
     org_id = incident.primary_org_id
     if org_id is None:
         raise ValueError("Einsatz hat keine primäre Organisation")
@@ -118,6 +119,13 @@ def einsatz_qr_login_url(db: Session, incident: Incident, *, issuing_user_id: in
             )
             if vorhanden is None:
                 raise
+    return token
+
+
+def einsatz_qr_login_url(db: Session, incident: Incident, *, issuing_user_id: int | None = None) -> str | None:
+    if incident.status != "active":
+        return None
+    token = ensure_incident_qr_token(db, incident, issuing_user_id=issuing_user_id)
     db.commit()
     basis = settings.effective_public_base_url.rstrip("/")
     return f"{basis}/qr-login?{urlencode({'incident_id': incident.id, 'token': token})}"
