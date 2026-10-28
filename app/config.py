@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     ALARM_MAP_TTL_DAYS: int = 365
     # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
     ALARM_LINK_TTL_DAYS: int = 30
-    APP_VERSION: str = "2026.10.26"
+    APP_VERSION: str = "2026.10.28"
     GIT_SHA: str = ""
     BUILD_TIME: str = ""
     GITHUB_READ_TOKEN: str = Field(default="", repr=False)
