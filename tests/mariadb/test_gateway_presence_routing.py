@@ -93,3 +93,54 @@ def test_four_claimants_and_reconnect_fencing_on_mariadb(monkeypatch, kind):
                 db.query(FireDept).filter(FireDept.id == org_id).delete()
                 db.commit()
         engine.dispose()
+
+
+def test_sms_gleichzeitiger_aufbau_genau_eine_verbindung(monkeypatch):
+    engine = create_engine(os.environ["MARIADB_TEST_URL"], pool_size=4)
+    sitzungen = sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(routing, "SessionLocal", sitzungen)
+    org_id = None
+    token_hash = uuid4().hex
+    verbindungs_ids = []
+    original_begin = presence.begin
+    schranke = Barrier(2)
+
+    def aufbau(db, kind, org, gateway, token, verbindungs_id):
+        # Nur den ersten Versuch synchronisieren: ein Retry darf allein weiterlaufen.
+        if verbindungs_id not in verbindungs_ids:
+            verbindungs_ids.append(verbindungs_id)
+            schranke.wait(timeout=10)
+        return original_begin(db, kind, org, gateway, token, verbindungs_id)
+
+    monkeypatch.setattr(presence, "begin", aufbau)
+    try:
+        with sitzungen() as db:
+            set_tenant_context(db, None)
+            org = FireDept(slug="sms-parallel-" + uuid4().hex, name="SMS Paralleltest")
+            db.add(org)
+            db.flush()
+            org_id = org.id
+            token = SmsGatewayToken(org_id=org_id, label="SMS Paralleltest", token_hash=token_hash)
+            db.add(token)
+            db.commit()
+            gateway_id = token.id
+
+        def verbinden(_index):
+            return routing.begin("sms", org_id, gateway_id, token_hash)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            list(executor.map(verbinden, range(2)))
+        assert len(set(verbindungs_ids)) == 2
+        assert len(routing.targets("sms", org_id, gateway_id)) == 1
+        with sitzungen() as db:
+            set_tenant_context(db, None)
+            zustaende = [presence.state(db, "sms", org_id, gateway_id, token_hash, cid) for cid in verbindungs_ids]
+            assert sorted(zustaende) == ["connected", "superseded"]
+    finally:
+        if org_id is not None:
+            with sitzungen() as db:
+                set_tenant_context(db, None)
+                db.query(SmsGatewayToken).filter(SmsGatewayToken.org_id == org_id).delete()
+                db.query(FireDept).filter(FireDept.id == org_id).delete()
+                db.commit()
+        engine.dispose()
