@@ -50,6 +50,7 @@ def _ensure_engine():
             raise RuntimeError(
                 "Wetter-DB nicht konfiguriert (WEATHER_DATABASE_URL leer)."
             )
+        # Eigene Wetter-DB ohne Locking-Reads: keine Snapshot-Anpassung erforderlich.
         _engine = create_engine(
             settings.WEATHER_DATABASE_URL,
             pool_pre_ping=True,

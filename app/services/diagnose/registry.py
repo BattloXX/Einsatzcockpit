@@ -171,6 +171,7 @@ def _process_check(sender, url: str, check: Check, seconds: float, runtime: dict
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
 
+    # Keine Snapshot-Anpassung: execute_check verbietet Locking-Reads und Mutationen.
     engine = create_engine(url, poolclass=NullPool, hide_parameters=True)
     try:
         try:

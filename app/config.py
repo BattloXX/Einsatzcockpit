@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "mysql+pymysql://einsatzleiter:pw@127.0.0.1:3306/einsatzleiter"
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 30
+    # MariaDB ab 11.6.2: Locking-Reads lesen die neueste Version statt Fehler 1020.
+    DB_SNAPSHOT_ISOLATION_OFF: bool = True
     SECRET_KEY: str = SECRET_KEY_PLACEHOLDER
     # Separater HMAC-Schlüssel für ableitbare GSL-Zugangstoken. Darf nie der
     # SESSION/SECRET_KEY selbst sein, damit beide Schlüssel unabhängig rotieren.
