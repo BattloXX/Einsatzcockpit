@@ -1,4 +1,4 @@
-"""MCP-Lesewerkzeuge fuer Lagekarten und den Symbolkatalog der Organisation."""
+"""MCP-Workflow fuer Lagekarten: lesen, georeferenzieren, vorschlagen und freigeben."""
 
 from app.core.permissions import EINSATZ_LESE_ROLLEN
 from app.mcp.context import MCPContext
@@ -64,12 +64,13 @@ async def objekt_karte_symbolkatalog(context: MCPContext) -> dict[str, object]:
     name="objekt_karte_vorschlaege",
     description=(
         "Verwaltet bis 30 Kartenvorschläge: anlegen, aendern, verwerfen, auflisten. "
+        "Zuerst Karte, Symbolkatalog und Dokumentseiten lesen; Planpositionen georeferenzieren. "
         "Koordinaten nie erfinden; ohne belastbare Position lat/lng weglassen. "
         "Vorschläge ändern die produktive Karte nicht. Freigabe erfolgt separat durch Berechtigte. "
         "pruefen=true: Trockenlauf mit Rollback. aendern: genau ein Eintrag und vorschlag_id. "
         "Eintrag: symbol_code, operation (hinzufuegen|aendern|entfernen), lat/lng oder geometry, label, "
         "georef_id, bild_x, bild_y (normiert 0..1, Ursprung oben links). Mit georef_id keine lat/lng oder geometry; "
-        "der Server rechnet um. Ohne gueltige Georeferenz keine Position. "
+        "der Server rechnet um. Bildpositionen ergeben ohne gueltige Georeferenz keine Position. "
         "rotation, position_methode, genauigkeit_m, erkennungs_konfidenz (0..1), quelle_dokument_id, "
         "quelle_seite, quelle_ausschnitt ([x0,y0,x1,y1], 0..1), begruendung. "
         "Markeränderungen benötigen basis_marker_id und expected_revision. filter_status ist der Freigabestatus. "
@@ -158,12 +159,14 @@ async def objekt_karte_pruefen(context: MCPContext, objekt_id: int) -> dict[str,
 @register_tool(
     name="objekt_karte_referenzpunkte",
     description=(
-        "Setzt, liest oder verwirft Georeferenzen einer Planseite. Bildkoordinaten x,y normiert 0..1, "
+        "Setzt, liest oder verwirft Georeferenzen einer Planseite. Zuerst aktuelle Dokumentseite ansehen "
+        "und Referenzquellen identifizieren; zuerst mit pruefen=true testen. Bildkoordinaten x,y normiert 0..1, "
         "Ursprung oben links auf der gerenderten, angezeigten Seite. Mindestens 3 gut verteilte, eindeutig "
         "identifizierte Punkte (affin: 4, Homographie: 6). Quellen: OSM-Ecken (osm_gebaeude), "
         "Orthofoto-Klick (orthofoto_klick), dokumentierte Koordinate (dokument_koordinate), manuell. "
         "Punkte: id, x, y, lat, lng, quelle, beschreibung. Keine Koordinaten schaetzen oder selbst umrechnen. "
-        "Restfehler beachten; abgelehnte/veraltete Referenzen ergeben keine Position. pruefen=true: Rollback."
+        "RMSE maximal 2 m, Einzelfehler maximal 4 m; Genauigkeit durch Referenzquelle begrenzt. "
+        "Abgelehnte/veraltete Referenzen ergeben keine Position. pruefen=true: Rollback."
     ),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_modul_aktiv,
@@ -228,7 +231,8 @@ async def objekt_karte_gebaeude_umrisse(context: MCPContext, objekt_id: int, rad
 
 @register_tool(
     name="objekt_karte_vorschau",
-    description="Liest Marker und Vorschlaege getrennt mit Warnungen, Dubletten und Prueflink. Keine Schreibwirkung.",
+    description=("Liest Marker und Vorschlaege getrennt mit Warnungen, Dubletten und Prueflink. "
+                 "Nach Vorschlagserstellung den ui_link zur menschlichen Pruefung weitergeben. Keine Schreibwirkung."),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_modul_aktiv,
 )
@@ -247,7 +251,8 @@ async def objekt_karte_vorschau(context: MCPContext, objekt_id: int,
 
 @register_tool(
     name="objekt_karte_freigeben",
-    description=("Uebernimmt Kartenvorschlaege atomar. Nur nach ausdruecklicher Bestaetigung durch den Benutzer "
+    description=("Uebernimmt Kartenvorschlaege atomar. Zuerst objekt_karte_vorschau und menschliche Pruefung. "
+                 "Nur nach ausdruecklicher Bestaetigung durch den Benutzer "
                  "aufrufen; einsatzkritische Symbole nie ohne konkrete Nutzerfreigabe. "
                  "bestaetigung muss woertlich ICH_BESTAETIGE_FREIGABE sein. Jede Warnung je Vorschlags-ID "
                  "in bestaetigte_warnungen bestaetigen. pruefen=true: Trockenlauf mit Rollback. "
