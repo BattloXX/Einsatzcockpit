@@ -9,7 +9,7 @@ Identität-Priorität für den Abgleich: serial > uuid > mac > uri/ip.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -26,17 +26,23 @@ def _identity_key(identity: dict) -> str | None:
     return None
 
 
-def apply_printer_status(gateway_id: int, org_id: int, payload: dict) -> None:
+def _statusinhalt(status: dict) -> dict:
+    """Reine Zeitstempel gehoeren nicht zum inhaltlichen Druckerstatus."""
+    return {key: wert for key, wert in status.items()
+            if not key.endswith("_at") and key not in ("timestamp", "timestamps")}
+
+
+def apply_printer_status(gateway_id: int, org_id: int, payload: dict) -> bool:
     """Übernimmt einen id-basierten Erreichbarkeits-Check je Drucker (periodischer
     Health-Check des Gateways): payload = {printers: [{printer_id, status:{reachable,...}}]}.
     Nur Drucker DIESES Gateways werden aktualisiert (Scope)."""
     entries = payload.get("printers") or []
     if not entries:
-        return
+        return False
     now = datetime.now(UTC).replace(tzinfo=None)
     by_id = {int(e["printer_id"]): (e.get("status") or {}) for e in entries if e.get("printer_id")}
     if not by_id:
-        return
+        return False
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -45,11 +51,32 @@ def apply_printer_status(gateway_id: int, org_id: int, payload: dict) -> None:
             .filter(Printer.org_id == org_id, Printer.gateway_id == gateway_id, Printer.id.in_(list(by_id)))
             .all()
         )
+        geaendert = False
+        schreiben = False
+        wechsel = []
         for p in printers:
+            alt = p.status or {}
             st = dict(by_id.get(p.id) or {})
-            st.setdefault("checked_at", now.isoformat())
-            p.status = st
-        db.commit()
+            inhalt_geaendert = _statusinhalt(alt) != _statusinhalt(st)
+            try:
+                geprueft = datetime.fromisoformat(alt.get("checked_at") or "")
+                if geprueft.tzinfo is not None:
+                    geprueft = geprueft.astimezone(UTC).replace(tzinfo=None)
+                veraltet = now - geprueft > timedelta(seconds=90)  # unter der 180-s-Frist der Erreichbarkeitsanzeige
+            except (TypeError, ValueError):
+                veraltet = True
+            if inhalt_geaendert or veraltet:
+                st["checked_at"] = now.isoformat()
+                p.status = st
+                schreiben = True
+            if inhalt_geaendert:
+                geaendert = True
+                wechsel.append((p.id, alt.get("reachable"), st.get("reachable")))
+        if schreiben:
+            db.commit()
+        for ident, vorher, nachher in wechsel:
+            logger.info("Druckerstatus geaendert (printer_id=%s, reachable=%s -> %s)", ident, vorher, nachher)
+        return geaendert
     finally:
         db.close()
 

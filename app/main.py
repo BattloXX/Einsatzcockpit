@@ -149,6 +149,8 @@ from app.routers import (
     ws,
 )
 from app.services.background_runtime import BackgroundRuntime, supervised_loop
+from app.services.gateway_presence import worker_id
+from app.services.loop_lag_watchdog import VerzugsWatchdog
 from app.services.suche.outbox import registriere_listener
 
 registriere_listener()
@@ -157,17 +159,30 @@ logger = logging.getLogger("einsatzleiter")
 loop_lag_logger = logging.getLogger("einsatzleiter.loop_lag")
 
 
-async def _loop_lag_monitor() -> None:
+async def _loop_lag_monitor(watchdog: VerzugsWatchdog | None = None) -> None:
     """Misst pro Worker den Verzug; normale Schleifendurchlaeufe bleiben still."""
     if settings.LOOP_LAG_WARN_MS <= 0:
         return
     loop = asyncio.get_running_loop()
+    letzter_dump = float("-inf")
     while True:
-        expected = loop.time() + 1.0
-        await asyncio.sleep(1.0)
-        lag_ms = (loop.time() - expected) * 1000
+        if watchdog is not None:
+            watchdog.puls()
+        expected = loop.time() + 0.1
+        await asyncio.sleep(0.1)
+        jetzt = loop.time()
+        lag_ms = (jetzt - expected) * 1000
         if lag_ms > settings.LOOP_LAG_WARN_MS:
-            loop_lag_logger.warning("Event-Loop-Verzug: %.0f ms (PID %s)", lag_ms, os.getpid())
+            loop_lag_logger.warning("Event-Loop-Verzug: %.0f ms (PID %s, worker_id=%s)",
+                                    lag_ms, os.getpid(), worker_id())
+            if jetzt - letzter_dump >= 60:
+                letzter_dump = jetzt
+                namen = []
+                for task in asyncio.all_tasks():
+                    namen.append(f"{task.get_name()} {getattr(task.get_coro(), '__qualname__', '?')}")
+                    if len(namen) == 5:
+                        break
+                loop_lag_logger.warning("Event-Loop-Verzug: aktive Tasks: %s", " | ".join(namen))
 
 # Laute Drittanbieter-Logger dämpfen: WeasyPrint subsettet bei JEDEM PDF-Druck Fonts
 # über fontTools, das dabei hunderte DEBUG/INFO-Zeilen erzeugt (Prod-Log 2026-07-08).
@@ -384,16 +399,20 @@ async def lifespan(app: FastAPI):
         # Der Lock ist die Sicherheitsgrenze. DB-Heartbeats dienen nur der Diagnose.
         runtime = BackgroundRuntime(settings.LEADER_LOCK_PATH, _start_background_loops)
         background_tasks: list[asyncio.Task] = []
+        watchdog = None
         if settings.LOOP_LAG_WARN_MS > 0:
-            background_tasks.append(asyncio.create_task(_loop_lag_monitor()))
-        if not settings.TESTING:
-            await runtime.start()
-        else:
-            logger.info("Hintergrund-Loops im Testmodus deaktiviert")
-
+            watchdog = VerzugsWatchdog(settings.LOOP_LAG_WARN_MS)
+            watchdog.starten()
+            background_tasks.append(asyncio.create_task(_loop_lag_monitor(watchdog), name="Loop-Verzugsmonitor"))
         try:
+            if not settings.TESTING:
+                await runtime.start()
+            else:
+                logger.info("Hintergrund-Loops im Testmodus deaktiviert")
             yield
         finally:
+            if watchdog is not None:
+                watchdog.stoppen()
             await runtime.stop_tasks()
             await mcp_lifespans.aclose()
             from app.services import ws_bus

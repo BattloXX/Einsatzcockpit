@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.katplan import (
@@ -69,7 +69,8 @@ class ObjektAdapter:
     quelle = "objekt"
 
     def alle_ids(self, db: Session, org_id: int) -> list[str]:
-        return [str(o.id) for o in db.scalars(_objekte(org_id).order_by(Objekt.id))]
+        return [str(ident) for ident in db.scalars(
+            _objekte(org_id).with_only_columns(Objekt.id).order_by(Objekt.id))]
 
     def dokument(self, db: Session, org_id: int, quell_id: str) -> IndexDokument | None:
         o = db.scalar(_objekte(org_id).where(Objekt.id == quell_id))
@@ -143,8 +144,11 @@ class ObjektDokumentAdapter:
     quelle = "objekt_dokument_seite"
 
     def alle_ids(self, db: Session, org_id: int) -> list[str]:
-        return [str(s.id) for s, _, _ in db.execute(_objekt_seiten(org_id))
-                if (s.volltext or "").strip() or (s.titel or "").strip()]
+        abfrage = _objekt_seiten(org_id).with_only_columns(ObjektDokumentSeite.id).where(or_(
+            func.length(func.trim(ObjektDokumentSeite.volltext)) > 0,
+            func.length(func.trim(ObjektDokumentSeite.titel)) > 0,
+        ))
+        return [str(ident) for ident in db.scalars(abfrage)]
 
     def dokument(self, db: Session, org_id: int, quell_id: str) -> IndexDokument | None:
         zeile = db.execute(_objekt_seiten(org_id).where(ObjektDokumentSeite.id == quell_id)).first()
@@ -233,7 +237,8 @@ class KatplanElementAdapter:
     quelle = "katplan_element"
 
     def alle_ids(self, db: Session, org_id: int) -> list[str]:
-        return [f"{p.id}:{e.element_uuid}" for e, _, p in db.execute(_elemente(org_id))]
+        abfrage = _elemente(org_id).with_only_columns(KatplanPlan.id, KatplanVersionElement.element_uuid)
+        return [f"{plan_id}:{element_uuid}" for plan_id, element_uuid in db.execute(abfrage)]
 
     def dokument(self, db: Session, org_id: int, quell_id: str) -> IndexDokument | None:
         plan_id, trenner, uuid = quell_id.partition(":")
@@ -285,7 +290,10 @@ class KatplanSeiteAdapter:
     quelle = "katplan_seite"
 
     def alle_ids(self, db: Session, org_id: int) -> list[str]:
-        return [str(s.id) for s, _, _ in db.execute(_katplan_seiten(org_id)) if (s.volltext or "").strip()]
+        abfrage = _katplan_seiten(org_id).with_only_columns(KatplanDokumentSeite.id).where(
+            func.length(func.trim(KatplanDokumentSeite.volltext)) > 0,
+        )
+        return [str(ident) for ident in db.scalars(abfrage)]
 
     def dokument(self, db: Session, org_id: int, quell_id: str) -> IndexDokument | None:
         zeile = db.execute(_katplan_seiten(org_id).where(KatplanDokumentSeite.id == quell_id)).first()

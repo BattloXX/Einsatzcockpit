@@ -194,6 +194,39 @@ def test_objekt_dokument_freigabe_version_seiten(daten):
     assert adapter.dokument(db, a.id, str(seite.id)) is None
 
 
+def test_objekt_seiten_ids_filtern_ohne_entities(daten):
+    db, a, _, o = daten
+    dokument = ObjektDokument(org_id=a.id, objekt_id=o.id, dateiname_original="Plan.pdf", pfad="plan.pdf")
+    db.add(dokument)
+    db.flush()
+    seiten = [ObjektDokumentSeite(
+        org_id=a.id, objekt_id=o.id, dokument_id=dokument.id, seiten_nr=nummer,
+        volltext=text, titel=titel,
+    ) for nummer, (text, titel) in enumerate([
+        ("Volltext " * 100000, None), (None, "Nur Titel"), (None, None), ("", ""), ("   ", "  "),
+    ], 1)]
+    db.add_all(seiten)
+    db.flush()
+    erwartet = {str(seite.id) for seite in seiten[:2]}
+    abfragen = []
+
+    def sammle(_conn, _cursor, statement, _parameters, _context, _executemany):
+        abfragen.append(statement)
+
+    # Abgelaufene Entities duerfen auch durch einen impliziten Refresh nicht geladen werden.
+    db.expire_all()
+    org_id = a.id
+    event.listen(db.get_bind(), "before_cursor_execute", sammle)
+    try:
+        assert set(adapter_fuer("objekt_dokument_seite").alle_ids(db, org_id)) == erwartet
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", sammle)
+    assert len(abfragen) == 1
+    auswahl = abfragen[0].lower().split("from", 1)[0]
+    assert "volltext" not in auswahl and "titel" not in auswahl
+    assert auswahl.strip() == "select objekt_dokument_seite.id"
+
+
 def _katplan(db, a):
     p = KatplanPlan(org_id=a.id, titel="Snapshotplan", status="in_pruefung")
     user = User(org_id=a.id, username=uuid4().hex, password_hash="test", display_name="Freigeber")

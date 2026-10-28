@@ -901,9 +901,10 @@ async def print_gateway_ws(websocket: WebSocket):
             elif mtype == "printer_status":
                 # Periodischer Erreichbarkeits-Check je Drucker (id-basiert).
                 from app.services.printer_report_service import apply_printer_status
-                await asyncio.to_thread(_linux_report, connection, gateway.device_token_hash,
-                                        apply_printer_status, msg.get("payload") or {})
-                await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
+                geaendert = await asyncio.to_thread(_linux_report, connection, gateway.device_token_hash,
+                                                  apply_printer_status, msg.get("payload") or {})
+                if geaendert:
+                    await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
             elif mtype == "passthrough_status":
                 await set_passthrough_status(org_id, msg.get("payload") or {})
             elif mtype == "alarm_notice":
@@ -1019,7 +1020,7 @@ def _linux_report(connection, token_hash, fn, payload):
             Gateway.id == connection.gateway_id).with_for_update().first()
         if gateway_presence.state(db, "linux", connection.org_id, connection.gateway_id,
                                   token_hash, connection.connection_id) == "connected":
-            fn(connection.gateway_id, connection.org_id, payload)
+            return fn(connection.gateway_id, connection.org_id, payload)
 
 
 def _print_target(org_id: int, job_id: int, gateway_id: int | None = None):
