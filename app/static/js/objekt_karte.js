@@ -53,32 +53,38 @@
   }
   window.ladeObjektSymbole = ladeObjektSymbole;
 
+  function escapeHtml(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
   function objektSymbolHtml(typ, label, rotation) {
     // Unbekannte Typen (z. B. aus EUS-Import): Typ-Kuerzel statt "?" anzeigen
     var s = SYMBOLE[typ] || { text: String(typ || "?").substring(0, 4).toUpperCase(), stil: "box" };
     var inner;
     if (s.stil === "bild" && s.bild) {
-      inner = '<div class="oks oks--bild"><img src="' + s.bild + '" alt="" draggable="false"></div>';
+      inner = '<div class="oks oks--bild"><img src="' + escapeHtml(s.bild) + '" alt="" draggable="false"></div>';
     } else if (s.stil === "dreieck") {
-      inner = '<div class="oks oks--dreieck"><span>' + s.text + "</span></div>";
+      inner = '<div class="oks oks--dreieck"><span>' + escapeHtml(s.text) + "</span></div>";
     } else if (s.stil === "hydrant") {
-      inner = '<div class="oks oks--hydrant">' + s.text + "</div>";
+      inner = '<div class="oks oks--hydrant">' + escapeHtml(s.text) + "</div>";
     } else if (s.stil === "pfeil-voll") {
-      inner = '<div class="oks oks--pfeil oks--pfeil-voll">' + s.text + "</div>";
+      inner = '<div class="oks oks--pfeil oks--pfeil-voll">' + escapeHtml(s.text) + "</div>";
     } else if (s.stil === "pfeil-leer") {
-      inner = '<div class="oks oks--pfeil oks--pfeil-leer">' + s.text + "</div>";
+      inner = '<div class="oks oks--pfeil oks--pfeil-leer">' + escapeHtml(s.text) + "</div>";
     } else if (s.stil === "gruen") {
-      inner = '<div class="oks oks--box oks--gruen">' + s.text + "</div>";
+      inner = '<div class="oks oks--box oks--gruen">' + escapeHtml(s.text) + "</div>";
     } else if (s.stil === "rot") {
-      inner = '<div class="oks oks--box oks--rot">' + s.text + "</div>";
+      inner = '<div class="oks oks--box oks--rot">' + escapeHtml(s.text) + "</div>";
     } else {
-      inner = '<div class="oks oks--box">' + s.text + "</div>";
+      inner = '<div class="oks oks--box">' + escapeHtml(s.text) + "</div>";
     }
     // Eigener innerer Wrapper: Leaflets Positions-Transform bleibt unberuehrt.
     var winkel = ((Number(rotation) || 0) % 360 + 360) % 360;
     inner = '<div style="transform: rotate(' + winkel + 'deg)">' + inner + "</div>";
     if (label) {
-      inner += '<div class="oks__label">' + label.replace(/</g, "&lt;") + "</div>";
+      inner += '<div class="oks__label">' + escapeHtml(label) + "</div>";
     }
     return '<div class="oks-wrap">' + inner + "</div>";
   }
@@ -107,6 +113,309 @@
     });
   }
 
+  var WARNUNGEN = {
+    weit_vom_objekt: "Position liegt mehr als 2 km vom Objekt entfernt.",
+    einsatzkritisch_freigabe_erforderlich: "Einsatzkritisches Symbol: Position und Bedeutung ausdrücklich geprüft.",
+    moegliche_dublette: "Mögliche Dublette: mit bestehendem Marker oder anderem Vorschlag abgleichen.",
+    position_manuell: "Position wurde manuell korrigiert.",
+    georef_ungenau: "Georeferenz ist ungenau.",
+    georef_veraltet: "Georeferenz ist veraltet; Position erneut prüfen.",
+    georef_ungueltig: "Georeferenz ist ungültig.",
+    georef_ungeprueft: "Georeferenz ist noch ungeprüft.",
+    georef_entwurf: "Georeferenz ist noch ein Entwurf.",
+    georef_abgelehnt: "Georeferenz wurde abgelehnt; Position erneut bestimmen."
+  };
+  function warntext(w) {
+    return (WARNUNGEN[w.code] || "Unbekannte Warnung: " + w.code) +
+      (w.marker_id ? " (Marker #" + w.marker_id + ")" : "") +
+      (w.vorschlag_id ? " (Vorschlag #" + w.vorschlag_id + ")" : "");
+  }
+  function geometrie(v) {
+    return typeof v.geometry_json === "string" ? JSON.parse(v.geometry_json) : v.geometry_json || v.geometry;
+  }
+  function position(v) {
+    if (v.lat != null && v.lng != null) { return [v.lat, v.lng]; }
+    var g = geometrie(v);
+    return g && g.type === "Point" ? [g.coordinates[1], g.coordinates[0]] : null;
+  }
+  function prueffaehig(v) {
+    return v.freigabe_status === "offen" && v.position_status === "vorgeschlagen" &&
+      !!(position(v) || geometrie(v));
+  }
+  function filterPasst(v, filter) {
+    return filter === "alle" || (filter === "neu" && v.operation === "hinzufuegen") ||
+      (filter === "aenderungen" && v.operation !== "hinzufuegen") ||
+      (filter === "unklar" && v.position_status === "pruefung_erforderlich") ||
+      (filter === "veraltet" && v.position_status === "veraltet") ||
+      (filter === "dubletten" && v.warnungen.some(function (w) { return w.code === "moegliche_dublette"; }));
+  }
+  // Kleine reine Helfer auch fuer die bestehenden Node-Tests.
+  window.objektKarteReview = { prueffaehig: prueffaehig, filterPasst: filterPasst, warntext: warntext };
+
+  function initReview(root, karte, get, post, markerErsetzen, modusWechsel) {
+    var modus = root.querySelector("[data-review-modus]");
+    var panel = root.querySelector("[data-review-panel]");
+    var liste = root.querySelector("[data-review-liste]");
+    var detail = root.querySelector("[data-review-detail]");
+    var filter = root.querySelector("[data-review-filter]");
+    var freigabe = root.querySelector("[data-review-freigeben]");
+    var dialog = root.querySelector("[data-review-dialog]");
+    var fehler = root.querySelector("[data-review-fehler]");
+    var sperre = root.querySelector("[data-review-sperre]");
+    var layout = root.nextElementSibling;
+    // Panel neben der Karte; Schalter und Dialog bleiben oberhalb erreichbar.
+    if (layout) { layout.insertBefore(panel, layout.firstChild); }
+    var gesperrt = root.dataset.gesperrt === "1";
+    var daten = [], layers = [], auswahl = new Set(), aktiv = null, busy = false;
+    var operationen = { hinzufuegen: "Neu", aendern: "Änderung", entfernen: "Entfernen" };
+
+    function el(tag, text, parent, klasse) {
+      var node = document.createElement(tag);
+      if (text != null) { node.textContent = text; }
+      if (klasse) { node.className = klasse; }
+      if (parent) { parent.appendChild(node); }
+      return node;
+    }
+    function button(text, parent, aktion) {
+      var b = el("button", text, parent, "btn btn--ghost btn--xs");
+      b.type = "button";
+      b.disabled = busy;
+      b.onclick = aktion;
+      return b;
+    }
+    function meldung(err) {
+      fehler.hidden = false;
+      fehler.textContent = err.message || "Vorschläge konnten nicht geladen werden.";
+      var app = document.querySelector('[x-data="appState()"]');
+      if (app && window.Alpine) { window.Alpine.$data(app).addToast(fehler.textContent, "error"); }
+    }
+    function leeren() {
+      layers.forEach(function (layer) { karte.removeLayer(layer); });
+      layers = [];
+    }
+    function layerDazu(layer) { layer.addTo(karte); layers.push(layer); return layer; }
+    function waehlen(v, zentrieren) {
+      aktiv = v.id;
+      if (zentrieren) {
+        if (position(v)) { karte.setView(position(v), Math.max(karte.getZoom(), 19)); }
+        else if (geometrie(v)) { karte.fitBounds(L.geoJSON(geometrie(v)).getBounds()); }
+      }
+      details(v);
+    }
+    function korrigieren(v, pos, rotation, label) {
+      return mutation("/vorschlaege/" + v.id + "/korrigieren", {
+        lat: pos[0], lng: pos[1], rotation: rotation, label: label
+      });
+    }
+    function zeichnen() {
+      leeren();
+      if (!modus.checked) { return; }
+      daten.filter(function (v) { return filterPasst(v, filter.value); }).forEach(function (v) {
+        var pos = position(v), g = geometrie(v), layer;
+        if (!pos && v.position_status === "pruefung_erforderlich") { return; }
+        var stil = { color: "#7654be", dashArray: "6 5", weight: 3, fillOpacity: 0.12, pmIgnore: true };
+        if (pos) {
+          var icon = symbolIcon(v.symbol_code, v.label, v.rotation);
+          icon.options ? icon.options.className += " oks-review__marker" : icon.className += " oks-review__marker";
+          layer = L.marker(pos, { icon: icon, draggable: !busy, pmIgnore: true });
+          layer.on("dragend", function (ev) {
+            var p = ev.target.getLatLng();
+            korrigieren(v, [p.lat, p.lng], v.rotation, v.label);
+          });
+          if (v.genauigkeit_m != null) {
+            layerDazu(L.circle(pos, Object.assign({ radius: v.genauigkeit_m, interactive: false }, stil)));
+          }
+        } else if (g && v.position_status !== "pruefung_erforderlich") {
+          layer = L.geoJSON(g, { style: stil, pmIgnore: true });
+        }
+        if (layer) { layer.on("click", function () { waehlen(v, false); }); layerDazu(layer); }
+        var alt = v.basis_marker;
+        if (alt && v.operation !== "hinzufuegen") {
+          var altpos = position(alt);
+          if (altpos) {
+            var geist = symbolIcon(alt.typ, alt.label, alt.rotation);
+            geist.options ? geist.options.className += " oks-review__geist" : geist.className += " oks-review__geist";
+            layerDazu(L.marker(altpos, { icon: geist, interactive: false, pmIgnore: true }));
+            if (pos) { layerDazu(L.polyline([altpos, pos], Object.assign({ interactive: false }, stil))); }
+          } else if (alt.geometry) {
+            layerDazu(L.geoJSON(alt.geometry, { style: Object.assign({ opacity: 0.4 }, stil), pmIgnore: true }));
+          }
+        }
+      });
+    }
+    function render() {
+      sperre.hidden = !gesperrt;
+      freigabe.disabled = gesperrt || busy || auswahl.size === 0;
+      root.querySelector("[data-review-count]").textContent = daten.length;
+      liste.replaceChildren();
+      daten.filter(function (v) { return filterPasst(v, filter.value); }).forEach(function (v) {
+        var row = el("div", null, liste, "oks-review__eintrag");
+        if (prueffaehig(v)) {
+          var check = el("input", null, row);
+          check.type = "checkbox";
+          check.checked = auswahl.has(v.id);
+          check.disabled = busy || gesperrt;
+          check.setAttribute("aria-label", "Vorschlag #" + v.id + " auswählen");
+          check.onchange = function () {
+            if (check.checked) { auswahl.add(v.id); } else { auswahl.delete(v.id); }
+            freigabe.disabled = gesperrt || busy || auswahl.size === 0;
+          };
+        }
+        button("#" + v.id + " · " + operationen[v.operation] + " · " + (v.label || v.symbol_code) +
+          (v.position_status === "veraltet" ? " · Veraltet" : ""), row, function () { waehlen(v, true); });
+      });
+      if (!liste.childNodes.length) { el("p", "Keine offenen Vorschläge für diesen Filter.", liste); }
+      var v = daten.find(function (v) { return v.id === aktiv; });
+      if (v) { details(v); } else { detail.textContent = "Vorschlag aus der Liste oder auf der Karte auswählen."; }
+      zeichnen();
+    }
+    function feld(text, wert, typ, parent) {
+      var gruppe = el("div", null, parent, "form-group");
+      var label = el("label", text, gruppe, "form-label");
+      var input = el("input", null, gruppe, "form-input");
+      input.type = typ;
+      input.value = wert == null ? "" : wert;
+      input.id = "oks-review-feld-" + text.replace(/[^a-z]/gi, "");
+      label.htmlFor = input.id;
+      input.disabled = busy;
+      return input;
+    }
+    function details(v) {
+      detail.replaceChildren();
+      el("h4", "#" + v.id + " · " + operationen[v.operation] + " · Symbol: " + v.symbol_code, detail);
+      var quelle = el("div", null, detail, "oks-review__quelle");
+      var texte = el("div", null, quelle);
+      el("p", "Positionsherkunft: " + v.position_methode, texte);
+      el("p", "Genauigkeit: " + (v.genauigkeit_m == null ? "unbekannt" : v.genauigkeit_m + " m"), texte);
+      el("p", "Erkennungskonfidenz: " + (v.erkennungs_konfidenz == null ? "unbekannt" :
+        Math.round(v.erkennungs_konfidenz * 100) + " %"), texte);
+      el("p", "Begründung: " + (v.begruendung || "Keine Angabe"), texte);
+      el("p", "Quelle: " + (v.quelle_dokument_name || (v.quelle_dokument_id ? "Dokument #" + v.quelle_dokument_id : "Keine Angabe")) +
+        (v.quelle_seite ? " · Seite " + v.quelle_seite : ""), texte);
+      if (Number.isInteger(v.quelle_seite_id)) {
+        var link = el("a", "Dokumentseite öffnen", texte);
+        link.href = "/objekt-medien/seite/" + v.quelle_seite_id + "/pdf";
+        link.target = "_blank"; link.rel = "noopener";
+        var bildLink = el("a", null, quelle);
+        bildLink.href = link.href; bildLink.target = "_blank"; bildLink.rel = "noopener";
+        var bild = el("img", null, bildLink);
+        bild.src = "/objekt-medien/seite/" + v.quelle_seite_id + "/thumb";
+        bild.alt = "Vorschau Quelldokument, Seite " + v.quelle_seite;
+        bild.loading = "lazy";
+      }
+      v.warnungen.forEach(function (w) { el("p", warntext(w), detail); });
+      var form = el("form", null, detail);
+      var pos = position(v);
+      el("p", "Position per Marker verschieben oder Koordinaten eingeben. Korrektur wird als manuell geprüft gespeichert.", form, "form-hint");
+      var lat = feld("Breitengrad", pos && pos[0], "number", form);
+      var lng = feld("Längengrad", pos && pos[1], "number", form);
+      lat.step = lng.step = "any"; lat.required = lng.required = true;
+      lat.min = "-90"; lat.max = "90"; lng.min = "-180"; lng.max = "180";
+      var rotation = feld("Drehung in Grad", v.rotation, "number", form);
+      rotation.step = "1"; rotation.required = true;
+      var label = feld("Beschriftung", v.label, "text", form); label.maxLength = 100;
+      // Geometrien duerfen durch eine Textkorrektur nicht versehentlich zu Punkten werden.
+      var speichern = button("Korrektur speichern", form, null);
+      var nurGeometrie = !!(geometrie(v) && !pos);
+      speichern.type = "submit"; speichern.disabled = busy || nurGeometrie;
+      if (nurGeometrie) {
+        [lat, lng, rotation, label].forEach(function (input) { input.disabled = true; });
+        el("p", "Die Positionskorrektur ist hier nur für Punktsymbole verfügbar. Linien und Flächen können geprüft, freigegeben oder abgelehnt werden.", form, "form-hint");
+      }
+      form.onsubmit = function (ev) {
+        ev.preventDefault();
+        korrigieren(v, [Number(lat.value), Number(lng.value)], Number(rotation.value), label.value);
+      };
+      var grund = feld("Ablehngrund", "", "text", detail); grund.maxLength = 10000;
+      var aktionen = el("div", null, detail, "oks-review__aktionen");
+      button("Ablehnen", aktionen, function () {
+        if (!grund.value.trim()) { grund.focus(); meldung(new Error("Bitte einen Ablehngrund eingeben.")); return; }
+        mutation("/vorschlaege/" + v.id + "/ablehnen", { grund: grund.value });
+      });
+      var b = button("Freigeben", aktionen, function () { freigeben([v]); });
+      b.disabled = busy || gesperrt || !prueffaehig(v);
+    }
+    function laden() {
+      // Review-GET markiert veraltete Quellen; produktive Marker danach lesen.
+      return get("/vorschlaege.json").then(function (review) {
+        return get("/objekte.json").then(function (karteDaten) {
+          daten = review.vorschlaege.filter(function (v) { return v.freigabe_status === "offen"; });
+          gesperrt = review.freigabe_gesperrt;
+          auswahl.clear();
+          markerErsetzen(karteDaten.eintraege);
+          render();
+        });
+      });
+    }
+    function mutation(pfad, payload) {
+      if (busy) { return Promise.resolve(); }
+      busy = true; fehler.hidden = true; render();
+      dialog.querySelectorAll("button, input").forEach(function (e) { e.disabled = true; });
+      return post(pfad, payload).then(function () {
+        if (dialog.open) { dialog.close(); }
+        return laden();
+      }).catch(function (err) {
+        meldung(err);
+        // Auch Drag-Vorschau zuruecksetzen und Konflikte neu einlesen.
+        return laden().catch(meldung);
+      }).finally(function () {
+        busy = false;
+        render();
+        // Ein alter Dialog darf nach Konflikten keine veraltete Auswahl bestaetigen.
+        if (dialog.open) { dialog.close(); }
+      });
+    }
+    function freigeben(vorschlaege) {
+      if (busy || gesperrt || !vorschlaege.length) { return; }
+      if (vorschlaege.length > 30) { meldung(new Error("Bitte maximal 30 Vorschläge auswählen.")); return; }
+      dialog.replaceChildren();
+      el("h3", "Freigabe bestätigen", dialog);
+      var checks = [];
+      vorschlaege.forEach(function (v) {
+        el("p", "#" + v.id + " · " + (v.label || v.symbol_code), dialog);
+        var warnungen = v.warnungen.slice();
+        var kritisch = function (code) {
+          return ["fsd", "bmz", "fbf", "hauptzugang", "nebenzugang", "dlk_stellplatz"].includes(code) || /^(gefahr_|hydrant_)/.test(code);
+        };
+        if ((kritisch(v.symbol_code) || (v.basis_marker && kritisch(v.basis_marker.typ))) &&
+            !warnungen.some(function (w) { return w.code === "einsatzkritisch_freigabe_erforderlich"; })) {
+          warnungen.push({ code: "einsatzkritisch_freigabe_erforderlich" });
+        }
+        warnungen.forEach(function (w) {
+          var label = el("label", null, dialog);
+          var check = el("input", null, label); check.type = "checkbox";
+          el("span", " " + warntext(w), label);
+          checks.push({ id: v.id, code: w.code, input: check });
+        });
+      });
+      var aktionen = el("div", null, dialog, "oks-review__aktionen");
+      button("Abbrechen", aktionen, function () { dialog.close(); });
+      var bestaetigen = button("Jetzt freigeben", aktionen, function () {
+        if (checks.some(function (c) { return !c.input.checked; })) { return; }
+        var bestaetigungen = {};
+        checks.forEach(function (c) {
+          if (!bestaetigungen[c.id]) { bestaetigungen[c.id] = []; }
+          bestaetigungen[c.id].push(c.code);
+        });
+        mutation("/vorschlaege/freigeben", {
+          ids: vorschlaege.map(function (v) { return v.id; }), bestaetigte_warnungen: bestaetigungen
+        });
+      });
+      function aktualisieren() { bestaetigen.disabled = checks.some(function (c) { return !c.input.checked; }); }
+      checks.forEach(function (c) { c.input.onchange = aktualisieren; });
+      aktualisieren(); dialog.showModal();
+    }
+    freigabe.onclick = function () { freigeben(daten.filter(function (v) { return auswahl.has(v.id); })); };
+    filter.onchange = render;
+    modus.onchange = function () {
+      panel.hidden = !modus.checked;
+      if (layout) { layout.classList.toggle("oks-review__layout", modus.checked); }
+      modusWechsel(modus.checked);
+      karte.invalidateSize();
+      if (modus.checked) { laden().catch(meldung); } else { leeren(); }
+    };
+  }
+
   window.initObjektKarte = function (opts) {
     var karte = L.map(opts.elementId, { zoomControl: true });
     window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
@@ -118,6 +427,23 @@
       return "/objekte/" + opts.objektId + "/karte" + pfad;
     }
 
+    function apiGet(pfad) {
+      return fetch(apiUrl(pfad)).then(antwortLesen);
+    }
+    function antwortLesen(r) {
+      return r.json().then(function (daten) {
+        if (!r.ok) {
+          var detail = daten.detail;
+          var text = typeof detail === "string" ? detail : (detail && detail.meldung) || "Ungültige Eingabe";
+          if (detail && detail.ergebnisse) {
+            text += ": " + detail.ergebnisse.map(function (e) { return "#" + e.id + " " + e.ursache; }).join("; ");
+          }
+          throw new Error((r.status === 409 ? "Konflikt (Revision oder Arbeitskopie). " : "") + text +
+            (r.status === 409 || r.status === 422 ? " Es wurde nichts übernommen. Bitte Daten neu laden und prüfen." : ""));
+        }
+        return daten;
+      });
+    }
     function apiPost(pfad, daten) {
       return fetch(apiUrl(pfad), {
         method: "POST",
@@ -126,10 +452,7 @@
           "X-CSRF-Token": opts.csrfToken
         },
         body: JSON.stringify(daten)
-      }).then(function (r) {
-        if (!r.ok) { throw new Error("HTTP " + r.status); }
-        return r.json();
-      });
+      }).then(antwortLesen);
     }
 
     function eintragEntfernen(id) {
@@ -141,6 +464,8 @@
     function popupHtml(e) {
       var html = "<strong>" + (e.label || e.typ).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</strong>";
       if (opts.editierbar) {
+        var status = { bestaetigt: "Bestätigt", veraltet: "Veraltet" }[e.position_status] || "Legacy / ungeprüft";
+        html += '<span class="oks-review__status">' + status + '</span>';
         if (!e.geometry || e.geometry.type === "Point") {
           html += '<div>Drehung: <span data-winkel>' + (e.rotation || 0) + '</span>°</div>' +
             '<div><button type="button" class="btn btn--xs" data-drehung="-15">-15°</button> ' +
@@ -269,6 +594,27 @@
       .catch(function () {});
 
     if (!opts.editierbar) { return karte; }
+    var review = document.getElementById("oks-review");
+    if (review) {
+      initReview(review, karte, apiGet, apiPost, function (eintraege) {
+        Object.keys(layerById).forEach(function (id) { karte.removeLayer(layerById[id]); });
+        layerById = {};
+        eintraege.forEach(eintragAnzeigen);
+      }, function (aktiv) {
+        aktiverTyp = null;
+        if (karte.pm) { karte.pm.disableGlobalEditMode(); karte.pm.disableDraw(); karte.pm.disableGlobalRotateMode(); }
+        var paletteElement = document.getElementById("oks-palette");
+        if (paletteElement) {
+          paletteElement.closest("aside").hidden = aktiv;
+          paletteElement.querySelectorAll(".oks-palette__eintrag--aktiv").forEach(function (b) {
+            b.classList.remove("oks-palette__eintrag--aktiv");
+          });
+        }
+        if (karte.pm) {
+          if (aktiv) { karte.pm.removeControls(); } else { karte.pm.addControls(geomanOptionen); }
+        }
+      });
+    }
 
     /* ── Editor: Palette (Klick waehlt Symbol, Kartenklick platziert) ── */
     var palette = document.getElementById("oks-palette");
@@ -303,7 +649,7 @@
 
     /* ── Geoman: Linien/Flaechen ── */
     if (karte.pm) {
-      karte.pm.addControls({
+      var geomanOptionen = {
         position: "topleft",
         drawMarker: false,
         drawCircleMarker: false,
@@ -317,7 +663,8 @@
         cutPolygon: false,
         removalMode: false,
         rotateMode: true
-      });
+      };
+      karte.pm.addControls(geomanOptionen);
       karte.on("pm:create", function (ev) {
         var gj = ev.layer.toGeoJSON();
         var label = "";

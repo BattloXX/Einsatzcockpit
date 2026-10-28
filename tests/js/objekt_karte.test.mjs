@@ -59,7 +59,7 @@ test("alle Symbolstile drehen innen, die Beschriftung bleibt ausserhalb des Dreh
   for (const typ of ["fsd", "hauptzugang", "nebenzugang", "gefahr_ex", "hydrant_ueberflur", "sammelplatz", "feuerloescher", "bild"]) {
     const html = window.objektSymbolHtml(typ, "Zugang <West>", -15);
     assert.match(html, /^<div class="oks-wrap"><div style="transform: rotate\(345deg\)">/);
-    assert.match(html, /<\/div><\/div><div class="oks__label">Zugang &lt;West>/);
+    assert.match(html, /<\/div><\/div><div class="oks__label">Zugang &lt;West&gt;/);
     assert.equal((html.match(/transform:/g) || []).length, 1);
   }
   assert.match(window.objektSymbolHtml("bmz"), /rotate\(0deg\)/);
@@ -126,4 +126,46 @@ test("readonly rendert den Winkel ohne Drehsteuerung", async () => {
   assert.doesNotMatch(env.marker[0].popup(), /data-drehung/);
   assert.equal(env.marker[0].events.popupopen, undefined);
   assert.equal(env.controls(), undefined);
+});
+
+test("KI-Texte und Katalogtexte werden vollständig escaped", () => {
+  const { window } = umgebung();
+  window.setObjektSymbole([{ code: "ki", text: '<script>alert("x")</script>', stil: "box" }]);
+  const html = window.objektSymbolHtml("ki", '<img src=x onerror="alert(1)"> &lt;script&gt;');
+  assert.doesNotMatch(html, /<script|<img/);
+  assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)/);
+  assert.match(html, /&amp;lt;script&amp;gt;/);
+});
+
+test("Review-Filter und Prüffähigkeit trennen Status, Position und Freigabe", () => {
+  const { window } = umgebung();
+  const { prueffaehig, filterPasst, warntext } = window.objektKarteReview;
+  const v = { freigabe_status: "offen", position_status: "vorgeschlagen", lat: 47, lng: 9,
+    operation: "hinzufuegen", warnungen: [{ code: "moegliche_dublette" }] };
+  assert.equal(prueffaehig(v), true);
+  for (const status of ["pruefung_erforderlich", "veraltet"]) {
+    assert.equal(prueffaehig({ ...v, position_status: status }), false);
+  }
+  assert.equal(prueffaehig({ ...v, freigabe_status: "angenommen" }), false);
+  assert.equal(prueffaehig({ ...v, lat: null, lng: null }), false);
+  assert.equal(prueffaehig({ ...v, lat: null, lng: null,
+    geometry_json: '{"type":"Point","coordinates":[9,47]}' }), true);
+  for (const f of ["alle", "neu", "dubletten"]) assert.equal(filterPasst(v, f), true);
+  for (const f of ["aenderungen", "unklar", "veraltet"]) assert.equal(filterPasst(v, f), false);
+  assert.equal(filterPasst({ ...v, operation: "entfernen" }, "aenderungen"), true);
+  assert.equal(filterPasst({ ...v, position_status: "veraltet" }, "veraltet"), true);
+  assert.match(warntext({ code: "neuer_code<script>" }), /neuer_code<script>/);
+});
+
+test("Marker-Popups zeigen Verwaltern Legacy, bestätigt und veraltet", async () => {
+  const env = umgebung([
+    { id: 1, typ: "tor", lat: 47, lng: 9 },
+    { id: 2, typ: "tor", lat: 47, lng: 9, position_status: "bestaetigt" },
+    { id: 3, typ: "tor", lat: 47, lng: 9, position_status: "veraltet" },
+  ]);
+  env.window.initObjektKarte({ elementId: "karte", objektId: 7, editierbar: true });
+  await fertig();
+  assert.match(env.marker[0].popup(), /Legacy \/ ungeprüft/);
+  assert.match(env.marker[1].popup(), /Bestätigt/);
+  assert.match(env.marker[2].popup(), /Veraltet/);
 });

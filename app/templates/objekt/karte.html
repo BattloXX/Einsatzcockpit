@@ -14,6 +14,7 @@
     <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück zum Objekt</a>
   </div>
 
+  {% if ist_verwalter %}{% include "objekt/_karte_review.html" %}{% endif %}
   <div class="objekt-karte-layout">
     <aside class="card" style="padding:12px;">
       <div class="form-group">

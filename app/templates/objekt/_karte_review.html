@@ -1,0 +1,40 @@
+<style>
+  .oks-review { margin-bottom:12px; }
+  .oks-review__inhalt { display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px; }
+  .oks-review__layout { grid-template-columns:minmax(280px,380px) minmax(0,1fr); }
+  .oks-review__panel { max-height:650px;overflow:auto;padding:12px; }
+  .oks-review__liste { max-height:180px;overflow:auto; }
+  .oks-review__eintrag { display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid var(--border); }
+  .oks-review__eintrag button { white-space:normal;text-align:left;overflow-wrap:anywhere;min-width:0; }
+  .oks-review__detail { min-width:0;overflow-wrap:anywhere; }
+  .oks-review__quelle { display:flex;align-items:start;gap:12px; }
+  .oks-review__quelle > div { min-width:0;flex:1; }
+  .oks-review__quelle img { width:80px;max-height:180px;object-fit:contain; }
+  .oks-review__aktionen { display:flex;gap:8px;flex-wrap:wrap;margin-top:12px; }
+  .oks-review__dialog { max-width:600px;max-height:85vh;overflow:auto;background:var(--surface-mid);color:inherit;padding:20px;border-radius:8px; }
+  .oks-review__dialog label { display:block;margin:12px 0; }
+  .oks-review__marker .oks-wrap { border:3px dashed #7654be;background:#eee5ff;padding:5px;border-radius:6px; }
+  .oks-review__geist .oks-wrap { border:2px dashed #7654be;opacity:.5;padding:5px; }
+  .oks-review__status { display:block;font-size:12px;opacity:.8; }
+  @media(max-width:760px) { .oks-review__layout { grid-template-columns:1fr; } .oks-review__panel { max-height:480px; } .oks-review__inhalt { grid-template-columns:1fr; } .oks-review__liste { max-height:180px; } }
+</style>
+<section id="oks-review" class="card oks-review" style="padding:12px;" data-gesperrt="{{ '1' if karten_freigabe_gesperrt else '0' }}">
+  <label><input type="checkbox" data-review-modus> KI-Vorschläge prüfen (<span data-review-count>{{ karten_vorschlag_count }}</span> offen)</label>
+  <div data-review-panel class="card oks-review__panel" hidden>
+    <p data-review-sperre {% if not karten_freigabe_gesperrt %}hidden{% endif %} class="form-hint">Offene Arbeitskopie: Freigabe erst nach Übernahme oder Verwerfen am Basisobjekt möglich.</p>
+    <div class="oks-review__aktionen">
+      <label>Filter <select data-review-filter class="form-select">
+        <option value="alle">Alle</option><option value="neu">Neu</option><option value="aenderungen">Änderungen</option>
+        <option value="unklar">Unklar</option><option value="dubletten">Dubletten</option><option value="veraltet">Veraltet</option>
+      </select></label>
+      <button type="button" class="btn btn--primary btn--xs" data-review-freigeben {% if karten_freigabe_gesperrt %}disabled{% endif %}>Auswahl freigeben</button>
+    </div>
+    <p class="form-hint">Violett gestrichelt: Vorschlag. Kreis: Positionsgenauigkeit. Transparent: Altposition. Ohne Position nur in der Liste. Maximal 30 Vorschläge je Freigabe.</p>
+    <p data-review-fehler role="alert" hidden></p>
+    <div class="oks-review__inhalt">
+      <div data-review-liste class="oks-review__liste" aria-label="Offene Vorschläge"></div>
+      <div data-review-detail class="oks-review__detail" aria-live="polite">Vorschlag aus der Liste oder auf der Karte auswählen.</div>
+    </div>
+  </div>
+  <dialog data-review-dialog class="oks-review__dialog" aria-label="Freigabe bestätigen"></dialog>
+</section>

@@ -39,6 +39,7 @@ def _karten_objekt_dict(k: ObjektKartenObjekt) -> dict:
         "geometry": parse_karten_geometry(k.geometry_json),
         "label": k.label,
         "rotation": k.rotation % 360,
+        "position_status": k.position_status,
     }
 
 
