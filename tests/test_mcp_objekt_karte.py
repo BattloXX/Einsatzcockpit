@@ -52,7 +52,9 @@ def test_lesen_werte_sortierung_und_katalog(client, karte):
     linie, punkt = gelesen["marker"]
     assert linie["geometry"] == {"type": "LineString", "coordinates": [[9, 47], [9.1, 47.1]]}
     assert punkt == {"id": punkt["id"], "typ": "tor", "symbolname": "Werkstor", "lat": 47.11, "lng": 9.22,
-                     "geometry": None, "label": "Zufahrt", "rotation": 90, "sort": 2}
+                     "geometry": None, "label": "Zufahrt", "rotation": 90, "sort": 2,
+                     "position_status": "ungeprueft", "revision": 1, "quelle_dokument_id": None,
+                     "quelle_seite": None, "genauigkeit_m": None, "geprueft_von": None, "geprueft_am": None}
     katalog = _rufe(client, token, "objekt_karte_symbolkatalog")["symbole"]
     symbole = {s["code"]: s for s in katalog}
     assert symbole["tor"] == {"code": "tor", "name": "Werkstor", "stil": "box", "text": "T",

@@ -800,6 +800,56 @@ class ObjektKartenObjekt(TenantScoped, Base):
     label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    position_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="ungeprueft", server_default="ungeprueft"
+    )
+    quelle_dokument_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_dokument.id", ondelete="SET NULL")
+    )
+    quelle_seite: Mapped[int | None] = mapped_column(SmallInteger)
+    genauigkeit_m: Mapped[float | None] = mapped_column(Float)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    geprueft_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    geprueft_am: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class ObjektKartenVorschlag(TenantScoped, Base):
+    """Pruefbare Vorschlaege; produktive Marker werden separat freigegeben."""
+    __tablename__ = "objekt_karten_vorschlag"
+    __table_args__ = (Index("ix_objekt_karten_vorschlag_org_objekt_status", "org_id", "objekt_id", "freigabe_status"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    objekt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"))
+    basis_marker_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_karten_objekt.id", ondelete="SET NULL")
+    )
+    operation: Mapped[str] = mapped_column(String(20), nullable=False)
+    symbol_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(100))
+    rotation: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
+    lat: Mapped[float | None] = mapped_column(Float)
+    lng: Mapped[float | None] = mapped_column(Float)
+    geometry_json: Mapped[str | None] = mapped_column(Text)
+    position_status: Mapped[str] = mapped_column(String(30), default="vorgeschlagen", server_default="vorgeschlagen")
+    position_methode: Mapped[str] = mapped_column(String(40), default="unbekannt", server_default="unbekannt")
+    genauigkeit_m: Mapped[float | None] = mapped_column(Float)
+    erkennungs_konfidenz: Mapped[float | None] = mapped_column(Float)
+    quelle_dokument_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_dokument.id", ondelete="SET NULL")
+    )
+    quelle_seite: Mapped[int | None] = mapped_column(SmallInteger)
+    quelle_ausschnitt: Mapped[str | None] = mapped_column(Text)
+    quelle_dokument_hash: Mapped[str | None] = mapped_column(String(64))
+    begruendung: Mapped[str | None] = mapped_column(Text)
+    warnungen_json: Mapped[str | None] = mapped_column(Text)
+    expected_revision: Mapped[int | None] = mapped_column(Integer)
+    freigabe_status: Mapped[str] = mapped_column(String(20), default="offen", server_default="offen")
+    erstellt_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+    geprueft_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    geprueft_am: Mapped[datetime | None] = mapped_column(DateTime)
+    quelle: Mapped[str] = mapped_column(String(10), default="mcp", server_default="mcp")
+
 
 OBJEKT_INFO_KANAELE = {"mail": "E-Mail", "sms": "SMS"}
 OBJEKT_INFO_GESENDET = "gesendet"

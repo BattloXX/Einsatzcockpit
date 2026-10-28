@@ -2340,3 +2340,20 @@ async def objekt_karte_lesen(
 @server.tool(name="objekt_karte_symbolkatalog", description=TOOLS["objekt_karte_symbolkatalog"].description)
 async def objekt_karte_symbolkatalog(ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("objekt_karte_symbolkatalog")
+
+
+@server.tool(name="objekt_karte_vorschlaege", description=TOOLS["objekt_karte_vorschlaege"].description)
+async def objekt_karte_vorschlaege(
+    objekt_id: int, aktion: str, vorschlaege: list[dict] | None = None,
+    vorschlag_id: int | None = None, filter_status: str | None = None,
+    pruefen: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_karte_vorschlaege", objekt_id=objekt_id, aktion=aktion, vorschlaege=vorschlaege,
+        vorschlag_id=vorschlag_id, filter_status=filter_status, pruefen=pruefen,
+    )
+
+
+@server.tool(name="objekt_karte_pruefen", description=TOOLS["objekt_karte_pruefen"].description)
+async def objekt_karte_pruefen(objekt_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("objekt_karte_pruefen", objekt_id=objekt_id)
