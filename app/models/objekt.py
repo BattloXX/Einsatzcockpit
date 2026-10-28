@@ -807,6 +807,7 @@ class ObjektKartenObjekt(TenantScoped, Base):
         BigInteger, ForeignKey("objekt_dokument.id", ondelete="SET NULL")
     )
     quelle_seite: Mapped[int | None] = mapped_column(SmallInteger)
+    quelle_dokument_hash: Mapped[str | None] = mapped_column(String(64))
     genauigkeit_m: Mapped[float | None] = mapped_column(Float)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     geprueft_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))

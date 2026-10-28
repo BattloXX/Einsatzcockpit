@@ -2346,11 +2346,12 @@ async def objekt_karte_symbolkatalog(ctx: Context | None = None) -> dict[str, ob
 async def objekt_karte_vorschlaege(
     objekt_id: int, aktion: str, vorschlaege: list[dict] | None = None,
     vorschlag_id: int | None = None, filter_status: str | None = None,
-    pruefen: bool = False, ctx: Context | None = None,
+    pruefen: bool = False, veraltete_markieren: bool = False, ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
         "objekt_karte_vorschlaege", objekt_id=objekt_id, aktion=aktion, vorschlaege=vorschlaege,
         vorschlag_id=vorschlag_id, filter_status=filter_status, pruefen=pruefen,
+        veraltete_markieren=veraltete_markieren,
     )
 
 
@@ -2376,3 +2377,21 @@ async def objekt_karte_gebaeude_umrisse(
     objekt_id: int, radius_m: int = 150, ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool("objekt_karte_gebaeude_umrisse", objekt_id=objekt_id, radius_m=radius_m)
+
+
+@server.tool(name="objekt_karte_vorschau", description=TOOLS["objekt_karte_vorschau"].description)
+async def objekt_karte_vorschau(
+    objekt_id: int, status_filter: str | None = None, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("objekt_karte_vorschau", objekt_id=objekt_id, status_filter=status_filter)
+
+
+@server.tool(name="objekt_karte_freigeben", description=TOOLS["objekt_karte_freigeben"].description)
+async def objekt_karte_freigeben(
+    objekt_id: int, vorschlag_ids: list[int], bestaetigte_warnungen: dict, bestaetigung: str,
+    pruefen: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_karte_freigeben", objekt_id=objekt_id, vorschlag_ids=vorschlag_ids,
+        bestaetigte_warnungen=bestaetigte_warnungen, bestaetigung=bestaetigung, pruefen=pruefen,
+    )

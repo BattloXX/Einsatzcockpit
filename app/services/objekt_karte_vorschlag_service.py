@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.objekt import Objekt, ObjektDokument, ObjektKartenVorschlag
+from app.models.objekt import Objekt, ObjektDokument, ObjektKartenObjekt, ObjektKartenVorschlag
 from app.services.objekt_karte_service import (
     EINSATZKRITISCHE_SYMBOLTYPEN,
     ObjektKartenFehler,
@@ -67,10 +67,13 @@ def _dokument(db: Session, objekt: Objekt, dokument_id: int) -> ObjektDokument:
     return dokument
 
 
-def _veraltet(db: Session, objekt: Objekt, v: ObjektKartenVorschlag) -> bool:
+def _veraltet(db: Session, objekt: Objekt, v: ObjektKartenVorschlag | ObjektKartenObjekt) -> bool:
     if v.quelle_dokument_id is None:
         return bool(v.quelle_dokument_hash)
-    dokument = _dokument(db, objekt, v.quelle_dokument_id)
+    dokument = db.query(ObjektDokument).filter_by(
+        id=v.quelle_dokument_id, objekt_id=objekt.id, org_id=objekt.org_id).first()
+    if dokument is None:
+        return True
     gruppe = dokument.dokument_gruppe_id or dokument.id
     aktuell = db.query(ObjektDokument).filter(
         ObjektDokument.objekt_id == objekt.id, ObjektDokument.org_id == objekt.org_id,
@@ -84,7 +87,8 @@ def vorschlag_dict(v: ObjektKartenVorschlag, db: Session | None = None, objekt: 
     daten = {name: getattr(v, name) for name in _FELDER}
     daten.update(id=v.id, objekt_id=v.objekt_id, freigabe_status=v.freigabe_status,
                  warnungen=json.loads(v.warnungen_json or "[]"), erstellt_von=v.erstellt_von,
-                 erstellt_am=v.erstellt_am.isoformat() if v.erstellt_am else None)
+                 erstellt_am=v.erstellt_am.isoformat() if v.erstellt_am else None,
+                 geprueft_von=v.geprueft_von, geprueft_am=v.geprueft_am.isoformat() if v.geprueft_am else None)
     if (v.georef_id is not None or v.position_methode == "plan_georeferenzierung") and db is not None and objekt:
         from app.models.objekt import ObjektDokumentGeoref
         from app.services.objekt_georef_service import georef_pruefen
@@ -92,7 +96,8 @@ def vorschlag_dict(v: ObjektKartenVorschlag, db: Session | None = None, objekt: 
             id=v.georef_id, org_id=objekt.org_id, objekt_id=objekt.id).first()
         status = georef_pruefen(db, objekt, g) if g else "veraltet"
         if status != "gueltig":
-            daten.update(lat=None, lng=None, genauigkeit_m=None, position_status="pruefung_erforderlich")
+            daten.update(lat=None, lng=None, genauigkeit_m=None,
+                         position_status="veraltet" if v.position_status == "veraltet" else "pruefung_erforderlich")
             daten["warnungen"] = daten["warnungen"] + [{"code": "georef_" + status}]
     return daten
 
@@ -212,7 +217,7 @@ def _dublette(code: str, label: str | None, lat: float | None, lng: float | None
 
 
 def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: int,
-                       vorschlag_id: int | None = None) -> dict:
+                       vorschlag_id: int | None = None, audit_quelle: str = "mcp") -> dict:
     if objekt.entwurf_von_id is not None:
         raise ObjektKartenFehler("Vorschlaege nur am Basisobjekt anlegen")
     alle = vorschlaege_auflisten(db, objekt, "offen")
@@ -307,7 +312,7 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
     db.flush()
     antwort = vorschlag_dict(v)
     write_objekt_change(db, objekt.id, objekt.org_id, "karte", "vorschlag_geaendert" if vorher else "vorschlag_neu",
-                        before=vorher, after=antwort, user_id=user_id, quelle="mcp")
+                        before=vorher, after=antwort, user_id=user_id, quelle=audit_quelle)
     db.flush()
     return antwort
 

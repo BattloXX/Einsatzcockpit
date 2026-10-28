@@ -72,7 +72,8 @@ async def objekt_karte_symbolkatalog(context: MCPContext) -> dict[str, object]:
         "der Server rechnet um. Ohne gueltige Georeferenz keine Position. "
         "rotation, position_methode, genauigkeit_m, erkennungs_konfidenz (0..1), quelle_dokument_id, "
         "quelle_seite, quelle_ausschnitt ([x0,y0,x1,y1], 0..1), begruendung. "
-        "Markeränderungen benötigen basis_marker_id und expected_revision. filter_status ist der Freigabestatus."
+        "Markeränderungen benötigen basis_marker_id und expected_revision. filter_status ist der Freigabestatus. "
+        "veraltete_markieren=true ist eine explizite Schreibaktion (nur Objektverwaltung), auch beim Auflisten."
     ),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_modul_aktiv,
@@ -80,7 +81,7 @@ async def objekt_karte_symbolkatalog(context: MCPContext) -> dict[str, object]:
 async def objekt_karte_vorschlaege(
     context: MCPContext, objekt_id: int, aktion: str,
     vorschlaege: list[dict] | None = None, vorschlag_id: int | None = None,
-    filter_status: str | None = None, pruefen: bool = False,
+    filter_status: str | None = None, pruefen: bool = False, veraltete_markieren: bool = False,
 ) -> dict[str, object]:
     from app.core.permissions import has_role
     from app.mcp.context import MCPPermissionError
@@ -90,14 +91,27 @@ async def objekt_karte_vorschlaege(
         raise ValueError("Unbekannte Aktion")
     if context.org_id != context.user.org_id:
         raise MCPPermissionError("Organisation stimmt nicht ueberein")
-    if aktion != "auflisten" and not has_role(context.user, "objekt_verwalter"):
+    if (aktion != "auflisten" or veraltete_markieren) and not has_role(context.user, "objekt_verwalter"):
         raise MCPPermissionError("Objektverwaltung erforderlich")
     db = context.db
     objekt = service.produktives_objekt(db, context.org_id, objekt_id)
     if aktion == "auflisten":
-        return {"vorschlaege": [
-            service.vorschlag_dict(v, db, objekt) for v in service.vorschlaege_auflisten(db, objekt, filter_status)
-        ]}
+        try:
+            if veraltete_markieren:
+                from app.services.objekt_karte_freigabe_service import markiere_veraltete
+                markiere_veraltete(db, objekt)
+            antwort_liste: dict[str, object] = {"vorschlaege": [
+                service.vorschlag_dict(v, db, objekt) for v in service.vorschlaege_auflisten(db, objekt, filter_status)
+            ]}
+            if veraltete_markieren:
+                if pruefen:
+                    db.rollback()
+                else:
+                    db.commit()
+            return antwort_liste
+        except Exception:
+            db.rollback()
+            raise
     if vorschlaege is not None and (not isinstance(vorschlaege, list) or len(vorschlaege) > 30
                                    or any(not isinstance(v, dict) for v in vorschlaege)):
         raise ValueError("Maximal 30 Vorschlaege als Liste von Objekten")
@@ -108,6 +122,9 @@ async def objekt_karte_vorschlaege(
     if aktion == "verwerfen" and (vorschlag_id is None or vorschlaege):
         raise ValueError("verwerfen benoetigt nur vorschlag_id")
     try:
+        if veraltete_markieren:
+            from app.services.objekt_karte_freigabe_service import markiere_veraltete
+            markiere_veraltete(db, objekt)
         if aktion == "verwerfen":
             assert vorschlag_id is not None
             ergebnisse = [service.vorschlag_verwerfen(db, objekt, vorschlag_id, user_id=context.user.id)]
@@ -207,3 +224,64 @@ async def objekt_karte_gebaeude_umrisse(context: MCPContext, objekt_id: int, rad
     if not settings.HYDRANT_ENABLED or (org_settings is not None and not org_settings.hydrant_layer_enabled):
         raise ValueError("OSM-/Overpass-Abfragen sind fuer diese Organisation deaktiviert")
     return await gebaeude_umrisse(objekt.lat, objekt.lng, radius_m)
+
+
+@register_tool(
+    name="objekt_karte_vorschau",
+    description="Liest Marker und Vorschlaege getrennt mit Warnungen, Dubletten und Prueflink. Keine Schreibwirkung.",
+    required_roles=EINSATZ_LESE_ROLLEN,
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_karte_vorschau(context: MCPContext, objekt_id: int,
+                               status_filter: str | None = None) -> dict:
+    from app.config import settings
+    from app.services.objekt_karte_freigabe_service import review_liste
+    from app.services.objekt_karte_vorschlag_service import produktives_objekt, pruefe_karte
+
+    objekt = produktives_objekt(context.db, context.org_id, objekt_id)
+    return {"marker": (await objekt_karte_lesen(context, objekt_id))["marker"],
+            "vorschlaege": review_liste(context.db, objekt, status_filter),
+            "pruefung": pruefe_karte(context.db, objekt),
+            "ui_link": f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}/karte"}
+
+
+@register_tool(
+    name="objekt_karte_freigeben",
+    description=("Uebernimmt Kartenvorschlaege atomar. Nur nach ausdruecklicher Bestaetigung durch den Benutzer "
+                 "aufrufen; einsatzkritische Symbole nie ohne konkrete Nutzerfreigabe. "
+                 "bestaetigung muss woertlich ICH_BESTAETIGE_FREIGABE sein. Jede Warnung je Vorschlags-ID "
+                 "in bestaetigte_warnungen bestaetigen. pruefen=true: Trockenlauf mit Rollback. "
+                 "Quellenalterung separat mit objekt_karte_vorschlaege und veraltete_markieren=true persistieren."),
+    required_roles=("objekt_verwalter",),
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_karte_freigeben(
+    context: MCPContext, objekt_id: int, vorschlag_ids: list[int], bestaetigte_warnungen: dict,
+    bestaetigung: str, pruefen: bool = False,
+) -> dict:
+    from app.core.permissions import has_role
+    from app.mcp.context import MCPPermissionError
+    from app.services import objekt_karte_freigabe_service as service
+    from app.services.objekt_karte_vorschlag_service import produktives_objekt
+
+    if context.org_id != context.user.org_id or not has_role(context.user, "objekt_verwalter"):
+        raise MCPPermissionError("Objektverwaltung erforderlich")
+    if bestaetigung != "ICH_BESTAETIGE_FREIGABE":
+        raise ValueError("Ausdrueckliche Bestaetigung ICH_BESTAETIGE_FREIGABE erforderlich")
+    db = context.db
+    try:
+        objekt = produktives_objekt(db, context.org_id, objekt_id)
+        antwort = service.freigeben(db, objekt, vorschlag_ids, context.user, bestaetigte_warnungen, "mcp")
+        antwort["gespeichert"] = not pruefen
+        if pruefen:
+            db.rollback()
+        else:
+            db.commit()
+        return antwort
+    except service.FreigabeFehler as exc:
+        db.rollback()
+        return {"gespeichert": False, "status_code": exc.status_code, "fehler": str(exc),
+                "ergebnisse": exc.ergebnisse}
+    except Exception:
+        db.rollback()
+        raise
