@@ -15,6 +15,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
 from app.services.background_runtime import create_leader_task
+from app.services.db_transactions import retry_claim
 from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger("einsatzleiter.alarm_outbox")
@@ -143,8 +144,6 @@ def nachalarm_praefix(job: IncidentAlarmJob) -> str:
 
 
 def _claim(db: Session, job: IncidentAlarmJob, now: datetime) -> bool:
-    from app.services.db_transactions import retry_claim
-
     # Der Claim besitzt bereits seine Commits; keine Versandwirkung wiederholen.
     job_id, org_id, channel = job.id, job.org_id, job.channel
     return retry_claim(db, lambda: _claim_once(db, job_id, org_id, channel, now))

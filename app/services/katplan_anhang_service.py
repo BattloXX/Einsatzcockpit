@@ -23,6 +23,7 @@ from app.models.katplan import (
 from app.models.master import OrgSettings
 from app.models.objekt import ObjektDokument
 from app.models.user import User
+from app.services.db_transactions import ist_wiederholbar
 from app.services.katplan_service import KatplanKonflikt, markiere_ueberarbeitung, protokolliere, pruefe_version
 from app.services.katplan_ziel_service import ziel_laden, ziel_verfuegbar
 from app.services.katplan_zugriff import darf_bearbeiten, sieht_vertraulich
@@ -62,7 +63,7 @@ def pflege_version(db: Session, plan: KatplanPlan, user: User, version: int) -> 
     except OperationalError as exc:
         # MariaDB kann unter REPEATABLE READ bereits das sperrende Neulesen ablehnen.
         # Der Aufrufer rollt zurück und zeigt denselben Konflikt wie bei alter Planversion.
-        if getattr(exc.orig, "args", (None,))[0] in (1020, 1205, 1213):
+        if ist_wiederholbar(exc):
             raise KatplanKonflikt("Der Arbeitsstand wird gleichzeitig geändert. Bitte neu laden.") from exc
         raise
     _bindung(db, plan, user)

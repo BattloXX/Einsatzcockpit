@@ -25,6 +25,7 @@ from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import get_db
 from app.models.gateway import AlarmIngest, Gateway
+from app.services.db_transactions import ist_wiederholbar
 
 logger = logging.getLogger("einsatzleiter.gateway")
 alarm_logger = logging.getLogger("einsatzleiter.alarm")
@@ -180,15 +181,14 @@ def get_artifact(job_id: int, sig: str = "", db: Session = Depends(get_db)):
                 pdf = render_job_pdf(db, job)
                 break
             except OperationalError as error:
-                args = getattr(error.orig, "args", ())
-                code = args[0] if args else None
-                if code not in (1020, 1213) or attempt == 2:
+                if not ist_wiederholbar(error, codes=(1020, 1213)) or attempt == 2:
                     raise
                 # Dieser GET hat keine physische Aussenwirkung. MariaDB verwirft
                 # bei Snapshot-Konflikt/Deadlock die Transaktion; komplett neu lesen.
                 db.rollback()
                 logger.warning(
-                    "Artefakt-Transaktion wiederholen (job=%s, code=%s, attempt=%s)", job_id, code, attempt + 1
+                    "Artefakt-Transaktion wiederholen (job=%s, attempt=%s)",
+                    job_id, attempt + 1
                 )
                 time.sleep(0.02 * (attempt + 1))
                 refreshed = db.get(PrintJob, job_id)

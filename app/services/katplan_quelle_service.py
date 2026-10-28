@@ -27,6 +27,7 @@ from app.models.katplan import (
 from app.models.master import OrgSettings, SystemSettings
 from app.models.user import User
 from app.services import pdf_seiten_pipeline as pipeline
+from app.services.db_transactions import ist_wiederholbar
 from app.services.katplan_service import markiere_ueberarbeitung, protokolliere
 from app.services.katplan_zugriff import darf_bearbeiten, sieht_vertraulich
 from app.services.media_service import _detect_mime
@@ -208,7 +209,7 @@ def verarbeite_quelle(dokument_id: int, render_func: pipeline.RenderFunc | None 
                 break
             except OperationalError as exc:
                 db.rollback()
-                if versuch or not (exc.orig is not None and exc.orig.args and exc.orig.args[0] == 1020):
+                if not ist_wiederholbar(exc, codes=(1020,)) or versuch:
                     raise
                 logger.warning("Lesekonflikt beim Start von Dokument %d; neue Transaktion", dokument_id)
                 db.close()
@@ -254,7 +255,7 @@ def verarbeite_quelle(dokument_id: int, render_func: pipeline.RenderFunc | None 
                 return
             except OperationalError as exc:
                 db.rollback()
-                if versuch or not (exc.orig is not None and exc.orig.args and exc.orig.args[0] == 1020):
+                if not ist_wiederholbar(exc, codes=(1020,)) or versuch:
                     raise
                 logger.warning("Lesekonflikt beim Abschluss von Dokument %d; neue Transaktion", dokument_id)
             finally:

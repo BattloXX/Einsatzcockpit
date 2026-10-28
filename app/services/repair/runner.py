@@ -18,6 +18,7 @@ from app.models.admin_security import utcnow
 from app.models.master import SystemSettings
 from app.models.user import AuditLog, User
 from app.services import totp_service
+from app.services.db_transactions import ist_wiederholbar
 from app.services.diagnose.runner import einsatz_aktiv
 from app.services.repair.registry import ACTIONS, Action, Ergebnis, RepairContext, digest, simulate
 
@@ -127,7 +128,7 @@ def consume_approval(db: Session, run: AdminRepairRun, user_id: int, token: str 
     except OperationalError as exc:
         # MariaDB 12.3 kann konkurrierende Änderungen bereits beim Locking-Read
         # mit 1020 ablehnen. Keine Wiederholung mit möglicherweise verbrauchtem Token.
-        if exc.orig is not None and exc.orig.args and exc.orig.args[0] in (1020, 1205, 1213):
+        if ist_wiederholbar(exc):
             raise ValueError("Web-Freigabe gleichzeitig verwendet; Status pruefen") from None
         raise
 
@@ -205,8 +206,9 @@ def claim_run(
         return False
     except OperationalError as exc:
         db.rollback()
-        if (exc.orig is not None and exc.orig.args
-                and exc.orig.args[0] in (1020, 1205, 1213, "database is locked")):
+        if ist_wiederholbar(exc) or (
+            exc.orig is not None and exc.orig.args and exc.orig.args[0] == "database is locked"
+        ):
             return False
         raise
 

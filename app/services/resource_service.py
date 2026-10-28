@@ -32,6 +32,7 @@ from app.models.major_incident import (
     SiteLogEntry,
 )
 from app.models.master import Member, VehicleMaster
+from app.services.db_transactions import ist_wiederholbar
 
 if TYPE_CHECKING:
     from app.services.gk_zugang_service import AutoSmsAuftrag
@@ -852,7 +853,7 @@ def status_transaktion[T](db: Session, ausfuehren: Callable[[], T]) -> T:
             db.commit()
             return ergebnis
         except OperationalError as exc:
-            if exc.orig is None or not exc.orig.args or exc.orig.args[0] not in {1020, 1205, 1213}:
+            if not ist_wiederholbar(exc):
                 raise
             db.rollback()
             if versuch == 2:

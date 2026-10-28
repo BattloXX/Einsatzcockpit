@@ -42,6 +42,7 @@ from app.models.objekt import (
 )
 from app.models.user import User
 from app.services import pdf_seiten_pipeline
+from app.services.db_transactions import ist_wiederholbar
 from app.services.objekt_service import lade_auswahl, write_objekt_change
 from app.services.storage_service import release_storage, reserve_storage
 
@@ -301,7 +302,7 @@ def verarbeite_dokument(
                 break
             except OperationalError as exc:
                 db.rollback()
-                if versuch or not _ist_lesekonflikt(exc):
+                if not ist_wiederholbar(exc, codes=(1020,)) or versuch:
                     raise
                 logger.warning("Lesekonflikt beim Start von Dokument %d; neue Transaktion", dokument_id)
                 db.close()
@@ -346,7 +347,7 @@ def verarbeite_dokument(
                 return
             except OperationalError as exc:
                 db.rollback()
-                if versuch or not _ist_lesekonflikt(exc):
+                if not ist_wiederholbar(exc, codes=(1020,)) or versuch:
                     raise
                 logger.warning("Lesekonflikt beim Abschluss von Dokument %d; neue Transaktion", dokument_id)
             finally:
@@ -371,10 +372,6 @@ def verarbeite_dokument(
             logger.exception("Fehlerstatus konnte nicht gespeichert werden (Dokument %d)", dokument_id)
     finally:
         db.close()
-
-
-def _ist_lesekonflikt(exc: OperationalError) -> bool:
-    return bool(exc.orig is not None and exc.orig.args and exc.orig.args[0] == 1020)
 
 
 def _analyse_seiten_validieren(
