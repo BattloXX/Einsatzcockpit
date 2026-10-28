@@ -67,7 +67,8 @@ async def test_disconnect_and_close_failure_reconnect_and_resubscribe_all(monkey
     clients = []
     def connect(*args, **kwargs):
         result = Client(len(clients) + 1)
-        clients.append(result)
+        if kwargs.get("socket_timeout") is None:
+            clients.append(result)
         return result
     monkeypatch.setattr("redis.asyncio.from_url", connect)
     try:
@@ -92,8 +93,17 @@ async def test_publish_failure_and_handler_exception_never_log_payload(monkeypat
         raise RuntimeError(payload["sms"])
     ws_bus.register(ws_bus.CH_GW, handler)
     assert not await ws_bus.publish(ws_bus.CH_GW, {"sms": "private full SMS"})
-    await ws_bus._dispatch({"type": "message", "channel": ws_bus.CH_GW,
-                            "data": json.dumps({"sms": "private full SMS"})})
+    queue = asyncio.Queue(maxsize=1000)
+    monkeypatch.setattr(ws_bus, "_queue", queue)
+    consumer = asyncio.create_task(ws_bus._consume(queue))
+    try:
+        await ws_bus._dispatch({"type": "message", "channel": ws_bus.CH_GW,
+                                "data": json.dumps({"sms": "private full SMS"})})
+        await queue.join()
+    finally:
+        consumer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await consumer
     assert ws_bus.status()["publish_failures"] == 1
     assert "SECRET_TOKEN" not in caplog.text and "private full SMS" not in caplog.text
     assert "publish_failed" in caplog.text and "handler_failed" in caplog.text
