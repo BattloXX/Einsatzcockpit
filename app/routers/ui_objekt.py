@@ -73,10 +73,11 @@ from app.models.objekt import (
     ObjektSymbol,
 )
 from app.models.user import User
-from app.services import kontakt_service
+from app.services import kontakt_service, objekt_karte_service
 from app.services import objekt_pflege_schreiben_service as objekt_schreiben
 from app.services.kontakt_access_service import incident_for_contacts, objekt_contact_summaries
 from app.services.mail_service import send_pflegeauftrag_einladung
+from app.services.objekt_karte_service import _karten_objekt_dict as _karten_objekt_dict
 from app.services.objekt_pflege_service import (
     _TERMINALE_STATUS,
     AKTUALITAET_LABELS,
@@ -2715,30 +2716,6 @@ def symbol_loeschen(
 # ── Abschnitt: Lagekarte (PR4) ─────────────────────────────────────────────────
 
 
-def _karten_objekt_dict(k: ObjektKartenObjekt) -> dict:
-    from app.models.objekt import parse_karten_geometry
-
-    return {
-        "id": k.id,
-        "typ": k.typ,
-        "lat": k.lat,
-        "lng": k.lng,
-        "geometry": parse_karten_geometry(k.geometry_json),
-        "label": k.label,
-        "rotation": k.rotation % 360,
-    }
-
-
-def _karten_rotation(wert: object) -> int:
-    try:
-        # Nur ganze Grad akzeptieren; ungueltige JSON-Werte ergeben HTTP 400.
-        if not isinstance(wert, (int, str)) or isinstance(wert, bool):
-            raise ValueError
-        return int(wert) % 360
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Rotation muss eine ganze Gradzahl sein") from None
-
-
 @router.get("/{objekt_id}/karte", response_class=HTMLResponse)
 def karte_editor(
     objekt_id: int,
@@ -2799,16 +2776,7 @@ def karten_objekte_json(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    eintraege = (
-        db.query(ObjektKartenObjekt)
-        .filter(ObjektKartenObjekt.objekt_id == objekt.id)
-        .order_by(ObjektKartenObjekt.sort, ObjektKartenObjekt.id)
-        .all()
-    )
-    return {
-        "objekt": {"id": objekt.id, "lat": objekt.lat, "lng": objekt.lng, "name": objekt.name},
-        "eintraege": [_karten_objekt_dict(k) for k in eintraege],
-    }
+    return objekt_karte_service.karten_lesen(db, objekt)
 
 
 @router.get("/{objekt_id}/hydranten.json")
@@ -2854,37 +2822,12 @@ def karten_objekt_neu(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
 ):
-    import json as _json
-
-    from app.models.objekt import OBJEKT_SYMBOL_TYPEN
-
     objekt = _objekt_or_404(db, objekt_id, user)
     daten = run_async(request.json)
-    typ = str(daten.get("typ", ""))
-    if typ not in OBJEKT_SYMBOL_TYPEN and typ != "geometrie":
-        raise HTTPException(status_code=400, detail="Unbekannter Symboltyp")
-    geometry = daten.get("geometry")
-    lat = daten.get("lat")
-    lng = daten.get("lng")
-    if geometry is None and (lat is None or lng is None):
-        raise HTTPException(status_code=400, detail="lat/lng oder geometry erforderlich")
-
-    max_sort = db.query(ObjektKartenObjekt).filter(ObjektKartenObjekt.objekt_id == objekt.id).count()
-    eintrag = ObjektKartenObjekt(
-        org_id=objekt.org_id,
-        objekt_id=objekt.id,
-        typ=typ,
-        lat=float(lat) if lat is not None else None,
-        lng=float(lng) if lng is not None else None,
-        geometry_json=_json.dumps(geometry, ensure_ascii=False) if geometry else None,
-        label=(str(daten.get("label") or "").strip() or None),
-        sort=max_sort + 1,
-        rotation=_karten_rotation(daten.get("rotation", 0)),
-    )
-    db.add(eintrag)
-    write_objekt_change(db, objekt.id, objekt.org_id, "karte", "symbol_neu", before=None, after=typ, user_id=user.id)
-    db.commit()
-    return _karten_objekt_dict(eintrag)
+    try:
+        return objekt_karte_service.karten_objekt_neu(db, objekt, daten, user_id=user.id)
+    except objekt_karte_service.ObjektKartenFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 @router.post("/{objekt_id}/karte/objekte/{eintrag_id}")
@@ -2896,35 +2839,12 @@ def karten_objekt_update(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
 ):
-    import json as _json
-
     objekt = _objekt_or_404(db, objekt_id, user)
-    eintrag = (
-        db.query(ObjektKartenObjekt)
-        .filter(ObjektKartenObjekt.id == eintrag_id, ObjektKartenObjekt.objekt_id == objekt.id)
-        .first()
-    )
-    if eintrag is None:
-        raise HTTPException(status_code=404, detail="Kartenobjekt nicht gefunden")
     daten = run_async(request.json)
-    vorher = _karten_objekt_dict(eintrag)
-    if "rotation" in daten:
-        eintrag.rotation = _karten_rotation(daten["rotation"])
-    if "lat" in daten:
-        eintrag.lat = float(daten["lat"]) if daten["lat"] is not None else None
-    if "lng" in daten:
-        eintrag.lng = float(daten["lng"]) if daten["lng"] is not None else None
-    if "geometry" in daten:
-        geometry = daten["geometry"]
-        eintrag.geometry_json = _json.dumps(geometry, ensure_ascii=False) if geometry else None
-    if "label" in daten:
-        eintrag.label = str(daten["label"] or "").strip() or None
-    write_objekt_change(
-        db, objekt.id, objekt.org_id, "karte", "symbol_geaendert",
-        before=vorher, after=_karten_objekt_dict(eintrag), user_id=user.id,
-    )
-    db.commit()
-    return _karten_objekt_dict(eintrag)
+    try:
+        return objekt_karte_service.karten_objekt_update(db, objekt, eintrag_id, daten, user_id=user.id)
+    except objekt_karte_service.ObjektKartenFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 @router.post("/{objekt_id}/karte/objekte/{eintrag_id}/loeschen")
@@ -2937,19 +2857,10 @@ def karten_objekt_loeschen(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    eintrag = (
-        db.query(ObjektKartenObjekt)
-        .filter(ObjektKartenObjekt.id == eintrag_id, ObjektKartenObjekt.objekt_id == objekt.id)
-        .first()
-    )
-    if eintrag is None:
-        raise HTTPException(status_code=404, detail="Kartenobjekt nicht gefunden")
-    write_objekt_change(
-        db, objekt.id, objekt.org_id, "karte", "symbol_geloescht", before=eintrag.typ, after=None, user_id=user.id
-    )
-    db.delete(eintrag)
-    db.commit()
-    return {"ok": True}
+    try:
+        return objekt_karte_service.karten_objekt_loeschen(db, objekt, eintrag_id, user_id=user.id)
+    except objekt_karte_service.ObjektKartenFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 # ── PR5: Einsatz-Verknuepfung (Board-Panel) ────────────────────────────────────
