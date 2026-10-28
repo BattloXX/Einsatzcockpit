@@ -258,6 +258,13 @@
         <button type="submit" name="richtung" value="rechts" class="btn btn--ghost btn--xs" title="90° nach rechts drehen" aria-label="90° nach rechts drehen">{{ icon("refresh", size="xs") }}</button>
         <button type="button" class="btn btn--ghost btn--xs" onclick="document.getElementById('seiteBearbeiten{{ s.id }}').showModal()">Bearbeiten</button>
       </form>
+      <div style="padding:4px;">
+        <a href="/objekte/{{ objekt.id }}/dokumente/seite/{{ s.id }}/georef"
+           class="btn {{ 'btn--primary' if s.dokumentart in ('lageplan', 'brandschutzplan') else 'btn--ghost' }} btn--xs">{{ icon("map", size="xs") }} Georeferenzieren</a>
+        {% set g = georef_status.get(s.id) %}
+        <span class="badge-pill {{ 'badge-pill--green' if g and g.status == 'gueltig' else 'badge-pill--amber' if g and g.status == 'veraltet' else 'badge-pill--red' if g else '' }}"
+              data-georef-status="{{ g.status if g else 'keine' }}">{% if not g %}keine{% elif g.status == 'gueltig' %}gültig (RMSE {{ '%.2f'|format(g.rmse_m or 0) }} m){% else %}{{ g.status }}{% endif %}</span>
+      </div>
       <dialog class="modal" id="seiteBearbeiten{{ s.id }}">
         <div class="modal__content">
           <div class="modal__header"><h3>Dokumentseite bearbeiten</h3>

@@ -169,6 +169,34 @@ def _galerie_context(
     )
 
     ist_verwalter = is_objekt_verwalter(user)
+    georef_status = {}
+    if ist_verwalter and seiten:
+        from app.services.objekt_georef_service import georef_pruefen
+
+        neueste = db.query(
+            ObjektDokumentGeoref.dokument_id, ObjektDokumentGeoref.seite,
+            func.max(ObjektDokumentGeoref.revision).label("revision"),
+        ).filter_by(org_id=objekt.org_id, objekt_id=objekt.id).group_by(
+            ObjektDokumentGeoref.dokument_id, ObjektDokumentGeoref.seite,
+        ).subquery()
+        georeferenzen = db.query(ObjektDokumentGeoref).join(neueste, (
+            (ObjektDokumentGeoref.dokument_id == neueste.c.dokument_id)
+            & (ObjektDokumentGeoref.seite == neueste.c.seite)
+            & (ObjektDokumentGeoref.revision == neueste.c.revision)
+        )).filter(
+            ObjektDokumentGeoref.org_id == objekt.org_id,
+            ObjektDokumentGeoref.objekt_id == objekt.id,
+            ObjektDokumentGeoref.dokument_id.in_([d.id for d in dokumente]),
+        ).all()
+        dokument_map = {d.id: d for d in dokumente}
+        seiten_map = {(s.dokument_id, s.seiten_nr): s for s in seiten}
+        for g in georeferenzen:
+            s = seiten_map.get((g.dokument_id, g.seite))
+            if s is not None:
+                georef_status[s.id] = {"status": georef_pruefen(
+                    db, objekt, g, dokument=dokument_map[g.dokument_id], seite=s,
+                ), "rmse_m": g.rmse_m}
+
     wartende_dokumente = hole_wartende_dokumente(db, objekt) if ist_verwalter else []
     in_verarbeitung = in_verarbeitung or any(d.status in ("neu", "verarbeitung") for d in wartende_dokumente)
     hochladende_ids = {d.hochgeladen_von_id for d in wartende_dokumente if d.hochgeladen_von_id}
@@ -186,6 +214,7 @@ def _galerie_context(
         "user": user,
         "objekt": objekt,
         "seiten": seiten,
+        "georef_status": georef_status,
         "dokumente": dokumente,
         "dokumentarten": lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART),
         "zaehler": zaehler,
@@ -401,6 +430,37 @@ def seiten_bulk_klassifizieren(
         request, "objekt/_dokumente.html",
         _galerie_context(request, db, user, objekt, art=art, suche=suche),
     )
+
+
+@router.get("/objekte/{objekt_id}/dokumente/seite/{seite_id}/georef", response_class=HTMLResponse)
+def georef_editor(
+    objekt_id: int,
+    seite_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    seite = db.query(ObjektDokumentSeite).join(ObjektDokument).filter(
+        ObjektDokumentSeite.id == seite_id,
+        ObjektDokumentSeite.objekt_id == objekt.id,
+        ObjektDokumentSeite.org_id == objekt.org_id,
+        ObjektDokument.objekt_id == objekt.id,
+        ObjektDokument.org_id == objekt.org_id,
+        ObjektDokument.ist_aktuelle_version.is_(True),
+        ObjektDokument.freigabe_status != "verworfen",
+    ).first()
+    if seite is None:
+        raise HTTPException(status_code=404, detail="Seite nicht gefunden")
+    return templates.TemplateResponse(request, "objekt/georef_editor.html", {
+        "user": user, "objekt": objekt, "seite": seite,
+        "dokument_id": seite.dokument_id, "seiten_nr": seite.seiten_nr,
+        "basis_url": f"/objekte/{objekt.id}/karte",
+        "startpunkt": {"lat": objekt.lat, "lng": objekt.lng}
+        if objekt.lat is not None and objekt.lng is not None else None,
+        "csrf": request.state.csrf_token,
+    })
 
 
 @router.post("/objekte/{objekt_id}/dokumente/seite/{seite_id}/bearbeiten", response_class=HTMLResponse)

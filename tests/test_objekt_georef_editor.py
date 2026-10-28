@@ -151,12 +151,16 @@ def test_editor_css_und_sichere_texte():
     import re
 
     js = Path("app/static/js/objekt_karte.js").read_text()
-    editor = js[js.index("  function georefEditor("):js.index("  function initReview(")]
-    assert "innerHTML" not in editor
+    adapter = js[js.index("  function georefEditor("):js.index("  function initReview(")]
+    editor = Path("app/static/js/objekt_georef_editor.js").read_text()
+    assert "window.objektGeorefEditor.open" in adapter
+    assert "innerHTML" not in adapter + editor
     assert "n.textContent = text" in editor
     template = Path("app/templates/objekt/_karte_review.html").read_text()
-    verwendet = set(re.findall(r"oks-georef(?:__[a-z-]+)?", editor))
-    definiert = set(re.findall(r"\.(oks-georef(?:__[a-z-]+)?)", template))
+    template += Path("app/templates/objekt/georef_editor.html").read_text()
+    template += Path("app/static/css/objekt_georef_editor.css").read_text()
+    verwendet = set(re.findall(r"(?:oks-georef|ogx)(?:__[a-z-]+)?", editor))
+    definiert = set(re.findall(r"\.((?:oks-georef|ogx)(?:__[a-z-]+)?)", template))
     assert verwendet <= definiert
 
 

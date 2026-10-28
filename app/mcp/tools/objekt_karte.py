@@ -166,7 +166,9 @@ async def objekt_karte_pruefen(context: MCPContext, objekt_id: int) -> dict[str,
         "Orthofoto-Klick (orthofoto_klick), dokumentierte Koordinate (dokument_koordinate), manuell. "
         "Punkte: id, x, y, lat, lng, quelle, beschreibung. Keine Koordinaten schaetzen oder selbst umrechnen. "
         "RMSE maximal 2 m, Einzelfehler maximal 4 m; Genauigkeit durch Referenzquelle begrenzt. "
-        "Abgelehnte/veraltete Referenzen ergeben keine Position. pruefen=true: Rollback."
+        "Abgelehnte/veraltete Referenzen ergeben keine Position. pruefen=true: Rollback. "
+        "Bei unsicherer Zuordnung den editor_link an den Menschen weitergeben "
+        "(vier Gebäudeecken in Plan und Orthofoto anklicken)."
     ),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_modul_aktiv,
@@ -175,9 +177,10 @@ async def objekt_karte_referenzpunkte(
     context: MCPContext, objekt_id: int, dokument_id: int, seite: int, aktion: str,
     punkte: list[dict] | None = None, modell: str | None = None, pruefen: bool = False,
 ) -> dict[str, object]:
+    from app.config import settings
     from app.core.permissions import has_role
     from app.mcp.context import MCPPermissionError
-    from app.services.objekt_georef_service import referenzpunkte
+    from app.services.objekt_georef_service import _seite, referenzpunkte
     from app.services.objekt_karte_vorschlag_service import produktives_objekt
 
     if aktion not in {"setzen", "lesen", "verwerfen"}:
@@ -190,6 +193,11 @@ async def objekt_karte_referenzpunkte(
     objekt = produktives_objekt(db, context.org_id, objekt_id)
     try:
         antwort = referenzpunkte(db, objekt, dokument_id, seite, aktion, punkte, modell, context.user.id)
+        s = _seite(db, objekt, dokument_id, seite)
+        antwort["editor_link"] = (
+            f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}/dokumente/seite/{s.id}/georef"
+        )
+        antwort["hinweise"] = (antwort.get("georeferenz") or {}).get("hinweise", [])
         if aktion != "lesen":
             antwort["gespeichert"] = not pruefen
             if pruefen:

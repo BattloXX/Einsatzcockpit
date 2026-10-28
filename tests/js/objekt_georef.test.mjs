@@ -5,6 +5,7 @@ import vm from "node:vm";
 
 const context = { window: {} };
 vm.createContext(context);
+vm.runInContext(readFileSync(new URL("../../app/static/js/objekt_georef_editor.js", import.meta.url), "utf8"), context);
 vm.runInContext(readFileSync(new URL("../../app/static/js/objekt_karte.js", import.meta.url), "utf8"), context);
 const normiert = context.window.objektKarteGeoref.planNormiert;
 
@@ -26,7 +27,7 @@ test("90 Grad gedrehte Seite verwendet gedrehte Bildmasse ohne zweite Rotation",
 const fertig = () => new Promise((resolve) => setImmediate(resolve));
 
 class Element {
-  constructor(tag) { this.tagName = tag; this.childNodes = []; this.dataset = {}; this.events = {}; this.text = ""; }
+  constructor(tag) { this.tagName = tag; this.childNodes = []; this.dataset = {}; this.events = {}; this.text = ""; this.style = {}; }
   appendChild(n) { this.childNodes.push(n); return n; }
   set textContent(s) { this.text = String(s); this.childNodes = []; }
   get textContent() { return this.text + this.childNodes.map((n) => n.textContent).join(""); }
@@ -44,34 +45,46 @@ class Element {
   alle(tag) { return this.childNodes.flatMap((n) => [...(n.tagName === tag ? [n] : []), ...n.alle(tag)]); }
 }
 
-function editorUmgebung(status = "gueltig") {
-  const root = new Element("section"), maps = [], markers = [], posts = [], bilder = [];
+function editorUmgebung(status = "gueltig", seitenModus = false) {
+  const root = new Element("section"), maps = [], markers = [], posts = [], bilder = [], overlays = [], tiles = [], anfragen = [];
   const gift = '<img src=x onerror="alert(1)">';
   const geo = { revision: 2, modell: "aehnlichkeit", status, ablehngrund: gift,
     referenzpunkte: [{ id: "extern", x: 0.25, y: 0.75, lat: 47, lng: 9, quelle: "manuell", beschreibung: gift }] };
   function layer(pos, opts) {
-    return { events: {}, pos, opts, on(k, fn) { this.events[k] = fn; return this; },
+    return { events: {}, pos, opts, on(k, fn, context) { k.split(" ").forEach((name) => { this.events[name] = context ? fn.bind(context) : fn; }); return this; },
+      off(k) { k.split(" ").forEach((name) => { delete this.events[name]; }); },
       addTo(map) { this.map = map; return this; }, remove() { this.removed = true; },
       getLatLng() { return this.pos; }, bindTooltip(node) { this.tooltip = node; return this; } };
   }
   const ctx = {
     window: { EinsatzcockpitMapConfig: { addOsmTileLayer: () => layer() } },
-    document: { createElement: (tag) => new Element(tag) },
+    document: { createElement: (tag) => new Element(tag), events: {},
+      addEventListener(k, fn) { this.events[k] = fn; }, removeEventListener(k) { delete this.events[k]; } },
     L: { CRS: { Simple: {} },
       map(node, opts) {
         const m = layer(); m.node = node; m.opts = opts;
         m.setView = () => m; m.fitBounds = (b) => { m.bounds = b; };
-        m.hasLayer = () => false; maps.push(m); return m;
+        m.pane = new Element("div"); m.getPane = () => m.pane;
+        m.latLngToLayerPoint = ([lat, lng]) => ({ x: lng * (m.scale || 1), y: -lat * (m.scale || 1) });
+        m.hasLayer = (l) => l.map === m && !l.removed; maps.push(m); return m;
       },
       imageOverlay(url, bounds) { bilder.push({ url, bounds }); return layer(); },
       marker(pos, opts) { const m = layer(pos, opts); markers.push(m); return m; },
       circleMarker(pos, opts) { const m = layer(pos, opts); markers.push(m); return m; },
-      divIcon: (o) => o, tileLayer: () => layer(), control: { layers: () => layer() }
+      Layer: { extend(methods) {
+        return class {
+          constructor() { Object.assign(this, methods); overlays.push(this); }
+          addTo(map) { this._map = map; this.onAdd(map); return this; }
+          remove() { this.onRemove(this._map); this.removed = true; }
+        };
+      } },
+      divIcon: (o) => o, tileLayer: () => { const t = layer(); tiles.push(t); return t; }, control: { layers: () => layer() }
     }
   };
   vm.createContext(ctx);
   const src = readFileSync(new URL("../../app/static/js/objekt_karte.js", import.meta.url), "utf8")
     .replace("  function initReview(", "  window.testEditor = georefEditor;\n  function initReview(");
+  vm.runInContext(readFileSync(new URL("../../app/static/js/objekt_georef_editor.js", import.meta.url), "utf8"), ctx);
   vm.runInContext(src, ctx);
   const get = async (path) => path.startsWith("/georef.json") ?
     { georeferenz: geo, bildgroesse: [2000, 1000], rotation: 0, seitenbild_url: "/plan",
@@ -81,9 +94,20 @@ function editorUmgebung(status = "gueltig") {
     posts.push({ path, body: JSON.parse(JSON.stringify(body)), resolve, reject });
   });
   let aktualisiert = 0;
-  ctx.window.testEditor(root, { quelle_seite: 1, quelle_dokument_id: 3 },
-    { getCenter: () => [47, 9], getZoom: () => 18 }, get, post, async () => { aktualisiert++; });
-  return { root, maps, posts, markers, bilder, gift, aktualisiert: () => aktualisiert };
+  if (seitenModus) {
+    root.dataset = { basisUrl: "/objekte/7/karte", dokumentId: "3", seite: "1", csrf: "csrf-token",
+      lat: "47", lng: "9", zurueckUrl: "/zurueck" };
+    ctx.document.getElementById = (id) => id === "georef-editor" ? root : null;
+    ctx.fetch = async (url, options) => {
+      anfragen.push({ url, options });
+      const path = url.replace(root.dataset.basisUrl, "");
+      const data = options.method === "POST" ? await post(path, JSON.parse(options.body)) : await get(path);
+      return { ok: true, text: async () => JSON.stringify(data) };
+    };
+    ctx.document.events.DOMContentLoaded();
+  } else { ctx.window.testEditor(root, { quelle_seite: 1, quelle_dokument_id: 3 },
+    { getCenter: () => [47, 9], getZoom: () => 18 }, get, post, async () => { aktualisiert++; }); }
+  return { root, maps, posts, markers, bilder, gift, ctx, overlays, tiles, anfragen, aktualisiert: () => aktualisiert };
 }
 
 function antwort(status = "gueltig") {
@@ -137,5 +161,168 @@ test("Veraltete Punkte werden nach Drehung nicht uebernommen", async () => {
   const e = editorUmgebung("veraltet"); await fertig();
   assert.equal(e.posts.length, 0);
   assert.ok(e.root.textContent.includes("Bildkoordinaten neu erfassen"));
+  assert.equal(e.root.alle("button").filter((b) => b.textContent === "Paar löschen").length, 0);
+});
+
+
+const { affineMatrix, naechsterSchritt } = context.window.objektGeorefEditor;
+
+for (const [name, tl, tr, bl, erwartet] of [
+  ["Translation und unabhaengige Skalierung", { x: 10, y: 20 }, { x: 410, y: 20 }, { x: 10, y: 320 }, [2, 0, 0, 3, 10, 20]],
+  ["90 Grad Rotation", { x: 10, y: 20 }, { x: 10, y: 420 }, { x: -290, y: 20 }, [0, 2, -3, 0, 10, 20]],
+  ["Scherung", { x: -5, y: 7 }, { x: 395, y: 107 }, { x: 45, y: 307 }, [2, 0.5, 0.5, 3, -5, 7]],
+]) {
+  test(`affineMatrix: ${name} bildet alle drei Ecken ab`, () => {
+    const m = affineMatrix(tl, tr, bl, 200, 100);
+    assert.deepEqual([m.a, m.b, m.c, m.d, m.e, m.f], erwartet);
+    for (const [x, y, ziel] of [[0, 0, tl], [200, 0, tr], [0, 100, bl]]) {
+      assert.equal(m.a * x + m.c * y + m.e, ziel.x);
+      assert.equal(m.b * x + m.d * y + m.f, ziel.y);
+    }
+  });
+}
+
+test("Schrittlogik fuehrt durch vier Ecken und erlaubt weitere Punkte", () => {
+  for (let n = 0; n < 4; n++) {
+    assert.equal(naechsterSchritt(Array(n), null).text, `Ecke ${n + 1} von 4 · jetzt im Plan klicken`);
+    assert.equal(naechsterSchritt(Array(n), {}).aktiv, "karte");
+  }
+  assert.equal(naechsterSchritt(Array(4), null).text, "Vier Ecken erfasst · jetzt Prüfen");
+  assert.equal(naechsterSchritt(Array(4), {}).aktiv, "karte");
+});
+
+const knopf = (node, text) => node.alle("button").find((b) => b.textContent === text);
+
+test("Schrittanzeige, Orthofoto, Esc und Backspace mit Eingabefeldschutz", async () => {
+  const e = editorUmgebung("veraltet"); await fertig();
+  const dialog = e.root.childNodes[0];
+  const schritt = dialog.alle("p").find((p) => p["aria-live"] === "polite");
+  assert.equal(schritt.textContent, "Ecke 1 von 4 · jetzt im Plan klicken");
+  for (let i = 0; i < 4; i++) {
+    assert.match(e.maps[0].node.className, /ogx__aktiv/);
+    e.maps[0].events.click({ latlng: { lng: 500, lat: -750 } });
+    assert.match(e.maps[1].node.className, /ogx__aktiv/);
+    assert.equal(schritt.textContent, `Ecke ${i + 1} von 4 · jetzt auf der Karte klicken`);
+    e.maps[1].events.click({ latlng: { lat: 47 + i, lng: 9 } });
+    assert.equal(e.posts.at(-1).body.punkte[i].quelle, "orthofoto_klick");
+  }
+  assert.equal(schritt.textContent, "Vier Ecken erfasst · jetzt Prüfen");
+  knopf(dialog, "Weitere Punkte hinzufügen").onclick();
+  assert.match(e.maps[0].node.className, /ogx__aktiv/);
+  e.maps[0].events.click({ latlng: { lng: 100, lat: -100 } });
+  let verhindert = 0;
+  const taste = (key, tagName = "DIV") => e.ctx.document.events.keydown({ key, target: { tagName }, preventDefault() { verhindert++; } });
+  taste("Escape");
+  assert.equal(verhindert, 1);
+  const vorher = e.posts.length;
+  e.maps[1].events.click({ latlng: { lat: 47, lng: 9 } });
+  assert.equal(e.posts.length, vorher); // Esc hat den vorgemerkten Punkt entfernt.
+  taste("Backspace", "INPUT");
+  assert.equal(e.posts.length, vorher);
+  taste("Backspace");
+  assert.equal(e.posts.at(-1).body.punkte.length, 3);
+  knopf(dialog, "Letztes Paar entfernen").onclick();
+  assert.equal(e.posts.at(-1).body.punkte.length, 2);
+});
+
+test("Gueltige Vorschau nutzt affine Matrix, Hinweise als Text, Slider und Zoom aktualisieren", async () => {
+  const e = editorUmgebung(); await fertig();
+  const a = antwort();
+  a.georeferenz.hinweise = [{ code: "probe", text: e.gift }];
+  a.georeferenz.vorschau_ecken = [
+    { lat: 20, lng: 10 }, { lat: 20, lng: 410 }, { lat: -280, lng: 410 }, { lat: -280, lng: 10 },
+  ];
+  e.posts[0].resolve(a); await fertig();
+  const dialog = e.root.childNodes[0];
+  const hinweise = dialog.alle("ul")[0];
+  assert.equal(hinweise.role, "status");
+  assert.equal(hinweise.alle("li")[0].textContent, e.gift);
+  assert.equal(hinweise.alle("img").length, 0);
+  assert.equal(e.bilder.length, 1); // imageOverlay ausschliesslich im Planfenster.
+  const overlay = e.overlays[0];
+  assert.equal(overlay.bild.style.transform, "matrix(0.2,0,0,0.3,10,-20)");
+  assert.equal(overlay.bild.style.opacity, "0.5");
+  e.maps[1].scale = 2; e.maps[1].events.zoom();
+  assert.equal(overlay.bild.style.transform, "matrix(0.4,0,0,0.6,20,-40)");
+  const slider = dialog.alle("input").find((i) => i.type === "range");
+  slider.value = "80"; slider.oninput();
+  assert.ok(overlay.removed);
+  assert.equal(e.overlays.at(-1).bild.style.opacity, "0.8");
+  const check = dialog.alle("input").find((i) => i.type === "checkbox");
+  assert.equal(check.checked, true);
+  check.checked = false; check.onchange();
+  assert.ok(e.overlays.at(-1).removed);
+  check.checked = true; check.onchange();
+  e.maps[0].events.click({ latlng: { lng: 10, lat: -10 } });
+  assert.ok(e.overlays.at(-1).removed);
+  assert.equal(hinweise.alle("li").length, 0);
+});
+
+test("Speichern blockiert Aenderungen, Verwerfen und alte Pruefantworten", async () => {
+  const e = editorUmgebung(); await fertig();
+  const dialog = e.root.childNodes[0];
+  e.posts[0].resolve(antwort()); await fertig();
+  const speichern = knopf(dialog, "Speichern");
+  speichern.onclick();
+  const vorher = e.posts.length;
+  e.maps[0].events.click({ latlng: { lng: 500, lat: -750 } });
+  knopf(dialog, "Letztes Paar entfernen").onclick();
+  knopf(dialog, "Georeferenz verwerfen").onclick();
+  speichern.onclick();
+  knopf(dialog, "Schließen").onclick();
+  assert.equal(dialog.open, true);
+  assert.equal(e.posts.length, vorher);
+  assert.equal(e.posts.at(-1).body.punkte.length, 1);
+  e.posts.at(-1).resolve({ georeferenz: { revision: 3 } }); await fertig();
+  assert.equal(dialog.open, false);
+  assert.equal(e.ctx.document.events.keydown, undefined);
+});
+
+test("Seite startet automatisch, bleibt nach Speichern offen und verwendet neue Revision", async () => {
+  const e = editorUmgebung("gueltig", true); await fertig();
+  assert.equal(e.root.tagName, "section");
+  assert.equal(e.root.alle("dialog").length, 0);
+  assert.equal(e.posts[0].body.dokument_id, 3);
+  assert.equal(e.anfragen[0].url, "/objekte/7/karte/georef.json?dokument_id=3&seite=1");
+  assert.equal(e.anfragen[0].options.headers["X-CSRF-Token"], "csrf-token");
+  const mutation = e.anfragen.find((r) => r.options.method === "POST");
+  assert.equal(mutation.options.headers["X-CSRF-Token"], "csrf-token");
+  assert.equal(mutation.options.headers["Content-Type"], "application/json");
+  e.posts[0].resolve(antwort()); await fertig();
+  knopf(e.root, "Speichern").onclick();
+  e.posts[1].resolve({ georeferenz: { revision: 3 } }); await fertig();
+  assert.match(e.root.textContent, /Georeferenz gespeichert/);
+  assert.equal(e.root.alle("a")[0].href, "/zurueck");
+  assert.ok(e.maps.every((m) => !m.removed));
+  knopf(e.root, "Prüfen").onclick();
+  assert.equal(e.posts.at(-1).body.expected_revision, 3);
+});
+
+
+for (const [status, body, text] of [
+  [409, JSON.stringify({ detail: "Seite wurde inzwischen gedreht" }), "Seite wurde inzwischen gedreht"],
+  [422, JSON.stringify({ detail: [{ msg: "Ungültige Punkte" }] }), "Ungültige Punkte"],
+  [503, "Kartenquelle derzeit nicht erreichbar", "Kartenquelle derzeit nicht erreichbar"],
+]) {
+  test(`Eigener Fetch-Helfer zeigt Fehlertext bei ${status} sicher an`, async () => {
+    const e = editorUmgebung("veraltet", true); await fertig();
+    e.ctx.fetch = async () => ({ ok: false, status, text: async () => body });
+    knopf(e.root, "Prüfen").onclick(); await fertig();
+    assert.ok(e.root.textContent.includes(text));
+    assert.equal(knopf(e.root, "Speichern").disabled, true);
+  });
+}
+
+test("Seite verwirft mit Revision und ignoriert laufende alte Pruefung", async () => {
+  const e = editorUmgebung("gueltig", true); await fertig();
+  knopf(e.root, "Georeferenz verwerfen").onclick();
+  assert.equal(e.posts[1].path, "/georef/verwerfen");
+  assert.equal(e.posts[1].body.expected_revision, 2);
+  assert.equal(e.posts[1].body.expected_rotation, 0);
+  e.posts[0].resolve(antwort()); await fertig();
+  assert.equal(knopf(e.root, "Speichern").disabled, true);
+  e.posts[1].resolve({ georeferenz: { revision: 2 } }); await fertig();
+  assert.ok(e.root.textContent.includes("Georeferenz verworfen"));
+  assert.equal(knopf(e.root, "Georeferenz verwerfen").disabled, true);
   assert.equal(e.root.alle("button").filter((b) => b.textContent === "Paar löschen").length, 0);
 });

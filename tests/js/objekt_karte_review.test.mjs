@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
+const editorQuelle = readFileSync(new URL("../../app/static/js/objekt_georef_editor.js", import.meta.url), "utf8");
 const quelle = readFileSync(new URL("../../app/static/js/objekt_karte.js", import.meta.url), "utf8");
 const fertig = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -79,7 +80,7 @@ function umgebung(vorschlaege, gesperrt = false) {
       return { ok: true, json: async () => daten };
     },
   };
-  vm.runInNewContext(quelle, context);
+  vm.runInNewContext(editorQuelle + "\n" + quelle, context);
   context.window.initObjektKarte({ elementId: "karte", objektId: 7, csrfToken: "csrf", editierbar: true });
   const starten = async () => { await fertig(); nodes.modus.checked = true; nodes.modus.onchange(); await fertig(); };
   return { nodes, anfragen, markers, kreise, linien, map, layers, toasts, starten, fehler: (code) => { fehlercode = code; } };

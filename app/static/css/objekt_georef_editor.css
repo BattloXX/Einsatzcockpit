@@ -1,0 +1,10 @@
+/* Gemeinsamer Georeferenzeditor fuer Dialog und eigenstaendige Seite. */
+.ogx { min-width:0; }
+.ogx__layout { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+.ogx__karte { height:52vh;min-height:280px;min-width:0;outline:3px solid transparent; }
+.ogx__aktiv { outline-color:var(--red-light); }
+.ogx__gut { color:var(--green); }
+.ogx__fehler { color:var(--red-light); }
+.ogx__nummer { background:var(--surface-high);color:var(--text);border:2px solid var(--red-light);border-radius:50%;text-align:center;font-weight:bold; }
+.ogx__aktionen { display:flex;flex-wrap:wrap;gap:8px;margin:12px 0; }
+@media(max-width:760px) { .ogx__layout { grid-template-columns:1fr; } .ogx__karte { height:36vh; } }

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Georeferenzierung · {{ seite.dokument.dateiname_original }} · Seite {{ seiten_nr }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<link rel="stylesheet" href="/static/css/objekt_georef_editor.css">
+<style>
+  #georef-editor .ogx__karte { height:60vh; }
+  @media(max-width:760px) { #georef-editor .ogx__karte { height:40vh; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <h1>Georeferenzierung · {{ seite.dokument.dateiname_original }} · Seite {{ seiten_nr }}</h1>
+    <a href="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ seite.id }}" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück zur Dokumentenseite</a>
+  </div>
+  <div id="georef-editor" data-objekt-id="{{ objekt.id }}" data-dokument-id="{{ dokument_id }}"
+       data-seite="{{ seiten_nr }}" data-basis-url="{{ basis_url }}"
+       data-lat="{{ startpunkt.lat if startpunkt else '' }}" data-lng="{{ startpunkt.lng if startpunkt else '' }}"
+       data-zurueck-url="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ seite.id }}"
+       data-csrf="{{ csrf }}"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/objekt_georef_editor.js" defer></script>
+{% endblock %}

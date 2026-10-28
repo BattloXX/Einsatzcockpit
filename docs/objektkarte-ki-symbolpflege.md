@@ -184,3 +184,19 @@ PDF-Statikkarten stellen Punktsymbole vereinfacht als farbige Kreise dar.
 
 Prüfbare Flussabnahme: `tests/test_objekt_karte_e2e.py`; Details zu Transformation,
 Freigabe, UI und Rechteprüfung in den benachbarten Georef-/Karten-/MCP-Tests.
+
+## Grafischer Georeferenzierungseditor
+
+Für Pläne ohne belastbare Referenz gibt es eine eigenständige Seite
+`/objekte/{id}/dokumente/seite/{seite_id}/georef` (Rolle `objekt_verwalter`).
+Links liegt der Plan, rechts das Orthofoto. Der Mensch klickt dieselben vier
+Gebäudeecken auf beiden Karten an („Ecke n von 4“; Esc/Rücktaste macht den letzten
+Klick rückgängig). Der Server berechnet Transformation, Restfehler und Hinweise
+(`wenige_punkte`, `punkte_eng`, `restfehler_hoch`, `nur_freie_klicks`); bei gültigem
+Ergebnis liegt der Plan halbtransparent über der Karte (Deckkraftregler) und wird erst
+nach Bestätigung gespeichert.
+
+`objekt_karte_referenzpunkte` liefert dazu `editor_link` und `hinweise`. Reicht die
+KI-Georeferenz nicht aus, gibt sie den Link an den Menschen weiter, statt Punkte zu raten.
+Die Objektliste zeigt pro Planseite den Georef-Status (Badge) und den Button
+„Georeferenzieren“.
