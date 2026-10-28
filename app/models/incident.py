@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -211,6 +212,7 @@ class IncidentAlarmJob(Base):
     __tablename__ = "incident_alarm_job"
     __table_args__ = (
         UniqueConstraint("incident_id", "channel", "variant", name="uq_incident_alarm_job_incident_channel_variant"),
+        UniqueConstraint("org_id", "event_key", name="uq_incident_alarm_job_org_event_key"),
         Index("ix_incident_alarm_job_due", "org_id", "status", "next_attempt_at"),
     )
 
@@ -224,6 +226,9 @@ class IncidentAlarmJob(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    event_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    send_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    may_have_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     context: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

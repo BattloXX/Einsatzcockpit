@@ -223,6 +223,8 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
     LIS geliefert wurde (kein passender API-Einsatz vorhanden war)."""
     existing = _find_by_lis_operation_id(db, org.id, parsed["lis_operation_id"])
     if existing:
+        from app.services.alarm_outbox import _protokolliere_doppelten_eingang
+        _protokolliere_doppelten_eingang(db, existing, "lis")
         # NICHT wiedereröffnen, wenn die Operation selbst bereits beendet ist (Backfill
         # historischer/geschlossener Operationen liefert diese Operation mit gesetzter EndTime)
         # — das übernimmt _reopen_if_auto_closed() intern über parsed["is_closed"].
@@ -240,6 +242,8 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         lis_operation_number=parsed["lis_operation_number"],
     )
     if match:
+        from app.services.alarm_outbox import _protokolliere_doppelten_eingang
+        _protokolliere_doppelten_eingang(db, match, "lis")
         if match.is_exercise != parsed["is_exercise"]:
             logger.warning(
                 "LIS-Uebungsstatus weicht von vorhandenem Einsatz ab "
@@ -296,6 +300,8 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         db.rollback()
         winner = _find_by_lis_operation_id(db, org.id, parsed["lis_operation_id"])
         if winner:
+            from app.services.alarm_outbox import _protokolliere_doppelten_eingang
+            _protokolliere_doppelten_eingang(db, winner, "lis")
             logger.info(
                 "Race beim Anlegen von Einsatz für LIS-Operation %s (Org %s) — "
                 "bereits von einem parallelen Sync angelegt, übernehme diesen (%s)",

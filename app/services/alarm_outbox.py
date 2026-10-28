@@ -4,7 +4,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import time
 from datetime import UTC, datetime, timedelta
+from threading import Lock
 
 from sqlalchemy import and_, or_, update
 from sqlalchemy.exc import IntegrityError, StatementError
@@ -23,6 +25,44 @@ TERMINAL = {"sent", "suppressed", "failed", "uncertain"}
 CHANNELS = ("sms", "push", "teams", "mail")
 _LEASE = timedelta(minutes=5)
 _running_incident_tasks: set[asyncio.Task] = set()
+_duplikat_audit_zeiten: dict[tuple[int, str], float] = {}
+_DUPLIKAT_AUDIT_LIMIT = 1_000
+_duplikat_audit_sperre = Lock()
+
+
+def _protokolliere_doppelten_eingang(db: Session, einsatz: Incident, quelle: str) -> None:
+    """Wiederholte Eingangsmeldungen ohne Personendaten gedrosselt protokollieren."""
+    try:
+        from app.core.audit import write_audit
+
+        with _duplikat_audit_sperre:
+            jetzt = time.monotonic()
+            schluessel = (einsatz.id, quelle)
+            zuletzt = _duplikat_audit_zeiten.get(schluessel)
+            if zuletzt is not None and jetzt - zuletzt < 3600:
+                return
+            if len(_duplikat_audit_zeiten) >= _DUPLIKAT_AUDIT_LIMIT:
+                del _duplikat_audit_zeiten[next(iter(_duplikat_audit_zeiten))]
+            _duplikat_audit_zeiten[schluessel] = jetzt
+        # Die Prozesssperre niemals waehrend eines Datenbankzugriffs halten.
+        with db.begin_nested():
+            write_audit(
+                db, "incident.alarm_duplicate_ingest", org_id=einsatz.primary_org_id,
+                incident_id=einsatz.id, payload={"source": quelle},
+            )
+            db.flush()
+    except Exception as exc:
+        logger.warning("Duplikat-Audit fehlgeschlagen (Quelle %s, Fehler %s)", quelle, type(exc).__name__)
+
+
+def _event_key(incident: Incident, org_id: int | None, channel: str, variant: str) -> str:
+    """Stabiler Ereignisschluessel je Organisation, Einsatznummer und Versandtyp."""
+    nummer = (incident.lis_operation_number or "").strip().lower() or f"inc{incident.id}"
+    schluessel = f"{org_id or 0}:{nummer}:{channel}:{variant}"
+    if len(schluessel) > 160:
+        nummer = hashlib.sha1(nummer.encode()).hexdigest()
+        schluessel = f"{org_id or 0}:{nummer}:{channel}:{variant}"
+    return schluessel
 
 
 def _now() -> datetime:
@@ -69,11 +109,17 @@ def enqueue_incident_alarm(
     }
     for channel in CHANNELS:
         if channel not in existing:
-            db.add(IncidentAlarmJob(
-                org_id=org_id, incident_id=incident.id, channel=channel, variant="",
-                status="suppressed" if suppressed else "pending", next_attempt_at=now,
-                finished_at=now if suppressed else None, context=context,
-            ))
+            try:
+                with db.begin_nested():
+                    db.add(IncidentAlarmJob(
+                        org_id=org_id, incident_id=incident.id, channel=channel, variant="",
+                        event_key=_event_key(incident, org_id, channel, ""),
+                        status="suppressed" if suppressed else "pending", next_attempt_at=now,
+                        finished_at=now if suppressed else None, context=context,
+                    ))
+                    db.flush()
+            except IntegrityError:
+                logger.info("Alarmauftrag bereits vorhanden (Einsatz %s, Kanal %s)", incident.id, channel)
     if suppressed and not existing:
         db.add(IncidentLog(
             incident_id=incident.id, author_name="System", level="info",
@@ -126,6 +172,7 @@ def enqueue_nachalarmierung(
             with db.begin_nested():
                 db.add(IncidentAlarmJob(
                     org_id=org_id, incident_id=incident.id, channel=channel, variant=variant,
+                    event_key=_event_key(incident, org_id, channel, variant),
                     status="suppressed" if grund is not None else "pending", next_attempt_at=now,
                     finished_at=now if grund is not None else None, context=context,
                 ))
@@ -163,11 +210,12 @@ def _claim_once(db: Session, job_id: int, org_id: int | None, channel: str, now:
         eligible = due
     else:
         eligible = or_(due, stale)
+    versandbeginn = {"send_started_at": now, "may_have_sent": True} if channel in {"teams", "mail"} else {}
     result = db.execute(
         update(IncidentAlarmJob)
         .where(IncidentAlarmJob.id == job_id, IncidentAlarmJob.org_id == org_id, eligible)
         .values(status="sending", lease_until=now + _LEASE,
-                attempt_count=IncidentAlarmJob.attempt_count + 1)
+                attempt_count=IncidentAlarmJob.attempt_count + 1, **versandbeginn)
     )
     db.commit()
     return bool(getattr(result, "rowcount", 0) == 1)
