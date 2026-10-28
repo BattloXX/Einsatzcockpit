@@ -2,6 +2,7 @@
 {% block title %}Lagekarte – {{ objekt.anzeige_nummer }} {{ objekt.name }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
+<link rel="stylesheet" href="/static/css/objekt_georef_editor.css">
 <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
 {% endblock %}
 {% block content %}
@@ -41,6 +42,7 @@
 {% block scripts %}
 <script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/leaflet-geoman.min.js"></script>
+<script src="/static/js/objekt_georef_editor.js"></script>
 <script src="/static/js/objekt_karte.js"></script>
 <script>
   initObjektKarte({

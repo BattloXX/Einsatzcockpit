@@ -32,6 +32,10 @@ def test_einstieg_rahmen_und_aktuelle_version(client, plan):
     antwort = client.get(url)
     assert antwort.status_code == 200
     assert 'id="georef-editor"' in antwort.text
+    assert 'data-seite="1"' in antwort.text
+    assert f'data-basis-url="/objekte/{plan["objekt_id"]}/karte"' in antwort.text
+    assert f'data-zurueck-url="/objekte/{plan["objekt_id"]}/dokumente/viewer?seite={sid}"' in antwort.text
+    assert '<script src="/static/js/leaflet.min.js"></script>' in antwort.text
     assert f'data-dokument-id="{plan["dokument_id"]}"' in antwort.text
     assert 'Georeferenzierung · plan.pdf · Seite 1' in antwort.text
     assert f'/dokumente/viewer?seite={sid}' in antwort.text
