@@ -301,7 +301,7 @@ async def test_sms_begin_dauerfehler_schliesst_1013(sms, praesenz_versuche, monk
     assert socket.closed == [(1013, "")]
     assert not socket.sent
     assert len(sitzungen) == begin.call_count == 3
-    assert "error_type=OperationalError" in caplog.text
+    assert "fehlerklasse=OperationalError" in caplog.text
     assert "worker_id=" in caplog.text
     assert "private" not in caplog.text and "geheim" not in caplog.text
 

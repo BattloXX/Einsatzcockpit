@@ -20,6 +20,7 @@ import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import OperationalError
 
+from app.core.fehlerlog import log_fehler
 from app.core.permissions import can_access_incident, has_role
 from app.core.security import hash_api_key, pruefe_geraete_session, session_security, unsign_session, valid_mfa
 from app.core.tenant import set_tenant_context
@@ -412,10 +413,9 @@ async def sms_gateway_ws(websocket: WebSocket):
     try:
         connection = await asyncio.to_thread(gateway_routing.begin, "sms", org_id, token_id, token.token_hash)
     except OperationalError as exc:
-        logger.warning(
-            "SMS-Gateway Aufbau fehlgeschlagen (org_id=%s, token_id=%s, connection_id=%s, "
-            "worker_id=%s, code=1013, error_type=%s, duration_s=%.1f)",
-            org_id, token_id, None, gateway_presence.worker_id(), type(exc).__name__, time.monotonic() - beginn,
+        log_fehler(
+            logger, "SMS-Gateway Aufbau fehlgeschlagen", exc,
+            dauer_s=time.monotonic() - beginn, org_id=org_id, code=1013,
         )
         await websocket.close(code=1013)
         return
@@ -483,11 +483,9 @@ async def sms_gateway_ws(websocket: WebSocket):
                 except OperationalError as exc:
                     if last_received - letzte_touch_warnung >= 60:
                         letzte_touch_warnung = last_received
-                        logger.warning(
-                            "SMS-Gateway Praesenz-Touch fehlgeschlagen (org_id=%s, token_id=%s, "
-                            "connection_id=%s, worker_id=%s, error_type=%s, duration_s=%.1f)",
-                            org_id, token_id, connection.connection_id, connection.worker_id,
-                            type(exc).__name__, time.monotonic() - connected_at,
+                        log_fehler(
+                            logger, "SMS-Gateway Praesenz-Touch fehlgeschlagen", exc,
+                            dauer_s=time.monotonic() - connected_at, org_id=org_id,
                         )
                 else:
                     if gueltig is False:

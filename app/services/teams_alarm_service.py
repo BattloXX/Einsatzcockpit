@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.fehlerlog import log_fehler
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings
@@ -88,14 +89,14 @@ async def _post_payload(webhook_url: str, payload: dict, *, log_label: str) -> t
             return False, resp.status_code == 429, f"HTTP {resp.status_code}", resp.status_code >= 500
         return True, False, None, False
     except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
-        logger.error("Teams-Alarmierung: Webhook-Fehler (%s): %s", log_label, type(exc).__name__)
-        return False, True, str(exc).replace(webhook_url, "[Webhook]") or type(exc).__name__, False
+        log_fehler(logger, "Teams-Alarmierung: Webhook-Fehler", exc, level=logging.ERROR, channel="teams")
+        return False, True, type(exc).__name__, False
     except (httpx.TimeoutException, httpx.TransportError) as exc:
-        logger.error("Teams-Alarmierung: Webhook-Fehler (%s): %s", log_label, type(exc).__name__)
-        return False, False, str(exc).replace(webhook_url, "[Webhook]") or type(exc).__name__, True
+        log_fehler(logger, "Teams-Alarmierung: Webhook-Fehler", exc, level=logging.ERROR, channel="teams")
+        return False, False, type(exc).__name__, True
     except Exception as exc:
-        logger.error("Teams-Alarmierung: Webhook-Fehler (%s): %s", log_label, type(exc).__name__)
-        return False, False, str(exc).replace(webhook_url, "[Webhook]") or type(exc).__name__, False
+        log_fehler(logger, "Teams-Alarmierung: Webhook-Fehler", exc, level=logging.ERROR, channel="teams")
+        return False, False, type(exc).__name__, False
 
 
 async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlarmConfig,
@@ -210,10 +211,10 @@ async def post_incident_card(
         from app.services.teams_bot_service import post_incident_card_via_bot
         try:
             await post_incident_card_via_bot(db, incident, cfg, binding, base_url=base_url, org=org)
-        except Exception:
-            logger.exception(
-                "Teams-Alarmierung: Bot-Versand fehlgeschlagen (Einsatz %s, Org %s)",
-                incident.id, incident.primary_org_id,
+        except Exception as exc:
+            log_fehler(
+                logger, "Teams-Alarmierung: Bot-Versand fehlgeschlagen", exc, level=logging.ERROR,
+                incident_id=incident.id, org_id=incident.primary_org_id, channel="teams",
             )
             return TeamsDispatchResult(False, "Bot-Versandfehler")
         # KEIN _record_card_post() hier: post_incident_card_via_bot() ist aktuell nur ein
@@ -242,8 +243,11 @@ async def post_incident_card(
             _record_card_post(
                 db, incident, target=target, conversation_id=webhook_url, major_incident_id=major_incident_id,
             )
-        except Exception:
-            logger.exception("Teams-Alarmierung: Kartenprotokoll fehlgeschlagen (Einsatz %s)", incident.id)
+        except Exception as exc:
+            log_fehler(
+                logger, "Teams-Alarmierung: Kartenprotokoll fehlgeschlagen", exc, level=logging.ERROR,
+                incident_id=incident.id, channel="teams",
+            )
     if sent:
         logger.info(
             "Teams-Alarmierung gesendet (Einsatz %s, Org %s, stichwort=%s, is_exercise=%s)",

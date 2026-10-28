@@ -543,7 +543,7 @@ async def test_teams_unklare_zustellung_wird_nicht_wiederholt(setup_db, monkeypa
                 aufrufe.append(url)
                 raise httpx.ReadTimeout(f"Lesefehler {url}")
 
-        grund = "Lesefehler [Webhook]"
+        grund = "ReadTimeout"
         monkeypatch.setattr(teams_alarm_service, "_teams_http_client", lambda: HttpClient())
         monkeypatch.setattr(teams_alarm_service, "post_incident_card", versand)
     else:
@@ -615,7 +615,8 @@ def test_teams_protokollfehler_nach_versand_bleibt_gesendet(setup_db, monkeypatc
         ergebnis = asyncio.run(teams_alarm_service.post_incident_card(db, einsatz, base_url="https://example.test"))
         assert ergebnis == TeamsDispatchResult(True)
         assert aufrufe == [einsatz.id]
-        assert f"Kartenprotokoll fehlgeschlagen (Einsatz {einsatz.id})" in caplog.text
+        assert "Kartenprotokoll fehlgeschlagen" in caplog.text
+        assert f"incident_id={einsatz.id}" in caplog.text
     finally:
         db.rollback()
         db.close()

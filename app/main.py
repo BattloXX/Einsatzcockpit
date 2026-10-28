@@ -28,6 +28,7 @@ from app.admin_mcp.server import application as admin_mcp_application
 from app.admin_mcp.server import server as admin_mcp_server
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
+from app.core.fehlerlog import korrelation_setzen, korrelations_id
 from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.security import (
     pruefe_geraete_session,
@@ -160,7 +161,8 @@ loop_lag_logger = logging.getLogger("einsatzleiter.loop_lag")
 
 
 async def _loop_lag_monitor(watchdog: VerzugsWatchdog | None = None) -> None:
-    """Misst pro Worker den Verzug; normale Schleifendurchlaeufe bleiben still."""
+    """Misst pro Worker den Verzug; setzt als Hintergrundtask eine eigene ID."""
+    korrelation_setzen()
     if settings.LOOP_LAG_WARN_MS <= 0:
         return
     loop = asyncio.get_running_loop()
@@ -587,6 +589,14 @@ def _melde_widerrufene_session(request: Request, db, device_token_id: int | None
 # Session middleware – inject request.state.user + sliding-window token refresh
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
+    korrelations_token = korrelation_setzen(request.headers.get("X-Request-ID"))
+    try:
+        return await _session_mit_kontext(request, call_next)
+    finally:
+        korrelations_id.reset(korrelations_token)
+
+
+async def _session_mit_kontext(request: Request, call_next):
     from app.services.broadcast import reset_request_client_id, set_request_client_id
 
     client_token = set_request_client_id(request.headers.get("X-EC-Client"))
