@@ -51,7 +51,7 @@ Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in de
 | **Im Einsatz** | **Einsatzwissen** (Einsatzpläne, Führungswissen, Fachwissen & Lehrbehelfe, Katastrophenschutz, Sondereinsatzmittel und Nachschlagewerk; bestehende Planarten, Freigaben, Akteure, Prüfzyklus, PDF-Quellen, Karte, Offlinefassung und KI-Import) · **Kontakte** (Einsatztelefonlisten, Verzeichnisse) · **Straßensperren** (Karte, Nachbarfreigaben, optionale Anfahrtsprüfung) · **Förderstrecke** (Wasserförderung planen) |
 | **Einsatzbegleitend** | **Fahrtenbuch** · **Atemschutz-Geräteprüfung** · **Drohne / UAS** (Dokumentation gemäß RL-UAS LFV Vorarlberg 2024) |
 | **Verwaltung & Planung** | **Objekte** (Einsatzunterlagen, Alarm-Matching, OCR-Suche, externe Objektpflege) · **Probenplan** (Jahresplanung, Appell, Nachbereitung, öffentlicher Kalender) · **Planspiele** (Übungsgenerator für Board und Großschadenslagen) · **Mailing** |
-| **Auswertung** | **Statistik** (Kennzahlen und Diagramme zu den Einsätzen; [Statistik-Infoscreen](docs/statistik-infoscreen.md)) |
+| **Auswertung** | **Statistik** (Kennzahlen und Diagramme zu den Einsätzen; [Statistik-Infoscreen](docs/konzepte/statistik-infoscreen.md)) |
 
 ### Großschadenslage, Alarmierung und Anbindung
 
@@ -156,13 +156,13 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 | [Erste Schritte](docs/wiki/Anwender-Erste-Schritte.md) | Login, Oberfläche, Menü und Tastaturkürzel |
 | [Einsatz starten](docs/wiki/Anwender-Einsatz-starten.md) | Vom Alarm bis zum laufenden Einsatz |
 | [Großschadenslage](docs/wiki/Anwender-Grosschadenslage.md) | Stab, Einsatzstellen, Ressourcen und Einheitenansicht |
-| [Einsatzwissen – Gesamtdokumentation](docs/einsatzwissen.md) | Bedienung, Dokumentpflege, Freigaben, KI, MCP, Architektur und Betrieb |
-| [Einsatzwissen – Phase 7](docs/einsatzwissen-phase7.md) | Dokumentreferenzen, Prüfmetadaten, PDF-Scrollen, MCP und Abschlussprüfung |
-| [Einsatzwissen – Phase 1](docs/einsatzwissen-phase1.md) | Bestandsaufnahme, Kategorien, Datenmodell, Kompatibilität und Migration |
-| [Einsatzwissen – Phase 6](docs/einsatzwissen-phase6.md) | Kompakte Einsatzansicht, Schnellzugriff, Suche, lokale Kerninhalte und mobile Abnahme |
-| [Dokumentenviewer – Phase 2](docs/dokumentviewer-phase2.md) | Gemeinsame PDF-/Bildanzeige, Dokumentfolgen, Seitenauswahl und Integration |
-| [Dokumentendruck – Phase 3](docs/dokumentdruck-phase3.md) | Seitenauswahl und Dokumentpakete, lokaler Druck, vorhandene Stationsdrucker und Status |
-| [Dokumente im Einsatz – Phase 4](docs/einsatzdokumente-phase4.md) | Unveränderliche Übernahmen, Auftrag und Einheitenfreigaben, Board, Archiv und Backup |
+| [Einsatzwissen – Gesamtdokumentation](docs/einsatzwissen/einsatzwissen.md) | Bedienung, Dokumentpflege, Freigaben, KI, MCP, Architektur und Betrieb |
+| [Einsatzwissen – Phase 7](docs/einsatzwissen/einsatzwissen-phase7.md) | Dokumentreferenzen, Prüfmetadaten, PDF-Scrollen, MCP und Abschlussprüfung |
+| [Einsatzwissen – Phase 1](docs/einsatzwissen/einsatzwissen-phase1.md) | Bestandsaufnahme, Kategorien, Datenmodell, Kompatibilität und Migration |
+| [Einsatzwissen – Phase 6](docs/einsatzwissen/einsatzwissen-phase6.md) | Kompakte Einsatzansicht, Schnellzugriff, Suche, lokale Kerninhalte und mobile Abnahme |
+| [Dokumentenviewer – Phase 2](docs/einsatzwissen/dokumentviewer-phase2.md) | Gemeinsame PDF-/Bildanzeige, Dokumentfolgen, Seitenauswahl und Integration |
+| [Dokumentendruck – Phase 3](docs/einsatzwissen/dokumentdruck-phase3.md) | Seitenauswahl und Dokumentpakete, lokaler Druck, vorhandene Stationsdrucker und Status |
+| [Dokumente im Einsatz – Phase 4](docs/einsatzwissen/einsatzdokumente-phase4.md) | Unveränderliche Übernahmen, Auftrag und Einheitenfreigaben, Board, Archiv und Backup |
 | [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen, Modulschalter |
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |

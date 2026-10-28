@@ -43,7 +43,7 @@ jeder Eintrag braucht eine Begründung in `AUSNAHME_GRUENDE`. Feuerwehr-/Fachzei
 Tabler-Entsprechung und Gefahren-Piktogramme bleiben unverändert (`=fw` im Inventar).
 Flex-Container mit Icon + Text brauchen `gap`; `x-text`/`textContent` nie mit SVG.
 Details: [Icon-System-Plan](docs/plans/icon-system-plan.md) und
-[Icon-Inventar](docs/icon-inventar.md).
+[Icon-Inventar](docs/konzepte/icon-inventar.md).
 
 ## Pflicht: Third-Party-JavaScript über npm vendoren
 

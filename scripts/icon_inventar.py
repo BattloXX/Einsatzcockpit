@@ -1,11 +1,11 @@
 """Inventar der Emoji-/Unicode-Icons im Einsatzcockpit (Icon-System, Phase P0).
 
 Zaehlt alle Emoji- und Symbolzeichen im App-Code, ordnet sie ueber ``ZUORDNUNG`` einem
-Tabler-Icon bzw. einer Sonderbehandlung zu und schreibt ``docs/icon-inventar.md``.
+Tabler-Icon bzw. einer Sonderbehandlung zu und schreibt ``docs/konzepte/icon-inventar.md``.
 Plan: ``docs/plans/icon-system-plan.md``.
 
 Aufruf:
-    .venv/bin/python scripts/icon_inventar.py            # schreibt docs/icon-inventar.md
+    .venv/bin/python scripts/icon_inventar.py            # schreibt docs/konzepte/icon-inventar.md
     .venv/bin/python scripts/icon_inventar.py --check    # Exit 1, wenn ein Zeichen fehlt
     .venv/bin/python scripts/icon_inventar.py --baseline # schreibt die Waechter-Baseline neu
 """

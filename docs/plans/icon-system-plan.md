@@ -12,7 +12,7 @@ Feuerwehrspezifische Symbole ohne Tabler-Entsprechung bleiben unverändert. Funk
 
 | Phase | Inhalt | PR |
 |---|---|---|
-| P0 | Inventar + Zuordnung (`scripts/icon_inventar.py`, `docs/icon-inventar.md`) | #651 |
+| P0 | Inventar + Zuordnung (`scripts/icon_inventar.py`, `docs/konzepte/icon-inventar.md`) | #651 |
 | P1+P2 | Fundament (Tabler 3.49.0, `icon()`, `icons.js`, Tokens) + Wächter | #652 |
 | P3 | Rahmen: Navigation, Übersicht, Admin-Menü, Fehlerseite, `modul_icon` | #653 |
 | P4a/P4b | Einsatzboard, Einsatzinfo, Funk, Lageführung, Atemschutz | #654, #655 |
@@ -123,7 +123,7 @@ des Wächter-Tests (Abschnitt 5). Die native Android-Widget-Oberfläche
 
 ## 2. Zuordnung Emoji → Icon (Entwurf)
 
-Die verbindliche, vollständige Tabelle erzeugt Phase 0 als `docs/icon-inventar.md`
+Die verbindliche, vollständige Tabelle erzeugt Phase 0 als `docs/konzepte/icon-inventar.md`
 (alle 216 Zeichen mit Fundstellen und Ziel). Jeder Name wird dort gegen die gepinnte
 Tabler-Version geprüft. Entwurf für die häufigsten:
 
@@ -333,7 +333,7 @@ Die Entwicklerdoku kommt nach `docs/wiki` (Icon-Katalog-Seite mit allen verfügb
 
 | Phase | Inhalt | Ergebnis |
 |---|---|---|
-| **P0 Inventar** | Skript `scripts/icon_inventar.py` (Fundstellen je Zeichen mit Kontext: Markup, `<option>`, JS-String, Python, extern), generiert `docs/icon-inventar.md` inkl. Ziel-Icon-Spalte; Tabler-Namen gegen gepinnte Version geprüft; Ausnahmeliste Feuerwehrsymbole final; Prod-Abfrage `objekt_auswahl.icon`/`merkmal_katalog.icon` | vollständige Migrationsübersicht |
+| **P0 Inventar** | Skript `scripts/icon_inventar.py` (Fundstellen je Zeichen mit Kontext: Markup, `<option>`, JS-String, Python, extern), generiert `docs/konzepte/icon-inventar.md` inkl. Ziel-Icon-Spalte; Tabler-Namen gegen gepinnte Version geprüft; Ausnahmeliste Feuerwehrsymbole final; Prod-Abfrage `objekt_auswahl.icon`/`merkmal_katalog.icon` | vollständige Migrationsübersicht |
 | **P1 Fundament** | `@tabler/icons` pinnen + Vendor-Schritt, `app/core/icons.py`, Jinja-Global `icon()`, `status_dot()`, `icons.js` + `ecpMarkerIcon`, CSS-Klassen/Tokens, SW-Precache, Fallback-Icon, Tests 3–5 + 8, Wiki-Katalogseite | System nutzbar, noch nichts migriert |
 | **P2 Wächter** | Test 1, 2, 6 mit Baseline aus Ist-Stand, CLAUDE.md-Regel | keine neuen Emojis ab jetzt |
 | **P3 Rahmen** | `base.html`, `admin/_layout.html`, Navigation, `index.html`, `hilfe.html`, Flash/Toasts, gemeinsame Buttons (Drucken, Schließen, Bearbeiten, Löschen) | einheitliche Grundbedienelemente |
@@ -361,7 +361,7 @@ Gestützt auf die Inventarliste werden die Codex-Aufträge pro Phase in 1–3 Pa
 | Einheitlich auf Android, iOS, Windows, Desktop | Inline-SVG statt System-Emoji; manueller Gerätetest mit Checkliste (Board, GSL, Karte, Einheitenmodus, Infoscreen, PDF) auf Android-App, iPad/iPhone Safari, Windows Edge/Chrome, Desktop Firefox |
 | Vollständig offline | Keine externen URLs (Test 2), `icons.js` im SW-Precache, Offline-Test Einheitenmodus/Objekt-Offline |
 | Keine leeren/fehlenden Icons | Test 3 + Fallback-Icon + Prod-Warnlog `einsatzleiter.icons` |
-| Gleiche Symbole/Größen in vergleichbaren Elementen | Zentrales Mapping in `docs/icon-inventar.md`, gemeinsame Button-Makros, Größenvarianten |
+| Gleiche Symbole/Größen in vergleichbaren Elementen | Zentrales Mapping in `docs/konzepte/icon-inventar.md`, gemeinsame Button-Makros, Größenvarianten |
 | Dark Mode, Karten, PDF korrekt | Token-Farben, Marker-Hülle mit Kontrast, PDF-Test 4.7; Playwright-Screenshots der Kernseiten (nur auf Anforderung lokal) |
 | Bestehende Tests/CI grün | CI je PR, danach CI auf `main` bestätigen |
 | Funktionen, Statuslogik, A11y erhalten | keine Änderungen an Status-Konstanten/-Logik; A11y-Test 6; `status_dot` mit Textalternative |

@@ -147,7 +147,7 @@ verweist fuer diesen weiteren Bugfix auf einen neueren Release als 2026.10.23.
 - `app/services/print_agent_service.py`
 - `app/templates/gateway/agent_detail.html`
 - `app/templates/gateway/liste.html`
-- `docs/print-agent-architektur.md`
+- `docs/konzepte/print-agent-architektur.md`
 - `tests/test_gateway_dispatch.py`
 - `tests/test_print_agent_service.py`
 - `tests/test_print_agent_ui.py`

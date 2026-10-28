@@ -1,7 +1,7 @@
 # Icon-Inventar
 
 Automatisch erzeugt von `scripts/icon_inventar.py` (Tabler Icons 3.49.0).
-Plan und Regeln: [plans/icon-system-plan.md](plans/icon-system-plan.md).
+Plan und Regeln: [plans/icon-system-plan.md](../plans/icon-system-plan.md).
 
 Ziel-Spalte: Tabler-Icon-Name, oder `=status` (Statuspunkt → `status_dot`), `=text`
 (Typografie, bleibt), `=fw` (Feuerwehr-/Fachzeichen, bleibt unverändert).

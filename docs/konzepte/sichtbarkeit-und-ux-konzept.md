@@ -2,7 +2,7 @@
 
 **Ziel:** (1) Die nach Umsetzung des Multi-Tenancy-Konzepts verbliebenen **Sichtbarkeits-Lecks vollständig schließen** – Benutzer einer Organisation sehen in sämtlichen Listen, Übersichten und Dashboards ausschließlich Daten der eigenen Org. (2) Neun **funktionale Erweiterungen** umsetzen (Personen-Schnellanlage, verschiebbare Spalten, Auftrag-Statusabfrage, Spaltentypen, QR-PIN, Karten-Aktionen, Benutzerprofil, Funkjournal-Ausbau nach österreichischer Funkordnung).
 
-**Stand:** 12.06.2026 · Baut auf `docs/multi-tenancy-konzept.md` (umgesetzt) auf
+**Stand:** 12.06.2026 · Baut auf `docs/konzepte/multi-tenancy-konzept.md` (umgesetzt) auf
 
 ---
 
@@ -223,8 +223,8 @@ Reihenfolge: **Sicherheitslecks zuerst** (Phase A), dann UX (Phase B), dann Funk
 
 ### Hinweise für die Claude-Code-Sessions
 
-- **Ein PR pro Session**, Start jeweils: „Lies `docs/sichtbarkeit-und-ux-konzept.md` Abschnitt X und implementiere PR n. Führe vor dem Commit `pytest` aus."
-- Konzeptdatei als `docs/sichtbarkeit-und-ux-konzept.md` ins Repo legen.
+- **Ein PR pro Session**, Start jeweils: „Lies `docs/konzepte/sichtbarkeit-und-ux-konzept.md` Abschnitt X und implementiere PR n. Führe vor dem Commit `pytest` aus."
+- Konzeptdatei als `docs/konzepte/sichtbarkeit-und-ux-konzept.md` ins Repo legen.
 - Die **Sichtbarkeits-Testmatrix aus PR 1 in jedem Folge-PR** um neue Endpoints erweitern lassen – explizit in jeden Prompt schreiben.
 - Nach PR 2 (Medien-Backfill) Migrationstest gegen Kopie der Produktiv-DB, bevor weitergebaut wird.
 - Phase A vor Phase B mergen und deployen – die Lecks sind produktiv und haben Vorrang vor jedem Feature.

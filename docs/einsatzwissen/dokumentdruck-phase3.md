@@ -28,7 +28,7 @@ abgefragt und kann bei Verbindungsproblemen manuell geprüft werden.
 
 ## Untersuchte und wiederverwendete Druckarchitektur
 
-Die Bestandsaufnahme umfasst [Druckarchitektur](print-agent-architektur.md),
+Die Bestandsaufnahme umfasst [Druckarchitektur](../konzepte/print-agent-architektur.md),
 `Gateway`, `Printer`, `PrinterAgentRoute`, `PrintJob`, Druckregeln, Dispatcher,
 signierte Artefakte, WebSocket-/Lease-Übertragung sowie beide vorhandenen Clients:
 

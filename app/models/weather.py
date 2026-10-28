@@ -1,6 +1,6 @@
 """Modelle für lokale Wetterstationen (Davis Vantage Pro 2 / Meteobridge).
 
-Aufteilung (siehe docs/wetterstation-konzept.md):
+Aufteilung (siehe docs/konzepte/wetterstation-konzept.md):
 
 - ``WeatherStation`` liegt in der HAUPT-DB und ist tenant-scoped (``TenantScoped``)
   → jede Organisation kann ihre eigene(n) Station(en) einbinden, Org-Isolation
