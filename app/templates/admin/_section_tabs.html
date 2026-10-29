@@ -5,7 +5,11 @@
 {% if section %}
 {% set tabs = namespace(items=[]) %}
 {% for tab in section.tabs %}
-{% set tabs.items = tabs.items + [{'label': tab.label, 'href': tab.href, 'active': active_tab and active_tab.id == tab.id, 'badge': mail_eingang_offene_count(user) if tab.badge_provider == 'mail_eingang_offene_count' else none}] %}
+{% set tab_href = tab.href %}
+{% if section_id == 'settings' and request.query_params is defined and request.query_params.get('org_id') %}
+{% set tab_href = tab.href ~ '?org_id=' ~ (request.query_params.get('org_id')|urlencode) %}
+{% endif %}
+{% set tabs.items = tabs.items + [{'label': tab.label, 'href': tab_href, 'active': active_tab and active_tab.id == tab.id, 'badge': mail_eingang_offene_count(user) if tab.badge_provider == 'mail_eingang_offene_count' else none}] %}
 {% endfor %}
 {{ subtabnav(tabs.items) }}
 {% endif %}

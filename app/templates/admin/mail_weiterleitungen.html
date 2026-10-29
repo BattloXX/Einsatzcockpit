@@ -1,6 +1,8 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Mail-Weiterleitungen{% endblock %}
 {% block admin_content %}
+{% with section_id='systemkonfiguration' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-content">
   <div class="page-header"><div><h1>Mail-Weiterleitungen</h1><p class="page-header__sub">Systemweit, vor der Organisationszuordnung. Mailinhalte werden nicht gespeichert.</p></div></div>
   {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}

@@ -62,7 +62,8 @@ def test_system_admin_sieht_systemstatus_nav_eintrag_genau_einmal(client, setup_
     response = client.get("/admin/systemstatus")
 
     assert response.status_code == 200
-    assert response.text.count('href="/admin/systemstatus"') == 1
+    assert response.text.count('href="/admin/systemstatus"') == 2
+    assert response.text.count('aria-selected="true"') == 1
 
 
 def test_systemstatus_zeigt_korrekte_dienstlabels(client, setup_db):

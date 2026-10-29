@@ -25,6 +25,8 @@ th.sortable a:hover { text-decoration:underline; }
 {% endblock %}
 
 {% block admin_content %}
+{% with section_id='organisationen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-content">
   <div class="page-header">
     <div>

@@ -2,6 +2,8 @@
 {% block title %}Seiten – Pflege{% endblock %}
 
 {% block admin_content %}
+{% with section_id='systemkonfiguration' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-header">
   <div>
     <h1>Öffentliche Seiten</h1>
