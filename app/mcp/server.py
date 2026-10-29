@@ -2337,6 +2337,13 @@ async def objekt_karte_lesen(
     return await _call_registered_tool("objekt_karte_lesen", objekt_id=objekt_id, arbeitskopie=arbeitskopie)
 
 
+@server.tool(name="objekt_karte_bsp_arbeitsliste", description=TOOLS["objekt_karte_bsp_arbeitsliste"].description)
+async def objekt_karte_bsp_arbeitsliste(objekt_id: int | None = None, nur_offen: bool = True,
+                                      limit: int = 50, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("objekt_karte_bsp_arbeitsliste", objekt_id=objekt_id,
+                                       nur_offen=nur_offen, limit=limit)
+
+
 @server.tool(name="objekt_karte_symbolkatalog", description=TOOLS["objekt_karte_symbolkatalog"].description)
 async def objekt_karte_symbolkatalog(ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("objekt_karte_symbolkatalog")

@@ -134,7 +134,7 @@ def symbol_basisrichtung(db: Session, org_id: int | None, symbol_code: str) -> i
     if org_id is None:
         raise ObjektKartenFehler("Organisation erforderlich")
     symbol = next((s for s in symbolkatalog_lesen(db, org_id) if s["code"] == symbol_code), None)
-    return 90 if symbol and symbol["stil"] in {"pfeil-voll", "pfeil-leer"} else 0
+    return symbol["basisrichtung_grad"] if symbol else 0
 
 
 def _zahl(wert: Any, feld: str, minimum: float, maximum: float) -> float:

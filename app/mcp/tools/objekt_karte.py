@@ -54,12 +54,38 @@ async def objekt_karte_lesen(context: MCPContext, objekt_id: int, arbeitskopie: 
 
 @register_tool(
     name="objekt_karte_symbolkatalog",
-    description="Liest den Symbolkatalog der eigenen Organisation. Koordinaten nie erfinden.",
+    description=("Liest den Symbolkatalog der eigenen Organisation. Legendenbegriffe ueber aliase abgleichen; "
+                 "bei traegt_richtung bild_richtung angeben. Koordinaten nie erfinden."),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_modul_aktiv,
 )
 async def objekt_karte_symbolkatalog(context: MCPContext) -> dict[str, object]:
     return {"symbole": symbolkatalog_lesen(context.db, context.org_id)}
+
+
+@register_tool(
+    name="objekt_karte_bsp_arbeitsliste",
+    description=(
+        "Arbeitsliste offener Lageplan-/BSP-Seiten mit naechstem Schritt. Ablauf: "
+        "1) objekt_dokument_seite_ansehen (rotation merken, ausschnitt fuer Details), "
+        "2) georef_uebernehmen oder georef_zuordnen erst ohne speichern, bei Klasse A speichern, "
+        "bei C editor_link an Menschen, 3) objekt_karte_symbolkatalog (aliase) und "
+        "objekt_karte_vorschlaege mit georef_id, bild_x/bild_y, bild_richtung und batch_id, "
+        "4) objekt_karte_pruefen und objekt_karte_vorschau, "
+        "5) Freigabe nur nach ausdruecklicher Bestaetigung des Menschen. Koordinaten nie erfinden."
+    ),
+    required_roles=EINSATZ_LESE_ROLLEN,
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_karte_bsp_arbeitsliste(
+    context: MCPContext, objekt_id: int | None = None, nur_offen: bool = True, limit: int = 50,
+) -> dict[str, object]:
+    from app.mcp.context import MCPPermissionError
+    from app.services.objekt_bsp_arbeitsliste_service import arbeitsliste_lesen
+
+    if context.org_id != context.user.org_id:
+        raise MCPPermissionError("Organisation stimmt nicht ueberein")
+    return arbeitsliste_lesen(context.db, context.org_id, objekt_id, nur_offen, limit)
 
 
 @register_tool(

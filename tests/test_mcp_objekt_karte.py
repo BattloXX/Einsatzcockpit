@@ -20,7 +20,7 @@ from app.services.objekt_service import erstelle_arbeitskopie
 from app.services.objekt_symbol_service import seed_objekt_symbole
 from tests.test_mcp_objekte import _mcp, _rufe, _seed, _token
 
-KARTEN_TOOLS = {"objekt_karte_lesen", "objekt_karte_symbolkatalog"}
+KARTEN_TOOLS = {"objekt_karte_lesen", "objekt_karte_symbolkatalog", "objekt_karte_bsp_arbeitsliste"}
 
 
 @pytest.fixture
@@ -58,7 +58,8 @@ def test_lesen_werte_sortierung_und_katalog(client, karte):
     katalog = _rufe(client, token, "objekt_karte_symbolkatalog")["symbole"]
     symbole = {s["code"]: s for s in katalog}
     assert symbole["tor"] == {"code": "tor", "name": "Werkstor", "stil": "box", "text": "T",
-                              "system": False, "einsatzkritisch": False}
+                              "system": False, "einsatzkritisch": False,
+                              "aliase": [], "traegt_richtung": False, "basisrichtung_grad": 0}
     for code in ("fsd", "bmz", "fbf", "hauptzugang", "nebenzugang", "dlk_stellplatz",
                  "gefahr_gas", "hydrant_ueberflur", "hydrant_unterflur"):
         assert symbole[code]["einsatzkritisch"] and symbole[code]["system"]
