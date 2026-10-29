@@ -19,7 +19,6 @@ from uuid import uuid4
 import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import OperationalError
-from starlette.websockets import WebSocketDisconnected
 
 from app.core.fehlerlog import log_fehler
 from app.core.permissions import can_access_incident, has_role
@@ -476,8 +475,10 @@ async def sms_gateway_ws(websocket: WebSocket):
                         )
                         break
                     await websocket.send_text(json.dumps({"type": "ping"}))
-                except WebSocketDisconnected:
-                    # Parallel ersetzt oder getrennt (Reconnect schliesst die alte Verbindung).
+                except RuntimeError:
+                    # Parallel ersetzt oder getrennt (Reconnect schliesst die alte Verbindung): Starlette wirft
+                    # beim Senden nach dem Close RuntimeError (ab 1.x als Unterklasse WebSocketDisconnected;
+                    # die Klasse nicht importieren, aeltere Versionen kennen sie nicht).
                     break
                 continue
             last_received = time.monotonic()
