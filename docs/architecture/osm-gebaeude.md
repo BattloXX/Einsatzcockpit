@@ -135,3 +135,72 @@ Oesterreich-Gesamtextrakt braucht deutlich mehr RAM; vor Umstellung Kapazitaet
 und Importzeit am Zielsystem messen. Waehrend Import und Pruefung koexistieren
 alter und neuer SQL-Bestand. DATA_DIR braucht Platz fuer fertigen und temporaeren
 Download, die Datenbank fuer aktive und wartende Laeufe.
+
+
+## Overpass-Rueckfall
+
+Alle neuen Nutzer fragen ueber `overpass_endpunkte.abfragen` ab. Der konfigurierte
+`HYDRANT_OVERPASS_URL` ist primaer, `OVERPASS_FALLBACK_URLS` ergaenzt eindeutige
+HTTPS-Endpunkte (Standard: private.coffee). Die Primaerinstanz darf intern HTTP
+verwenden. Gebaeude: 25 Sekunden je Versuch, 45 Sekunden Gesamtbudget;
+Hydranten: 8 Sekunden je Versuch, 10 Sekunden insgesamt. Reserven fuer Cache und
+Aufbereitung koennen das fuer HTTP verfuegbare Budget verkuerzen.
+
+Jeder Endpunkt hat einen gemeinsamen Fehlerschutz aus Fehlerfenster, Schwelle und
+Pause (`OVERPASS_ENDPUNKT_FENSTER_SECONDS`, `OVERPASS_ENDPUNKT_FEHLER`,
+`OVERPASS_ENDPUNKT_PAUSE_SECONDS`). Offene Endpunkte werden uebersprungen.
+HTTP 429 beruecksichtigt Retry-After. Erfolg schliesst den Endpunkt-Fehlerschutz;
+der getrennte Hydranten-Breaker sperrt keine Gebaeudeabfragen. Wiederholungen
+bleiben im Gesamtbudget, 4xx ausser 429 brechen sofort ab.
+
+| Code | Ursache | retryable |
+|---|---|---|
+| OVERPASS_TIMEOUT | Transport- oder Gesamtzeitlimit | true |
+| OVERPASS_RATE_LIMIT | HTTP 429 | true |
+| OVERPASS_HTTP_5XX | HTTP 500 bis 599 | true |
+| OVERPASS_HTTP_4XX | Sonstiger nicht erfolgreicher HTTP-Status, insbesondere 4xx | false |
+| OVERPASS_DNS_ERROR | Namensaufloesung fehlgeschlagen | true |
+| OVERPASS_TLS_ERROR | TLS-/Zertifikatsfehler | true |
+| OVERPASS_CONNECTION_ERROR | Sonstiger Transportfehler | true |
+| OVERPASS_INVALID_RESPONSE | Ungueltiges JSON oder Overpass-Laufzeitfehler | true |
+| OVERPASS_ALL_ENDPOINTS_FAILED | Endpunkte gescheitert, gesperrt oder Budget aufgebraucht | true |
+
+Die strukturierte Versuchsfolge nennt Host, Code, HTTP-Status, Dauer und
+uebersprungene Endpunkte. Externe Fehler werden als `ExternerDienstFehler` mit
+Code weitergereicht. Niemals URLs, Abfragekoordinaten oder Antworttexte als
+Betriebsstatistik speichern.
+
+## Statistik und Monitoring
+
+`geodienst_statistik` speichert Tages-Dictionaries unter
+`geodienst-stat:<UTC-Datum>:<dienst>` und letzte Host-Ereignisse unter
+`geodienst-letzt:<dienst>:<sha256(host)[:16]>`; ein TTL-Hostindex ermoeglicht
+lesende Zusammenfassungen ohne Redis-SCAN. `GEODIENST_STATISTIK_TAGE=30` steuert
+alle TTLs. Atomare Redis-Lua-Updates verhindern verlorene parallele Zaehler;
+die Verbindung stammt aus `shared_cache`. Bei Redis-Ausfall wird lokal mit TTL
+weitergezaehlt, geschuetzt ueber Thread-Grenzen. Lokale Ausfallwerte sind nicht
+neustartfest und werden bei Redis-Rueckkehr nicht nachtraeglich zusammengefuehrt.
+Schreibfehler werden auf DEBUG protokolliert und unterbrechen keine Fachabfrage.
+
+`overpass` zaehlt Erfolg und Fehler je echtem Versuch; `retry_count` steigt nur,
+wenn nach einem Fehler tatsaechlich ein weiterer Endpunkt versucht wird.
+Uebersprungene Endpunkte sind keine Versuche. `gebaeude` zaehlt `cache_lokal`,
+`cache_hit`, `cache_miss` und `negativ_cache`; lokale und negative Treffer gehen
+nicht in hit/(hit+miss) ein. Tageszaehler aggregieren UTC-Kalendertage, die
+24-Stunden-Warnung nutzt die letzten Host-Fehlerzeitpunkte.
+
+Das System-Admin-MCP-Werkzeug `admin_osm_pruefen(live=true)` liest Bestand,
+Statistik und beide Fehlerschutzarten. Parallele GET-Status-/HEAD-PBF-Proben
+verwenden den ehrlichen User-Agent, maximal 5 Sekunden je Probe und insgesamt
+weniger als 15 Sekunden. Sie schreiben weder Statistik noch Fehlerschutz.
+`admin_system_uebersicht` verwendet ausschliesslich `live=false`.
+
+## Diagnose-Check
+
+Der registrierte leichte Check `osm.gebaeude_bestand` (Modul `osm`) erscheint
+in der Systemdiagnose und ist ueber `admin_diagnose_starten` anforderbar.
+Er arbeitet hinter der SELECT-Sperre mit begrenzten Abfragen je Quelle:
+fehlender aktiver Bestand ist `fail`, veralteter/unbekannter Stand, wartender
+Prueflauf und ein juengerer Fehlerlauf als der aktive Lauf sind `warn`.
+Die Empfehlungen nennen Import-, Status- und Aktivierungs-CLI. Weder dieser
+Check noch das MCP-Tool veraendern Georeferenzen, Vorschlaege oder Marker.

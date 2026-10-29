@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **OSM / Systemdiagnose:** Persistente Geodienst-Zaehler mit Redis und lokalem TTL-Fallback, lesendes Admin-MCP-Tool `admin_osm_pruefen` mit parallelen optionalen Status-/PBF-Proben und OSM-Teilstatus ohne HTTP in der Systemuebersicht. Neuer leichter Check `osm.gebaeude_bestand` fuer fehlende/veraltete Bestaende, Prueflaeufe und Importfehler. BSP-Pflichtregeln dokumentiert; keine neue Verwaltungsseite, keine Migration.
+
 - **Objektkarte / OSM:** Gebaeudeumrisse aus konfigurierbaren lokalen PBF-Extrakten, standardmaessig Vorarlberg; Overpass als Rueckfall ausserhalb der importierten Huellen. Begrenzter Download, Aenderungsvergleich mit manueller Pruefung, CLI und Leader-Import (03:30 Europe/Vienna). Veraltete Daten bleiben analysierbar, sperren aber die Georef-Speicherung. Globale OSM-Tabellen, Migration 0335; neue Abhaengigkeit osmium. Betrieb: [lokaler OSM-Bestand](docs/architecture/osm-gebaeude.md).
 
 - **Objektkarte / Betrieb:** Strukturierte externe Overpass-Fehler mit Codes, Wiederholbarkeit, Korrelations-ID und Endpunktversuchen; UI antwortet weiter mit 422. Cache-Antworten weisen hit/miss aus. Identische offene Planvorschlaege erzeugen keine Aenderung und keinen Audit-Eintrag; reine batch_id-Wechsel bleiben still. GIT_SHA wird bei systemd/venv-Deploys ohne gesetzte Build-Revision aus dem lokalen Repository gelesen. Nur private.coffee bleibt Standard-Fallback, da kumi.systems derselbe Host ist. Keine Migration.

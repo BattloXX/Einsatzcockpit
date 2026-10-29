@@ -143,6 +143,19 @@ npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an a
 - Suche ist client-seitig: Funkjournal über `data-fj-search`, Stab-Journal über
   `.journal-row`, Board über `applyBoardFilters()` in `incident_major/board.html`.
 
+## Pflicht: Georeferenzierung von Plaenen (BSP)
+
+- Keine geschaetzten/erfundenen Weltkoordinaten; nur serverseitig aus OSM-Ecken oder bestehender Georef.
+- Bildkoordinaten normiert 0..1, Ursprung oben links auf der gedrehten Seite; `expected_rotation` pruefen.
+- Georef zuerst ohne Speichern pruefen; nur Klasse A ist speicherbar.
+- Klasse C nie automatisch speichern oder eine Hypothese waehlen; `editor_link` liefern.
+- Keine Speicherung mit veralteten OSM-Daten.
+- Vorschlaege bleiben offen bis zur menschlichen Freigabe; `objekt_karte_freigeben` nur nach ausdruecklicher Bestaetigung.
+- Keine Entfernung wegen fehlender Symbole; keine Geschossplan-Symbole als Aussensymbole.
+- Externe Geodienst-Fehler als `ExternerDienstFehler` mit Code, nie als Eingabefehler behandeln.
+- Neue Overpass-Nutzer verwenden `overpass_endpunkte.abfragen`.
+- Details: [OSM-Bestand](docs/architecture/osm-gebaeude.md), [KI-Symbolpflege](docs/objektkarte-ki-symbolpflege.md).
+
 ## Pflicht: Verwaltungsnavigation (ein Hauptpunkt, Unterseiten als Tabs)
 
 - Im Verwaltungsmenue gibt es **pro Fachgebiet genau einen Hauptpunkt**; alle zugehoerigen Seiten sind

@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.config import settings
-from app.services import hydrant_service
+from app.services import geodienst_statistik, hydrant_service
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,8 @@ async def abfragen(
                 rest = budget_s - (time.monotonic() - start)
                 if rest < 1:
                     break
+                if letzter_fehler is not None:
+                    await geodienst_statistik.zaehlen("overpass", "retry_count")
                 versuchte += 1
                 versuch_start = time.monotonic()
                 http_status = None
@@ -144,11 +146,18 @@ async def abfragen(
                                 raise ValueError("Overpass-Zeitlimit erreicht")
                 except httpx.HTTPStatusError as exc:
                     if exc.response.status_code != 429 and not 500 <= exc.response.status_code <= 599:
+                        await geodienst_statistik.fehler(
+                            "overpass", url, fehlercode(exc), http_status,
+                            round((time.monotonic() - versuch_start) * 1000),
+                        )
                         raise OverpassAbfrageFehler(str(exc), request=exc.request, response=exc.response) from exc
                     letzter_fehler = exc
                 except (httpx.TransportError, TimeoutError, ValueError) as exc:
                     letzter_fehler = exc
                 else:
+                    await geodienst_statistik.erfolg(
+                        "overpass", url, round((time.monotonic() - versuch_start) * 1000),
+                    )
                     async with hydrant_service._sperre(schluessel):
                         await hydrant_service._setzen(
                             schluessel, {"fehler": [], "offen_bis": 0}, settings.OVERPASS_ENDPUNKT_FENSTER_SECONDS,
@@ -160,6 +169,9 @@ async def abfragen(
                                http_status=http_status,
                                dauer_ms=round((time.monotonic() - versuch_start) * 1000), uebersprungen=False)
                 versuche.append(versuch)
+                await geodienst_statistik.fehler(
+                    "overpass", url, versuch["code"], http_status, versuch["dauer_ms"],
+                )
                 await _fehler(schluessel, letzter_fehler)
     except TimeoutError as exc:
         letzter_fehler = exc
@@ -167,4 +179,5 @@ async def abfragen(
             versuch.update(code="OVERPASS_TIMEOUT", dauer_ms=round((time.monotonic() - versuch_start) * 1000),
                            uebersprungen=False)
             versuche.append(versuch)
+            await geodienst_statistik.fehler("overpass", url, "OVERPASS_TIMEOUT", http_status, versuch["dauer_ms"])
     raise OverpassNichtVerfuegbar(letzter_fehler, versuchte, versuche)

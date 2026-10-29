@@ -5,6 +5,8 @@ app.routers.ui_map_tiles:_tile_cache
 app.routers.ui_weather:_panel_summaries
 app.services.address_autocomplete:_cache
 app.services.eus_sms_service:_token_cache
+# Ausfallbestand der Geodienst-Statistik ohne Redis (Diagnose, TTL-begrenzt, dokumentiert)
+app.services.geodienst_statistik:_lokal
 app.services.hoehen_service:_cache
 app.services.hydrant_service:_cache
 app.services.kachelmann_service:_key_cache

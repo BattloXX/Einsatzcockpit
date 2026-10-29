@@ -41,6 +41,7 @@ beruecksichtigt. Die Login-Seite erklaert diese Grenze, Fehler verraten keine Ko
 | `admin_system_uebersicht` | Version, Commit, Build und Gesamtstatus der Teilchecks |
 | `admin_dienste_pruefen` | Aggregierte gespeicherte Dienstmonitor-Zustaende aller Organisationen |
 | `admin_worker_pruefen` | Anzahl aktiver/abgelaufener Worker, Leader und fehlerhafter Loops |
+| `admin_osm_pruefen` | Lokaler OSM-Bestand, persistente Statistik und optionale Live-Proben (`live=true`) |
 | `admin_redis_pruefen` | Lokaler Konfigurations- und Verbindungszustand, ohne Netzwerkprobe |
 | `admin_datenbank_pruefen` | Verbindung, Pool-Zaehler und Alembic-Stand |
 | `admin_gateway_pruefen` | Gateway-/SMS-Presence, W&T-Dienstmonitor und offene/ueberfaellige Druck-/SMS-Jobs |
@@ -59,6 +60,54 @@ Modul, Schweregrad, Evidenz, ausdruecklich gekennzeichnete Ursachenhypothese,
 Empfehlung und eine Korrelations-ID. Fehlende Dienstmonitor-Daten werden als
 `nicht verfuegbar` ausgewiesen. Dienstmonitorwerte sind gespeicherte Zustaende,
 keine neu gestarteten Pruefungen. W&T wird nur anhand dieser Datenbasis beurteilt.
+
+## admin_osm_pruefen
+
+Das lesende Werkzeug gehoert zum Modul `osm`. `live` ist standardmaessig `true`.
+`admin_system_uebersicht` bezieht seinen OSM-Teilstatus stets mit `live=false` ein;
+dabei gibt es keine HTTP-Proben. Die Diagnose veraendert weder Georeferenzen,
+Planvorschlaege, Marker noch Fehlerschutz und fuellt auch keine Gebaeude-Caches.
+Die normale Antwort enthaelt bereits eine `korrelations_id`.
+
+In `evidenz` stehen:
+
+- `overall_status`: `fail`, wenn einer konfigurierten Quelle der aktive Bestand
+  fehlt und Overpass nicht erreichbar ist. `warn` bei fehlendem oder veraltetem
+  Bestand, unbekanntem Datenstand, Lauf in Pruefung, letztem Importfehler oder
+  Overpass-Fehlern in den letzten 24 Stunden. Auch eine fehlgeschlagene Live-Probe
+  bei vorhandenem Bestand ergibt `warn`; sonst `ok`.
+- `lokaler_bestand`: je Quelle aktiver Lauf mit ID, Anzahl, Datenstand und Alter,
+  wartende Pruefungen und letzter Fehler mit Code. Keine Fehler-Rohtexte oder URLs.
+- `endpoints` (nur live): parallele GETs auf `/api/status`, je Host Status,
+  `http_code`, `latenz_ms`, Fehlercode und `fehlerschutz` (`offen`/`geschlossen`,
+  `offen_bis`). `quellen_proben` enthaelt parallele PBF-HEADs mit `last_modified`.
+  Je Probe maximal 5 Sekunden, Probenbudget 6 Sekunden, Sammelbudget 12 Sekunden;
+  User-Agent ist der tatsaechlich konfigurierte `HYDRANT_USER_AGENT`.
+- `statistik.overpass` und `.gebaeude`: sieben UTC-Kalendertage mit
+  `errors_by_code`, `ok`, `retry_count`, `last_success`, `last_failure` und
+  letzten Ereignissen je Host. `cache_hit_rate` ist hit/(hit+miss), ohne Zugriffe
+  `null`; `cache_entries` bleibt `null`, da kein globaler Cache-Inventarzaehler
+  existiert. `cache_lokal`, `cache_hit`, `cache_miss`, `negativ_cache` zaehlen
+  Gebaeude-Zugriffsarten getrennt von Fehlern.
+- `circuit_breaker_status`: Hydranten-Breaker und Fehlerschutz je Endpunkt.
+- `recommendations`: konkrete naechste Schritte, beispielsweise Erstimport mit
+  `python -m app.cli osm-gebaeude-import --erzwingen`, Bestand mit
+  `osm-gebaeude-status` sichten oder einen geprueften Lauf mit
+  `osm-gebaeude-aktivieren <id>` aktivieren.
+
+Ohne Live-Probe wird die Erreichbarkeit aus den letzten gespeicherten Erfolgen
+und Fehlern abgeleitet; ohne Ereignisse bleibt sie unbekannt und fuehrt allein
+nicht zu `fail`. Ein fehlender Erstimport mit unbekannter Erreichbarkeit ist `warn`.
+Ein neuerer Erfolg hebt die 24-Stunden-Fehlerwarnung nicht auf. Die Zaehler leben
+30 Tage (`GEODIENST_STATISTIK_TAGE`); Redis macht sie workeruebergreifend und
+neustartfest. Ohne Redis sind sie nur im jeweiligen Prozess bis zum TTL-Ablauf
+verfuegbar. Schreibfehler verhindern keine Fachabfrage.
+
+Typische Befunde: Bei fehlendem Bestand Erstimport ausfuehren, bei veraltetem
+Stand Import pruefen, bei `pruefung` zuerst Unterschiede sichten. Oeffentliches
+Overpass bleibt Rueckfall: bei wiederholten Ausfaellen lokale Quellen fuer die
+benoetigte Region ergaenzen. Die [Systemdiagnose](Administration-Systemdiagnose)
+zeigt denselben lokalen Bestand zusaetzlich als Check `osm.gebaeude_bestand`.
 
 ## Sicherheitsmodell
 
