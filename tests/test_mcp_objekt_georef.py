@@ -9,6 +9,7 @@ from tests.test_mcp_objekte import _rufe, _seed, _token
 from tests.test_objekt_georef import karte as karte
 from tests.test_objekt_georef import plan as plan
 from tests.test_objekt_georef import punkte
+from tests.test_osm_gebaeude_import import osm_umgebung as osm_umgebung
 
 
 def test_dry_run_lesen_verwerfen_und_fremd(client, plan):
@@ -330,3 +331,60 @@ def test_externer_fehler_mcp_und_ui(client, plan, zuordnungsdaten, monkeypatch, 
         "meldung": "Overpass derzeit nicht erreichbar", "code": "OVERPASS_ALL_ENDPOINTS_FAILED",
     }
     assert _georeferenzen(plan) == []
+
+
+@pytest.mark.parametrize(
+    "fall", ["frisch", "veraltet", "analyse_alt", "unbekannt", "rechteck", "eckenzahl", "rotation"],
+)
+def test_lokale_zuordnung_und_alterssperre(client, plan, osm_umgebung, monkeypatch, fall):
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import AsyncMock
+
+    from app.models.objekt import ObjektKartenObjekt
+    from app.services import objekt_gebaeude_service
+    from app.services import osm_gebaeude_import as osm
+    from tests.test_objekt_georef_zuordnung import RECHTECK, kontur
+    from tests.test_osm_gebaeude_import import URL
+
+    _, pbf, zustand = osm_umgebung
+    bild, gebaeude = kontur(RECHTECK if fall == "rechteck" else None, lat0=47.1, lng0=9.2)
+    datum = datetime.now(UTC) - timedelta(days=31 if fall in ("veraltet", "analyse_alt") else 1)
+    pbf({123: [[p["lat"], p["lng"]] for p in gebaeude["ecken"]]},
+        datenstand=datum.strftime("%Y-%m-%dT%H:%M:%SZ") if fall != "unbekannt" else None)
+    if fall == "unbekannt":
+        zustand["headers"] = {"last-modified": ""}
+    assert osm.importieren("region", URL).status == "aktiv"
+    overpass = AsyncMock(side_effect=AssertionError("Lokale Abfrage darf kein Overpass verwenden"))
+    monkeypatch.setattr(objekt_gebaeude_service, "abfragen", overpass)
+    with SessionLocal() as db:
+        set_tenant_context(db, plan["org_id"])
+        marker_vorher = db.query(ObjektKartenObjekt).count()
+    token = _token(client, plan, "u")
+    antwort = _rufe(
+        client, token, "objekt_karte_georef_zuordnen", objekt_id=plan["objekt_id"],
+        dokument_id=plan["dokument_id"], seite=1, bild_ecken=bild[:-1] if fall == "eckenzahl" else bild,
+        expected_rotation=90 if fall == "rotation" else 0, speichern=fall != "analyse_alt", osm_id=123,
+    )
+    if fall == "veraltet":
+        assert "OSM-Gebaeudedaten sind 31 Tage alt (Grenze 30)" in antwort["__fehler__"], antwort
+    elif fall == "unbekannt":
+        assert "keinen bekannten Datenstand" in antwort["__fehler__"], antwort
+    elif fall == "rotation":
+        assert "inzwischen gedreht" in antwort["__fehler__"], antwort
+    else:
+        assert antwort["quelle"] == "OpenStreetMap (lokaler Bestand region)"
+        assert antwort["datenstand"].endswith("Z")
+        assert antwort["veraltet"] == (fall == "analyse_alt")
+        assert antwort["gespeichert"] == (fall == "frisch"), antwort
+        if fall in ("rechteck", "eckenzahl"):
+            assert antwort["klasse"] == "C" and antwort["begruendung"], antwort
+        else:
+            assert antwort["klasse"] == "A", antwort
+    if fall == "frisch":
+        assert len(_georeferenzen(plan)) == 1
+    else:
+        assert _georeferenzen(plan) == []
+    with SessionLocal() as db:
+        set_tenant_context(db, plan["org_id"])
+        assert db.query(ObjektKartenObjekt).count() == marker_vorher
+    overpass.assert_not_awaited()

@@ -325,6 +325,13 @@ async def objekt_karte_georef_zuordnen(
         raise ObjektKartenFehler("Dokumentseite wurde inzwischen gedreht; Seite neu ansehen")
     breite, hoehe = objekt_georef_service._bildgroesse(s)
     umrisse = await objekt_gebaeude_service.gebaeude_umrisse(lat, lng, radius_m)
+    if speichern and umrisse.get("veraltet"):
+        alter = umrisse.get("alter_tage")
+        alter_text = f"sind {alter} Tage alt" if alter is not None else "haben keinen bekannten Datenstand"
+        raise ObjektKartenFehler(
+            f"OSM-Gebaeudedaten {alter_text} "
+            f"(Grenze {settings.OSM_GEBAEUDE_MAX_ALTER_TAGE}); Import aktualisieren, dann erneut speichern"
+        )
     gebaeude = umrisse["gebaeude"]
     if osm_id is not None:
         gebaeude = [g for g in gebaeude if g["osm_id"] == osm_id]
@@ -348,7 +355,9 @@ async def objekt_karte_georef_zuordnen(
             raise
     return ergebnis | {
         "gespeichert": georeferenz is not None, "georeferenz": georeferenz,
-        "bildgroesse": [breite, hoehe], "rotation": s.rotation, "quelle": "OpenStreetMap / Overpass",
+        "bildgroesse": [breite, hoehe], "rotation": s.rotation,
+        "quelle": umrisse.get("quelle", "OpenStreetMap / Overpass"),
+        **{feld: umrisse.get(feld) for feld in ("datenstand", "alter_tage", "veraltet")},
         "editor_link": (
             f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}/dokumente/seite/{s.id}/georef"
         ),

@@ -423,3 +423,23 @@ gepackte Branch-Referenzen, detached HEAD und Worktrees mit `.git`-Datei.
 Nur volle 40-stellige Hex-SHAs werden als Fallback akzeptiert. Ein gesetzter
 Build-Wert bleibt erhalten. Fehlende oder unlesbare Git-Daten lassen den Wert
 leer; der Start scheitert deshalb nicht. Nach `git pull` den Dienst neu starten.
+
+
+## Lokale OSM-Gebaeude als Referenz
+
+Gebaeudeumrisse stammen bevorzugt aus dem lokal importierten OSM-Bestand.
+Innerhalb der Huelle eines aktiven Imports ist auch eine leere Trefferliste ein
+verbindliches Ergebnis. Ausserhalb der Huellen bleibt Overpass der Rueckfall und
+liefert `quelle_hinweis: "kein lokaler Bestand fuer diesen Ort"`.
+
+Lokale Antworten enthalten `cache_status: "lokal"`, `datenstand` (UTC mit Z-Suffix),
+`alter_tage` und `veraltet`, bei veralteten oder unbekannten Daten zusaetzlich
+`warnung`. `osm_id`, `quelle: "osm_gebaeude"` und die ab 1 nummerierten `ecken`
+bleiben unveraendert. Die Quellenangabe nennt den lokalen Bestand.
+`objekt_karte_georef_zuordnen` gibt Datenstand, Alter und Veraltet-Flag weiter:
+Analyse bleibt erlaubt, `speichern=True` wird bei veralteten Daten gesperrt.
+Klasse A, Rollen und `expected_rotation` sind weiterhin erforderlich.
+Es werden dabei keine produktiven Kartenmarker freigegeben oder veraendert.
+
+Konfiguration, Aktualisierung und Freigabe auffaelliger Importe:
+[Lokaler OSM-Gebaeudebestand](architecture/osm-gebaeude.md).

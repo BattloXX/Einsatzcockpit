@@ -46,6 +46,8 @@ _GLOBAL_TABLES = frozenset({
     "hoehen_cache", "alembic_version",
     # Systemweite Worker-Laufzeitdiagnose ohne Org-Bezug.
     "diag_schedule_slot", "diag_notification", "worker_runtime", "diag_run", "diag_finding",
+    # Oeffentliche, systemweite OSM-Gebaeudedaten ohne Org-Bezug.
+    "osm_import_lauf", "osm_gebaeude",
     "admin_repair_run", "admin_approval",
     # Systemweite Mail-Weiterleitungen (Sysadmin, kein Org-Bezug).
     "mail_weiterleitung", "mail_weiterleitung_log",

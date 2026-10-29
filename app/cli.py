@@ -9,6 +9,7 @@ Verwendung:
 """
 import argparse
 import gzip
+import json
 import os
 import re
 import subprocess
@@ -507,7 +508,33 @@ def main() -> None:
     p_vektor = sub.add_parser("suche-vektor-aufbau", help="Vektor-Jobs fuer Suchdokumente planen")
     p_vektor.add_argument("--org", type=int)
 
+    p_osm = sub.add_parser("osm-gebaeude-import", help="Lokale OSM-Gebaeude importieren")
+    p_osm.add_argument("--quelle", help="Nur diese konfigurierte Quelle importieren")
+    p_osm.add_argument("--erzwingen", action="store_true")
+    p_osm_aktiv = sub.add_parser("osm-gebaeude-aktivieren", help="Geprueften OSM-Import aktivieren")
+    p_osm_aktiv.add_argument("lauf_id", type=int)
+    sub.add_parser("osm-gebaeude-status", help="OSM-Importstatus anzeigen")
+
     args = parser.parse_args()
+    if args.command and args.command.startswith("osm-gebaeude-"):
+        from app.services import osm_gebaeude_import as osm
+        if args.command == "osm-gebaeude-status":
+            print(json.dumps(osm.status(), ensure_ascii=False))
+        elif args.command == "osm-gebaeude-aktivieren":
+            print(json.dumps(osm.lauf_info(osm.aktivieren(args.lauf_id)), ensure_ascii=False))
+        else:
+            quellen = [(n, u) for n, u in osm.quellen() if not args.quelle or n == args.quelle]
+            if not quellen:
+                parser.error("Keine passende OSM-Quelle konfiguriert")
+            fehler = False
+            for name, url in quellen:
+                lauf = osm.importieren(name, url, erzwingen=args.erzwingen)
+                print(json.dumps({"quelle": name, **osm.lauf_info(lauf),
+                                  "ergebnis": getattr(lauf, "ergebnis", lauf.status)}, ensure_ascii=False))
+                fehler = fehler or lauf.status == "fehler"
+            if fehler:
+                sys.exit(1)
+        return
     if args.command == "mfa-reset":
         mfa_reset(args.username)
     elif args.command == "mfa-global-aus":

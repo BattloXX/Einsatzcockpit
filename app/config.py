@@ -273,6 +273,16 @@ class Settings(BaseSettings):
     # Oeffentliche Instanzen laut OSM-Wiki; per Env ueberschreibbar, leer = kein Fallback.
     # kumi.systems ist derselbe Host wie private.coffee.
     OVERPASS_FALLBACK_URLS: str = "https://overpass.private.coffee/api/interpreter"
+    OSM_GEBAEUDE_IMPORT_ENABLED: bool = True
+    # Geofabrik bietet fuer Oesterreich nur das Gesamtland (deutlich mehr RAM):
+    # oesterreich=https://download.geofabrik.de/europe/austria-latest.osm.pbf
+    OSM_GEBAEUDE_QUELLEN: str = "vorarlberg=https://download.openstreetmap.fr/extracts/europe/austria/vorarlberg-latest.osm.pbf"
+    OSM_GEBAEUDE_AKTUALISIERUNG_TAGE: int = 7
+    OSM_GEBAEUDE_MAX_ALTER_TAGE: int = 30
+    OSM_GEBAEUDE_MAX_DOWNLOAD_MB: int = 1200
+    OSM_GEBAEUDE_MAX_AENDERUNG_ANTEIL: float = 0.2
+    OSM_GEBAEUDE_DATA_DIR: str = "app_storage/osm"
+
     OVERPASS_ENDPUNKT_FEHLER: int = 2
     OVERPASS_ENDPUNKT_FENSTER_SECONDS: int = 300
     OVERPASS_ENDPUNKT_PAUSE_SECONDS: int = 300

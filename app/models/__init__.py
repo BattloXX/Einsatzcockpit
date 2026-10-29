@@ -540,3 +540,5 @@ __all__ = [
     "IncidentRoute",
     "IncidentRoadClosure",
 ]
+
+from app.models.osm import OsmGebaeude, OsmImportLauf  # noqa: F401
