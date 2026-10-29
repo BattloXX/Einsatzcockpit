@@ -1,5 +1,7 @@
 # Plan: MCP-gestützte BSP-Georeferenzierung und Kartenvorschläge
 
+> **Fortsetzung:** Der Pilot Senderstraße (2026-10-29) hat gezeigt, dass die Lagepläne Luftbilder sind. Der Nachfolgeplan [bsp-orthofoto-plan.md](bsp-orthofoto-plan.md) ersetzt die OSM-Eckenzuordnung als Hauptweg durch Orthofoto-Paare; die Phasen 1–4 unten bleiben bestehen.
+
 Stand: 2026-10-29. Grundlage: Konzept "ECP – Vollautomatische BSP-Georeferenzierung und KI-gestützte Lagekartenpflege",
 geprüft gegen `main` (4882756b).
 
