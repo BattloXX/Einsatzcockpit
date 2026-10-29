@@ -288,6 +288,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.mcp_upload_service import mcp_upload_retention_loop
     from app.services.nachschlagewerk_sync import nachschlagewerk_sync_loop
     from app.services.org_backup_loop import org_backup_loop
+    from app.services.osm_gebaeude_import import osm_gebaeude_loop
     from app.services.planspiel_loop import planspiel_loop
     from app.services.print_agent_loop import print_agent_sweep_loop
     from app.services.print_watchdog import print_job_watchdog_loop
@@ -321,7 +322,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         mail_zuordnung_loop,
         mail_weiterleitung_loop,
         incident_route_loop,
-        planspiel_loop,
+        planspiel_loop, osm_gebaeude_loop,
     )
     return [asyncio.create_task(supervised_loop(loop), name=loop.__name__) for loop in loops]
 
