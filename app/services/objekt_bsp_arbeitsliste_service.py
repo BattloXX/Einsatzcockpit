@@ -32,6 +32,8 @@ SCHRITTE = {
     "vorschlaege_pruefen": "objekt_karte_vorschau aufrufen; Freigabe durch Menschen.",
     "symbole_erfassen": "objekt_karte_symbolkatalog abgleichen und objekt_karte_vorschlaege mit georef_id erfassen.",
     "aktuell": "Marker aus dieser Planversion vorhanden.",
+    "lageplan_klassifizieren": ("Keine Lageplan-Seite: die Lageplan-Seite mit objekt_dokument_seiten_klassifizieren "
+                                "als lageplan markieren. Geschoss-, Kanal- und Legendenseiten nicht georeferenzieren."),
 }
 
 
@@ -81,6 +83,7 @@ def arbeitsliste_lesen(db: Session, org_id: int, objekt_id: int | None = None,
         if dokument.id not in hashes:
             hashes[dokument.id] = objekt_karte_vorschlag_service._hash(dokument)
     eintraege: list[dict[str, Any]] = []
+    mit_lageplan: set[int] = set()
     for objekt, dokument, seite in seiten:
         g = aktuell.get((dokument.id, seite.seiten_nr))
         status = objekt_georef_service.georef_pruefen(
@@ -96,6 +99,11 @@ def arbeitsliste_lesen(db: Session, org_id: int, objekt_id: int | None = None,
                 vorversion = {"dokument_id": alt.id, "seite": seite.seiten_nr,
                               "georef_id": quelle.id, "status": quelle.status}
                 break
+        # Nur Lageplaene georeferenzieren; BSP-Seiten (Deckblatt, Geschosse, Kanalplaene, Legende)
+        # erscheinen nur, wenn bereits jemand sie bewusst georeferenziert hat.
+        if seite.dokumentart != "lageplan" and g is None and vorversion is None:
+            continue
+        mit_lageplan.add(dokument.id)
         anzahl_offen = offene.get((objekt.id, dokument.id, seite.seiten_nr), 0)
         anzahl_marker = marker.get((objekt.id, g.dokument_hash if g else hashes[dokument.id]), 0)
         if status != "gueltig":
@@ -116,7 +124,20 @@ def arbeitsliste_lesen(db: Session, org_id: int, objekt_id: int | None = None,
             "offene_vorschlaege": anzahl_offen, "marker_aus_planversion": anzahl_marker,
             "vorversion": vorversion, "naechster_schritt": schritt, "hinweis": SCHRITTE[schritt],
         })
+    ohne_lageplan: dict[int, tuple[Objekt, ObjektDokument]] = {}
+    for objekt, dokument, _ in seiten:
+        if dokument.id not in mit_lageplan:
+            ohne_lageplan.setdefault(dokument.id, (objekt, dokument))
+    for objekt, dokument in ohne_lageplan.values():
+        eintraege.append({
+            "objekt_id": objekt.id, "objekt_name": objekt.name, "dokument_id": dokument.id,
+            "dokument_versionsnummer": dokument.versionsnummer, "seite": None, "dokumentart": None,
+            "titel": None, "rotation": None, "georef": None, "offene_vorschlaege": 0,
+            "marker_aus_planversion": 0, "vorversion": None, "naechster_schritt": "lageplan_klassifizieren",
+            "hinweis": SCHRITTE["lageplan_klassifizieren"],
+        })
     reihenfolge = {schritt: rang for rang, schritt in enumerate(SCHRITTE)}
-    eintraege.sort(key=lambda e: (reihenfolge[e["naechster_schritt"]], e["objekt_id"], e["dokument_id"], e["seite"]))
+    eintraege.sort(key=lambda e: (reihenfolge[e["naechster_schritt"]], e["objekt_id"], e["dokument_id"],
+                                  e["seite"] or 0))
     return {"eintraege": eintraege[:limit], "anzahl_gesamt": len(eintraege),
             "abgeschnitten": len(eintraege) > limit, "ablauf": list(ABLAUF)}
