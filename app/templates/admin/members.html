@@ -63,7 +63,7 @@
            placeholder="Suchen: Name, Telefon, E-Mail, syBOS-ID oder Qualifikation (z. B. AGT)"
            class="form-input" style="flex:1; min-width:260px; max-width:520px;"
            oninput="applyMemberFilter()">
-    <select id="memberStatusFilter" class="form-select" style="width:160px;" onchange="applyMemberFilter()">
+    <select data-no-dirty id="memberStatusFilter" class="form-select" style="width:160px;" onchange="applyMemberFilter()">
       <option value="all">Alle Status</option>
       <option value="active" selected>Nur aktive</option>
       <option value="inactive">Nur inaktive</option>

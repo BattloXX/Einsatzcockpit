@@ -4,17 +4,20 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
+const ptrQuelle = readFileSync(new URL("../../app/static/js/native-ptr.js", import.meta.url), "utf8");
 const quelle = readFileSync(new URL("../../app/static/js/native-bridge.js", import.meta.url), "utf8");
 
-function umgebung({ online = true, felder = [], overlays = [], scrollY = 0 } = {}) {
-  const aufrufe = { done: 0, failed: [], reload: 0, events: [] };
+function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, fullBridge = true } = {}) {
+  const aufrufe = { done: 0, failed: [], reload: 0, events: [], blocked: [] };
   const listener = new Map();
+  const docListener = new Map();
   const window = {
     scrollY,
+    getComputedStyle(el) { return { overflowY: el.overflowY || "visible" }; },
     ECPtr: {
       done() { aufrufe.done += 1; },
       failed(msg) { aufrufe.failed.push(msg); },
-      setBlocked() {},
+      setBlocked(value) { aufrufe.blocked.push(value); },
     },
     location: { reload() { aufrufe.reload += 1; } },
     addEventListener(name, fn) { listener.set(name, [...(listener.get(name) || []), fn]); },
@@ -28,9 +31,10 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0 } = {
     readyState: "loading",
     scrollingElement: { scrollTop: 0 },
     documentElement: {},
-    addEventListener() {},
+    addEventListener(name, fn) { docListener.set(name, [...(docListener.get(name) || []), fn]); },
+    elementFromPoint() { return null; },
     querySelectorAll(selector) {
-      if (selector === "input, textarea, select") return felder;
+      if (selector === 'input, textarea, select, [contenteditable="true"]') return felder;
       if (selector === '[contenteditable="true"]') return [];
       return overlays;
     },
@@ -45,12 +49,15 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0 } = {
   };
   window.document = document;
   window.navigator = kontext.navigator;
-  vm.runInNewContext(quelle, kontext);
-  return { window, aufrufe, native: window.ELNative, listener };
+  vm.runInNewContext(ptrQuelle, kontext);
+  if (fullBridge) vm.runInNewContext(quelle, kontext);
+  return { window, document, aufrufe, native: window.ELNative, listener,
+    emit(type, event) { (docListener.get(type) || []).forEach(fn => fn(event)); },
+  };
 }
 
-const sauberesFeld = { type: "text", value: "", defaultValue: "", disabled: false, tagName: "INPUT" };
-const geaendertesFeld = { type: "text", value: "Neu", defaultValue: "", disabled: false, tagName: "INPUT" };
+const sauberesFeld = { closest: () => null, type: "text", value: "", defaultValue: "", disabled: false, tagName: "INPUT" };
+const geaendertesFeld = { closest: (s) => s.startsWith("input,") ? geaendertesFeld : null, type: "text", value: "Neu", defaultValue: "", disabled: false, tagName: "INPUT" };
 
 test("offline: Hinweis statt Aktualisierung, kein Reload", async () => {
   const { native, aufrufe } = umgebung({ online: false });
@@ -78,7 +85,8 @@ test("Seite ohne Handler wird neu geladen, solange nichts ungespeichert ist", as
 });
 
 test("ungespeicherte Eingaben verhindern den Reload", async () => {
-  const { native, aufrufe } = umgebung({ felder: [geaendertesFeld] });
+  const { native, aufrufe, emit } = umgebung({ felder: [geaendertesFeld] });
+  emit("input", { target: geaendertesFeld, isTrusted: true });
   assert.equal(await native.refresh(), false);
   assert.equal(aufrufe.reload, 0);
   assert.match(aufrufe.failed[0], /Ungespeicherte Eingaben/);
@@ -91,7 +99,7 @@ test("ptrBlocked: Karte, gescrollter Container, Dialog und Eingaben sperren die 
   const karte = { matches: (s) => s.includes(".leaflet-container"), scrollTop: 0, parentElement: null };
   assert.equal(umgebung().native.ptrBlocked({ matches: () => false, scrollTop: 0, parentElement: karte }), true);
 
-  const gescrollt = { matches: () => false, scrollTop: 40, parentElement: null };
+  const gescrollt = { nodeType: 1, scrollHeight: 200, clientHeight: 100, overflowY: "auto", matches: () => false, scrollTop: 40, parentElement: null };
   assert.equal(umgebung().native.ptrBlocked(gescrollt), true);
 
   assert.equal(umgebung({ scrollY: 10 }).native.ptrBlocked(frei), true);
@@ -101,5 +109,130 @@ test("ptrBlocked: Karte, gescrollter Container, Dialog und Eingaben sperren die 
   const verstecktes = { offsetParent: null, getClientRects: () => [] };
   assert.equal(umgebung({ overlays: [verstecktes] }).native.ptrBlocked(frei), false);
 
-  assert.equal(umgebung({ felder: [geaendertesFeld] }).native.ptrBlocked(frei), true);
+  const u = umgebung({ felder: [geaendertesFeld] });
+  u.emit("input", { target: geaendertesFeld, isTrusted: true });
+  assert.equal(u.native.ptrBlocked(frei), true);
+});
+
+function feld(props = {}) {
+  const f = { type: 'text', tagName: 'INPUT', value: 'Neu', defaultValue: '', ...props };
+  f.closest = (selector) => selector.startsWith('input,') ? f : (f.ignored ? f : null);
+  return f;
+}
+function scrollbereich(props = {}) {
+  return { nodeType: 1, scrollHeight: 200, clientHeight: 100, overflowY: 'auto',
+    scrollTop: 0, parentElement: null, matches: () => false, ...props };
+}
+
+test('Vorbelegung und synthetische Events sperren nicht; echte Eingabe und Loeschen schon', () => {
+  const f = feld();
+  const u = umgebung({ felder: [f] });
+  assert.equal(u.native.ptrBlocked(), false);
+  u.emit('input', { target: f, isTrusted: false });
+  assert.equal(u.native.ptrBlocked(), false);
+  u.emit('input', { target: f, isTrusted: true });
+  assert.equal(u.native.ptrBlocked(), true);
+  f.value = f.defaultValue;
+  assert.equal(u.native.ptrBlocked(), false);
+  f.defaultValue = 'Vorhanden';
+  f.value = '';
+  assert.equal(u.native.ptrBlocked(), true);
+});
+
+test('Such-/Filterfelder, data-no-dirty und deaktivierte Felder bleiben frei', () => {
+  for (const props of [{ type: 'search', ignored: true }, { ignored: true }, { disabled: true }]) {
+    const f = feld(props);
+    const u = umgebung({ felder: [f] });
+    u.emit('input', { target: f, isTrusted: true });
+    assert.equal(u.native.ptrBlocked(), false);
+  }
+});
+
+test('Checkbox, Select und Contenteditable werden erst nach Eingabe geschuetzt', () => {
+  for (const props of [
+    { type: 'checkbox', checked: true, defaultChecked: false },
+    { tagName: 'SELECT', options: [{ selected: true, defaultSelected: false }] },
+    { isContentEditable: true, textContent: '' },
+  ]) {
+    const f = feld(props);
+    const u = umgebung({ felder: [f] });
+    assert.equal(u.native.ptrBlocked(), false);
+    u.emit('input', { target: f, isTrusted: true });
+    assert.equal(u.native.ptrBlocked(), true);
+  }
+});
+
+test('Naechster echter Scrollbereich entscheidet auch bei gescrollter aeusserer Seite', () => {
+  const aussen = scrollbereich({ scrollTop: 80 });
+  const innen = scrollbereich({ parentElement: aussen });
+  const ziel = scrollbereich({ overflowY: 'hidden', scrollTop: 12, parentElement: innen });
+  const u = umgebung({ scrollY: 1 });
+  assert.equal(u.native.ptrBlocked(ziel), false);
+  innen.scrollTop = 10;
+  assert.equal(u.native.ptrBlocked(ziel), true);
+  innen.scrollTop = -1;
+  assert.equal(u.native.ptrBlocked(ziel), false);
+  // Auch ein aeusserer Karten-/Editorbereich bleibt gesperrt.
+  aussen.matches = () => true;
+  assert.equal(u.native.ptrBlocked(ziel), true);
+});
+
+test('Touchpunkt, touchmove und scroll aktualisieren Sperre; Hinweis einmal pro Geste', () => {
+  const ziel = scrollbereich({ scrollTop: 20 });
+  const u = umgebung();
+  u.document.elementFromPoint = () => ziel;
+  u.emit('touchstart', { target: {}, touches: [{ clientX: 5, clientY: 10 }] });
+  assert.equal(u.aufrufe.blocked.at(-1), true);
+  u.emit('touchmove', { touches: [{ clientY: 80 }] });
+  u.emit('touchmove', { touches: [{ clientY: 90 }] });
+  assert.equal(u.aufrufe.failed.length, 1);
+  ziel.scrollTop = 0;
+  u.emit('scroll', { target: u.document });
+  assert.equal(u.aufrufe.blocked.at(-1), false);
+  ziel.scrollTop = 5;
+  u.emit('touchmove', { touches: [{ clientY: 100 }] });
+  assert.equal(u.aufrufe.blocked.at(-1), true);
+});
+
+test('Eingaben verhindern auch Resync; abgelehnte Auftraege melden Fehler', async () => {
+  const f = feld();
+  const u = umgebung({ felder: [f] });
+  u.window.addEventListener('ec:resync', e => { e.detail.handled = true; });
+  u.emit('input', { target: f, isTrusted: true });
+  assert.equal(await u.native.refresh(), false);
+  assert.equal(u.aufrufe.events.length, 0);
+  const v = umgebung();
+  v.window.addEventListener('ec:resync', e => {
+    e.detail.handled = true;
+    e.detail.promises.push(Promise.reject(new Error('HTTP 500')));
+  });
+  assert.equal(await v.native.refresh(), false);
+  assert.equal(v.aufrufe.done, 0);
+  assert.match(v.aufrufe.failed[0], /fehlgeschlagen/);
+});
+
+
+test('Eigenstaendige Seiten bieten Refresh ohne GPS-/Push-Bruecke; pagehide gibt Sperre frei', async () => {
+  const u = umgebung({ fullBridge: false });
+  assert.equal(await u.native.refresh(), true);
+  assert.equal(u.aufrufe.reload, 1);
+  u.window.dispatchEvent({ type: 'pagehide' });
+  assert.equal(u.aufrufe.blocked.at(-1), false);
+});
+
+test('Refresh prueft aktuelle Sperre erneut und wartet auf den Resync-Auftrag', async () => {
+  const u = umgebung({ overlays: [{ offsetParent: {} }] });
+  assert.equal(await u.native.refresh(), false);
+  assert.equal(u.aufrufe.reload, 0);
+  let finish;
+  const v = umgebung();
+  v.window.addEventListener('ec:resync', e => {
+    e.detail.handled = true;
+    e.detail.promises.push(new Promise(resolve => { finish = resolve; }));
+  });
+  const pending = v.native.refresh();
+  assert.equal(v.aufrufe.done, 0);
+  finish();
+  assert.equal(await pending, true);
+  assert.equal(v.aufrufe.done, 1);
 });

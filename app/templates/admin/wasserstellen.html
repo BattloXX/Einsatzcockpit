@@ -64,13 +64,13 @@
   <div class="ws-filterbar">
     <input type="search" id="wsSearch" class="form-input" style="flex:1;min-width:220px;max-width:420px;"
            placeholder="Suchen: Bezeichnung, Hinweis …" oninput="wsApplyFilter()">
-    <select id="wsFilterTyp" class="form-select" style="width:170px;" onchange="wsApplyFilter()">
+    <select data-no-dirty id="wsFilterTyp" class="form-select" style="width:170px;" onchange="wsApplyFilter()">
       <option value="">Alle Typen</option>
       {% for code, label in typen.items() %}
       <option value="{{ code }}">{{ label }}</option>
       {% endfor %}
     </select>
-    <select id="wsFilterStatus" class="form-select" style="width:160px;" onchange="wsApplyFilter()">
+    <select data-no-dirty id="wsFilterStatus" class="form-select" style="width:160px;" onchange="wsApplyFilter()">
       <option value="">Alle Zustände</option>
       {% for code, label in status_labels.items() %}
       <option value="{{ code }}">{{ label }}</option>
