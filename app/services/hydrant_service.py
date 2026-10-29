@@ -222,6 +222,10 @@ async def _frisch(schluessel: str) -> HydrantErgebnis | None:
 
 
 def _wartezeit(exc: Exception, anzahl: int) -> int:
+    from app.services.overpass_endpunkte import OverpassNichtVerfuegbar
+
+    if isinstance(exc, OverpassNichtVerfuegbar) and exc.letzter_fehler is not None:
+        exc = exc.letzter_fehler
     maximum = settings.HYDRANT_BACKOFF_MAX_SECONDS
     basis = min(maximum, 60 * 2 ** min(anzahl - 1, 10))
     wartezeit = basis * random.uniform(0.8, 1.2)
@@ -240,8 +244,11 @@ def _wartezeit(exc: Exception, anzahl: int) -> int:
 
 
 async def _fehler(schluessel: str, breaker_key: str, zustand: dict, exc: Exception, start: float):
+    from app.services.overpass_endpunkte import OverpassNichtVerfuegbar
+
+    ursache = exc.letzter_fehler if isinstance(exc, OverpassNichtVerfuegbar) else exc
     logger.warning("Overpass-Hydrantenabfrage fehlgeschlagen: klasse=%s dauer=%.3fs",
-                   type(exc).__name__, time.monotonic() - start)
+                   type(ursache).__name__, time.monotonic() - start)
     jetzt = time.time()
     vorher = await _lesen(schluessel + ":negativ") or {}
     anzahl = vorher.get("anzahl", 0) + 1
@@ -296,16 +303,14 @@ async def fetch_osm_hydranten_ergebnis(
                         # Reserve fuer Fehlercache und Redis innerhalb des Gesamtbudgets.
                         rest = settings.HYDRANT_TOTAL_TIMEOUT_SECONDS - (time.monotonic() - start)
                         async with asyncio.timeout(max(0, rest * 0.8)):
-                            async with httpx.AsyncClient(
-                                headers={"User-Agent": settings.HYDRANT_USER_AGENT},
-                                timeout=settings.HYDRANT_TIMEOUT_SECONDS,
-                            ) as client:
-                                resp = await client.post(
-                                    settings.HYDRANT_OVERPASS_URL,
-                                    data={"data": _overpass_query(lat, lng, radius, limit)},
-                                )
-                                resp.raise_for_status()
-                                daten = resp.json()
+                            from app.services.overpass_endpunkte import abfragen
+
+                            daten = await abfragen(
+                                _overpass_query(lat, lng, radius, limit),
+                                primaer=settings.HYDRANT_OVERPASS_URL,
+                                timeout_je_versuch=settings.HYDRANT_TIMEOUT_SECONDS,
+                                budget_s=rest * 0.8, zweck="hydranten",
+                            )
                         items = parse_overpass_elements(daten.get("elements", []), lat, lng, max_results=limit)
                     except Exception as exc:
                         await _fehler(schluessel, breaker_key, zustand, exc, start)

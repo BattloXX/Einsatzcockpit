@@ -265,6 +265,13 @@ class Settings(BaseSettings):
     # Hydranten / Löschwasser (OpenStreetMap / OSMHydrant, via Overpass server-seitig geproxyt)
     HYDRANT_ENABLED: bool = True
     HYDRANT_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
+    # Oeffentliche Instanzen laut OSM-Wiki; per Env ueberschreibbar, leer = kein Fallback.
+    OVERPASS_FALLBACK_URLS: str = "https://overpass.private.coffee/api/interpreter,https://overpass.kumi.systems/api/interpreter"
+    OVERPASS_ENDPUNKT_FEHLER: int = 2
+    OVERPASS_ENDPUNKT_FENSTER_SECONDS: int = 300
+    OVERPASS_ENDPUNKT_PAUSE_SECONDS: int = 300
+    OBJEKT_GEBAEUDE_TIMEOUT_SECONDS: float = 25.0
+    OBJEKT_GEBAEUDE_TOTAL_TIMEOUT_SECONDS: float = 45.0
     HYDRANT_RADIUS_M: int = 300  # Suchradius um den Einsatzort (Standard)
     HYDRANT_RADIUS_EINSATZINFO_M: int = 2000  # Erweiterter Radius für die Einsatzinfo-Karte
     HYDRANT_RADIUS_INFOSCREEN_M: int = 800  # OSM-Umkreis für den Wandmonitor

@@ -368,3 +368,23 @@ nach Bestätigung gespeichert.
 KI-Georeferenz nicht aus, gibt sie den Link an den Menschen weiter, statt Punkte zu raten.
 Die Objektliste zeigt pro Planseite den Georef-Status (Badge) und den Button
 „Georeferenzieren“.
+
+## Overpass-Verfuegbarkeit und Zeitbudget
+
+Gebaeudeumrisse nutzen zuerst `HYDRANT_OVERPASS_URL`, bei Ueberlastung oder Timeout
+anschliessend die kommagetrennten `OVERPASS_FALLBACK_URLS`. Standard sind die
+im OSM-Wiki gelisteten oeffentlichen Instanzen private.coffee und kumi.systems;
+ein leerer Wert schaltet Fallback ab. Die URLs muessen HTTPS verwenden.
+
+`OBJEKT_GEBAEUDE_TIMEOUT_SECONDS` begrenzt jeden Versuch auf 25 s,
+`OBJEKT_GEBAEUDE_TOTAL_TIMEOUT_SECONDS` die gesamte Abfrage samt Sperren und Cache
+auf 45 s (davon 2 s Reserve fuer Aufbereitung und Cache). Gebaeudeumrisse lesen
+und schreiben den globalen Hydranten-Breaker nicht. Bei Ausfall aller Endpunkte
+gilt ein eigener Negativcache von 60 s; Hydranten-Zeitlimits bleiben 8 s je Versuch
+und 10 s insgesamt.
+
+Der gemeinsame Fehlerschutz je Endpunkt verwendet `OVERPASS_ENDPUNKT_FEHLER`
+(Standard 2 Fehler), `OVERPASS_ENDPUNKT_FENSTER_SECONDS` (300 s) und
+`OVERPASS_ENDPUNKT_PAUSE_SECONDS` (300 s). HTTP 429 mit `Retry-After` pausiert
+mindestens fuer die angegebene Dauer. Alle Einstellungen sind per Env ueberschreibbar;
+Schluessel enthalten nur den URL-Hash, Fallback-Logs nur den Hostnamen.
