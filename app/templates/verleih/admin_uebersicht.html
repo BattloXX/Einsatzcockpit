@@ -2,6 +2,8 @@
 {% block title %}Geräteverleih – Aktive Ausleihen{% endblock %}
 
 {% block admin_content %}
+{% with section_id='verleih' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-content">
   <div class="page-header">
     <div>

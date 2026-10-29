@@ -3,6 +3,8 @@
 {% block title %}{{ entry.betreff }}{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Posteingang', 'url': '/admin/mail/eingang'}, {'label': entry.betreff}]) }}{% endblock %}
 {% block admin_content %}
+{% with section_id='schnittstellen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <style>.mail-timeline { border-left:2px solid var(--border); margin-left:8px; padding-left:18px; }.mail-timeline__item { margin:0 0 16px; }.mail-pre { white-space:pre-wrap; overflow-wrap:anywhere; }</style>
 <p><a href="/admin/mail/eingang">&larr; Posteingang</a></p>
 <div class="page-header"><div><h1>{{ entry.betreff }}</h1><p class="page-header__sub">{{ entry.absender }} · {{ entry.empfangen_at|local_datetime }} · <span class="badge-pill badge-pill--gray">{{ quelle_labels.get(entry.quelle, entry.quelle) }}</span>{% if entry.groesse_bytes %} · {{ entry.groesse_bytes|filesizeformat }}{% endif %}</p></div></div>

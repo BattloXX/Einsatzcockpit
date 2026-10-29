@@ -2,6 +2,8 @@
 {% block title %}Geraeteverleih &ndash; Artikelstammdaten{% endblock %}
 
 {% block admin_content %}
+{% with section_id='verleih' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-content" x-data="artikelDruck()">
   <div class="page-header">
     <div>

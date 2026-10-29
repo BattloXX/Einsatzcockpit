@@ -4,6 +4,8 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SSO / Microsoft 365'}]) }}{% endblock %}
 
 {% block admin_content %}
+{% with section_id='schnittstellen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-header">
   <div>
     <h1>SSO / Microsoft 365</h1>

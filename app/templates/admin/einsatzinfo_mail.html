@@ -3,6 +3,8 @@
 {% block title %}Einsatzinfo-Mail – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Einsatzinfo-Mail'}]) }}{% endblock %}
 {% block admin_content %}
+{% with section_id='alarmierung' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-content">
   <div class="page-header"><div><h1>Einsatzinfo-Mail</h1><p class="page-header__sub">Automatische Einsatz-Mail bei Alarmeingang konfigurieren.</p></div></div>
   {% if saved %}<div class="alert alert--success">Einstellungen gespeichert.</div>{% endif %}

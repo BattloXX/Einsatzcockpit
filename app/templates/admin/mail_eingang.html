@@ -2,4 +2,6 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Posteingang{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Posteingang'}]) }}{% endblock %}
-{% block admin_content %}{% include "admin/_mail_eingang_content.html" %}{% endblock %}
+{% block admin_content %}
+{% with section_id='schnittstellen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+{% include "admin/_mail_eingang_content.html" %}{% endblock %}

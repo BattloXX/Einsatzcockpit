@@ -14,7 +14,7 @@
 <div class="subtabnav" role="tablist">
   {% for t in tabs %}
   <a href="{{ t.href }}" role="tab" aria-selected="{% if t.active %}true{% else %}false{% endif %}"
-     class="subtabnav__item {% if t.active %}subtabnav__item--active{% endif %}">{{ t.label }}</a>
+     class="subtabnav__item {% if t.active %}subtabnav__item--active{% endif %}">{{ t.label }}{% if t.badge %} <span class="badge">{{ t.badge }}</span>{% endif %}</a>
   {% endfor %}
 </div>
 {% endmacro %}

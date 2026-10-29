@@ -13,6 +13,8 @@ class AdminTab:
     exakt: bool = False
     rollen: tuple[str, ...] = ()
     modulflag: str | None = None
+    badge_provider: str | None = None
+    sichtbarkeit: Literal["voll", "alle", "sysadmin", "org_admin"] = "voll"
 
     def ist_aktiv(self, path: str) -> bool:
         return any(path == p if self.exakt else path.startswith(p) for p in self.aktiv_praefixe)
@@ -43,7 +45,11 @@ class AdminEintrag:
         return (
             not self.neues_fenster
             and not any(path.startswith(p) for p in self.inaktiv_praefixe)
-            and any(path == p if self.exakt else path.startswith(p) for p in self.aktiv_praefixe)
+            and (
+                any(tab.ist_aktiv(path) for tab in self.tabs)
+                if self.tabs
+                else any(path == p if self.exakt else path.startswith(p) for p in self.aktiv_praefixe)
+            )
         )
 
 
@@ -68,32 +74,9 @@ class AdminNavigation:
         return next((e for g in self.gruppen for e in g.eintraege if e.id == eintrag_id), None)
 
     def aktiver_tab_fuer(self, eintrag_id: str, path: str) -> AdminTab | None:
-        # Infoscreen-Tabs werden auch beim separaten Sidebar-Link "Externe Zugaenge" angezeigt.
         eintrag = self.eintrag(eintrag_id)
         return next((t for t in eintrag.tabs if t.ist_aktiv(path)), None) if eintrag else None
 
-
-_INFOSCREENS_TABS = (
-    AdminTab("verwaltung", "Alarm-Infoscreen", "/infoscreen-alarm/verwaltung", ("/infoscreen-alarm",)),
-    AdminTab(
-        "infoscreen", "Wetter-Infoscreen", "/admin/settings/wetter/infoscreen", ("/admin/settings/wetter/infoscreen",)
-    ),
-    AdminTab("statistik", "Statistik", "/admin/settings/statistik", ("/admin/settings/statistik",)),
-    AdminTab(
-        "strassensperren_infoscreen",
-        "Straßensperren",
-        "/admin/settings/strassensperren-infoscreen",
-        ("/admin/settings/strassensperren-infoscreen",),
-        modulflag="strassensperren_enabled",
-    ),
-)
-
-_SMS_TABS = (
-    AdminTab("sms_senden", "SMS senden", "/admin/sms-senden", ("/admin/sms-senden",), exakt=True),
-    AdminTab("sms_provider", "SMS-Versandweg", "/admin/sms-provider", ("/admin/sms-provider",), exakt=True),
-    AdminTab("sms_empfang", "SMS-Empfang", "/admin/sms-empfang", ("/admin/sms-empfang",), exakt=True),
-    AdminTab("einsatzinfo_sms", "SMS-Einsatzinfo", "/admin/einsatzinfo-sms", ("/admin/einsatzinfo-sms",), exakt=True),
-)
 
 _ZUGAENGE_TABS = (
     AdminTab("geraete_login", "Geräte-Login", "/admin/geraete-login", ("/admin/geraete-login",)),
@@ -107,18 +90,44 @@ _FOERDERSTRECKE_TABS = (
     AdminTab("foerderkalibrierung", "Kalibrierung", "/admin/foerderkalibrierung", ("/admin/foerderkalibrierung",)),
 )
 
-_EINSATZVORLAGEN_TABS = (
-    AdminTab("auftragsvorlagen", "Auftragsvorlagen", "/admin/auftragsvorlagen", ("/admin/auftragsvorlagen",)),
-    AdminTab("meldungsvorlagen", "Meldungsvorlagen", "/admin/meldungsvorlagen", ("/admin/meldungsvorlagen",)),
-    AdminTab("lage_hinweise", "Lage-Hinweise", "/admin/lage-hinweise", ("/admin/lage-hinweise",)),
-    AdminTab("default_meldungen", "Default-Meldungen", "/admin/default-meldungen", ("/admin/default-meldungen",)),
-)
-
 ADMIN_GRUPPEN = (
     AdminGruppe(
         "stammdaten",
         "Stammdaten",
         (
+            AdminEintrag(
+                id="personal",
+                label="Personal",
+                gruppe="stammdaten",
+                icon="users",
+                href="/admin/mitglieder",
+                aktiv_praefixe=("/admin/mitglieder", "/admin/qualifikationen", "/admin/gruppen"),
+                tooltip="Mannschaftsliste mit Qualifikationen",
+                sichtbarkeit="alle",
+                tabs=(
+                    AdminTab(
+                        sichtbarkeit="alle",
+                        id="mitglieder",
+                        label="Mitglieder",
+                        href="/admin/mitglieder",
+                        aktiv_praefixe=("/admin/mitglieder",),
+                    ),
+                    AdminTab(
+                        sichtbarkeit="alle",
+                        id="qualifikationen",
+                        label="Qualifikationen",
+                        href="/admin/qualifikationen",
+                        aktiv_praefixe=("/admin/qualifikationen",),
+                    ),
+                    AdminTab(
+                        id="gruppen",
+                        label="Gruppen",
+                        href="/admin/gruppen",
+                        aktiv_praefixe=("/admin/gruppen",),
+                        rollen=("admin", "org_admin", "system_admin"),
+                    ),
+                ),
+            ),
             AdminEintrag(
                 "fahrzeuge",
                 "Ressourcen",
@@ -129,70 +138,58 @@ ADMIN_GRUPPEN = (
                 tooltip="Eigene und fremde Ressourcen: Fahrzeuge, Geräte, Einheiten",
             ),
             AdminEintrag(
-                "mitglieder",
-                "Mitglieder",
-                "stammdaten",
-                "users",
-                "/admin/mitglieder",
-                ("/admin/mitglieder",),
-                tooltip="Mannschaftsliste mit Qualifikationen",
-                sichtbarkeit="alle",
-            ),
-            AdminEintrag(
-                "gruppen",
-                "Gruppen",
-                "stammdaten",
-                "users-group",
-                "/admin/gruppen",
-                ("/admin/gruppen",),
-                tooltip="Benannte Empfaengergruppen (fuer SMS-Versand, Benachrichtigungen, etc.)",
-            ),
-            AdminEintrag(
-                "qualifikationen",
-                "Qualifikationen",
-                "stammdaten",
-                "award",
-                "/admin/qualifikationen",
-                ("/admin/qualifikationen",),
-                tooltip="AGT, GK, MA u.a. — Codes für Mitglieder",
-                sichtbarkeit="alle",
-            ),
-            AdminEintrag(
-                "alarmtypen",
-                "Alarmtypen",
-                "stammdaten",
-                "urgent",
-                "/admin/alarmtypen",
-                ("/admin/alarmtypen",),
-                tooltip="Bekannte Einsatzstichwörter und ihre Eigenschaften",
-                subheading="Alarm-Reaktionen",
-            ),
-            AdminEintrag(
-                "ausrueckordnung",
-                "Ausrückordnung",
-                "stammdaten",
-                "clipboard-list",
-                "/admin/ausrueckordnung",
-                ("/admin/ausrueckordnung",),
-                tooltip="Welche Fahrzeuge rücken bei welchem Stichwort aus?",
-            ),
-            AdminEintrag(
-                "einsatzvorlagen",
-                "Einsatzvorlagen",
-                "stammdaten",
-                "files",
-                "/admin/auftragsvorlagen",
-                (
+                id="alarmstichwoerter",
+                label="Alarmstichwörter",
+                gruppe="stammdaten",
+                icon="urgent",
+                href="/admin/alarmtypen",
+                aktiv_praefixe=(
+                    "/admin/alarmtypen",
+                    "/admin/ausrueckordnung",
                     "/admin/auftragsvorlagen",
                     "/admin/meldungsvorlagen",
                     "/admin/lage-hinweise",
                     "/admin/default-meldungen",
                 ),
-                tooltip=(
-                    "Auftrags- und Meldungsvorlagen, Lage-Hinweise und automatische Default-Meldungen pro "
-                    "Alarmstichwort"
+                tooltip="Bekannte Einsatzstichwörter und ihre Eigenschaften",
+                tabs=(
+                    AdminTab(
+                        id="alarmtypen",
+                        label="Alarmtypen",
+                        href="/admin/alarmtypen",
+                        aktiv_praefixe=("/admin/alarmtypen",),
+                    ),
+                    AdminTab(
+                        id="ausrueckordnung",
+                        label="Ausrückordnung",
+                        href="/admin/ausrueckordnung",
+                        aktiv_praefixe=("/admin/ausrueckordnung",),
+                    ),
+                    AdminTab(
+                        id="auftragsvorlagen",
+                        label="Auftragsvorlagen",
+                        href="/admin/auftragsvorlagen",
+                        aktiv_praefixe=("/admin/auftragsvorlagen",),
+                    ),
+                    AdminTab(
+                        id="meldungsvorlagen",
+                        label="Meldungsvorlagen",
+                        href="/admin/meldungsvorlagen",
+                        aktiv_praefixe=("/admin/meldungsvorlagen",),
+                    ),
+                    AdminTab(
+                        id="lage_hinweise",
+                        label="Lage-Hinweise",
+                        href="/admin/lage-hinweise",
+                        aktiv_praefixe=("/admin/lage-hinweise",),
+                    ),
+                    AdminTab(
+                        id="default_meldungen",
+                        label="Default-Meldungen",
+                        href="/admin/default-meldungen",
+                        aktiv_praefixe=("/admin/default-meldungen",),
+                    ),
                 ),
-                tabs=_EINSATZVORLAGEN_TABS,
             ),
         ),
     ),
@@ -201,40 +198,185 @@ ADMIN_GRUPPEN = (
         "Verwaltung",
         (
             AdminEintrag(
-                "einsatz_import",
-                "Einsatz-Import",
+                id="benutzer",
+                label="Benutzer & Rechte",
+                gruppe="verwaltung",
+                icon="user-cog",
+                href="/admin/benutzer",
+                aktiv_praefixe=("/admin/benutzer", "/admin/audit"),
+                tooltip="Login-Accounts, Rollen, Passwörter",
+                tabs=(
+                    AdminTab(
+                        id="benutzer", label="Benutzer", href="/admin/benutzer", aktiv_praefixe=("/admin/benutzer",)
+                    ),
+                    AdminTab(id="audit", label="Audit-Log", href="/admin/audit", aktiv_praefixe=("/admin/audit",)),
+                ),
+            ),
+            AdminEintrag(
+                id="probenplanung",
+                label="Probenplanung",
+                gruppe="verwaltung",
+                icon="calendar-event",
+                href="/admin/probenplanung/probearten",
+                aktiv_praefixe=(
+                    "/admin/probenplanung/probearten",
+                    "/admin/probenplanung/vorlagen",
+                    "/admin/probenplanung/oeffentlich",
+                ),
+                modulflag="probenplanung_enabled",
+                tabs=(
+                    AdminTab(
+                        id="probenplanung_probearten",
+                        label="Probearten",
+                        href="/admin/probenplanung/probearten",
+                        aktiv_praefixe=("/admin/probenplanung/probearten",),
+                    ),
+                    AdminTab(
+                        id="probenplanung_vorlagen",
+                        label="Checklisten-Vorlagen",
+                        href="/admin/probenplanung/vorlagen",
+                        aktiv_praefixe=("/admin/probenplanung/vorlagen",),
+                    ),
+                    AdminTab(
+                        id="probenplanung_oeffentlich",
+                        label="Öffentlicher Plan",
+                        href="/admin/probenplanung/oeffentlich",
+                        aktiv_praefixe=("/admin/probenplanung/oeffentlich",),
+                    ),
+                ),
+            ),
+            AdminEintrag(
+                id="infoscreens",
+                label="Infoscreens",
+                gruppe="verwaltung",
+                icon="device-tv",
+                href="/infoscreen-alarm/verwaltung",
+                aktiv_praefixe=(
+                    "/infoscreen-alarm",
+                    "/admin/settings/wetter/infoscreen",
+                    "/admin/settings/statistik",
+                    "/admin/settings/strassensperren-infoscreen",
+                ),
+                tooltip="Alarm-, Wetter- und Statistik-Infoscreens verwalten",
+                tabs=(
+                    AdminTab(
+                        id="verwaltung",
+                        label="Alarm-Infoscreen",
+                        href="/infoscreen-alarm/verwaltung",
+                        aktiv_praefixe=("/infoscreen-alarm",),
+                    ),
+                    AdminTab(
+                        id="infoscreen",
+                        label="Wetter-Infoscreen",
+                        href="/admin/settings/wetter/infoscreen",
+                        aktiv_praefixe=("/admin/settings/wetter/infoscreen",),
+                    ),
+                    AdminTab(
+                        id="statistik",
+                        label="Statistik",
+                        href="/admin/settings/statistik",
+                        aktiv_praefixe=("/admin/settings/statistik",),
+                    ),
+                    AdminTab(
+                        id="strassensperren_infoscreen",
+                        label="Straßensperren",
+                        href="/admin/settings/strassensperren-infoscreen",
+                        aktiv_praefixe=("/admin/settings/strassensperren-infoscreen",),
+                        modulflag="strassensperren_enabled",
+                    ),
+                ),
+            ),
+            AdminEintrag(
+                id="alarmierung",
+                label="Alarmierung",
+                gruppe="verwaltung",
+                icon="mail",
+                href="/admin/sms-senden",
+                aktiv_praefixe=(
+                    "/admin/sms-senden",
+                    "/admin/sms-provider",
+                    "/admin/sms-empfang",
+                    "/admin/einsatzinfo-sms",
+                    "/admin/einsatzinfo-mail",
+                    "/admin/teams-alarmierung",
+                    "/admin/push-nachrichten",
+                ),
+                tooltip="SMS, Einsatzinfo-Mail, Teams-Alarmierung und Push-Nachrichten verwalten",
+                tabs=(
+                    AdminTab(
+                        id="sms_senden",
+                        label="SMS senden",
+                        href="/admin/sms-senden",
+                        aktiv_praefixe=("/admin/sms-senden",),
+                        exakt=True,
+                    ),
+                    AdminTab(
+                        id="sms_provider",
+                        label="SMS-Versandweg",
+                        href="/admin/sms-provider",
+                        aktiv_praefixe=("/admin/sms-provider",),
+                        exakt=True,
+                    ),
+                    AdminTab(
+                        id="sms_empfang",
+                        label="SMS-Empfang",
+                        href="/admin/sms-empfang",
+                        aktiv_praefixe=("/admin/sms-empfang",),
+                        exakt=True,
+                    ),
+                    AdminTab(
+                        id="einsatzinfo_sms",
+                        label="SMS-Einsatzinfo",
+                        href="/admin/einsatzinfo-sms",
+                        aktiv_praefixe=("/admin/einsatzinfo-sms",),
+                        exakt=True,
+                    ),
+                    AdminTab(
+                        id="einsatzinfo_mail",
+                        label="Einsatzinfo-Mail",
+                        href="/admin/einsatzinfo-mail",
+                        aktiv_praefixe=("/admin/einsatzinfo-mail",),
+                    ),
+                    AdminTab(
+                        id="teams_alarmierung",
+                        label="Teams-Alarmierung",
+                        href="/admin/teams-alarmierung",
+                        aktiv_praefixe=("/admin/teams-alarmierung",),
+                    ),
+                    AdminTab(
+                        id="push_nachrichten",
+                        label="Push-Nachrichten",
+                        href="/admin/push-nachrichten",
+                        aktiv_praefixe=("/admin/push-nachrichten",),
+                    ),
+                ),
+            ),
+            AdminEintrag(
+                "gateway",
+                "Gateway / Druck",
                 "verwaltung",
-                "inbox",
-                "/admin/einsatz-import",
-                ("/admin/einsatz-import",),
+                "printer",
+                "/gateway",
+                ("/gateway",),
+                tooltip="Drucker-Gateway im Gerätehaus: Pairing, Drucker, Druckregeln und Druckverlauf",
+                modulflag="gateway_enabled",
+            ),
+            AdminEintrag(
+                id="einsatzdaten",
+                label="Einsatzdaten",
+                gruppe="verwaltung",
+                icon="inbox",
+                href="/admin/einsatz-import",
+                aktiv_praefixe=("/admin/einsatz-import",),
                 tooltip="Historische Leitstellen-Excel-Exporte importieren",
             ),
             AdminEintrag(
-                "benutzer",
-                "Benutzer",
-                "verwaltung",
-                "user-cog",
-                "/admin/benutzer",
-                ("/admin/benutzer",),
-                tooltip="Login-Accounts, Rollen, Passwörter",
-            ),
-            AdminEintrag(
-                "verleih_artikel",
-                "Geräteverleih",
-                "verwaltung",
-                "package",
-                "/admin/verleih-artikel",
-                ("/admin/verleih",),
-                tooltip="Geräteverleih Artikelstammdaten und Stücklisten",
-                subheading="Ausrüstung",
-            ),
-            AdminEintrag(
-                "wasserstellen",
-                "Wasserstellen",
-                "verwaltung",
-                "droplet",
-                "/admin/wasserstellen",
-                ("/admin/wasserstellen",),
+                id="loeschwasser",
+                label="Löschwasserversorgung",
+                gruppe="verwaltung",
+                icon="droplet",
+                href="/admin/wasserstellen",
+                aktiv_praefixe=("/admin/wasserstellen",),
                 tooltip="Löschwasser-Stammdaten: Hydranten, Saugstellen, Löschteiche — pflegen und aus CSV importieren",
             ),
             AdminEintrag(
@@ -253,35 +395,54 @@ ADMIN_GRUPPEN = (
                 tabs=_FOERDERSTRECKE_TABS,
             ),
             AdminEintrag(
-                "probenplanung_probearten",
-                "Probearten",
-                "verwaltung",
-                "calendar-event",
-                "/admin/probenplanung/probearten",
-                ("/admin/probenplanung/probearten",),
-                tooltip="",
-                subheading="Probenplanung",
-                modulflag="probenplanung_enabled",
+                id="verleih",
+                label="Geräteverleih",
+                gruppe="verwaltung",
+                icon="package",
+                href="/admin/verleih-artikel",
+                aktiv_praefixe=(
+                    "/admin/verleih-artikel",
+                    "/admin/verleih-stuecklisten",
+                    "/admin/verleih-uebersicht",
+                    "/admin/verleih-geraetetypen",
+                ),
+                tooltip="Geräteverleih Artikelstammdaten und Stücklisten",
+                tabs=(
+                    AdminTab(
+                        id="artikel",
+                        label="Artikel",
+                        href="/admin/verleih-artikel",
+                        aktiv_praefixe=("/admin/verleih-artikel",),
+                    ),
+                    AdminTab(
+                        id="stuecklisten",
+                        label="Stücklisten",
+                        href="/admin/verleih-stuecklisten",
+                        aktiv_praefixe=("/admin/verleih-stuecklisten",),
+                    ),
+                    AdminTab(
+                        id="uebersicht",
+                        label="Übersicht",
+                        href="/admin/verleih-uebersicht",
+                        aktiv_praefixe=("/admin/verleih-uebersicht",),
+                    ),
+                    AdminTab(
+                        id="geraetetypen",
+                        label="Gerätetypen",
+                        href="/admin/verleih-geraetetypen",
+                        aktiv_praefixe=("/admin/verleih-geraetetypen",),
+                    ),
+                ),
             ),
             AdminEintrag(
-                "probenplanung_vorlagen",
-                "Checklisten-Vorlagen",
-                "verwaltung",
-                "clipboard-list",
-                "/admin/probenplanung/vorlagen",
-                ("/admin/probenplanung/vorlagen",),
-                tooltip="",
-                modulflag="probenplanung_enabled",
-            ),
-            AdminEintrag(
-                "probenplanung_oeffentlich",
-                "Öffentlicher Plan",
-                "verwaltung",
-                "world",
-                "/admin/probenplanung/oeffentlich",
-                ("/admin/probenplanung/oeffentlich",),
-                tooltip="",
-                modulflag="probenplanung_enabled",
+                id="medien",
+                label="Dateien & Medien",
+                gruppe="verwaltung",
+                icon="photo",
+                href="/admin/medien",
+                aktiv_praefixe=("/admin/medien",),
+                tooltip="Alle hochgeladenen Medien: Größe, Alter, Typ – sortierbar und filterbar",
+                sichtbarkeit="org_admin",
             ),
             AdminEintrag(
                 "zugaenge",
@@ -293,64 +454,6 @@ ADMIN_GRUPPEN = (
                 tooltip="Geräte-Login-Token, API-Keys für externe Systeme und Lagekarte-Tokens verwalten",
                 subheading="Zugänge und Tokens",
                 tabs=_ZUGAENGE_TABS,
-            ),
-            AdminEintrag(
-                "push_nachrichten",
-                "Push-Nachrichten",
-                "verwaltung",
-                "speakerphone",
-                "/admin/push-nachrichten",
-                ("/admin/push-nachrichten",),
-                tooltip="Manuelle Push-Nachrichten an alle oder einzelne Benutzer",
-            ),
-            AdminEintrag(
-                "audit",
-                "Audit-Log",
-                "verwaltung",
-                "history",
-                "/admin/audit",
-                ("/admin/audit",),
-                tooltip="Vollständiges Aktionsprotokoll",
-            ),
-            AdminEintrag(
-                "medien",
-                "Medienverwaltung",
-                "verwaltung",
-                "photo",
-                "/admin/medien",
-                ("/admin/medien",),
-                tooltip="Alle hochgeladenen Medien: Größe, Alter, Typ – sortierbar und filterbar",
-                sichtbarkeit="org_admin",
-            ),
-            AdminEintrag(
-                "sms",
-                "SMS",
-                "verwaltung",
-                "mail",
-                "/admin/sms-senden",
-                ("/admin/sms-senden", "/admin/sms-provider", "/admin/sms-empfang", "/admin/einsatzinfo-sms"),
-                tooltip="SMS senden sowie Versandweg, Empfang und Einsatzinfo konfigurieren",
-                tabs=_SMS_TABS,
-            ),
-            AdminEintrag(
-                "infoscreens",
-                "Infoscreens",
-                "verwaltung",
-                "device-tv",
-                "/infoscreen-alarm/verwaltung",
-                ("/infoscreen-alarm", "/admin/settings/wetter/infoscreen", "/admin/settings/statistik"),
-                tooltip="Alarm-, Wetter- und Statistik-Infoscreens verwalten",
-                tabs=_INFOSCREENS_TABS,
-            ),
-            AdminEintrag(
-                "gateway",
-                "Gateway / Druck",
-                "verwaltung",
-                "printer",
-                "/gateway",
-                ("/gateway",),
-                tooltip="Drucker-Gateway im Gerätehaus: Pairing, Drucker, Druckregeln und Druckverlauf",
-                modulflag="gateway_enabled",
             ),
         ),
         aktiv_praefixe=("/admin/push", "/admin/probenplanung"),
@@ -390,107 +493,134 @@ ADMIN_GRUPPEN = (
                 icon_art="modul_icon",
             ),
             AdminEintrag(
-                "sso",
-                "SSO / Microsoft 365",
-                "einstellungen",
-                "key",
-                "/admin/sso",
-                ("/admin/sso",),
-                tooltip="Microsoft 365 / Entra ID Single Sign-On konfigurieren",
-                subheading="Schnittstellen",
-            ),
-            AdminEintrag(
-                "lis",
-                "LIS-Anbindung",
-                "einstellungen",
-                "antenna",
-                "/admin/lis",
-                ("/admin/lis",),
-                tooltip="Leitstellenanbindung (LIS/IPR): Verbindung ein-/ausschalten, Zugangsdaten hinterlegen",
-            ),
-            AdminEintrag(
-                "dibos",
-                "DIBOS/Elvis-Tracing",
-                "einstellungen",
-                "radio",
-                "/admin/dibos",
-                ("/admin/dibos",),
-                tooltip="DIBOS EventHub / Elvis-Anbindung: rein lesendes Tracing, Zugangsdaten hinterlegen",
-            ),
-            AdminEintrag(
-                "mail",
-                "Mail-Versand",
-                "einstellungen",
-                "mail",
-                "/admin/mail",
-                ("/admin/mail",),
-                tooltip="Eigener SMTP-Server und/oder Office 365 / Microsoft Graph je Organisation",
-                inaktiv_praefixe=("/admin/mail/eingang", "/admin/mail-weiterleitungen"),
-            ),
-            AdminEintrag(
-                "mail_eingang",
-                "Posteingang",
-                "einstellungen",
-                "inbox",
-                "/admin/mail/eingang",
-                ("/admin/mail/eingang",),
-                tooltip="Eingegangene Mails aller Empfangswege und was mit ihnen passiert ist",
-                badge_provider="mail_eingang_offene_count",
-            ),
-            AdminEintrag(
-                "teams_alarmierung",
-                "Teams-Einsatzinfo",
-                "einstellungen",
-                "message",
-                "/admin/teams-alarmierung",
-                ("/admin/teams-alarmierung",),
-                tooltip=(
-                    "Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale "
-                    "Bot-Erweiterung mit Zusage/Absage"
+                id="schnittstellen",
+                label="Schnittstellen",
+                gruppe="einstellungen",
+                icon="key",
+                href="/admin/sso",
+                aktiv_praefixe=(
+                    "/admin/lis",
+                    "/admin/dibos",
+                    "/admin/sso",
+                    "/admin/mail",
+                    "/admin/mail/eingang",
+                    "/admin/wordpress-berichte",
+                ),
+                tooltip="LIS, DIBOS, Microsoft SSO, Mail und WordPress konfigurieren",
+                tabs=(
+                    AdminTab(id="lis", label="LIS", href="/admin/lis", aktiv_praefixe=("/admin/lis",)),
+                    AdminTab(id="dibos", label="DIBOS", href="/admin/dibos", aktiv_praefixe=("/admin/dibos",)),
+                    AdminTab(id="sso", label="Microsoft SSO", href="/admin/sso", aktiv_praefixe=("/admin/sso",)),
+                    AdminTab(
+                        id="mail", label="Mail-Versand", href="/admin/mail", aktiv_praefixe=("/admin/mail",), exakt=True
+                    ),
+                    AdminTab(
+                        id="mail_eingang",
+                        label="Posteingang",
+                        href="/admin/mail/eingang",
+                        aktiv_praefixe=("/admin/mail/eingang",),
+                        badge_provider="mail_eingang_offene_count",
+                    ),
+                    AdminTab(
+                        id="wordpress_berichte",
+                        label="WordPress",
+                        href="/admin/wordpress-berichte",
+                        aktiv_praefixe=("/admin/wordpress-berichte",),
+                    ),
                 ),
             ),
             AdminEintrag(
-                "einsatzinfo_mail",
-                "Einsatzinfo-Mail",
-                "einstellungen",
-                "mail",
-                "/admin/einsatzinfo-mail",
-                ("/admin/einsatzinfo-mail",),
-                tooltip=(
-                    "Automatische Einsatz-Mail bei Alarmeingang - Verteiler und Vorlagen "
-                    "wie bei der SMS-Einsatzinfo"
+                id="strassensperren",
+                label="Straßensperren",
+                gruppe="einstellungen",
+                icon="message",
+                href="/strassensperren/einstellungen",
+                aktiv_praefixe=("/strassensperren/einstellungen",),
+                tooltip="Microsoft-Teams-Benachrichtigungen für Straßensperren konfigurieren",
+                modulflag="strassensperren_enabled",
+                tabs=(
+                    AdminTab(
+                        id="strassensperren_einstellungen",
+                        label="Teams-Benachrichtigungen",
+                        href="/strassensperren/einstellungen",
+                        aktiv_praefixe=("/strassensperren/einstellungen",),
+                    ),
+                    AdminTab(
+                        id="infoscreen_zugaenge",
+                        label="Infoscreen & Zugänge",
+                        href="/admin/settings/strassensperren-infoscreen",
+                        aktiv_praefixe=(),
+                    ),
                 ),
-                aktive_gruppe="verwaltung",
             ),
             AdminEintrag(
-                "wordpress_berichte",
-                "WordPress-Berichte",
-                "einstellungen",
-                "world",
-                "/admin/wordpress-berichte",
-                ("/admin/wordpress-berichte",),
-                tooltip="Automatische Website-Entwürfe beim Abschluss eines Einsatzes konfigurieren",
-                aktive_gruppe="stammdaten",
+                id="planspiele",
+                label="Planspiele",
+                gruppe="einstellungen",
+                icon="settings",
+                href="/admin/settings/planspiele",
+                aktiv_praefixe=(
+                    "/admin/settings/planspiele",
+                    "/admin/settings/planspiele/szenarien",
+                    "/admin/settings/planspiele/stichworte",
+                ),
+                rollen=("org_admin", "admin", "system_admin", "uebungsleiter"),
+                modulflag="planspiel_enabled",
+                tabs=(
+                    AdminTab(
+                        id="settings_planspiele",
+                        label="Einstellungen & Adresspool",
+                        href="/admin/settings/planspiele",
+                        aktiv_praefixe=("/admin/settings/planspiele",),
+                        exakt=True,
+                    ),
+                    AdminTab(
+                        id="settings_planspiele_szenarien",
+                        label="Szenarien",
+                        href="/admin/settings/planspiele/szenarien",
+                        aktiv_praefixe=("/admin/settings/planspiele/szenarien",),
+                    ),
+                    AdminTab(
+                        id="settings_planspiele_stichworte",
+                        label="Stichwort-Regeln",
+                        href="/admin/settings/planspiele/stichworte",
+                        aktiv_praefixe=("/admin/settings/planspiele/stichworte",),
+                    ),
+                ),
             ),
             AdminEintrag(
-                "org_backup",
-                "Datensicherung",
-                "einstellungen",
-                "device-floppy",
-                "/admin/org-backup",
-                ("/admin/org-backup",),
-                tooltip="Alle Org-Daten als Archiv sichern (Download / Remote-Ziel)",
-                aktive_gruppe="stammdaten",
-            ),
-            AdminEintrag(
-                "ki_anfragen",
-                "KI-Anfragen-Log",
-                "einstellungen",
-                "KI",
-                "/admin/ki-anfragen",
-                ("/admin/ki-anfragen",),
+                id="ki",
+                label="KI & MCP",
+                gruppe="einstellungen",
+                icon="KI",
+                href="/admin/ki-anfragen",
+                aktiv_praefixe=("/admin/ki-anfragen", "/admin/ki-prompts"),
                 tooltip="Tokenverbrauch und Fehler der KI-Anfragen anzeigen",
+                tabs=(
+                    AdminTab(
+                        id="ki_anfragen",
+                        label="KI-Anfragen",
+                        href="/admin/ki-anfragen",
+                        aktiv_praefixe=("/admin/ki-anfragen",),
+                    ),
+                    AdminTab(
+                        id="ki_prompts",
+                        label="KI-Prompts",
+                        href="/admin/ki-prompts",
+                        aktiv_praefixe=("/admin/ki-prompts",),
+                        rollen=("system_admin",),
+                    ),
+                ),
                 icon_art="text",
+            ),
+            AdminEintrag(
+                id="org_backup",
+                label="Datensicherung",
+                gruppe="einstellungen",
+                icon="device-floppy",
+                href="/admin/org-backup",
+                aktiv_praefixe=("/admin/org-backup",),
+                tooltip="Alle Org-Daten als Archiv sichern (Download / Remote-Ziel)",
             ),
             AdminEintrag(
                 "systemstatus",
@@ -500,83 +630,6 @@ ADMIN_GRUPPEN = (
                 "/admin/systemstatus",
                 ("/admin/systemstatus",),
                 tooltip="Status externer Gateways und Monitoring-Tokens verwalten",
-            ),
-            AdminEintrag(
-                "strassensperren_infoscreen",
-                "Infoscreen",
-                "einstellungen",
-                "device-desktop",
-                "/strassensperren/infoscreen",
-                (),
-                tooltip="Interne Vollbildanzeige der aktuellen Straßensperren öffnen",
-                subheading="Straßensperren",
-                modulflag="strassensperren_enabled",
-                neues_fenster=True,
-            ),
-            AdminEintrag(
-                "settings_strassensperren_infoscreen",
-                "Externe Zugänge",
-                "einstellungen",
-                "link",
-                "/admin/settings/strassensperren-infoscreen",
-                ("/admin/settings/strassensperren-infoscreen",),
-                tooltip="Externe Statusseiten und Infoscreens verwalten",
-                modulflag="strassensperren_enabled",
-            ),
-            AdminEintrag(
-                "strassensperren_einstellungen",
-                "Teams",
-                "einstellungen",
-                "message",
-                "/strassensperren/einstellungen",
-                ("/strassensperren/einstellungen",),
-                tooltip="Microsoft-Teams-Benachrichtigungen für Straßensperren konfigurieren",
-                modulflag="strassensperren_enabled",
-            ),
-            AdminEintrag(
-                "settings_planspiele",
-                "Einstellungen & Adresspool",
-                "einstellungen",
-                "settings",
-                "/admin/settings/planspiele",
-                ("/admin/settings/planspiele",),
-                tooltip="",
-                exakt=True,
-                subheading="Planspiele",
-                modulflag="planspiel_enabled",
-                rollen=("org_admin", "admin", "system_admin", "uebungsleiter"),
-            ),
-            AdminEintrag(
-                "settings_planspiele_szenarien",
-                "Szenariokatalog",
-                "einstellungen",
-                "masks-theater",
-                "/admin/settings/planspiele/szenarien",
-                ("/admin/settings/planspiele/szenarien",),
-                tooltip="",
-                modulflag="planspiel_enabled",
-                rollen=("org_admin", "admin", "system_admin", "uebungsleiter"),
-            ),
-            AdminEintrag(
-                "settings_planspiele_stichworte",
-                "Stichwort-Referenz",
-                "einstellungen",
-                "books",
-                "/admin/settings/planspiele/stichworte",
-                ("/admin/settings/planspiele/stichworte",),
-                tooltip="",
-                modulflag="planspiel_enabled",
-                rollen=("org_admin", "admin", "system_admin", "uebungsleiter"),
-            ),
-            AdminEintrag(
-                "ki_prompts",
-                "KI-Prompts",
-                "einstellungen",
-                "sparkles",
-                "/admin/ki-prompts",
-                ("/admin/ki-prompts",),
-                tooltip="KI-System-Prompts verwalten und versionieren",
-                sichtbarkeit="sysadmin",
             ),
             AdminEintrag(
                 "systemdiagnose",
@@ -719,6 +772,12 @@ def admin_navigation(request, user) -> AdminNavigation:
     sysadmin = "system_admin" in rollen
 
     def erlaubt(element) -> bool:
+        if element.sichtbarkeit != "alle" and not voll:
+            return False
+        if element.sichtbarkeit == "sysadmin" and not sysadmin:
+            return False
+        if element.sichtbarkeit == "org_admin" and sysadmin:
+            return False
         return (not element.rollen or bool(rollen.intersection(element.rollen))) and (
             not element.modulflag or bool(getattr(request.state, element.modulflag, False))
         )
@@ -729,34 +788,30 @@ def admin_navigation(request, user) -> AdminNavigation:
         for eintrag in gruppe.eintraege:
             if not erlaubt(eintrag):
                 continue
-            if eintrag.sichtbarkeit != "alle" and not voll:
+            tabs = tuple(tab for tab in eintrag.tabs if erlaubt(tab))
+            if eintrag.tabs and not tabs:
                 continue
-            if eintrag.sichtbarkeit == "sysadmin" and not sysadmin:
-                continue
-            if eintrag.sichtbarkeit == "org_admin" and sysadmin:
-                continue
-            # Ohne sichtbaren Sysadmin-Link bleibt Mail-Versand wie bisher aktiv.
-            ausschluss = eintrag.inaktiv_praefixe
-            if eintrag.id == "mail" and not sysadmin:
-                ausschluss = ("/admin/mail/eingang",)
             eintraege.append(
-                replace(eintrag, tabs=tuple(tab for tab in eintrag.tabs if erlaubt(tab)), inaktiv_praefixe=ausschluss)
+                replace(
+                    eintrag,
+                    tabs=tabs,
+                    aktiv_praefixe=tuple(p for tab in tabs for p in tab.aktiv_praefixe)
+                    if tabs
+                    else eintrag.aktiv_praefixe,
+                    href=eintrag.href if not tabs or any(tab.href == eintrag.href for tab in tabs) else tabs[0].href,
+                )
             )
         if eintraege:
             gruppen.append(replace(gruppe, eintraege=tuple(eintraege), ueberschrift=voll))
     path = request.url.path
     aktiv = next((e for g in gruppen for e in g.eintraege if e.ist_aktiv(path)), None)
     # Auch ausgeblendete Modul-Links bestimmten bisher die Gruppenoeffnung.
-    gruppen_eintrag = aktiv or next(
-        (e for g in ADMIN_GRUPPEN for e in g.eintraege if e.ist_aktiv(path)), None
-    )
+    gruppen_eintrag = aktiv or next((e for g in ADMIN_GRUPPEN for e in g.eintraege if e.ist_aktiv(path)), None)
     fallback = next(
         (g.key for g in ADMIN_GRUPPEN if any(path.startswith(p) for p in g.aktiv_praefixe)),
         ADMIN_GRUPPEN[0].key,
     )
-    aktive_gruppe = (
-        (gruppen_eintrag.aktive_gruppe or gruppen_eintrag.gruppe) if gruppen_eintrag else fallback
-    )
+    aktive_gruppe = (gruppen_eintrag.aktive_gruppe or gruppen_eintrag.gruppe) if gruppen_eintrag else fallback
     if path == "/admin/hilfe":
         aktive_gruppe = "hilfe"
     tab = next((t for g in gruppen for e in g.eintraege for t in e.tabs if t.ist_aktiv(path)), None)

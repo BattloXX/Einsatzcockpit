@@ -2,6 +2,7 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Planspiel-Einstellungen{% endblock %}
 {% block head_extra %}
+{{ super() }}
   {% include "planspiel/_design.html" %}
   <link rel="stylesheet" href="/static/css/leaflet.min.css">
   <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
@@ -25,14 +26,15 @@
     @media (max-width: 760px) { .planspiel-map { height: 280px; } .planspiel-actions { flex-direction: column; } }
   </style>
 {% endblock %}
-{% block content %}
+{% block admin_content %}
+{% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <section class="ps-page planspiel-settings">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": none}]) }}
   <div class="ps-header">
     <h1>Einstellungen &amp; Adresspool</h1>
     <a class="btn btn--secondary btn--sm" href="/admin/settings/planspiele/szenarien">Szenariokatalog</a>
   </div>
-  {% include "planspiel/_tabs.html" %}
   {% if fehler %}<p class="form-error">{{ fehler }}</p>{% endif %}
   {% if meldung %}<p class="form-success">{{ meldung }}</p>{% endif %}
 

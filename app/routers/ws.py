@@ -19,6 +19,7 @@ from uuid import uuid4
 import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import OperationalError
+from starlette.websockets import WebSocketDisconnected
 
 from app.core.fehlerlog import log_fehler
 from app.core.permissions import can_access_incident, has_role
@@ -461,19 +462,23 @@ async def sms_gateway_ws(websocket: WebSocket):
             try:
                 raw = await asyncio.wait_for(websocket.receive_text(), timeout=SMS_GATEWAY_IDLE_PING_S)
             except TimeoutError:
-                if await asyncio.to_thread(gateway_routing.state, connection, token.token_hash) != "connected":
-                    await websocket.close(code=4401)
+                try:
+                    if await asyncio.to_thread(gateway_routing.state, connection, token.token_hash) != "connected":
+                        await websocket.close(code=4401)
+                        break
+                    if time.monotonic() - last_received > SMS_GATEWAY_DEAD_AFTER_S:
+                        await websocket.close(code=4408, reason="idle timeout")
+                        logger.info(
+                            "SMS-Gateway getrennt (org_id=%s, token_id=%s, code=4408, "
+                            "reason=idle timeout, duration_s=%.1f, connection_id=%s, worker_id=%s)",
+                            org_id, token_id, time.monotonic() - connected_at,
+                            connection.connection_id, connection.worker_id,
+                        )
+                        break
+                    await websocket.send_text(json.dumps({"type": "ping"}))
+                except WebSocketDisconnected:
+                    # Parallel ersetzt oder getrennt (Reconnect schliesst die alte Verbindung).
                     break
-                if time.monotonic() - last_received > SMS_GATEWAY_DEAD_AFTER_S:
-                    await websocket.close(code=4408, reason="idle timeout")
-                    logger.info(
-                        "SMS-Gateway getrennt (org_id=%s, token_id=%s, code=4408, "
-                        "reason=idle timeout, duration_s=%.1f, connection_id=%s, worker_id=%s)",
-                        org_id, token_id, time.monotonic() - connected_at,
-                        connection.connection_id, connection.worker_id,
-                    )
-                    break
-                await websocket.send_text(json.dumps({"type": "ping"}))
                 continue
             last_received = time.monotonic()
             if last_received - letzter_touch >= 15:
