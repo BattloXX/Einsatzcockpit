@@ -390,16 +390,20 @@ def _seite(dokument: ObjektDokument, nr: int, context: MCPContext) -> ObjektDoku
     description=("Liest einen Plan visuell Seite fuer Seite, etwa BMZ, FBF, Laufkarten und Schluesselsafe-Standorte. "
                  "Zuerst objekt_dokumente_auflisten; aktuelle Planversion waehlen. "
                  "volltext ist OCR und kann Fehler enthalten. Fuer lagegenaue Symbole danach "
-                 "objekt_karte_referenzpunkte verwenden; Koordinaten nie erfinden."),
+                 "objekt_karte_referenzpunkte verwenden; Koordinaten nie erfinden. "
+                 "ausschnitt=[x0,y0,x1,y1] (0..1) fuer kleine Symbole auf der gedrehten Seite. "
+                 "Koordinaten immer auf die Gesamtseite zurueckrechnen; rotation als expected_rotation "
+                 "fuer Georef-Tools verwenden."),
     required_roles=("objekt_verwalter",), module_check=objekt_modul_aktiv,
 )
 async def objekt_dokument_seite_ansehen(context: MCPContext, dokument_id: int, seite: int,
-                                        bild: bool = True, max_kante_px: int = 1600) -> dict[str, object]:
+                                        bild: bool = True, max_kante_px: int = 1600,
+                                        ausschnitt: list[float] | None = None) -> dict[str, object]:
     dokument = _lesbares_dokument(context, dokument_id)
     row = _seite(dokument, seite, context)
     result = seite_ergebnis(dokument, row)
     if bild:
-        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px)
+        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px, ausschnitt)
     write_audit(context.db, "objekt.mcp_seite_angesehen", org_id=context.org_id, user_id=context.user.id,
                 entity_type="objekt_dokument", entity_id=dokument.id,
                 payload={"objekt_id": dokument.objekt_id, "seite": row.seiten_nr})

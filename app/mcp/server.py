@@ -1872,12 +1872,12 @@ async def objekt_dokumente_auflisten(objekt_id: int, ctx: Context | None = None)
     return await _call_registered_tool("objekt_dokumente_auflisten", objekt_id=objekt_id)
 
 
-@server.tool(name="objekt_dokument_seite_ansehen", description=("Liest einen Plan visuell Seite fuer Seite, etwa BMZ, "
-             "FBF, Laufkarten und Schluesselsafe-Standorte; volltext ist OCR und kann Fehler enthalten."))
+@server.tool(name="objekt_dokument_seite_ansehen", description=TOOLS["objekt_dokument_seite_ansehen"].description)
 async def objekt_dokument_seite_ansehen(dokument_id: int, seite: int, bild: bool = True,
-                                        max_kante_px: int = 1600, ctx: Context | None = None) -> list[ContentBlock]:
+                                        max_kante_px: int = 1600, ausschnitt: list[float] | None = None,
+                                        ctx: Context | None = None) -> list[ContentBlock]:
     return await _dokument_seite_inhalt("objekt_dokument_seite_ansehen", dokument_id=dokument_id, seite=seite,
-                                        bild=bild, max_kante_px=max_kante_px)
+                                        bild=bild, max_kante_px=max_kante_px, ausschnitt=ausschnitt)
 
 
 @server.tool(name="objekt_dokument_text", description="Liest den OCR-/Textindex eines Objektdokuments seitenweise.")
@@ -2390,6 +2390,18 @@ async def objekt_karte_georef_zuordnen(
         "objekt_karte_georef_zuordnen", objekt_id=objekt_id, dokument_id=dokument_id, seite=seite,
         bild_ecken=bild_ecken, expected_rotation=expected_rotation, osm_id=osm_id,
         radius_m=radius_m, modell=modell, speichern=speichern,
+    )
+
+
+@server.tool(name="objekt_karte_georef_uebernehmen", description=TOOLS["objekt_karte_georef_uebernehmen"].description)
+async def objekt_karte_georef_uebernehmen(
+    objekt_id: int, von_dokument_id: int, von_seite: int, nach_dokument_id: int, nach_seite: int,
+    punktpaare: list[dict], expected_rotation: int, speichern: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_karte_georef_uebernehmen", objekt_id=objekt_id, von_dokument_id=von_dokument_id,
+        von_seite=von_seite, nach_dokument_id=nach_dokument_id, nach_seite=nach_seite,
+        punktpaare=punktpaare, expected_rotation=expected_rotation, speichern=speichern,
     )
 
 

@@ -113,6 +113,49 @@ zu kalibrieren. Die Antwort nennt Begruendung, gepruefte Hypothesenzahl, vereinf
 `eckenzahlen_osm`, bis zu drei Hypothesen, Bildgroesse, Rotation und Editor-Link.
 Referenzpunkte werden nur bei Klasse A ausgegeben; Koordinaten stammen aus OSM.
 
+## Seitenausschnitt und Drehung
+
+`objekt_dokument_seite_ansehen` liefert das Bild wie der Editor um `rotation` Grad
+im Uhrzeigersinn gedreht, auch beim Thumbnail-Fallback. `bildgroesse` nennt die
+Pixelmasse der gedrehten Gesamtseite vor dem Verkleinern (beim Fallback des
+verfuegbaren Thumbnails). `rotation` als `expected_rotation` fuer Georef-Tools verwenden.
+
+Fuer kleine Symbole optional `ausschnitt=[x0,y0,x1,y1]` angeben: vier endliche Zahlen
+in 0..1, x0 < x1 und y0 < y1, Breite und Hoehe jeweils mindestens 0.02.
+Der Ausschnitt bezieht sich auf die gedrehte Gesamtseite und wird vor dem
+Verkleinern ausgeschnitten. Aus einer Ausschnittposition u,v (jeweils 0..1) immer
+auf Gesamtseitenkoordinaten zurueckrechnen:
+`bild_x = x0 + u*(x1-x0)`, `bild_y = y0 + v*(y1-y0)`.
+Ohne Ausschnitt sind die gelieferten Bildpositionen bereits auf die gedrehte
+Gesamtseite normiert. Das Einsatz-Seitentool liefert dieselbe gedrehte Darstellung.
+
+## Uebernahme auf neue Planversion
+
+`objekt_karte_georef_uebernehmen` uebertraegt die Georeferenz bei Neuscan oder
+anderem Zuschnitt innerhalb derselben Dokumentgruppe auf die aktuelle Version.
+Beide Seiten vorher ansehen. Mindestens vier identische, gut ueber den Plan
+verteilte Merkmale (Gebaeudeecken oder Achsen-Schnittpunkte) auf beiden Seiten
+markieren. `punktpaare` enthaelt 4 bis 30 Eintraege
+`{von_x, von_y, nach_x, nach_y}`, jeweils normiert auf die gedrehte Gesamtseite.
+Quell- und Zieldokument mit Seitennummer sowie `expected_rotation` der neuen
+Seite angeben. Zuerst mit `speichern=false` pruefen; Einsatz-Leserollen duerfen
+analysieren, nur die Objektverwaltung darf speichern.
+
+Die Quelle ist die juengste als `gueltig` gespeicherte Revision mit Parametern.
+Sie darf durch den Versionswechsel als veraltet gelten, ihre gespeicherte Rotation
+und Bildgroesse muessen aber weiterhin zur alten Seite passen. Die Planabbildung
+ist eine Aehnlichkeit mit eigener Seitengeometrie fuer beide Seiten; Spiegelung
+wird abgelehnt. Maximaler Paarfehler: 0.01, Leave-one-out je Paar: 0.02, jeweils
+in Einheiten der neuen Seitenhoehe. Diese Grenzen sind im Pilot zu kalibrieren.
+
+Nur gespeicherte alte Referenzpunkte werden abgebildet; Weltkoordinaten und Quelle
+bleiben erhalten, die Beschreibung nennt die Herkunftsrevision. Punkte ausserhalb
+der neuen Seite werden verworfen und gezaehlt. Es entstehen keine synthetischen
+Referenzen. Danach prueft der bestehende Georef-Pfad mit dem alten Modell die
+uebernommenen Punkte. Nur bestandene Paarpruefung und Status `gueltig` ergeben
+Klasse A. Analyseaufrufe schreiben nichts. Klasse C speichert auch bei
+`speichern=true` nichts; `editor_link` fuer die neue Seite an den Menschen geben.
+
 ## Richtung und Wiederholung
 
 Fuer Pfeile und Zugaenge `bild_richtung={"dx": 1, "dy": 0}` zusammen mit `georef_id`

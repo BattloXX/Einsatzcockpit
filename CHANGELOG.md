@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Objektkarte:** Bugfix: MCP-Seitenbilder werden wie im Editor gedreht ausgeliefert, auch im Einsatz und beim Thumbnail-Fallback. Optionaler Seitenausschnitt mit Koordinatenhinweis, Rotation und Bildgroesse. Neues Tool `objekt_karte_georef_uebernehmen` uebertraegt gespeicherte Referenzpunkte innerhalb derselben Dokumentgruppe auf eine neue Planversion; Paarfehler, Leave-one-out und Georef-Pruefung sichern die Uebernahme. Analyse bleibt lesend, Speicherung nur durch die Objektverwaltung bei Klasse A. Keine Migration.
+
 - **Objektkarte:** MCP-Vorschlaege uebernehmen Bildrichtungen und berechnen Kartenrotationen aus der Georeferenz (Pfeil-Nullrichtung Osten). Wiederholte Planlaeufe aktualisieren offene Vorschlaege per Bildtoleranz oder erkennen bereits freigegebene Marker. Laufkennung `batch_id`, Listenfilter und Ergebniszaehler; kompatible Georef-Revisionen berechnen Richtungen neu. Migration 0334.
 
 - **Objektkarte:** Neues MCP-Tool `objekt_karte_georef_zuordnen` ordnet markierte Bildkonturen deterministisch OSM-Gebaeudeecken zu. Leave-one-out und Mehrdeutigkeitspruefung erlauben nur eindeutige Klasse A zur Speicherung durch die Objektverwaltung; Klasse C verweist zur menschlichen Pruefung auf den Georeferenzierungseditor. Keine Migration.

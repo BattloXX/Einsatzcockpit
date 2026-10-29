@@ -59,14 +59,21 @@ Kein Automatismus beim Upload: Ein Mensch stößt die Bearbeitung im Chat an ("a
 - Lat/lng stammen ausschließlich aus OSM-Ecken; der Client liefert nie Koordinaten.
 
 ### 3.2 `objekt_karte_georef_uebernehmen` (neu)
-- Neue Planversion: Client markiert 3–6 identische Punkte in alter (`von_dokument_id`, Seite) und neuer Seite.
+- Neue Planversion: Client markiert 4 bis 30 identische, gut verteilte Punkte in alter (`von_dokument_id`, Seite) und neuer Seite.
 - Server bildet die gültige alte Georef über Plan-zu-Plan-Ähnlichkeit auf die neue Seite ab, erzeugt Referenzpunkte und
-  validiert mit denselben Schwellen. Nur innerhalb derselben `dokument_gruppe_id`, alte Georef muss gültig gewesen sein.
+  validiert mit denselben Schwellen. Nur innerhalb derselben Dokumentgruppe (`dokument_gruppe_id or id`),
+  Ziel muss aktuell sein. Juengste gespeichert gueltige Quellrevision mit passender Rotation/Bildgroesse verwenden.
+- Isotrope Plan-zu-Plan-Rechnung mit eigenem Seitenverhaeltnis; Spiegelung ablehnen. Paarfehler <= 0.01,
+  Leave-one-out <= 0.02 in neuer Seitenhoehe (im Pilot kalibrieren). Gespeicherte Referenzen abbilden,
+  ausserhalb liegende verwerfen; keine synthetischen Punkte. Klasse A nur mit gueltiger neuer Georef.
+  Analyse mit Rollback; Speichern nur fuer Objektverwaltung, bei Klasse C Editor-Link der neuen Seite.
 
 ### 3.3 `objekt_dokument_seite_ansehen` erweitern
-- Optionaler `ausschnitt` (x, y, b, h normiert) für Zoom auf kleine Symbole; Rückgabe gibt den Ausschnitt und die
+- Optionaler `ausschnitt` ([x0,y0,x1,y1] normiert, Breite/Hoehe mindestens 0.02) für Zoom auf kleine Symbole; Rückgabe gibt den Ausschnitt und die
   Umrechnung auf Seitenkoordinaten mit an, damit der Client gesamtseiten-normierte `bild_x/bild_y` meldet.
-- Metadaten: Bildgröße, Rotation, Dokument-Hash (Grundlage für `expected_rotation` und Konflikterkennung).
+- Bild vor Ausschnitt und Verkleinerung wie im Editor im Uhrzeigersinn drehen, auch Thumbnail-Fallback.
+- Metadaten: Bildgroesse der gedrehten Gesamtseite, Rotation als `expected_rotation`, Ausschnitt und
+  Umrechnung `bild_x=x0+u*(x1-x0)`, `bild_y=y0+v*(y1-y0)`.
 
 ### 3.4 `objekt_karte_vorschlaege` erweitern
 - `bild_richtung` ({dx, dy} im normierten Bild): Server berechnet `rotation` über die lokale Ableitung der Transformation
@@ -109,7 +116,8 @@ Doku/Wiki/CHANGELOG im selben PR).
 - Abnahme: zweiter identischer Lauf erzeugt null neue Vorschläge; Rotation stimmt in der Kartenanzeige.
 
 ### Phase 3 – Seitenausschnitt und Versionsübernahme
-- Ausschnitt in `objekt_dokument_seite_ansehen`; `objekt_karte_georef_uebernehmen`.
+- Ausschnitt und korrigierte Seitenrotation in `objekt_dokument_seite_ansehen`;
+  `objekt_karte_georef_uebernehmen` mit Paar-/LOO-Pruefung und bestehender Georef-Validierung.
 - Abnahme: neue Version mit Zuschnitt/Neuscan erhält gültige Georef aus Vorversion; Wechsel der Dokumentgruppe abgelehnt.
 
 ### Phase 4 – Arbeitsliste, Katalog, Benachrichtigung
