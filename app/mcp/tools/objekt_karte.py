@@ -330,6 +330,58 @@ async def objekt_karte_georef_zuordnen(
 
 
 @register_tool(
+    name="objekt_karte_georef_uebernehmen",
+    description=(
+        "Uebernimmt eine gueltige alte Georeferenz nur innerhalb derselben Dokumentgruppe. "
+        "Beide Seiten vorher mit objekt_dokument_seite_ansehen ansehen; rotation der neuen Seite "
+        "als expected_rotation verwenden. Mindestens 4 identische, gut verteilte Planmerkmale "
+        "(Gebaeudeecken, Achsen-Schnittpunkte) in beiden Seiten markieren. "
+        "punktpaare: 4 bis 30 Objekte {von_x,von_y,nach_x,nach_y}, normiert auf die gedrehte Gesamtseite. "
+        "Erst ohne speichern pruefen; nur die Objektverwaltung darf Klasse A speichern. "
+        "Bei Klasse C editor_link an den Menschen geben."
+    ),
+    required_roles=EINSATZ_LESE_ROLLEN,
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_karte_georef_uebernehmen(
+    context: MCPContext, objekt_id: int, von_dokument_id: int, von_seite: int,
+    nach_dokument_id: int, nach_seite: int, punktpaare: list[dict], expected_rotation: int,
+    speichern: bool = False,
+) -> dict:
+    from app.config import settings
+    from app.core.permissions import has_role
+    from app.mcp.context import MCPPermissionError
+    from app.services import objekt_georef_service, objekt_georef_uebernahme_service
+    from app.services.objekt_karte_vorschlag_service import produktives_objekt
+
+    if context.org_id != context.user.org_id:
+        raise MCPPermissionError("Organisation stimmt nicht ueberein")
+    if speichern and not has_role(context.user, "objekt_verwalter"):
+        raise MCPPermissionError("Objektverwaltung erforderlich")
+    db = context.db
+    try:
+        objekt = produktives_objekt(db, context.org_id, objekt_id)
+        neue_seite = objekt_georef_service._seite(db, objekt, nach_dokument_id, nach_seite)
+        editor_link = (
+            f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}"
+            f"/dokumente/seite/{neue_seite.id}/georef"
+        )
+        ergebnis = objekt_georef_uebernahme_service.uebernehmen(
+            db, objekt, von_dokument_id, von_seite, nach_dokument_id, nach_seite,
+            punktpaare, expected_rotation, context.user.id, speichern,
+        )
+        ergebnis["editor_link"] = editor_link
+        if ergebnis["gespeichert"]:
+            db.commit()
+        else:
+            db.rollback()
+        return ergebnis
+    except Exception:
+        db.rollback()
+        raise
+
+
+@register_tool(
     name="objekt_karte_vorschau",
     description=("Liest Marker und Vorschlaege getrennt mit Warnungen, Dubletten und Prueflink. "
                  "Nach Vorschlagserstellung den ui_link zur menschlichen Pruefung weitergeben. Keine Schreibwirkung."),
