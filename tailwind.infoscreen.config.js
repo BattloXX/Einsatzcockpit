@@ -1,6 +1,6 @@
 module.exports = {
     darkMode: "class",
-    content: ["./app/templates/weather/**/*.html", "./app/templates/infoscreen/statistik.html"],
+    content: ["./app/templates/weather/**/*.html", "./app/templates/road_closure/infoscreen.html", "./app/templates/infoscreen/statistik.html"],
     plugins: [require("@tailwindcss/forms"), require("@tailwindcss/container-queries")],
     theme: {
       extend: {
