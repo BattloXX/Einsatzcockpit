@@ -286,12 +286,15 @@ def _bildgroesse(seite: ObjektDokumentSeite) -> tuple[int, int]:
 
 
 def georef_pruefen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref, *,
-                   dokument: ObjektDokument | None = None, seite: ObjektDokumentSeite | None = None) -> str:
+                   dokument: ObjektDokument | None = None, seite: ObjektDokumentSeite | None = None,
+                   dokument_hash: str | None = "") -> str:
     """Veraltet nur melden, ohne Schreibwirkung fuer lesende MCP-Tools."""
     from app.services.objekt_karte_vorschlag_service import _dokument, _hash
 
     dokument = dokument if dokument is not None else _dokument(db, objekt, g.dokument_id)
-    if not dokument.ist_aktuelle_version or _hash(dokument) != g.dokument_hash:
+    # Leerer String: noch nicht gelesen; None: Datei bereits erfolglos gelesen.
+    hashwert = _hash(dokument) if dokument_hash == "" else dokument_hash
+    if not dokument.ist_aktuelle_version or hashwert != g.dokument_hash:
         return "veraltet"
     s = seite if seite is not None else _seite(db, objekt, g.dokument_id, g.seite)
     try:

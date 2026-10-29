@@ -89,13 +89,16 @@ Kein Automatismus beim Upload: Ein Mensch stößt die Bearbeitung im Chat an ("a
 - Entfernen nur als Prüfhinweis, nie aus bloßem Fehlen im neuen Plan.
 
 ### 3.5 `objekt_karte_bsp_arbeitsliste` (neu, lesend)
-- Objekte mit aktueller Lageplan-Seite ohne gültige Georef, mit veralteter Georef nach neuer Version oder mit veralteten
-  Vorschlägen; je Eintrag nächster empfohlener Schritt.
+- Fertige aktuelle Lageplan-/Brandschutzplan-Seiten von Basisobjekten der eigenen Org; je Seite
+  Georef-Status, offene Vorschlaege, Marker aus dem Planhash und passende Vorversion.
+- Prioritaet: georef_uebernehmen, georef_zuordnen, vorschlaege_pruefen, symbole_erfassen, aktuell.
+  `nur_offen=true` blendet aktuell aus; Limit 1..200 mit Gesamtzahl und Abschneidehinweis.
 - Enthält in der Tool-Beschreibung den Ablauf (Ersatz für fehlende MCP-Prompts):
   Arbeitsliste → Seite ansehen → `georef_zuordnen` (bzw. `georef_uebernehmen`) → Symbole mit `bild_richtung` → `objekt_karte_pruefen` → `objekt_karte_vorschau` → Freigabe durch Menschen.
 
 ### 3.6 `objekt_karte_symbolkatalog` erweitern
-- Aliase/Legendenbegriffe je Code und Hinweis, ob das Symbol eine Richtung trägt.
+- `aliase`/Legendenbegriffe je Systemcode (eigene Codes: leer), `traegt_richtung` und
+  `basisrichtung_grad`: Pfeilstile 90 Grad, andere Stile 0. Keine Migration.
 
 ## 4. Phasen
 
@@ -120,10 +123,12 @@ Doku/Wiki/CHANGELOG im selben PR).
   `objekt_karte_georef_uebernehmen` mit Paar-/LOO-Pruefung und bestehender Georef-Validierung.
 - Abnahme: neue Version mit Zuschnitt/Neuscan erhält gültige Georef aus Vorversion; Wechsel der Dokumentgruppe abgelehnt.
 
-### Phase 4 – Arbeitsliste, Katalog, Benachrichtigung
-- `objekt_karte_bsp_arbeitsliste`, Katalog-Aliase.
-- Optional: nach Upload einer neuen Lageplan-Version Hinweis an Objektverwaltung ("Lageplan braucht Kartenabgleich").
-- Editor-Link aus `georef_zuordnen` öffnet den bestehenden Georef-Editor mit vorbelegten Kandidaten.
+### Phase 4 – Arbeitsliste und Katalog; weitere Schritte offen
+- Umgesetzt: `objekt_karte_bsp_arbeitsliste`, Katalog-Aliase und Richtungsfelder.
+- Offen, nicht Teil dieses PRs: nach Upload einer neuen Lageplan-Version Hinweis an
+  Objektverwaltung ("Lageplan braucht Kartenabgleich").
+- Offen, nicht Teil dieses PRs: Editor-Link aus `georef_zuordnen` mit vorbelegten Kandidaten.
+  Der bestehende Link oeffnet weiterhin den normalen Georef-Editor.
 
 ### Phase 5 – Pilot und Doku
 - 5–10 Objekte Wolfurt mit Ground Truth; Lauf mit Claude.ai und ChatGPT; Fehler in m und Korrekturquote messen,

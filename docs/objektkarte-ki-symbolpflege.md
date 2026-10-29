@@ -21,6 +21,56 @@ Referenzen setzen/verwerfen, Vorschläge schreiben und Freigaben benötigt.
 `veraltete_markieren=true` ist auch beim Auflisten eine Schreibaktion.
 Ein Lesetoken darf keine dieser Änderungen ausführen.
 
+## BSP-Arbeitsliste und Ablauf
+
+`objekt_karte_bsp_arbeitsliste(objekt_id=null, nur_offen=true, limit=50)` liest
+aktuelle, fertig verarbeitete Seiten mit Dokumentart `lageplan` oder
+`brandschutzplan` der eigenen Organisation. Arbeitskopien sind ausgeschlossen.
+Einsatz-Leserollen duerfen die Liste lesen; sie schreibt nichts. `objekt_id`
+grenzt optional auf ein Basisobjekt ein, `limit` liegt zwischen 1 und 200.
+
+Jeder Eintrag nennt Objekt-ID und -Name, Dokument-ID und Versionsnummer, Seite,
+Dokumentart, Titel, Rotation, Georef mit ID/Revision/geprueftem Status/RMSE,
+offene Vorschlaege der Seite, Marker aus dem Planhash sowie gegebenenfalls die
+juengste aeltere Version derselben Dokumentgruppe mit Georef derselben Seite.
+Der Vorversionsstatus ist der gespeicherte Status (`gueltig` oder `veraltet`).
+Markerzahlen gelten pro Objekt und Planhash, auch bei mehrseitigen Dokumenten.
+
+`naechster_schritt` und `hinweis` folgen dieser Prioritaet:
+
+1. `georef_uebernehmen`: keine gueltige Georef, aber Vorversion mit Georef.
+2. `georef_zuordnen`: keine gueltige Georef und keine passende Vorversion.
+3. `vorschlaege_pruefen`: gueltige Georef und offene Vorschlaege.
+4. `symbole_erfassen`: gueltige Georef, keine offenen Vorschlaege und keine Marker
+   aus dieser Planversion.
+5. `aktuell`: gueltige Georef und bereits Marker aus dieser Planversion.
+
+`nur_offen=true` blendet `aktuell` aus. Die Liste sortiert nach Schrittprioritaet,
+dann Objekt-ID, Dokument-ID und Seite. `anzahl_gesamt` zaehlt die gefilterte Liste
+vor dem Limit; `abgeschnitten` zeigt weitere Eintraege an. `ablauf` nennt die
+kurzen Arbeitsschritte, die auch in der Tool-Beschreibung enthalten sind:
+
+1. `objekt_dokument_seite_ansehen`: Rotation merken, fuer Details Ausschnitt nutzen.
+2. `objekt_karte_georef_uebernehmen` oder `objekt_karte_georef_zuordnen` erst ohne
+   Speichern pruefen. Klasse A durch die Objektverwaltung speichern; bei Klasse C
+   `editor_link` an Menschen geben.
+3. `objekt_karte_symbolkatalog` ueber Aliase abgleichen und
+   `objekt_karte_vorschlaege` mit `georef_id`, `bild_x/bild_y`, `bild_richtung`
+   und `batch_id` erfassen.
+4. `objekt_karte_pruefen` und `objekt_karte_vorschau` aufrufen.
+5. Freigabe nur nach ausdruecklicher Bestaetigung des Menschen. Koordinaten nie erfinden.
+
+Der Symbolkatalog ergaenzt die bisherigen Felder um `aliase` (eindeutige
+Legendenbegriffe fuer Systemcodes, sonst leere Liste), `traegt_richtung` und
+`basisrichtung_grad`. Die aktiven Stile `pfeil-voll`/`pfeil-leer` tragen Richtung
+mit Basis 90 Grad (Osten), alle anderen Stile haben Basis 0. Dies gilt auch fuer
+eigene Symbole. Bei `traegt_richtung=true` die sichtbare Richtung als
+`bild_richtung` angeben. Aliase unterstuetzen den Abgleich; die konkrete
+Planlegende und menschliche Bedeutungspruefung bleiben massgeblich.
+
+Upload-Benachrichtigungen und mit Kandidaten vorbelegte Editor-Links sind offen
+und nicht Teil dieser Erweiterung.
+
 ## Ablauf für den KI-Agenten
 
 1. Objekt eindeutig auswählen, etwa mit `objekt_suchen` und `objekt_lesen`.

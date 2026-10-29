@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Objektkarte:** Lesende MCP-BSP-Arbeitsliste fuer fertige aktuelle Lageplan-/Brandschutzplan-Seiten mit priorisiertem naechstem Schritt, Vorversions-Georef und Vorschlags-/Markerzahlen. Symbolkatalog mit Legenden-Aliassen und Richtungsfeldern fuer System- und eigene Symbole. Keine Migration; Upload-Benachrichtigung und vorbelegter Editor-Link bleiben offen.
+
 - **Objektkarte:** Bugfix: MCP-Seitenbilder werden wie im Editor gedreht ausgeliefert, auch im Einsatz und beim Thumbnail-Fallback. Optionaler Seitenausschnitt mit Koordinatenhinweis, Rotation und Bildgroesse. Neues Tool `objekt_karte_georef_uebernehmen` uebertraegt gespeicherte Referenzpunkte innerhalb derselben Dokumentgruppe auf eine neue Planversion; Paarfehler, Leave-one-out und Georef-Pruefung sichern die Uebernahme. Analyse bleibt lesend, Speicherung nur durch die Objektverwaltung bei Klasse A. Keine Migration.
 
 - **Objektkarte:** MCP-Vorschlaege uebernehmen Bildrichtungen und berechnen Kartenrotationen aus der Georeferenz (Pfeil-Nullrichtung Osten). Wiederholte Planlaeufe aktualisieren offene Vorschlaege per Bildtoleranz oder erkennen bereits freigegebene Marker. Laufkennung `batch_id`, Listenfilter und Ergebniszaehler; kompatible Georef-Revisionen berechnen Richtungen neu. Migration 0334.
