@@ -50,6 +50,7 @@
     })();
   </script>
   {% block head_extra %}{% endblock %}
+  <script src="/static/js/native-ptr.js?v={{ ASSET_VERSION }}"></script>
 </head>
 <body data-ew-owner="{{ user.id if user else 0 }}:{{ user.org_id if user else 0 }}:{{ user.roles|map(attribute='code')|sort|join(',') if user else '' }}:{{ 1 if can_view_katplan(request) else 0 }}:{{ request.state.device_token_id or 0 }}:{{ request.state.qr_incident_id or 0 }}:{{ request.state.qr_lage_id or 0 }}" data-document-transfer="{{ 'true' if can_transfer_documents(request) else 'false' }}" data-kontakt-cache-owner="{{ user.id if user else 0 }}:{{ user.org_id if user else 0 }}:{{ 1 if can_view_kontakt_directory(request) else 0 }}:{{ request.state.device_token_id or 0 }}:{{ request.state.qr_incident_id or 0 }}:{{ request.state.qr_lage_id or 0 }}" x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
       :class="{ 'mobile-menu-open': mobileMenuOpen || profilSheetOpen }">

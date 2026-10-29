@@ -532,8 +532,10 @@ function incidentBoard(incidentId, alarm, startedAt) {
       if (document.getElementById('kanban')) this._setupKeyboard(incidentId);
       this._trackOpenModalEntity();
       window.addEventListener('ec:resync', (e) => {
+        if (!document.getElementById('kanban')) return;
         if (e.detail) e.detail.handled = true;
-        this._resyncBoard(incidentId);
+        const work = this._resyncBoard(incidentId);
+        if (e.detail?.promises) e.detail.promises.push(work);
       });
       this._keepaliveTimer = setInterval(() => {
         fetch('/api/v1/live/state', { credentials: 'same-origin', headers: { 'X-EC-Client': this._clientId } })
@@ -695,7 +697,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
       const kanban = document.getElementById('kanban');
       const kanbanScroll = kanban ? { x: kanban.scrollLeft, y: kanban.scrollTop } : null;
       const focusedId = document.activeElement && document.activeElement.id;
-      Promise.all([this._swapKanban(incidentId), this._swapKopfleiste(incidentId)]).finally(() => {
+      return Promise.all([this._swapKanban(incidentId), this._swapKopfleiste(incidentId)]).finally(() => {
         window.scrollTo(scroll.x, scroll.y);
         if (kanban && kanbanScroll) {
           kanban.scrollLeft = kanbanScroll.x;

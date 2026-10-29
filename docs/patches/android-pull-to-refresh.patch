@@ -1,0 +1,36 @@
+--- a/scripts/MainActivity.java
++++ b/scripts/MainActivity.java
+@@ -26,6 +26,7 @@
+     // Von der Seite (native-bridge.js) gesetzt: Karte, Drag-and-Drop, Dialog oder Formular mit
+     // Eingaben aktiv -> kein Pull-to-Refresh, damit weder Bedienung gestört noch Eingaben verworfen werden.
+     private volatile boolean pullBlocked;
++    private String pullPageUrl;
+     private final Handler handler = new Handler(Looper.getMainLooper());
+     private final Runnable stopSpinner = () -> {
+         if (swipe != null) swipe.setRefreshing(false);
+@@ -52,7 +53,11 @@
+         swipe.addView(webView, new ViewGroup.LayoutParams(
+                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+         parent.addView(swipe, index, params);
+-        swipe.setOnChildScrollUpCallback((p, child) -> pullBlocked || webView.getScrollY() > 0);
++        swipe.setOnChildScrollUpCallback((p, child) -> {
++            // JS kennt innere Scrollbereiche. Alte Sperren gelten nicht fuer eine neue Seite.
++            if (pullPageUrl != null && pullPageUrl.equals(webView.getUrl())) return pullBlocked;
++            return webView.canScrollVertically(-1);
++        });
+         swipe.setOnRefreshListener(this::refreshWebContent);
+         webView.addJavascriptInterface(new PullToRefreshBridge(), "ECPtr");
+     }
+@@ -91,7 +96,11 @@
+     private class PullToRefreshBridge {
+         @JavascriptInterface
+         public void setBlocked(boolean blocked) {
+-            pullBlocked = blocked;
++            handler.post(() -> {
++                if (bridge == null) return;
++                pullPageUrl = bridge.getWebView().getUrl();
++                pullBlocked = blocked;
++            });
+         }
+ 
+         @JavascriptInterface

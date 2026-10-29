@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v22';
+const CACHE = 'ec-v23';
 const BOARD_CACHE = 'ec-board-v4';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; Version 2 entfernt alte Kontaktseiten mit zu weiten Rechten)
@@ -15,6 +15,7 @@ const CORE_PRECACHE = [
   '/',
   '/static/css/app.css',
   '/static/js/app.js',
+  '/static/js/native-ptr.js',
   '/static/js/icons.js',
   '/static/js/alpine.min.js',
   '/static/js/htmx.min.js',

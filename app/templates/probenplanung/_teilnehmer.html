@@ -34,10 +34,10 @@
   </div>
 
   <div class="card" style="margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem">
-    <div class="form-group"><label for="teilnehmer-suche">Suche</label><input class="form-input" id="teilnehmer-suche" type="search" placeholder="Name suchen" oninput="filterProbeTeilnehmer()"></div>
-    <div class="form-group"><label for="teilnehmer-gruppe">Gruppe</label><select class="form-select" id="teilnehmer-gruppe" onchange="filterProbeTeilnehmer()"><option value="">Alle Gruppen</option>{% for gruppe in gruppen %}<option value="{{ gruppe.id }}">{{ gruppe.name }}</option>{% endfor %}</select></div>
-    <div class="form-group"><label for="teilnehmer-funktion">Funktion</label><select class="form-select" id="teilnehmer-funktion" onchange="filterProbeTeilnehmer()"><option value="">Alle Funktionen</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}">{{ funktion.name }}</option>{% endfor %}</select></div>
-    <div class="form-group form-group--checkbox"><label for="teilnehmer-offen" style="min-height:44px"><input id="teilnehmer-offen" type="checkbox" onchange="filterProbeTeilnehmer()"> Nur nicht erfasste anzeigen</label></div>
+    <div class="form-group"><label for="teilnehmer-suche">Suche</label><input data-no-dirty class="form-input" id="teilnehmer-suche" type="search" placeholder="Name suchen" oninput="filterProbeTeilnehmer()"></div>
+    <div class="form-group"><label for="teilnehmer-gruppe">Gruppe</label><select data-no-dirty class="form-select" id="teilnehmer-gruppe" onchange="filterProbeTeilnehmer()"><option value="">Alle Gruppen</option>{% for gruppe in gruppen %}<option value="{{ gruppe.id }}">{{ gruppe.name }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label for="teilnehmer-funktion">Funktion</label><select data-no-dirty class="form-select" id="teilnehmer-funktion" onchange="filterProbeTeilnehmer()"><option value="">Alle Funktionen</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}">{{ funktion.name }}</option>{% endfor %}</select></div>
+    <div class="form-group form-group--checkbox"><label for="teilnehmer-offen" style="min-height:44px"><input data-no-dirty id="teilnehmer-offen" type="checkbox" onchange="filterProbeTeilnehmer()"> Nur nicht erfasste anzeigen</label></div>
   </div>
 
   <div id="teilnehmer-liste" style="display:grid;gap:.75rem;margin-top:1rem">

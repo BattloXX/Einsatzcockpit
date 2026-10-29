@@ -9,7 +9,7 @@
   {% if kontext != 'global' %}
   <p class="suche-kontext">Suche in: {{ 'Lage' if kontext == 'gsl' else 'Einsatz' }} {{ kontext_name }}</p>
   {% endif %}
-  <form id="suche-form" method="post" action="/suche/treffer"
+  <form data-no-dirty id="suche-form" method="post" action="/suche/treffer"
         hx-post="/suche/treffer"
         hx-trigger="input changed delay:350ms from:#suche-q, submit, change from:.suche-filter"
         hx-target="#suche-treffer" hx-sync="this:replace" hx-indicator="#suche-laden"

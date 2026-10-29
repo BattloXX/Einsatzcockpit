@@ -282,14 +282,14 @@
     <div class="karte-controls__sep"></div>
     {% for phase in ['eingegangen','erkundung','bewertet','disponiert','in_arbeit','fertig_gemeldet','erledigt'] %}
     <label>
-      <input type="checkbox" class="phase-filter" checked value="{{ phase }}" onchange="applyFilter()">
+      <input data-no-dirty type="checkbox" class="phase-filter" checked value="{{ phase }}" onchange="applyFilter()">
       {{ {'eingegangen':'Eingegangen','erkundung':'Erkundung','bewertet':'Bewertet',
           'disponiert':'Disponiert','in_arbeit':'In Arbeit','fertig_gemeldet':'Fertig gemeldet','erledigt':'Abgeschlossen'}[phase] }}
     </label>
     {% endfor %}
     <div class="karte-controls__sep"></div>
     <label style="color:var(--red);">
-      <input type="checkbox" id="attention-filter" onchange="applyFilter()">
+      <input data-no-dirty type="checkbox" id="attention-filter" onchange="applyFilter()">
       {{ icon("alert-triangle", size="sm") }} Nur Aufmerksamkeit
     </label>
     <a class="karte-mode-btn" href="/lage/{{ lage.id }}">Board</a>
