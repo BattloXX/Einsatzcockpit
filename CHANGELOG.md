@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Objektkarte / BSP-Arbeitsliste:** Nur Lageplan-Seiten werden zur Georeferenzierung vorgeschlagen; Deckblatt-, Geschoss-, Kanal- und Legendenseiten nur, wenn sie bereits eine Georef haben. Dokumente ohne Lageplan-Seite erhalten einen Eintrag `lageplan_klassifizieren` (Befund Pilot Objekt 404: 13 Seiten statt 1).
+
 - **OSM / Systemdiagnose:** Persistente Geodienst-Zaehler mit Redis und lokalem TTL-Fallback, lesendes Admin-MCP-Tool `admin_osm_pruefen` mit parallelen optionalen Status-/PBF-Proben und OSM-Teilstatus ohne HTTP in der Systemuebersicht. Neuer leichter Check `osm.gebaeude_bestand` fuer fehlende/veraltete Bestaende, Prueflaeufe und Importfehler. BSP-Pflichtregeln dokumentiert; keine neue Verwaltungsseite, keine Migration.
 
 - **Objektkarte / OSM:** Gebaeudeumrisse aus konfigurierbaren lokalen PBF-Extrakten, standardmaessig Vorarlberg; Overpass als Rueckfall ausserhalb der importierten Huellen. Begrenzter Download, Aenderungsvergleich mit manueller Pruefung, CLI und Leader-Import (03:30 Europe/Vienna). Veraltete Daten bleiben analysierbar, sperren aber die Georef-Speicherung. Globale OSM-Tabellen, Migration 0335; neue Abhaengigkeit osmium. Betrieb: [lokaler OSM-Bestand](docs/architecture/osm-gebaeude.md).

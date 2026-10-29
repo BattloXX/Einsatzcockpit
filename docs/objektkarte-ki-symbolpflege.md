@@ -26,6 +26,10 @@ Ein Lesetoken darf keine dieser Änderungen ausführen.
 `objekt_karte_bsp_arbeitsliste(objekt_id=null, nur_offen=true, limit=50)` liest
 aktuelle, fertig verarbeitete Seiten mit Dokumentart `lageplan` oder
 `brandschutzplan` der eigenen Organisation. Arbeitskopien sind ausgeschlossen.
+Georeferenziert werden nur Lageplaene: Seiten mit `brandschutzplan` (Deckblatt,
+Geschoss-, Kanal-, Legendenseiten) erscheinen nur, wenn sie selbst oder ihre
+Vorversion bereits eine Georef haben. Hat ein Dokument keine solche Seite, gibt es
+einen einzigen Eintrag ohne Seite mit `lageplan_klassifizieren`.
 Einsatz-Leserollen duerfen die Liste lesen; sie schreibt nichts. `objekt_id`
 grenzt optional auf ein Basisobjekt ein, `limit` liegt zwischen 1 und 200.
 
@@ -44,6 +48,8 @@ Markerzahlen gelten pro Objekt und Planhash, auch bei mehrseitigen Dokumenten.
 4. `symbole_erfassen`: gueltige Georef, keine offenen Vorschlaege und keine Marker
    aus dieser Planversion.
 5. `aktuell`: gueltige Georef und bereits Marker aus dieser Planversion.
+6. `lageplan_klassifizieren`: Dokument ohne Lageplan-Seite; Seite mit
+   `objekt_dokument_seiten_klassifizieren` als `lageplan` markieren.
 
 `nur_offen=true` blendet `aktuell` aus. Die Liste sortiert nach Schrittprioritaet,
 dann Objekt-ID, Dokument-ID und Seite. `anzahl_gesamt` zaehlt die gefilterte Liste

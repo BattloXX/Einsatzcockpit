@@ -193,3 +193,31 @@ def test_schrittprioritaet_und_gebuendelte_abfragen(bsp):
     assert [(e["seite"], e["naechster_schritt"]) for e in antwort["eintraege"]] == [
         (2, "georef_zuordnen"), (1, "symbole_erfassen"),
     ]
+
+
+def test_geschossplaene_nicht_georeferenzieren(bsp):
+    # Lageplan vorhanden: weitere BSP-Seiten ohne Georef erscheinen nicht.
+    with SessionLocal() as db:
+        set_tenant_context(db, bsp["org_id"])
+        for nr, titel in ((2, "Erdgeschoss"), (3, "Kanalplan West"), (4, "Legende")):
+            db.add(ObjektDokumentSeite(org_id=bsp["org_id"], objekt_id=bsp["objekt_id"],
+                                      dokument_id=bsp["dokument_id"], seiten_nr=nr, titel=titel,
+                                      dokumentart="brandschutzplan", bild_pfad="plan.png"))
+        db.commit()
+    eintraege = _lesen(bsp)["eintraege"]
+    assert [(e["seite"], e["naechster_schritt"]) for e in eintraege] == [(1, "georef_zuordnen")]
+
+
+def test_ohne_lageplan_nur_klassifizieren(bsp):
+    with SessionLocal() as db:
+        set_tenant_context(db, bsp["org_id"])
+        db.query(ObjektDokumentSeite).filter_by(dokument_id=bsp["dokument_id"]).one().dokumentart = "brandschutzplan"
+        db.add(ObjektDokumentSeite(org_id=bsp["org_id"], objekt_id=bsp["objekt_id"],
+                                  dokument_id=bsp["dokument_id"], seiten_nr=2, titel="Erdgeschoss",
+                                  dokumentart="brandschutzplan", bild_pfad="plan.png"))
+        db.commit()
+    eintraege = _lesen(bsp)["eintraege"]
+    assert len(eintraege) == 1
+    e = eintraege[0]
+    assert e["naechster_schritt"] == "lageplan_klassifizieren" and e["seite"] is None
+    assert e["dokument_id"] == bsp["dokument_id"] and "lageplan" in e["hinweis"]
