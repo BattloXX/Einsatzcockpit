@@ -1,5 +1,7 @@
 """MCP-Workflow fuer Lagekarten: lesen, georeferenzieren, vorschlagen und freigeben."""
 
+import asyncio
+
 from app.core.permissions import EINSATZ_LESE_ROLLEN
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
@@ -220,21 +222,96 @@ async def objekt_karte_referenzpunkte(
     module_check=objekt_modul_aktiv,
 )
 async def objekt_karte_gebaeude_umrisse(context: MCPContext, objekt_id: int, radius_m: int = 150) -> dict:
-    from app.config import settings
     from app.mcp.context import MCPPermissionError
-    from app.models.master import OrgSettings
-    from app.services.objekt_gebaeude_service import gebaeude_umrisse
+    from app.services import objekt_gebaeude_service
     from app.services.objekt_karte_vorschlag_service import produktives_objekt
 
     if context.org_id != context.user.org_id:
         raise MCPPermissionError("Organisation stimmt nicht ueberein")
     objekt = produktives_objekt(context.db, context.org_id, objekt_id)
+    lat, lng = _overpass_freigabe_pruefen(context, objekt)
+    return await objekt_gebaeude_service.gebaeude_umrisse(lat, lng, radius_m)
+
+
+def _overpass_freigabe_pruefen(context: MCPContext, objekt: Objekt) -> tuple[float, float]:
+    from app.config import settings
+    from app.models.master import OrgSettings
+
     if objekt.lat is None or objekt.lng is None:
         raise ValueError("Objekt hat keine belastbare Bezugskoordinate")
     org_settings = context.db.query(OrgSettings).filter_by(org_id=context.org_id).first()
     if not settings.HYDRANT_ENABLED or (org_settings is not None and not org_settings.hydrant_layer_enabled):
         raise ValueError("OSM-/Overpass-Abfragen sind fuer diese Organisation deaktiviert")
-    return await gebaeude_umrisse(objekt.lat, objekt.lng, radius_m)
+    return objekt.lat, objekt.lng
+
+
+@register_tool(
+    name="objekt_karte_georef_zuordnen",
+    description=(
+        "Ordnet Bildecken deterministisch OSM-Gebaeudeecken zu. Seite vorher mit "
+        "objekt_dokument_seite_ansehen ansehen; expected_rotation aus der angesehenen Seite angeben. "
+        "Alle Aussenecken EINES Gebaeudes entlang der Kontur markieren: bild_ecken als {x,y}, "
+        "normiert 0..1, mindestens 4 Ecken; Startpunkt und Umlaufrichtung egal. "
+        "Keine Koordinaten liefern oder schaetzen. Erst ohne speichern pruefen. "
+        "Nur eindeutige Klasse A kann die Objektverwaltung speichern. Bei Klasse C keine Hypothese "
+        "selbst auswaehlen, sondern editor_link an den Menschen geben. Bei Nachbargebaeuden "
+        "osm_id aus objekt_karte_gebaeude_umrisse angeben."
+    ),
+    required_roles=EINSATZ_LESE_ROLLEN,
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_karte_georef_zuordnen(
+    context: MCPContext, objekt_id: int, dokument_id: int, seite: int, bild_ecken: list[dict],
+    expected_rotation: int, osm_id: int | None = None, radius_m: int = 150,
+    modell: str = "aehnlichkeit", speichern: bool = False,
+) -> dict:
+    from app.config import settings
+    from app.core.permissions import has_role
+    from app.mcp.context import MCPPermissionError
+    from app.services import objekt_gebaeude_service, objekt_georef_service, objekt_georef_zuordnung_service
+    from app.services.objekt_karte_service import ObjektKartenFehler
+    from app.services.objekt_karte_vorschlag_service import produktives_objekt
+
+    if context.org_id != context.user.org_id:
+        raise MCPPermissionError("Organisation stimmt nicht ueberein")
+    if speichern and not has_role(context.user, "objekt_verwalter"):
+        raise MCPPermissionError("Objektverwaltung erforderlich")
+    db = context.db
+    objekt = produktives_objekt(db, context.org_id, objekt_id)
+    lat, lng = _overpass_freigabe_pruefen(context, objekt)
+    s = objekt_georef_service._seite(db, objekt, dokument_id, seite)
+    if expected_rotation != s.rotation:
+        raise ObjektKartenFehler("Dokumentseite wurde inzwischen gedreht; Seite neu ansehen")
+    breite, hoehe = objekt_georef_service._bildgroesse(s)
+    umrisse = await objekt_gebaeude_service.gebaeude_umrisse(lat, lng, radius_m)
+    gebaeude = umrisse["gebaeude"]
+    if osm_id is not None:
+        gebaeude = [g for g in gebaeude if g["osm_id"] == osm_id]
+        if not gebaeude:
+            raise ObjektKartenFehler("OSM-Gebaeude nicht im Umkreis gefunden")
+    # Bis zu MAX_HYPOTHESEN Ausgleichsrechnungen: nicht im Event-Loop rechnen.
+    ergebnis = await asyncio.to_thread(
+        objekt_georef_zuordnung_service.hypothesen_bewerten, bild_ecken, gebaeude, breite, hoehe, modell
+    )
+    georeferenz = None
+    if speichern and ergebnis["klasse"] == "A":
+        try:
+            antwort = objekt_georef_service.referenzpunkte(
+                db, objekt, dokument_id, seite, "setzen", ergebnis["punkte"], modell, context.user.id,
+                nur_gueltig=True, expected_rotation=expected_rotation,
+            )
+            georeferenz = antwort["georeferenz"]
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+    return ergebnis | {
+        "gespeichert": georeferenz is not None, "georeferenz": georeferenz,
+        "bildgroesse": [breite, hoehe], "rotation": s.rotation, "quelle": "OpenStreetMap / Overpass",
+        "editor_link": (
+            f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}/dokumente/seite/{s.id}/georef"
+        ),
+    }
 
 
 @register_tool(

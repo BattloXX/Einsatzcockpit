@@ -106,3 +106,154 @@ def test_umrisse_readonly_org_schalter_und_fehler(client, plan, monkeypatch):
         db.commit()
     assert "deaktiviert" in _rufe(client, token, "objekt_karte_gebaeude_umrisse", **args)["__fehler__"]
     assert mock.await_count == 2
+
+
+@pytest.fixture
+def zuordnungsdaten(plan, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.models.objekt import Objekt
+    from app.services import objekt_gebaeude_service
+    from tests.test_objekt_georef_zuordnung import kontur
+
+    with SessionLocal() as db:
+        set_tenant_context(db, plan["org_id"])
+        objekt = db.get(Objekt, plan["objekt_id"])
+        bild, gebaeude = kontur(lat0=objekt.lat, lng0=objekt.lng)
+    mock = AsyncMock(return_value={"gebaeude": [gebaeude]})
+    monkeypatch.setattr(objekt_gebaeude_service, "gebaeude_umrisse", mock)
+    args = dict(objekt_id=plan["objekt_id"], dokument_id=plan["dokument_id"], seite=1,
+                bild_ecken=bild, expected_rotation=0)
+    return args, mock
+
+
+def _rolle_setzen(plan, rolle):
+    from app.models.user import Role, User, UserRole
+
+    with SessionLocal() as db:
+        set_tenant_context(db, plan["org_id"])
+        user = db.get(User, plan["users"]["u"])
+        for zuordnung in list(user.user_roles):
+            db.delete(zuordnung)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=db.query(Role).filter_by(code=rolle).one().id))
+        db.commit()
+
+
+def _georeferenzen(plan):
+    with SessionLocal() as db:
+        set_tenant_context(db, plan["org_id"])
+        return [(g.id, g.status) for g in db.query(ObjektDokumentGeoref).all()]
+
+
+def test_zuordnen_analyse_als_leser(client, plan, zuordnungsdaten):
+    args, mock = zuordnungsdaten
+    _rolle_setzen(plan, "readonly")
+    token = _token(client, plan, "u")
+    antwort = _rufe(client, token, "objekt_karte_georef_zuordnen", **args)
+    assert antwort["klasse"] == "A", antwort
+    assert not antwort["gespeichert"] and antwort["georeferenz"] is None
+    assert antwort["bildgroesse"] == [2000, 1000] and antwort["rotation"] == 0
+    assert antwort["quelle"] == "OpenStreetMap / Overpass"
+    assert f"/objekte/{plan['objekt_id']}/dokumente/seite/" in antwort["editor_link"]
+    assert antwort["editor_link"].endswith("/georef")
+    assert _georeferenzen(plan) == []
+    mock.assert_awaited_once_with(47.1, 9.2, 150)
+
+
+def test_zuordnen_speichern(client, plan, zuordnungsdaten):
+    args, _ = zuordnungsdaten
+    token = _token(client, plan, "u")
+    antwort = _rufe(client, token, "objekt_karte_georef_zuordnen", **args, speichern=True, osm_id=123)
+    assert antwort["klasse"] == "A" and antwort["gespeichert"], antwort
+    assert _georeferenzen(plan) == [(antwort["georeferenz"]["id"], "gueltig")]
+
+
+def test_zuordnen_speichern_als_leser_verboten(client, plan, zuordnungsdaten):
+    args, mock = zuordnungsdaten
+    _rolle_setzen(plan, "readonly")
+    token = _token(client, plan, "u")
+    antwort = _rufe(client, token, "objekt_karte_georef_zuordnen", **args, speichern=True)
+    assert "Objektverwaltung erforderlich" in antwort["__fehler__"]
+    assert _georeferenzen(plan) == []
+    mock.assert_not_awaited()
+
+
+def test_zuordnen_rechteck_speichert_nie(client, plan, zuordnungsdaten):
+    from tests.test_objekt_georef_zuordnung import RECHTECK, kontur
+
+    args, mock = zuordnungsdaten
+    bild, gebaeude = kontur(RECHTECK, lat0=47.1, lng0=9.2)
+    mock.return_value = {"gebaeude": [gebaeude]}
+    token = _token(client, plan, "u")
+    antwort = _rufe(client, token, "objekt_karte_georef_zuordnen",
+                    **(args | {"bild_ecken": bild}), speichern=True)
+    assert antwort["klasse"] == "C" and not antwort["gespeichert"], antwort
+    assert antwort["punkte"] is None and _georeferenzen(plan) == []
+
+
+@pytest.mark.parametrize("fall", ["rotation", "fremde_org", "deaktiviert", "global_deaktiviert", "osm_id", "overpass"])
+def test_zuordnen_fehler_speichern_nichts(client, plan, zuordnungsdaten, monkeypatch, fall):
+    from app.config import settings
+    from app.models.master import OrgSettings
+    from app.services.objekt_karte_service import ObjektKartenFehler
+
+    args, mock = zuordnungsdaten
+    seed = plan
+    erwartet = ""
+    if fall == "rotation":
+        args["expected_rotation"] = 90
+        erwartet = "Dokumentseite wurde inzwischen gedreht; Seite neu ansehen"
+    elif fall == "fremde_org":
+        seed = _seed("zuordnung-fremd", {"u": "objekt_verwalter"})
+        erwartet = "nicht gefunden"
+    elif fall == "deaktiviert":
+        with SessionLocal() as db:
+            set_tenant_context(db, plan["org_id"])
+            db.query(OrgSettings).filter_by(org_id=plan["org_id"]).one().hydrant_layer_enabled = False
+            db.commit()
+        erwartet = "deaktiviert"
+    elif fall == "global_deaktiviert":
+        monkeypatch.setattr(settings, "HYDRANT_ENABLED", False)
+        erwartet = "deaktiviert"
+    elif fall == "osm_id":
+        args["osm_id"] = 999
+        erwartet = "OSM-Gebaeude nicht im Umkreis gefunden"
+    else:
+        mock.side_effect = ObjektKartenFehler("Overpass-Netzfehler")
+        erwartet = "Overpass-Netzfehler"
+    token = _token(client, seed, "u")
+    antwort = _rufe(client, token, "objekt_karte_georef_zuordnen", **args, speichern=True)
+    assert erwartet in antwort["__fehler__"], antwort
+    assert _georeferenzen(plan) == []
+    if fall not in {"osm_id", "overpass"}:
+        mock.assert_not_awaited()
+
+
+def test_zuordnen_speicherfehler_rollt_zurueck(client, plan, zuordnungsdaten, monkeypatch):
+    from app.services import objekt_georef_service
+
+    original = objekt_georef_service.referenzpunkte
+
+    def fehler_nach_speichern(*args, **kwargs):
+        original(*args, **kwargs)
+        raise ValueError("Speichern fehlgeschlagen")
+
+    monkeypatch.setattr(objekt_georef_service, "referenzpunkte", fehler_nach_speichern)
+    args, _ = zuordnungsdaten
+    token = _token(client, plan, "u")
+    antwort = _rufe(client, token, "objekt_karte_georef_zuordnen", **args, speichern=True)
+    assert "Speichern fehlgeschlagen" in antwort["__fehler__"]
+    assert _georeferenzen(plan) == []
+
+
+def test_zuordnen_tool_liste_und_beschreibung(client, plan):
+    from app.mcp.registry import TOOLS
+    from tests.test_mcp_objekte import _mcp
+
+    token = _token(client, plan, "u")
+    name = "objekt_karte_georef_zuordnen"
+    assert name in _mcp(client, token, "tools/list", {}, 1).text
+    beschreibung = TOOLS[name].description
+    for text in ("objekt_dokument_seite_ansehen", "Keine Koordinaten", "Klasse C", "editor_link", "osm_id"):
+        assert text in beschreibung
