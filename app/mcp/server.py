@@ -23,9 +23,11 @@ from mcp_types import ContentBlock, ImageContent, TextContent
 from pydantic import AnyHttpUrl, AnyUrl, BaseModel
 
 from app.config import settings
+from app.core.fehlerlog import neue_korrelations_id
 from app.core.security import hash_api_key
 from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
+from app.mcp.fehler import ExternerDienstFehler
 from app.mcp.registry import TOOLS
 from app.mcp.tools import alarm_parser as _alarm_parser  # noqa: F401 - registriert Alarmdiagnose
 from app.mcp.tools import benutzer as _benutzer  # noqa: F401 - registriert Benutzer-Lesetools
@@ -302,6 +304,15 @@ async def _call_registered_tool(tool_name: str, **arguments) -> dict[str, object
         raise ToolError(str(exc)) from exc
     try:
         return await definition.handler(context, **arguments)
+    except ExternerDienstFehler as exc:
+        correlation_id = neue_korrelations_id()
+        logger.warning("Externer MCP-Fehler: code=%s tool=%s correlation_id=%s", exc.code, tool_name, correlation_id)
+        # Das Client-Label (z. B. INVALID_ARGUMENT) bestimmt der Client; der Inhalt
+        # kennzeichnet den Fehler eindeutig als extern und seine Wiederholbarkeit.
+        raise ToolError(json.dumps(exc.details | {
+            "fehlerart": "extern", "code": exc.code, "meldung": exc.meldung,
+            "retryable": exc.retryable, "correlation_id": correlation_id,
+        })) from exc
     except (ValueError, MCPPermissionError) as exc:
         # Nur fachliche Meldungen an den Client geben; das SDK maskiert sonst jede Ausnahme.
         raise ToolError(str(exc)) from exc

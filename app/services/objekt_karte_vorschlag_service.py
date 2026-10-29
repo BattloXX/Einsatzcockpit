@@ -379,12 +379,24 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
             code, d.get("label"), d.get("lat"), d.get("lng"), a.symbol_code, a.label, a.lat, a.lng
         ):
             warnungen.append({"code": "moegliche_dublette", "vorschlag_id": a.id})
+    warnungen_json = json.dumps(warnungen)
+    if v is not None:
+        def gleich(alt: Any, neu: Any) -> bool:
+            if isinstance(alt, float) and isinstance(neu, (float, int)):
+                return math.isclose(alt, neu, rel_tol=0, abs_tol=1e-9)
+            return bool(alt == neu)
+
+        if all(gleich(getattr(v, k), d.get(k)) for k in _FELDER - {"batch_id"}) and v.warnungen_json == warnungen_json:
+            if "batch_id" in d and v.batch_id != d["batch_id"]:
+                v.batch_id = d["batch_id"]
+                db.flush()
+            return vorschlag_dict(v, db, objekt) | {"ergebnis": "unveraendert_offen"}
     if v is None:
         v = ObjektKartenVorschlag(objekt_id=objekt.id, org_id=objekt.org_id, erstellt_von=user_id)
         db.add(v)
     for k, wert in d.items():
         setattr(v, k, wert)
-    v.warnungen_json = json.dumps(warnungen)
+    v.warnungen_json = warnungen_json
     db.flush()
     antwort = vorschlag_dict(v)
     write_objekt_change(db, objekt.id, objekt.org_id, "karte", "vorschlag_geaendert" if vorher else "vorschlag_neu",

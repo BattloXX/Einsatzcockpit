@@ -372,8 +372,8 @@ Die Objektliste zeigt pro Planseite den Georef-Status (Badge) und den Button
 ## Overpass-Verfuegbarkeit und Zeitbudget
 
 Gebaeudeumrisse nutzen zuerst `HYDRANT_OVERPASS_URL`, bei Ueberlastung oder Timeout
-anschliessend die kommagetrennten `OVERPASS_FALLBACK_URLS`. Standard sind die
-im OSM-Wiki gelisteten oeffentlichen Instanzen private.coffee und kumi.systems;
+anschliessend die kommagetrennten `OVERPASS_FALLBACK_URLS`. Standard ist
+private.coffee; kumi.systems ist derselbe Host (193.219.97.30);
 ein leerer Wert schaltet Fallback ab. Die URLs muessen HTTPS verwenden.
 
 `OBJEKT_GEBAEUDE_TIMEOUT_SECONDS` begrenzt jeden Versuch auf 25 s,
@@ -388,3 +388,38 @@ Der gemeinsame Fehlerschutz je Endpunkt verwendet `OVERPASS_ENDPUNKT_FEHLER`
 `OVERPASS_ENDPUNKT_PAUSE_SECONDS` (300 s). HTTP 429 mit `Retry-After` pausiert
 mindestens fuer die angegebene Dauer. Alle Einstellungen sind per Env ueberschreibbar;
 Schluessel enthalten nur den URL-Hash, Fallback-Logs nur den Hostnamen.
+
+### Fehlercodes
+
+Externe Fehler werden im MCP als JSON-Fehlertext mit `fehlerart="extern"`,
+`code`, `meldung`, `retryable` und `correlation_id` ausgegeben. Das vom Client
+angezeigte Label (etwa INVALID_ARGUMENT) bestimmt der Client.
+`endpunkte` enthaelt nur Hostnamen, Fehlercodes, HTTP-Status, Dauer in ms und
+`uebersprungen`; `attempted_endpoints_count` zaehlt tatsaechliche Versuche.
+Bei Gesamtausfall stehen die Einzelcodes in diesen Versuchsdaten.
+
+| Code | Bedeutung | retryable |
+|---|---|---|
+| OVERPASS_ALL_ENDPOINTS_FAILED | Alle verfuegbaren Endpunkte fehlgeschlagen oder gesperrt | true |
+| OVERPASS_TIMEOUT | Verbindungs-, Lese- oder Gesamtzeitlimit erreicht | true |
+| OVERPASS_RATE_LIMIT | HTTP 429; Retry-After wird beim Fehlerschutz beachtet | true |
+| OVERPASS_HTTP_5XX | HTTP 500 bis 599; naechster Endpunkt wird versucht | true |
+| OVERPASS_DNS_ERROR | Namensaufloesung fehlgeschlagen | true |
+| OVERPASS_TLS_ERROR | TLS-Verbindung fehlgeschlagen | true |
+| OVERPASS_CONNECTION_ERROR | Sonstiger Transportfehler | true |
+| OVERPASS_INVALID_RESPONSE | Kein JSON/Objekt oder Overpass-timeout/runtime error | true |
+| OVERPASS_HTTP_4XX | Abfrage abgelehnt (ausser 429); kein Fallback | false |
+
+Erfolgreiche Gebaeudeantworten enthalten `cache_status="miss"` bei frischer
+Abfrage und `"hit"` beim Cache-Treffer; `gebaeude=[]` ist ein Erfolg.
+Ein Negativcache-Treffer liefert `cache_status="negativ_cache"` und `retry_after_s`.
+Ungueltige Eingaben wie `radius_m` bleiben Validierungsfehler.
+
+### Deploy-Revision bei systemd/venv
+
+Bei Deploys mit `git pull` liest die Anwendung `GIT_SHA` beim Start aus `.git`,
+wenn die Einstellung leer oder `unknown` ist. Unterstuetzt werden lose und
+gepackte Branch-Referenzen, detached HEAD und Worktrees mit `.git`-Datei.
+Nur volle 40-stellige Hex-SHAs werden als Fallback akzeptiert. Ein gesetzter
+Build-Wert bleibt erhalten. Fehlende oder unlesbare Git-Daten lassen den Wert
+leer; der Start scheitert deshalb nicht. Nach `git pull` den Dienst neu starten.

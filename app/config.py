@@ -1,5 +1,10 @@
-from pydantic import AliasChoices, Field
+from pathlib import Path
+from typing import Self
+
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.git_sha import lese_git_sha
 
 SECRET_KEY_PLACEHOLDER = "change-me-in-production"
 BOOTSTRAP_PASSWORD_PLACEHOLDER = "admin"
@@ -266,7 +271,8 @@ class Settings(BaseSettings):
     HYDRANT_ENABLED: bool = True
     HYDRANT_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
     # Oeffentliche Instanzen laut OSM-Wiki; per Env ueberschreibbar, leer = kein Fallback.
-    OVERPASS_FALLBACK_URLS: str = "https://overpass.private.coffee/api/interpreter,https://overpass.kumi.systems/api/interpreter"
+    # kumi.systems ist derselbe Host wie private.coffee.
+    OVERPASS_FALLBACK_URLS: str = "https://overpass.private.coffee/api/interpreter"
     OVERPASS_ENDPUNKT_FEHLER: int = 2
     OVERPASS_ENDPUNKT_FENSTER_SECONDS: int = 300
     OVERPASS_ENDPUNKT_PAUSE_SECONDS: int = 300
@@ -527,6 +533,12 @@ class Settings(BaseSettings):
     EUS_SMS_HTTP_TIMEOUT: int = 15
     EUS_SMS_TOKEN_MARGIN_S: int = 60
     EUS_SMS_CONCURRENCY: int = 10
+
+    @model_validator(mode="after")
+    def git_revision_ergaenzen(self) -> Self:
+        if not self.GIT_SHA or self.GIT_SHA == "unknown":
+            self.GIT_SHA = lese_git_sha(Path(__file__).resolve().parent.parent)
+        return self
 
     @property
     def effective_public_base_url(self) -> str:

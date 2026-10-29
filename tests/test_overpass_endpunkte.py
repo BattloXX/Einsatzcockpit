@@ -67,8 +67,9 @@ async def test_fallback(fehler, monkeypatch, caplog):
 async def test_abfragefehler_sofort(status, monkeypatch):
     post = AsyncMock(return_value=_antwort(status))
     monkeypatch.setattr(httpx.AsyncClient, "post", post)
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(oe.OverpassAbfrageFehler) as fehler:
         await _abfragen()
+    assert fehler.value.code == "OVERPASS_HTTP_4XX"
     assert post.await_count == 1
     assert not hs._cache
 
@@ -142,3 +143,66 @@ async def test_erfolg_setzt_fehler_zurueck(monkeypatch):
             await _abfragen()
         await _abfragen()
     assert post.await_count == 4
+
+
+def _mit_ursache(fehler, ursache, kontext=False):
+    if kontext:
+        fehler.__context__ = ursache
+    else:
+        fehler.__cause__ = ursache
+    return fehler
+
+
+@pytest.mark.parametrize("fehler,code", [
+    (httpx.ConnectTimeout("langsam"), "OVERPASS_TIMEOUT"),
+    (httpx.ReadTimeout("langsam"), "OVERPASS_TIMEOUT"),
+    (TimeoutError(), "OVERPASS_TIMEOUT"),
+    (httpx.ConnectError("Name or service not known"), "OVERPASS_DNS_ERROR"),
+    (httpx.ConnectError("Temporary failure in name resolution"), "OVERPASS_DNS_ERROR"),
+    (httpx.ConnectError("offline"), "OVERPASS_CONNECTION_ERROR"),
+    (_antwort(429, headers={"Retry-After": "60"}), "OVERPASS_RATE_LIMIT"),
+    *[(_antwort(status), "OVERPASS_HTTP_5XX") for status in (500, 502, 503, 504)],
+    (_antwort(daten=[]), "OVERPASS_INVALID_RESPONSE"),
+    (_antwort(daten={"remark": "timeout"}), "OVERPASS_INVALID_RESPONSE"),
+    (_antwort(daten={"remark": "runtime error"}), "OVERPASS_INVALID_RESPONSE"),
+    (httpx.Response(200, text="kaputt", request=httpx.Request("POST", PRIMAER)), "OVERPASS_INVALID_RESPONSE"),
+])
+async def test_fehlercodes(fehler, code, monkeypatch):
+    monkeypatch.setattr(httpx.AsyncClient, "post", AsyncMock(side_effect=[fehler, fehler]))
+    with pytest.raises(oe.OverpassNichtVerfuegbar) as ausfall:
+        await _abfragen()
+    assert ausfall.value.code == "OVERPASS_ALL_ENDPOINTS_FAILED"
+    assert len(ausfall.value.versuche) == 2
+    for versuch in ausfall.value.versuche:
+        assert versuch["code"] == code
+        assert versuch["host"] in {"primaer.test", "fallback.test"}
+        assert versuch["dauer_ms"] >= 0
+        assert not versuch["uebersprungen"]
+        assert versuch["http_status"] == (fehler.status_code if isinstance(fehler, httpx.Response) else None)
+
+
+@pytest.mark.parametrize("kontext", [False, True])
+async def test_ursachenkette(kontext, monkeypatch):
+    import socket
+    import ssl
+
+    for ursache, code in ((socket.gaierror("unbekannt"), "OVERPASS_DNS_ERROR"),
+                          (ssl.SSLError("zertifikat"), "OVERPASS_TLS_ERROR")):
+        hs._cache.clear()
+        fehler = _mit_ursache(httpx.ConnectError("Verbindung"),
+                              _mit_ursache(OSError("Zwischenschicht"), ursache, kontext), kontext)
+        monkeypatch.setattr(httpx.AsyncClient, "post", AsyncMock(side_effect=fehler))
+        with pytest.raises(oe.OverpassNichtVerfuegbar) as ausfall:
+            await _abfragen()
+        assert all(v["code"] == code for v in ausfall.value.versuche)
+
+
+async def test_uebersprungene_endpunkte(monkeypatch):
+    post = AsyncMock(return_value=_antwort(502))
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    for _ in range(3):
+        with pytest.raises(oe.OverpassNichtVerfuegbar) as ausfall:
+            await _abfragen()
+    assert ausfall.value.versuchte == 0
+    assert len(ausfall.value.versuche) == 2
+    assert all(v["uebersprungen"] and v["code"] == "OVERPASS_HTTP_5XX" for v in ausfall.value.versuche)

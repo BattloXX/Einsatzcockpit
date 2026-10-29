@@ -8,6 +8,7 @@ import time
 import httpx
 
 from app.config import settings
+from app.mcp.fehler import ExternerDienstFehler
 from app.services import hydrant_service as overpass
 from app.services import shared_cache
 from app.services.objekt_karte_service import ObjektKartenFehler
@@ -24,12 +25,15 @@ async def gebaeude_umrisse(lat: float, lng: float, radius_m: int = 150) -> dict:
             async with overpass._sperre(key):
                 cached = await overpass._lesen(key)
                 if cached is not None:
-                    return cached
+                    return cached | {"cache_status": "hit"}
                 negativ = await overpass._lesen(key + ":negativ") or {}
                 if negativ.get("bis", 0) > time.time():
-                    raise ObjektKartenFehler(
-                        "Overpass derzeit nicht erreichbar "
-                        "(alle Endpunkte ausgelastet oder gesperrt); bitte spaeter erneut versuchen"
+                    raise ExternerDienstFehler(
+                        code="OVERPASS_ALL_ENDPOINTS_FAILED", retryable=True,
+                        meldung="Overpass derzeit nicht erreichbar (alle Endpunkte ausgelastet oder gesperrt)",
+                        details={"attempted_endpoints_count": negativ.get("anzahl", 0),
+                                 "endpunkte": negativ.get("endpunkte", []), "cache_status": "negativ_cache",
+                                 "retry_after_s": max(0, int(negativ["bis"] - time.time()) + 1)},
                     )
                 try:
                     # Zwei Sekunden Reserve fuer Cache und Aufbereitung innerhalb des Gesamtbudgets.
@@ -57,21 +61,32 @@ async def gebaeude_umrisse(lat: float, lng: float, radius_m: int = 150) -> dict:
                 except OverpassNichtVerfuegbar as exc:
                     await overpass._setzen(
                         key + ":negativ",
-                        {"bis": time.time() + 60, "endpunkte": exc.versuchte}, 60,
+                        {"bis": time.time() + 60, "anzahl": exc.versuchte, "endpunkte": exc.versuche}, 60,
                     )
-                    raise ObjektKartenFehler(
-                        "Overpass derzeit nicht erreichbar "
+                    raise ExternerDienstFehler(
+                        code=exc.code, retryable=True,
+                        details={"attempted_endpoints_count": exc.versuchte, "endpunkte": exc.versuche,
+                                 "cache_status": "miss"},
+                        meldung="Overpass derzeit nicht erreichbar "
                         f"(alle Endpunkte ausgelastet oder gesperrt, {exc.versuchte} versucht); "
                         "bitte spaeter erneut versuchen"
                     ) from exc
+                except httpx.HTTPStatusError as exc:
+                    raise ExternerDienstFehler(
+                        code="OVERPASS_HTTP_4XX", retryable=False,
+                        meldung="Overpass-Gebaeudeabfrage fehlgeschlagen", details={"cache_status": "miss"},
+                    ) from exc
                 except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
-                    raise ObjektKartenFehler(
-                        "Overpass-Gebaeudeabfrage fehlgeschlagen; keine Referenzdaten verfuegbar"
+                    raise ExternerDienstFehler(
+                        code="OVERPASS_INVALID_RESPONSE", retryable=True,
+                        details={"cache_status": "miss"},
+                        meldung="Overpass-Gebaeudeabfrage fehlgeschlagen; keine Referenzdaten verfuegbar"
                     ) from exc
                 ergebnis = {"gebaeude": items[:100], "quelle": "OpenStreetMap / Overpass"}
                 await overpass._setzen(key, ergebnis, settings.HYDRANT_CACHE_TTL_SECONDS)
-                return ergebnis
+                return ergebnis | {"cache_status": "miss"}
     except (TimeoutError, shared_cache.LockTimeout) as exc:
-        raise ObjektKartenFehler(
-            "Zeitlimit der Overpass-Gebaeudeabfrage erreicht; keine Referenzdaten verfuegbar"
+        raise ExternerDienstFehler(
+            code="OVERPASS_TIMEOUT", retryable=True, details={"cache_status": "miss"},
+            meldung="Zeitlimit der Overpass-Gebaeudeabfrage erreicht; keine Referenzdaten verfuegbar"
         ) from exc

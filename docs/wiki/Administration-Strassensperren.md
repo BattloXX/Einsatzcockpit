@@ -57,7 +57,7 @@ Die Abschnittsermittlung fragt das OSM-Straßennetz über Overpass ab – zuerst
 | Variable | Standard | Bedeutung |
 |----------|----------|-----------|
 | `STRASSEN_OVERPASS_URL` | `https://overpass-api.de/api/interpreter` | Overpass-Endpunkt |
-| `OVERPASS_FALLBACK_URLS` | `https://overpass.private.coffee/api/interpreter,https://overpass.kumi.systems/api/interpreter` | HTTPS-Ausweichendpunkte, kommagetrennt; leer deaktiviert Fallback. Wiederholungen nutzen den naechsten Endpunkt. |
+| `OVERPASS_FALLBACK_URLS` | `https://overpass.private.coffee/api/interpreter` | HTTPS-Ausweichendpunkte, kommagetrennt; kumi.systems ist derselbe Host wie private.coffee; leer deaktiviert Fallback. Wiederholungen nutzen den naechsten Endpunkt. |
 | `STRASSEN_OVERPASS_TIMEOUT_SECONDS` | `20` | Timeout je Anfrage; bei Überlast (429/502/503/504, Timeout) wird einmal wiederholt |
 | `STRASSEN_SUCHRADIUS_M` | `6000` | Umkreis um Ort/Organisation, falls das Gemeindegebiet nichts liefert |
 
