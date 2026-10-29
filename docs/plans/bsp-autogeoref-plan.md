@@ -71,8 +71,14 @@ Kein Automatismus beim Upload: Ein Mensch stößt die Bearbeitung im Chat an ("a
 ### 3.4 `objekt_karte_vorschlaege` erweitern
 - `bild_richtung` ({dx, dy} im normierten Bild): Server berechnet `rotation` über die lokale Ableitung der Transformation
   (`parameter_json`), Nullrichtung und Drehsinn gemäß `objekt_karte.js`; `rotation` und `bild_richtung` gleichzeitig verboten.
-- `batch_id` (Client-gewählt) und serverseitiger `detektions_schluessel` (Dokument-Hash, Seite, Code, gerundeter Bildpunkt):
-  wiederholter Aufruf aktualisiert bestehende offene Vorschläge statt neue anzulegen.
+- `bild_richtung_x/_y` speichern den normierten Bildvektor; y zeigt nach unten. Pfeilstile
+  `pfeil-voll`/`pfeil-leer` zeigen ohne Rotation nach Osten (Basis 90 Grad), andere Symbole nach Norden.
+  Kartenrotation = gerundete Peilung minus Basis, modulo 360; ungueltige Georef ergibt 0 und Warnung.
+- `batch_id` (Client-gewaehlt, 1-64 Zeichen aus A-Za-z0-9_.:-) kennzeichnet einen Lauf und filtert Listen.
+  Idempotenz bei Neuanlage mit Georef: produktiver Marker mit gleichem Hash, Seite und Code unter 3 m
+  ergibt `unveraendert`; sonst aktualisiert ein offener Vorschlag mit gleichem Hash, Seite, Code und Operation
+  bei Bildabstand unter `BILD_TOLERANZ = 0.01` den Bestand (`aktualisiert`). Sonst `neu`.
+  Fuer andere Faelle bleibt der exakte Vergleich (`unveraendert_offen`). `zusammenfassung` zaehlt die Ergebnisse.
 - Entfernen nur als Prüfhinweis, nie aus bloßem Fehlen im neuen Plan.
 
 ### 3.5 `objekt_karte_bsp_arbeitsliste` (neu, lesend)
@@ -96,8 +102,10 @@ Doku/Wiki/CHANGELOG im selben PR).
 - Abnahme: synthetische Fälle korrekt; mehrdeutige Fälle speichern nichts.
 
 ### Phase 2 – Richtung und Idempotenz (`objekt_karte_vorschlaege`)
-- Rotation aus Bildvektor; Test mit bekannter Transformation (90°-Drehung, Spiegelung abgelehnt).
-- Migration: `batch_id`, `detektions_schluessel` an `objekt_karten_vorschlag` (Index org/objekt/Schlüssel).
+- Rotation aus Bildvektor ueber lokale Transformationsableitung; nichtquadratisches Bild beruecksichtigen.
+  Bei kompatibler neuer Georef-Revision Position und Richtung offener Vorschlaege neu berechnen.
+- Migration 0334: `bild_richtung_x`, `bild_richtung_y`, `batch_id` an `objekt_karten_vorschlag`,
+  Index auf org/objekt/batch_id. Toleranzabgleich statt gerundetem Detektionsschluessel.
 - Abnahme: zweiter identischer Lauf erzeugt null neue Vorschläge; Rotation stimmt in der Kartenanzeige.
 
 ### Phase 3 – Seitenausschnitt und Versionsübernahme

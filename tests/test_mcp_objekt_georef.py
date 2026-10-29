@@ -257,3 +257,41 @@ def test_zuordnen_tool_liste_und_beschreibung(client, plan):
     beschreibung = TOOLS[name].description
     for text in ("objekt_dokument_seite_ansehen", "Keine Koordinaten", "Klasse C", "editor_link", "osm_id"):
         assert text in beschreibung
+
+
+def test_richtung_batch_wiederholung_und_filter(client, plan):
+    token = _token(client, plan, "u")
+    g = _rufe(client, token, "objekt_karte_referenzpunkte", objekt_id=plan["objekt_id"],
+              dokument_id=plan["dokument_id"], seite=1, aktion="setzen", punkte=punkte())["georeferenz"]
+    args = dict(objekt_id=plan["objekt_id"], aktion="anlegen", batch_id="bsp:2026-10.29_1", vorschlaege=[
+        dict(symbol_code=code, georef_id=g["id"], bild_x=x, bild_y=0.5, bild_richtung={"dx": 1, "dy": 0})
+        for code, x in (("hauptzugang", 0.3), ("tor", 0.7))
+    ])
+    erster = _rufe(client, token, "objekt_karte_vorschlaege", **args)
+    assert erster["zusammenfassung"]["neu"] == 2, erster
+    zweiter = _rufe(client, token, "objekt_karte_vorschlaege", **args)
+    assert zweiter["zusammenfassung"] == {
+        "neu": 0, "aktualisiert": 2, "unveraendert": 0, "unveraendert_offen": 0,
+    }
+    assert [v["id"] for v in erster["vorschlaege"]] == [v["id"] for v in zweiter["vorschlaege"]]
+    assert [v["rotation"] for v in zweiter["vorschlaege"]] == [330, 60]
+    basis = dict(objekt_id=plan["objekt_id"], aktion="auflisten", filter_status="offen")
+    assert len(_rufe(client, token, "objekt_karte_vorschlaege", **basis)["vorschlaege"]) == 2
+    assert len(_rufe(client, token, "objekt_karte_vorschlaege", **basis,
+                     batch_id=args["batch_id"])["vorschlaege"]) == 2
+    assert _rufe(client, token, "objekt_karte_vorschlaege", **basis, batch_id="anderer")["vorschlaege"] == []
+    aendern = _rufe(client, token, "objekt_karte_vorschlaege", objekt_id=plan["objekt_id"], aktion="aendern",
+                    vorschlag_id=zweiter["vorschlaege"][0]["id"], batch_id="lauf2", vorschlaege=[{"label": "Zugang"}])
+    assert aendern["vorschlaege"][0]["batch_id"] == "lauf2"
+    assert aendern["vorschlaege"][0]["ergebnis"] == "aktualisiert"
+    assert len(_rufe(client, token, "objekt_karte_vorschlaege", **basis,
+                     batch_id=args["batch_id"])["vorschlaege"]) == 1
+
+
+@pytest.mark.parametrize("batch_id", ["", "a" * 65, "lauf 1", "lauf/1", "ä", 123])
+@pytest.mark.parametrize("aktion", ["anlegen", "aendern", "auflisten"])
+def test_batch_id_ungueltig(client, plan, batch_id, aktion):
+    token = _token(client, plan, "u")
+    antwort = _rufe(client, token, "objekt_karte_vorschlaege", objekt_id=plan["objekt_id"],
+                    aktion=aktion, batch_id=batch_id, vorschlaege=[{"symbol_code": "tor"}])
+    assert "__fehler__" in antwort

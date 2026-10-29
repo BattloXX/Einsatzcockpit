@@ -73,6 +73,10 @@ async def objekt_karte_symbolkatalog(context: MCPContext) -> dict[str, object]:
         "Eintrag: symbol_code, operation (hinzufuegen|aendern|entfernen), lat/lng oder geometry, label, "
         "georef_id, bild_x, bild_y (normiert 0..1, Ursprung oben links). Mit georef_id keine lat/lng oder geometry; "
         "der Server rechnet um. Bildpositionen ergeben ohne gueltige Georeferenz keine Position. "
+        "Fuer Pfeile/Zugaenge bild_richtung {dx,dy} statt rotation: sichtbare Richtung im Bild "
+        "(rechts +dx, unten +dy, Pixelverhaeltnis); Server rechnet Kartenrotation. "
+        "Wiederholung erzeugt keine Dubletten. batch_id kennzeichnet einen Lauf (1-64 Zeichen, A-Za-z0-9_.:-). "
+        "Fehlen eines Symbols im neuen Plan ist kein Grund fuer entfernen. "
         "rotation, position_methode, genauigkeit_m, erkennungs_konfidenz (0..1), quelle_dokument_id, "
         "quelle_seite, quelle_ausschnitt ([x0,y0,x1,y1], 0..1), begruendung. "
         "Markeränderungen benötigen basis_marker_id und expected_revision. filter_status ist der Freigabestatus. "
@@ -85,6 +89,7 @@ async def objekt_karte_vorschlaege(
     context: MCPContext, objekt_id: int, aktion: str,
     vorschlaege: list[dict] | None = None, vorschlag_id: int | None = None,
     filter_status: str | None = None, pruefen: bool = False, veraltete_markieren: bool = False,
+    batch_id: str | None = None,
 ) -> dict[str, object]:
     from app.core.permissions import has_role
     from app.mcp.context import MCPPermissionError
@@ -96,6 +101,8 @@ async def objekt_karte_vorschlaege(
         raise MCPPermissionError("Organisation stimmt nicht ueberein")
     if (aktion != "auflisten" or veraltete_markieren) and not has_role(context.user, "objekt_verwalter"):
         raise MCPPermissionError("Objektverwaltung erforderlich")
+    if batch_id is not None:
+        service.batch_id_validieren(batch_id)
     db = context.db
     objekt = service.produktives_objekt(db, context.org_id, objekt_id)
     if aktion == "auflisten":
@@ -104,7 +111,8 @@ async def objekt_karte_vorschlaege(
                 from app.services.objekt_karte_freigabe_service import markiere_veraltete
                 markiere_veraltete(db, objekt)
             antwort_liste: dict[str, object] = {"vorschlaege": [
-                service.vorschlag_dict(v, db, objekt) for v in service.vorschlaege_auflisten(db, objekt, filter_status)
+                service.vorschlag_dict(v, db, objekt)
+                for v in service.vorschlaege_auflisten(db, objekt, filter_status, batch_id)
             ]}
             if veraltete_markieren:
                 if pruefen:
@@ -132,9 +140,16 @@ async def objekt_karte_vorschlaege(
             assert vorschlag_id is not None
             ergebnisse = [service.vorschlag_verwerfen(db, objekt, vorschlag_id, user_id=context.user.id)]
         else:
-            ergebnisse = [service.vorschlag_speichern(db, objekt, daten, user_id=context.user.id,
+            ergebnisse = [service.vorschlag_speichern(
+                          db, objekt, daten | ({"batch_id": batch_id} if batch_id is not None else {}),
+                          user_id=context.user.id,
                           vorschlag_id=vorschlag_id) for daten in (vorschlaege or [])]
         antwort: dict[str, object] = {"vorschlaege": ergebnisse, "gespeichert": not pruefen}
+        if aktion == "anlegen":
+            antwort["zusammenfassung"] = {
+                ergebnis: sum(e["ergebnis"] == ergebnis for e in ergebnisse)
+                for ergebnis in ("neu", "aktualisiert", "unveraendert", "unveraendert_offen")
+            }
         if pruefen:
             db.rollback()
         else:

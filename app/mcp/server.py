@@ -2347,11 +2347,12 @@ async def objekt_karte_vorschlaege(
     objekt_id: int, aktion: str, vorschlaege: list[dict] | None = None,
     vorschlag_id: int | None = None, filter_status: str | None = None,
     pruefen: bool = False, veraltete_markieren: bool = False, ctx: Context | None = None,
+    batch_id: str | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
         "objekt_karte_vorschlaege", objekt_id=objekt_id, aktion=aktion, vorschlaege=vorschlaege,
         vorschlag_id=vorschlag_id, filter_status=filter_status, pruefen=pruefen,
-        veraltete_markieren=veraltete_markieren,
+        veraltete_markieren=veraltete_markieren, batch_id=batch_id,
     )
 
 

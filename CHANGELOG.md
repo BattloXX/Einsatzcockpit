@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Objektkarte:** MCP-Vorschlaege uebernehmen Bildrichtungen und berechnen Kartenrotationen aus der Georeferenz (Pfeil-Nullrichtung Osten). Wiederholte Planlaeufe aktualisieren offene Vorschlaege per Bildtoleranz oder erkennen bereits freigegebene Marker. Laufkennung `batch_id`, Listenfilter und Ergebniszaehler; kompatible Georef-Revisionen berechnen Richtungen neu. Migration 0334.
+
 - **Objektkarte:** Neues MCP-Tool `objekt_karte_georef_zuordnen` ordnet markierte Bildkonturen deterministisch OSM-Gebaeudeecken zu. Leave-one-out und Mehrdeutigkeitspruefung erlauben nur eindeutige Klasse A zur Speicherung durch die Objektverwaltung; Klasse C verweist zur menschlichen Pruefung auf den Georeferenzierungseditor. Keine Migration.
 
 - **Android-Aktualisierung:** Pull-to-Refresh auch auf Login-, Public- und Infoscreen-Seiten; innere Scrollbereiche und echte Formulareingaben werden berücksichtigt, Such-/Filterwerte sperren nicht. Sperrgründe werden bei einer Ziehgeste angezeigt; fehlgeschlagene Resync-Aufträge werden gemeldet.
