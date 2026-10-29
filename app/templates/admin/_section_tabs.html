@@ -1,0 +1,11 @@
+{% from "_tabnav.html" import subtabnav %}
+{% set navigation = admin_navigation(request, user) %}
+{% set section = navigation.eintrag(section_id) %}
+{% set active_tab = navigation.aktiver_tab_fuer(section_id, request.url.path) %}
+{% if section %}
+{% set tabs = namespace(items=[]) %}
+{% for tab in section.tabs %}
+{% set tabs.items = tabs.items + [{'label': tab.label, 'href': tab.href, 'active': active_tab and active_tab.id == tab.id}] %}
+{% endfor %}
+{{ subtabnav(tabs.items) }}
+{% endif %}
