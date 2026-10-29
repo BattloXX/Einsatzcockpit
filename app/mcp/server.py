@@ -2379,6 +2379,19 @@ async def objekt_karte_gebaeude_umrisse(
     return await _call_registered_tool("objekt_karte_gebaeude_umrisse", objekt_id=objekt_id, radius_m=radius_m)
 
 
+@server.tool(name="objekt_karte_georef_zuordnen", description=TOOLS["objekt_karte_georef_zuordnen"].description)
+async def objekt_karte_georef_zuordnen(
+    objekt_id: int, dokument_id: int, seite: int, bild_ecken: list[dict], expected_rotation: int,
+    osm_id: int | None = None, radius_m: int = 150, modell: str = "aehnlichkeit",
+    speichern: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_karte_georef_zuordnen", objekt_id=objekt_id, dokument_id=dokument_id, seite=seite,
+        bild_ecken=bild_ecken, expected_rotation=expected_rotation, osm_id=osm_id,
+        radius_m=radius_m, modell=modell, speichern=speichern,
+    )
+
+
 @server.tool(name="objekt_karte_vorschau", description=TOOLS["objekt_karte_vorschau"].description)
 async def objekt_karte_vorschau(
     objekt_id: int, status_filter: str | None = None, ctx: Context | None = None,

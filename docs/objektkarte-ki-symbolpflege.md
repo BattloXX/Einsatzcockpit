@@ -66,6 +66,53 @@ Ein Lesetoken darf keine dieser Änderungen ausführen.
     (`pruefen=true`) benötigt diese Bestätigungen. Er speichert weder Marker noch
     Freigabestatus oder Änderungsaudit. Danach produktive Karte erneut lesen.
 
+## Automatische Eckenzuordnung
+
+`objekt_karte_georef_zuordnen` ersetzt fuer geeignete Gebaeudekonturen die manuelle
+Wahl der OSM-Eckennummern in den Schritten 4 und 5. Der KI-Client liefert ausschliesslich
+`bild_ecken` als Liste `{x, y}` (normiert 0..1, Ursprung oben links), keine `lat/lng`
+und keine geschaetzten Koordinaten. Alle Aussenecken **eines** Gebaeudes entlang seiner
+Kontur markieren; Startpunkt und Umlaufrichtung sind beliebig. Zulaessig sind 4 bis
+30 Punkte mit mindestens 0.005 Abstand zwischen jedem Punktepaar.
+
+1. Aktuelle Seite mit `objekt_dokument_seite_ansehen` ansehen. `objekt_id`,
+   `dokument_id`, `seite` und deren `expected_rotation` verwenden. Bei gedrehter
+   Seite zuerst das neue Bild ansehen und die Punkte neu erfassen.
+2. Mit `objekt_karte_gebaeude_umrisse` Kandidaten lesen. Bei gleichartigen
+   Nachbargebaeuden deren belegte `osm_id` angeben, um genau dieses Gebaeude zu pruefen.
+   Standardradius: 150 m; OSM-/Overpass-Freigabe und Objektkoordinate sind erforderlich.
+3. `objekt_karte_georef_zuordnen(..., speichern=false)` aufrufen (Standardmodell:
+   `aehnlichkeit`). Einsatz-Leserollen duerfen analysieren; dies speichert nichts.
+4. **Klasse A:** Eindeutige, tragfaehige Zuordnung. Mit denselben Eingaben und
+   `speichern=true` kann die Objektverwaltung ueber den bestehenden Referenzpunktpfad
+   speichern. Erst die persistierte `georeferenz.id` fuer Symbolvorschlaege verwenden.
+5. **Klasse C:** Fehlende passende Eckenzahl, unzureichende Fehlerwerte, zu wenige
+   Ecken fuer die Gegenpruefung oder Mehrdeutigkeit. Es wird auch bei `speichern=true`
+   nichts gespeichert. Keine der bis zu drei Hypothesen selbst auswaehlen: `editor_link`
+   an den Menschen zur Pruefung geben. Symmetrische Gebaeude und identische Nachbarn
+   koennen geometrisch nicht eindeutig unterschieden werden.
+
+Der Server entfernt OSM-Zwischenecken mit Richtungsaenderung unter
+`KOLLINEAR_WINKEL_GRAD = 10.0` in lokalen Metern; Original-Eckennummern bleiben
+bestehen. Nur vereinfachte Ringe mit gleicher Eckenzahl werden beruecksichtigt.
+Er prueft alle zyklischen Verschiebungen und beide Umlaufrichtungen, hoechstens
+`MAX_HYPOTHESEN = 2000`; bei mehr Kandidaten `osm_id` angeben oder Radius verkleinern.
+
+Die vorhandene Transformationspruefung prueft Spiegelung, Verzerrung und Restfehler
+(RMSE maximal 2 m, Einzelfehler maximal 4 m). Nur gueltige Hypothesen erhalten eine
+Leave-one-out-Gegenpruefung: jeden Punkt auslassen, erneut rechnen und den Fehler am
+ausgelassenen Punkt in Metern messen. Tragfaehig ist eine gueltige Hypothese mit
+`loo_max_m <= MAX_FEHLER_M = 4.0`. Bleiben nach dem Auslassen weniger als
+`MIN_PUNKTE[modell]` (3/4/6) Punkte, ist Klasse A ausgeschlossen.
+
+Tragfaehige Hypothesen werden nach `loo_max_m`, dann `rmse_m` sortiert. Eine zweite
+tragfaehige Hypothese muss mindestens
+`max(beste_loo * EINDEUTIG_FAKTOR, beste_loo + EINDEUTIG_ABSTAND_M)` erreichen.
+Die Konstanten `EINDEUTIG_FAKTOR = 2.0` und `EINDEUTIG_ABSTAND_M = 1.0` sind im Pilot
+zu kalibrieren. Die Antwort nennt Begruendung, gepruefte Hypothesenzahl, vereinfachte
+`eckenzahlen_osm`, bis zu drei Hypothesen, Bildgroesse, Rotation und Editor-Link.
+Referenzpunkte werden nur bei Klasse A ausgegeben; Koordinaten stammen aus OSM.
+
 ## Status und Warnungen
 
 `position_status` beschreibt die Position, unabhängig von `freigabe_status`:

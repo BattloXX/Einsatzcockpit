@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Objektkarte:** Neues MCP-Tool `objekt_karte_georef_zuordnen` ordnet markierte Bildkonturen deterministisch OSM-Gebaeudeecken zu. Leave-one-out und Mehrdeutigkeitspruefung erlauben nur eindeutige Klasse A zur Speicherung durch die Objektverwaltung; Klasse C verweist zur menschlichen Pruefung auf den Georeferenzierungseditor. Keine Migration.
+
 - **Android-Aktualisierung:** Pull-to-Refresh auch auf Login-, Public- und Infoscreen-Seiten; innere Scrollbereiche und echte Formulareingaben werden berücksichtigt, Such-/Filterwerte sperren nicht. Sperrgründe werden bei einer Ziehgeste angezeigt; fehlgeschlagene Resync-Aufträge werden gemeldet.
 - **Straßensperren-Infoscreen:** Wetter-Monitorrahmen mit gemeinsamen Farben und Schriftarten; höhenabhängige Listenseiten mit Seitenanzeige statt Scrollleisten. Alle Seiten laufen vor Karte und Einzelansichten durch, Datenaktualisierungen behalten den Fortschritt. Mobil bleibt die vollständige Liste scrollbar. Keine Migration.
 - **Objektkarte:** Offene KI-Vorschläge automatisch anzeigen, direkt prüfen und alle unkritischen Vorschläge mit einem Klick in Blöcken zu 30 freigeben. Eine gemeinsame Warnungsbestätigung, atomar Speichern & freigeben nach Positionskorrektur und direkter Link zur offenen Arbeitskopie. Sicherheitsregeln und MCP unverändert; keine Migration.
