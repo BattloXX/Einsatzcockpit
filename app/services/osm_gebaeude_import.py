@@ -126,9 +126,10 @@ def _download(name: str, url: str, datenstand: datetime | None) -> tuple[Path | 
 
 
 def _aktiver(db: Session, name: str) -> OsmImportLauf | None:
+    # Kein FOR UPDATE: Alle Schreiber einer Quelle laufen unter _quellen_sperre (Dateisperre).
     return db.scalar(select(OsmImportLauf).where(
         OsmImportLauf.quelle == name, OsmImportLauf.status == "aktiv",
-    ).with_for_update())
+    ))
 
 
 def _zeilen_loeschen(db: Session, lauf_id: int) -> None:
@@ -296,7 +297,7 @@ def aktivieren(lauf_id: int) -> OsmImportLauf:
             raise ValueError("OSM-Importlauf nicht gefunden")
         db.commit()  # Vor dem Warten keinen alten MariaDB-Snapshot festhalten.
         with _quellen_sperre(lauf.quelle):
-            db.refresh(lauf, with_for_update=True)
+            db.refresh(lauf)  # Frischer Snapshot nach commit; serialisiert durch die Dateisperre.
             if lauf.status != "pruefung":
                 raise ValueError("Nur OSM-Importlaeufe in Pruefung koennen aktiviert werden")
             _umschalten(db, lauf)
