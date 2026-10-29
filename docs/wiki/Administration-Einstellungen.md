@@ -2,7 +2,7 @@
 
 ← [Zurück zur Startseite](Home)
 
-> URL: `/admin/settings`  
+> URL: `/admin/settings` (Tabs: `/admin/settings/erscheinungsbild`, `/module`, `/allgemein`)  
 > Zugänglich für: `org_admin`, `admin`, `system_admin`
 
 ## Organisations-Einstellungen

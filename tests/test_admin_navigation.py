@@ -455,3 +455,58 @@ def test_system_toggle_behaelt_tab_und_org(client, setup_db, toggle, tab):
     assert response.status_code == 303
     path = "/admin/settings/module" if tab == "module" else "/admin/settings"
     assert response.headers["location"] == f"{path}?saved=1&org_id={org_id}"
+
+
+# Admin-GET-Seiten ohne Katalogeintrag. Jede Ausnahme braucht einen Grund; die Liste darf nur schrumpfen.
+# Neue Verwaltungsseiten gehoeren als Tab in den Katalog (siehe docs/architecture/admin-navigation.md).
+OHNE_KATALOGEINTRAG = {
+    "/admin": "Dashboard (statischer Link im Layout)",
+    "/admin/": "Dashboard (statischer Link im Layout)",
+    "/admin/hilfe": "Hilfe (statischer Link im Layout)",
+    "/admin/about": "Versionsinfo, von der Hilfe verlinkt",
+    "/admin/einheiten": "Altbestand, ohne Link in der Verwaltung",
+    "/admin/konfig": "Org-Konfigurationsexport, von der Organisationsliste verlinkt",
+    "/admin/konfig/export.json": "Download",
+    "/admin/seed-vorlagen": "Seed-Vorlagen, von der Organisationsliste verlinkt",
+    "/admin/org-backup/export.zip": "Download",
+    "/admin/atemschutz-pruefung/einstellungen": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/atemschutz-pruefung/geraete": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/atemschutz-pruefung/token": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/atemschutz-pruefung/token/qr.png": "Bild",
+    "/admin/fahrtenbuch/einstellungen": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/fahrtenbuch/fahrzeuge": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/fahrtenbuch/token": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/fahrtenbuch/zielorte": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/fahrtenbuch/zwecke": "Modul-Einstellungen mit eigener Tab-Leiste",
+    "/admin/reparatur/freigabe/{run_id}": "Freigabe-Link per Mail/MCP",
+    "/admin/settings/planspiele/adresspool": "HTMX-Teilansicht",
+    "/admin/settings/planspiele/adresspool/osm/status": "HTMX-Teilansicht",
+    "/admin/sms-gateway/status": "JSON/HTMX-Status",
+    "/admin/sms-senden/{log_id}/details": "HTMX-Teilansicht",
+    "/admin/sms-senden/{log_id}/status": "HTMX-Teilansicht",
+}
+
+
+def test_jede_admin_seite_gehoert_genau_einem_hauptpunkt():
+    """Wächter: neue /admin-GET-Routen brauchen einen Katalogeintrag/Tab oder eine begruendete Ausnahme."""
+    from app.main import app
+    from tests.conftest import flatten_routes
+
+    flags = dict.fromkeys(FLAGS, True)
+    pfade = sorted({
+        r.path for r in flatten_routes(app.routes)
+        if getattr(r, "methods", None) and "GET" in r.methods and r.path.startswith("/admin")
+    })
+    ohne, mehrfach = [], []
+    for pfad in pfade:
+        nav = navigation.admin_navigation(SimpleNamespace(url=SimpleNamespace(path=pfad), state=SimpleNamespace(**flags)),
+                                          _user("system_admin"))
+        treffer = [e.id for g in nav.gruppen for e in g.eintraege if e.ist_aktiv(pfad)]
+        if not treffer and pfad not in OHNE_KATALOGEINTRAG:
+            ohne.append(pfad)
+        if len(treffer) > 1:
+            mehrfach.append((pfad, treffer))
+    assert not ohne, f"Admin-Seiten ohne Hauptpunkt/Tab im Katalog: {ohne}"
+    assert not mehrfach, f"Admin-Seiten mit mehreren Hauptpunkten: {mehrfach}"
+    veraltet = set(OHNE_KATALOGEINTRAG) - set(pfade)
+    assert not veraltet, f"Ausnahmen ohne Route, bitte entfernen: {sorted(veraltet)}"

@@ -143,10 +143,26 @@ npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an a
 - Suche ist client-seitig: Funkjournal über `data-fj-search`, Stab-Journal über
   `.journal-row`, Board über `applyBoardFilters()` in `incident_major/board.html`.
 
+## Pflicht: Verwaltungsnavigation (ein Hauptpunkt, Unterseiten als Tabs)
+
+- Im Verwaltungsmenue gibt es **pro Fachgebiet genau einen Hauptpunkt**; alle zugehoerigen Seiten sind
+  URL-basierte **Tabs** im Inhaltsbereich (Vorbild Infoscreen). Aktionen sind Buttons, keine Tabs.
+- Katalog und einzige Quelle: `app/services/admin_navigation.py`. Keine neue hartcodierte Sidebar-Logik in
+  Einzeltemplates. Tab-Leiste per `{% with section_id='...' %}{% include 'admin/_section_tabs.html' %}{% endwith %}`.
+- Neue Verwaltungsseite: **zuerst als Tab eines bestehenden Hauptpunkts** einordnen; neuen Hauptpunkt nur fuer ein
+  eigenstaendiges Fachgebiet und in der PR-Beschreibung begruenden. Keine versteckten oder doppelten Verwaltungsseiten.
+- Der Katalog zeigt nur an: Rollen und Modulflags weiterhin in der Route pruefen (`require_role`).
+- Mitpflegen: Rollen/Modulflag im Katalog, Mobile-Darstellung, Tests (`tests/test_admin_navigation.py`, der Waechter
+  `test_jede_admin_seite_gehoert_genau_einem_hauptpunkt` faengt neue Routen ohne Eintrag), die Doku
+  [docs/architecture/admin-navigation.md](docs/architecture/admin-navigation.md), die Wiki-Seite
+  `Administration-Navigation` und `CHANGELOG.md` im selben PR.
+- Das gilt auch fuer Codex-Aenderungen, neue Module und MCP-Funktionen.
+
 ## Neue Features – Checkliste
 
 - [ ] Mobile Ansicht (≤760px) berücksichtigt
 - [ ] CSRF-Token (`_csrf`) in allen POST-Formularen
 - [ ] HTMX-Swap statt Reload, WebSocket-Broadcast für Multi-User-Sync
 - [ ] Alle Datetime-Ausgaben über `|local*` / `format_local_datetime(.., org)`
+- [ ] Neue Verwaltungsseite: Tab/Hauptpunkt in `app/services/admin_navigation.py` (siehe Pflicht oben)
 - [ ] Neues Modul: Eintrag in `app/services/modul_navigation.py` (Gruppe + Sichtbarkeit) – Menü Desktop/Mobil und Kacheln der Übersicht rendern daraus; geprüft von `tests/test_modul_navigation.py` und `tests/test_module_kacheln.py`
