@@ -6,6 +6,7 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 - **Android-Aktualisierung:** Pull-to-Refresh auch auf Login-, Public- und Infoscreen-Seiten; innere Scrollbereiche und echte Formulareingaben werden berücksichtigt, Such-/Filterwerte sperren nicht. Sperrgründe werden bei einer Ziehgeste angezeigt; fehlgeschlagene Resync-Aufträge werden gemeldet.
 - **Straßensperren-Infoscreen:** Wetter-Monitorrahmen mit gemeinsamen Farben und Schriftarten; höhenabhängige Listenseiten mit Seitenanzeige statt Scrollleisten. Alle Seiten laufen vor Karte und Einzelansichten durch, Datenaktualisierungen behalten den Fortschritt. Mobil bleibt die vollständige Liste scrollbar. Keine Migration.
+- **Objektkarte:** Offene KI-Vorschläge automatisch anzeigen, direkt prüfen und alle unkritischen Vorschläge mit einem Klick in Blöcken zu 30 freigeben. Eine gemeinsame Warnungsbestätigung, atomar Speichern & freigeben nach Positionskorrektur und direkter Link zur offenen Arbeitskopie. Sicherheitsregeln und MCP unverändert; keine Migration.
 
 - **Verwaltungsmenue:** Pro Fachgebiet ein Hauptpunkt, Unterseiten als URL-basierte Tabs aus einem zentralen Katalog (`admin_navigation.py`). Neue Gruppe Systemverwaltung (nur Sysadmin), Organisations-Einstellungen in vier Tabs, Systemstatus mit Tabs. Admin-Sidebar 42 -> 23, Sysadmin 54 -> 34 Eintraege; alle URLs und Rechte unveraendert. Waechter-Test ordnet jede Admin-Seite einem Hauptpunkt zu; Regel in CLAUDE.md und docs/architecture/admin-navigation.md. Keine Migration.
 
