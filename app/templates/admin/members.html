@@ -1,6 +1,8 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Mitglieder – Admin{% endblock %}
 {% block admin_content %}
+{% with section_id='personal' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 {% set user_role_codes = user.roles|map(attribute='code')|list %}
 {% set can_manage_members = 'system_admin' in user_role_codes or 'admin' in user_role_codes or 'org_admin' in user_role_codes %}
 <div class="page-content">

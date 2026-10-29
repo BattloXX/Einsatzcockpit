@@ -6,6 +6,8 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Benutzer'}]) }}{% endblock %}
 
 {% block admin_content %}
+{% with section_id='benutzer' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 {% set invitation_status = einladungs_status|default({}) %}
 <div class="page-header">
   <div>

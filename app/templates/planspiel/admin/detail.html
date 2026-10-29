@@ -2,10 +2,13 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}{{ szenario.code }}{% endblock %}
 {% block head_extra %}
+{{ super() }}
   {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
-{% block content %}
+{% block admin_content %}
+{% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <section class="ps-page ps-page--narrow" x-data="{ tab: 'grund' }">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": szenario.code, "href": none}]) }}
   <div class="ps-header"><div><a href="/admin/settings/planspiele/szenarien" class="btn btn--ghost btn--sm">← Katalog</a><div class="planspiel-title"><h1>{{ szenario.code }}: {{ version.titel }}</h1><span class="ps-status {% if archiviert %}ps-status--gray{% elif szenario.aktiv %}ps-status--green{% else %}ps-status--amber{% endif %}">{{ 'archiviert' if archiviert else ('aktiv' if szenario.aktiv else 'deaktiviert') }}</span></div></div></div>

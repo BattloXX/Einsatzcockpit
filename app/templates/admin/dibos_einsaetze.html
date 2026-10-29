@@ -4,6 +4,8 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'DIBOS / Elvis-Anbindung', 'href': '/admin/dibos'}, {'label': 'Einsatz-Infos'}]) }}{% endblock %}
 
 {% block admin_content %}
+{% with section_id='schnittstellen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-header">
   <div>
     <h1>DIBOS: Einsatz-Infos</h1>

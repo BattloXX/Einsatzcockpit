@@ -2,14 +2,16 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Szenariokatalog{% endblock %}
 {% block head_extra %}
+{{ super() }}
   {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
-{% block content %}
+{% block admin_content %}
+{% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <section class="ps-page">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": none}]) }}
   <div class="ps-header"><h1>Szenariokatalog</h1><div>{% if can_edit %}<a class="btn btn--secondary btn--sm" href="/admin/settings/planspiele/szenarien/export.json">Export JSON</a><form class="planspiel-import" method="post" action="/admin/settings/planspiele/szenarien/import" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label>Import JSON<input type="file" name="file" accept="application/json" required></label><button class="btn btn--secondary btn--sm" type="submit">Importieren</button></form><a class="btn btn--primary btn--sm" href="/admin/settings/planspiele/szenarien/neu">Neues Szenario</a>{% endif %}<a class="btn btn--secondary btn--sm" href="/admin/settings/planspiele/stichworte">Stichwort-Referenz</a></div></div>
-  {% include "planspiel/_tabs.html" %}
   {% if fehler %}<p class="form-error">{{ fehler }}</p>{% endif %}
   {% if meldung %}<p class="form-success">{{ meldung }}</p>{% endif %}
   <form class="ps-filter" hx-get="/admin/settings/planspiele/szenarien" hx-target="#szenario-liste" hx-push-url="true">

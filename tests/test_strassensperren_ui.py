@@ -105,11 +105,20 @@ def test_navigation_verschiebt_strassensperren_einstellungen_in_die_verwaltung(c
 
     settings = client.get("/admin/settings")
     assert settings.status_code == 200
-    assert 'href="/strassensperren/infoscreen" target="_blank" rel="noopener"' in settings.text
-    assert 'href="/admin/settings/strassensperren-infoscreen"' in settings.text
+    assert 'href="/strassensperren/infoscreen"' not in settings.text
+    assert 'href="/admin/settings/strassensperren-infoscreen"' not in settings.text
     assert 'href="/strassensperren/einstellungen"' in settings.text
 
-    assert client.get("/strassensperren/einstellungen").status_code == 200
+    teams = client.get("/strassensperren/einstellungen")
+    assert teams.status_code == 200
+    assert 'href="/admin/settings/strassensperren-infoscreen"' in teams.text
+    assert 'class="subtabnav"' in teams.text
+
+    infoscreen = client.get("/admin/settings/strassensperren-infoscreen")
+    assert infoscreen.status_code == 200
+    assert 'href="/strassensperren/infoscreen" class="btn btn--secondary" target="_blank" rel="noopener"' in infoscreen.text
+    assert "Vollbild-Infoscreen öffnen" in infoscreen.text
+    assert "Alarm-Infoscreen" in infoscreen.text
 
 
 def test_anlegen_validierung_und_utc_sommerzeit(client):

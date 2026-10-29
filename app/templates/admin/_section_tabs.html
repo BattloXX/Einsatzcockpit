@@ -5,7 +5,7 @@
 {% if section %}
 {% set tabs = namespace(items=[]) %}
 {% for tab in section.tabs %}
-{% set tabs.items = tabs.items + [{'label': tab.label, 'href': tab.href, 'active': active_tab and active_tab.id == tab.id}] %}
+{% set tabs.items = tabs.items + [{'label': tab.label, 'href': tab.href, 'active': active_tab and active_tab.id == tab.id, 'badge': mail_eingang_offene_count(user) if tab.badge_provider == 'mail_eingang_offene_count' else none}] %}
 {% endfor %}
 {{ subtabnav(tabs.items) }}
 {% endif %}
