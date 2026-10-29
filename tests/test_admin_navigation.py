@@ -15,6 +15,30 @@ FLAGS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _system_settings_zuruecksetzen():
+    """Toggle-/Flag-Tests schreiben globale system_settings; andere Tests legen dieselben Keys an."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.master import SystemSettings
+
+    def _stand():
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            return {row.key: row.value for row in db.query(SystemSettings).all()}
+
+    vorher = _stand()
+    yield
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        for row in db.query(SystemSettings).all():
+            if row.key not in vorher:
+                db.delete(row)
+            elif row.value != vorher[row.key]:
+                row.value = vorher[row.key]
+        db.commit()
+
+
 def _request(path="/admin", **flags):
     return SimpleNamespace(url=SimpleNamespace(path=path), state=SimpleNamespace(**flags))
 
