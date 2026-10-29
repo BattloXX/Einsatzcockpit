@@ -2933,6 +2933,7 @@ def karten_gebaeude_json(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
 ):
+    from app.mcp.fehler import ExternerDienstFehler
     from app.services.objekt_gebaeude_service import gebaeude_umrisse
 
     objekt = _objekt_or_404(db, objekt_id, user)
@@ -2940,6 +2941,8 @@ def karten_gebaeude_json(
         raise HTTPException(status_code=422, detail="Objekt hat keine Kartenposition fuer die Gebaeudeabfrage")
     try:
         return run_async(gebaeude_umrisse, objekt.lat, objekt.lng)
+    except ExternerDienstFehler as exc:
+        raise HTTPException(status_code=422, detail={"meldung": exc.meldung, "code": exc.code}) from None
     except objekt_karte_service.ObjektKartenFehler as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 

@@ -271,7 +271,7 @@ def test_richtung_batch_wiederholung_und_filter(client, plan):
     assert erster["zusammenfassung"]["neu"] == 2, erster
     zweiter = _rufe(client, token, "objekt_karte_vorschlaege", **args)
     assert zweiter["zusammenfassung"] == {
-        "neu": 0, "aktualisiert": 2, "unveraendert": 0, "unveraendert_offen": 0,
+        "neu": 0, "aktualisiert": 0, "unveraendert": 0, "unveraendert_offen": 2,
     }
     assert [v["id"] for v in erster["vorschlaege"]] == [v["id"] for v in zweiter["vorschlaege"]]
     assert [v["rotation"] for v in zweiter["vorschlaege"]] == [330, 60]
@@ -295,3 +295,38 @@ def test_batch_id_ungueltig(client, plan, batch_id, aktion):
     antwort = _rufe(client, token, "objekt_karte_vorschlaege", objekt_id=plan["objekt_id"],
                     aktion=aktion, batch_id=batch_id, vorschlaege=[{"symbol_code": "tor"}])
     assert "__fehler__" in antwort
+
+
+def test_externer_fehler_mcp_und_ui(client, plan, zuordnungsdaten, monkeypatch, caplog):
+    import json
+
+    from app.mcp.fehler import ExternerDienstFehler
+    from app.services import objekt_gebaeude_service
+    from tests.test_objekt_karte_freigabe_routes import _login
+
+    args, mock = zuordnungsdaten
+    mock.side_effect = ExternerDienstFehler(
+        code="OVERPASS_ALL_ENDPOINTS_FAILED", meldung="Overpass derzeit nicht erreichbar", retryable=True,
+        details={"cache_status": "miss", "attempted_endpoints_count": 2, "endpunkte": []},
+    )
+    monkeypatch.setattr(objekt_gebaeude_service, "gebaeude_umrisse", mock)
+    token = _token(client, plan, "u")
+    for tool, argumente in (
+        ("objekt_karte_gebaeude_umrisse", {"objekt_id": plan["objekt_id"]}),
+        ("objekt_karte_georef_zuordnen", args),
+    ):
+        antwort = _rufe(client, token, tool, **argumente)
+        inhalt = json.loads(antwort["__fehler__"])[0]["text"]
+        fehler = json.loads(inhalt[inhalt.index("{"):])
+        assert fehler["fehlerart"] == "extern"
+        assert fehler["code"] == "OVERPASS_ALL_ENDPOINTS_FAILED" and fehler["retryable"] is True
+        assert fehler["correlation_id"]
+        assert fehler["cache_status"] == "miss"
+        assert fehler["correlation_id"] in caplog.text
+    _login(client, plan)
+    antwort = client.get(f'/objekte/{plan["objekt_id"]}/karte/gebaeude.json')
+    assert antwort.status_code == 422
+    assert antwort.json()["detail"] == {
+        "meldung": "Overpass derzeit nicht erreichbar", "code": "OVERPASS_ALL_ENDPOINTS_FAILED",
+    }
+    assert _georeferenzen(plan) == []

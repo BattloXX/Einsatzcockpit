@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Objektkarte / Betrieb:** Strukturierte externe Overpass-Fehler mit Codes, Wiederholbarkeit, Korrelations-ID und Endpunktversuchen; UI antwortet weiter mit 422. Cache-Antworten weisen hit/miss aus. Identische offene Planvorschlaege erzeugen keine Aenderung und keinen Audit-Eintrag; reine batch_id-Wechsel bleiben still. GIT_SHA wird bei systemd/venv-Deploys ohne gesetzte Build-Revision aus dem lokalen Repository gelesen. Nur private.coffee bleibt Standard-Fallback, da kumi.systems derselbe Host ist. Keine Migration.
+
 - **Overpass:** Konfigurierbare Ausweichendpunkte bei Ueberlastung und Timeout, mit eigenem Fehlerschutz je Endpunkt. Gebaeudeumrisse haben 25 s je Versuch und 45 s Gesamtbudget und sind vom Hydranten-Breaker entkoppelt. Hydranten-Zeitlimits im Alarmpfad bleiben unveraendert; Strassenabfragen und Planspiel-Import wechseln bei Wiederholungen den Endpunkt. Keine Migration.
 
 - **Objektkarte:** Lesende MCP-BSP-Arbeitsliste fuer fertige aktuelle Lageplan-/Brandschutzplan-Seiten mit priorisiertem naechstem Schritt, Vorversions-Georef und Vorschlags-/Markerzahlen. Symbolkatalog mit Legenden-Aliassen und Richtungsfeldern fuer System- und eigene Symbole. Keine Migration; Upload-Benachrichtigung und vorbelegter Editor-Link bleiben offen.
