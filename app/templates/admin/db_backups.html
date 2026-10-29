@@ -28,6 +28,8 @@
 {% endblock %}
 
 {% block admin_content %}
+{% with section_id='updates_backups' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-header">
   <h1>Server-Datensicherung</h1>
   <span class="badge-pill badge-pill--amber">Nur Systemadministratoren</span>

@@ -15,6 +15,30 @@ FLAGS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _system_settings_zuruecksetzen():
+    """Toggle-/Flag-Tests schreiben globale system_settings; andere Tests legen dieselben Keys an."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.master import SystemSettings
+
+    def _stand():
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            return {row.key: row.value for row in db.query(SystemSettings).all()}
+
+    vorher = _stand()
+    yield
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        for row in db.query(SystemSettings).all():
+            if row.key not in vorher:
+                db.delete(row)
+            elif row.value != vorher[row.key]:
+                row.value = vorher[row.key]
+        db.commit()
+
+
 def _request(path="/admin", **flags):
     return SimpleNamespace(url=SimpleNamespace(path=path), state=SimpleNamespace(**flags))
 
@@ -49,13 +73,13 @@ def test_katalog_konsistent():
 @pytest.mark.parametrize("role", ["admin", "org_admin", "system_admin"])
 def test_vollrechte_und_medien_genau_einmal(role):
     nav = _nav(role=role)
-    assert [group.key for group in nav.gruppen] == ["stammdaten", "verwaltung", "einstellungen"]
+    assert [group.key for group in nav.gruppen] == ["stammdaten", "verwaltung", "einstellungen"] + (["system"] if role == "system_admin" else [])
     entries = _entries(nav)
-    media = [entry for entry in entries if entry.href == "/admin/medien"]
+    media = [entry for entry in entries if entry.href == "/admin/medien" or any(t.href == "/admin/medien" for t in entry.tabs)]
     assert len(media) == 1
-    assert media[0].gruppe == ("einstellungen" if role == "system_admin" else "verwaltung")
-    assert (nav.eintrag("systemdiagnose") is not None) == (role == "system_admin")
-    assert (nav.eintrag("medien_system") is not None) == (role == "system_admin")
+    assert media[0].gruppe == ("system" if role == "system_admin" else "verwaltung")
+    assert [t.id for t in nav.eintrag("systemstatus").tabs] == (["uebersicht", "systemdiagnose", "server_log"] if role == "system_admin" else ["uebersicht"])
+    assert (nav.eintrag("organisationen") is not None) == (role == "system_admin")
     assert all(group.ueberschrift for group in nav.gruppen)
 
 
@@ -123,11 +147,11 @@ def test_eindeutige_aktivitaet(role, path, entry_id):
 @pytest.mark.parametrize("role", ["admin", "system_admin"])
 def test_medien_aktiv_und_mail_weiterleitungen(role):
     nav = _nav("/admin/medien", role)
-    assert nav.aktiver_eintrag.href == "/admin/medien"
-    assert nav.aktive_gruppe == ("einstellungen" if role == "system_admin" else "verwaltung")
+    assert nav.aktiver_eintrag.id == ("organisationen" if role == "system_admin" else "medien")
+    assert nav.aktive_gruppe == ("system" if role == "system_admin" else "verwaltung")
     nav = _nav("/admin/mail-weiterleitungen", role)
     assert len([e for e in _entries(nav) if e.ist_aktiv("/admin/mail-weiterleitungen")]) == (1 if role == "system_admin" else 0)
-    assert (nav.aktiver_eintrag.id if nav.aktiver_eintrag else None) == ("mail_weiterleitungen" if role == "system_admin" else None)
+    assert (nav.aktiver_eintrag.id if nav.aktiver_eintrag else None) == ("systemkonfiguration" if role == "system_admin" else None)
 
 
 def test_tabs_rollen_flag_filter(monkeypatch):
@@ -209,9 +233,7 @@ def test_rollenmatrix_hauptpunkte(role):
     }
     if role == "system_admin":
         expected |= {
-            "systemdiagnose", "system_einstellungen", "mail_weiterleitungen", "system_server_log",
-            "seiten", "system_update", "backup", "db_backups", "organisations", "system_orgs",
-            "system_quotas", "medien_system",
+            "systemkonfiguration", "organisationen", "updates_backups",
         }
     else:
         expected.add("medien")
@@ -303,3 +325,133 @@ def test_alle_flag_kombinationen(role, values):
             assert sum(e.ist_aktiv(tab.href) for e in _entries(target)) == 1
             assert target.aktiver_eintrag.id == (entry.id if tab.aktiv_praefixe else "infoscreens")
             assert sum(t.ist_aktiv(tab.href) for t in target.aktiver_eintrag.tabs) == 1
+
+
+@pytest.mark.parametrize("role", ["mitglied", "uebungsleiter", "mitglieder_admin", "fahrtenbuch_admin", "admin", "org_admin"])
+def test_systemgruppe_und_sysadmin_tabs_unsichtbar(role):
+    nav = _nav(role=role)
+    assert "system" not in {g.key for g in nav.gruppen}
+    assert all(t.sichtbarkeit != "sysadmin" for e in _entries(nav) for t in e.tabs)
+    assert all(g.eintraege for g in nav.gruppen)
+
+
+@pytest.mark.parametrize("path", [
+    "/admin/system-einstellungen", "/admin/mail-weiterleitungen", "/admin/seiten",
+    "/admin/organisations", "/admin/system/orgs", "/admin/system/quotas",
+    "/admin/system/update", "/admin/backup", "/admin/db-backups",
+    "/admin/systemdiagnose", "/admin/system/server-log", "/admin/org-backup/restore",
+])
+def test_systemseiten_bleiben_verboten(client, setup_db, path):
+    username = "nav-forbidden-" + path.replace("/", "-")
+    _make_org_admin(username, username, "org_admin")
+    _login(client, username, "Test1234!")
+    assert client.get(path, follow_redirects=False).status_code == 403
+
+
+class _SettingsFormParser:
+    @staticmethod
+    def parse(html):
+        from html.parser import HTMLParser
+
+        class Parser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.forms = []
+                self.form = None
+
+            def handle_starttag(self, tag, attributes):
+                attrs = dict(attributes)
+                if tag == "form":
+                    assert self.form is None, "Verschachteltes Formular"
+                    self.form = {"attrs": attrs, "fields": [], "panels": []}
+                    self.forms.append(self.form)
+                elif self.form is not None:
+                    if "name" in attrs:
+                        self.form["fields"].append(attrs)
+                    if "data-settings-panel" in attrs:
+                        self.form["panels"].append(attrs)
+
+            def handle_endtag(self, tag):
+                if tag == "form":
+                    self.form = None
+
+        parser = Parser()
+        parser.feed(html)
+        return parser.forms
+
+
+@pytest.mark.parametrize("role", ["admin", "org_admin", "system_admin"])
+def test_settings_tabs_alle_formularfelder_und_org_auswahl(client, setup_db, role):
+    import re
+    from collections import Counter
+
+    org_id = _make_org_admin("nav-settings-" + role, "nav-settings-" + role, role)
+    _login(client, "nav-settings-" + role, "Test1234!")
+    fields = []
+    for tab in _nav(role=role).eintrag("settings").tabs:
+        response = client.get(tab.href, params={"org_id": org_id})
+        assert response.status_code == 200
+        forms = _SettingsFormParser.parse(response.text)
+        form = next(f for f in forms if f["attrs"].get("action") == "/admin/settings/org")
+        fields.append(Counter(el["name"] for el in form["fields"]))
+        panels = form["panels"]
+        assert len(panels) == 4
+        assert [p["data-settings-panel"] for p in panels if "hidden" not in p] == [tab.id]
+        assert next(f["value"] for f in form["fields"] if f["name"] == "tab") == tab.id
+        assert response.text.count('aria-selected="true"') == 1
+        bar = re.search(r'<div class="subtabnav"[^>]*>(.*?)</div>', response.text, re.S)[1]
+        links = re.findall(r'href="([^"]+)"', bar)
+        assert len(links) == 4
+        assert all(f"org_id={org_id}" in link for link in links)
+        if role == "system_admin":
+            assert f"location.href='{tab.href}?org_id='" in response.text
+        for toggle in forms:
+            if not toggle["attrs"].get("action", "").startswith("/admin/settings/system/"):
+                continue
+            assert next(f["value"] for f in toggle["fields"] if f["name"] == "tab") == tab.id
+            assert next(f["value"] for f in toggle["fields"] if f["name"] == "org_id") == str(org_id)
+    assert fields[0]["org_name"] == 1
+    assert fields[0]["alarm_ausschluss_begriffe"] == 1
+    assert fields[0]["hydrant_layer_enabled_raw"] == 2
+    assert all(f == fields[0] for f in fields)
+
+
+@pytest.mark.parametrize("tab,path", [
+    ("module", "/admin/settings/module"),
+    ("erscheinungsbild", "/admin/settings/erscheinungsbild"),
+    ("allgemein", "/admin/settings/allgemein"),
+    ("stammdaten", "/admin/settings"),
+    ("unbekannt", "/admin/settings"),
+    ("//example.org", "/admin/settings"),
+    ("https://example.org", "/admin/settings"),
+])
+def test_settings_post_tab_whitelist(client, setup_db, tab, path):
+    from urllib.parse import urlsplit
+
+    username = "nav-save-" + tab.replace("/", "-").replace(":", "-")
+    _make_org_admin(username, username)
+    _login(client, username, "Test1234!")
+    response = client.post("/admin/settings/org", data={
+        "_csrf": client.cookies.get("ec_csrf"), "org_name": "Navigation", "tab": tab,
+    }, follow_redirects=False)
+    assert response.status_code == 303
+    target = urlsplit(response.headers["location"])
+    assert not target.netloc and not target.scheme
+    assert target.path == path
+
+
+@pytest.mark.parametrize("toggle", [
+    "uas", "mcp", "foerderstrecke", "probenplanung", "strassensperren", "planspiel", "katplan",
+    "lagefuehrung", "breathing", "kontakte", "objekt", "gateway", "mailing", "nachschlagewerke",
+])
+@pytest.mark.parametrize("tab", ["module", "https://example.org"])
+def test_system_toggle_behaelt_tab_und_org(client, setup_db, toggle, tab):
+    username = "nav-toggle-" + toggle + ("-module" if tab == "module" else "-invalid")
+    org_id = _make_org_admin(username, username, "system_admin")
+    _login(client, username, "Test1234!")
+    response = client.post(f"/admin/settings/system/{toggle}-toggle", data={
+        "_csrf": client.cookies.get("ec_csrf"), "tab": tab, "org_id": org_id,
+    }, follow_redirects=False)
+    assert response.status_code == 303
+    path = "/admin/settings/module" if tab == "module" else "/admin/settings"
+    assert response.headers["location"] == f"{path}?saved=1&org_id={org_id}"

@@ -1,6 +1,8 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Systemdiagnose{% endblock %}
 {% block admin_content %}
+{% with section_id='systemstatus' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <style>
 .diag-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
 .diag-card {padding:16px;border:1px solid var(--border);border-radius:8px;min-width:0;overflow-wrap:anywhere}
