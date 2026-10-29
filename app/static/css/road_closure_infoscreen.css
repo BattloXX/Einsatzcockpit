@@ -1,0 +1,74 @@
+/* Strassensperren im gemeinsamen Wetter-Monitorrahmen. */
+:root{--bg:#0b1326;--surface:#171f33;--low:#131b2e;--text:#dae2fd;--muted:#a1aec9;--line:#2e3347;--primary:#ffb3ac;--tertiary:#adc6ff}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Hanken Grotesk",sans-serif}
+body.infoscreen{height:100dvh;overflow:hidden}
+.rc{--rc-card-height:clamp(176px,23vh,260px)}
+.rc>*{min-width:0;min-height:0}
+.head{gap:20px;overflow:hidden}
+.brand{display:flex;align-items:center;gap:20px;min-width:0}
+.brand img{max-height:48px;max-width:140px;object-fit:contain}
+.brand>div{min-width:0}
+.org{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+h1{font-size:26px;line-height:1.15;margin:0;font-weight:800}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap}
+.button{color:var(--text);background:var(--low);border:1px solid var(--line);border-radius:8px;padding:8px 14px;text-decoration:none;font:inherit;cursor:pointer}
+.button--primary{background:var(--primary);color:#3b0907;border-color:var(--primary);font-weight:700}
+.zeit{text-align:right;flex-shrink:0}
+.clock{font-size:44px;font-weight:700;line-height:1}
+.stand,.footer,.kpi span,.tag{font-family:"JetBrains Mono",monospace}
+.stand{font-size:10px;color:var(--muted)}
+.rc-main{display:grid;grid-template-rows:132px minmax(0,1fr);padding:12px;gap:12px;overflow:hidden}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;min-height:0}
+.kpi{min-width:0;overflow:hidden;padding:12px}
+.kpi strong{display:block;font-size:clamp(40px,4vw,72px);line-height:1.1;font-weight:800}
+.kpi span{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.content{min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px}
+.content:has(.map-panel[hidden]){grid-template-columns:minmax(0,1fr)}
+.panel{min-width:0;min-height:0;padding:12px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;background:var(--low);overflow:hidden}
+.map{flex:1;min-height:0;border-radius:8px;overflow:hidden}
+.list-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-shrink:0}
+.list-heading h2{font-size:16px;font-weight:700;margin:0;color:var(--tertiary)}
+#page-indicator{font-size:12px;color:var(--muted);white-space:nowrap}
+.list{flex:1;min-height:0;overflow:hidden;display:grid;align-content:start;gap:8px}
+.card{height:var(--rc-card-height);min-height:0;min-width:0;overflow:hidden;border-left:6px solid #9e9e9e;padding:10px 14px;background:var(--surface);border-radius:8px}
+.card h3{margin:0;font-size:clamp(18px,1.15vw,26px);font-weight:700;-webkit-line-clamp:2}
+.card h3,.meta,.tag{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.meta{margin-top:4px;color:var(--muted);font-size:clamp(13px,.85vw,18px);line-height:1.35;-webkit-line-clamp:1}
+.meta--art{color:var(--text);font-weight:700}
+.tag{margin-top:4px;font-size:11px;color:var(--tertiary);-webkit-line-clamp:1}
+.card--gross{height:100%}
+.card--gross h3{font-size:clamp(24px,2.2vw,40px)}
+.card--gross .meta{font-size:clamp(16px,1.3vw,24px);-webkit-line-clamp:2}
+.empty{padding:20px;text-align:center;color:var(--muted);font-size:clamp(18px,1.4vw,26px)}
+.footer{display:flex;gap:12px;align-items:center;padding:0 24px;font-size:10px;color:var(--muted);overflow:hidden}
+.bar{height:4px;background:var(--primary);flex:1;min-width:0;border-radius:4px;transform-origin:left;transition:transform 1s linear}
+.is-offline .bar{background:#f57c00}
+.view-map .list-panel,.view-map .kpis,.view-detail .kpis{display:none}
+.view-map .rc-main,.view-detail .rc-main{grid-template-rows:minmax(0,1fr)}
+.view-map .content{grid-template-columns:minmax(0,1fr)}
+.view-detail .list{grid-template-rows:minmax(0,1fr)}
+/* Statusseiten behalten die vollstaendige Liste. */
+body.status .rc{height:auto;min-height:100dvh;grid-template-rows:88px minmax(0,1fr) 36px;overflow:visible}
+body.status .rc-main{overflow:visible}
+body.status .list{display:block;overflow:visible}
+body.status .card{height:auto;margin-bottom:8px}
+body.status .card h3,body.status .meta,body.status .tag{display:block}
+body.status .map{min-height:400px}
+.section-title{font-size:18px;margin:6px 0 8px;color:var(--tertiary)}
+@media(max-width:760px){
+  body.infoscreen{height:auto;overflow:auto}
+  body.infoscreen .rc,body.status .rc{height:auto;min-height:100dvh;grid-template-rows:auto minmax(0,1fr) auto;overflow:visible}
+  .head{padding:12px;flex-wrap:wrap;align-items:flex-start}
+  .brand img{max-width:80px}
+  .zeit{text-align:left}
+  .rc-main{grid-template-rows:auto auto;overflow:visible}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .content,.view-detail .content{display:flex;flex-direction:column}
+  .map-panel{height:45vh;flex:none}
+  .list{display:block;overflow:visible}
+  .card,.card--gross{height:auto;margin-bottom:8px}
+  .card h3,.meta,.tag{display:block}
+  .list-heading{flex-wrap:wrap}
+  .footer{padding:12px;flex-wrap:wrap}
+  body.status .map{min-height:0}
+}

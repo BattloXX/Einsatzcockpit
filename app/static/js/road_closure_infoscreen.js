@@ -19,7 +19,21 @@
   var loadedAt = Date.now();
   var lastOk = new Date();
   var rotationTimer = null;
-  var rotationStep = 0;
+  var rotationSeconds = null;
+  var currentView = 0;
+  var pageIndex = 0;
+  var pageCount = 1;
+  var list = document.getElementById('list');
+  var mobile = window.matchMedia('(max-width: 760px)');
+
+  function paginated() {
+    return root.dataset.modus === 'infoscreen' && !mobile.matches;
+  }
+
+  function orderedItems(items) {
+    return items.filter(function (item) { return item.status === 'active'; })
+      .concat(items.filter(function (item) { return item.status === 'planned'; }));
+  }
 
   function el(tag, text, cls) {
     var node = document.createElement(tag);
@@ -77,7 +91,7 @@
     box.replaceChildren();
     KPIS.forEach(function (kpi) {
       if (kpi[0] === 'geplant' && data.zeige_geplante === false) return;
-      var tile = el('div', null, 'kpi');
+      var tile = el('div', null, 'kpi bg-surface-container-low rounded-xl');
       tile.append(el('strong', String(data.kennzahlen[kpi[0]] || 0)), el('span', kpi[1]));
       box.append(tile);
     });
@@ -98,19 +112,47 @@
   }
 
   function renderList(items, gross) {
-    var list = document.getElementById('list');
     list.replaceChildren();
-    if (!items.length) { list.append(el('p', 'Derzeit keine Straßensperren', 'empty')); return; }
-    [['active', 'Aktiv'], ['planned', 'Geplant']].forEach(function (group) {
-      var subset = items.filter(function (item) { return item.status === group[0]; });
-      if (!subset.length) return;
-      if (!gross) list.append(el('h2', group[1] + ' (' + subset.length + ')', 'section-title'));
-      subset.forEach(function (item) { list.append(card(item, gross)); });
-    });
+    list.style.gridAutoRows = '';
+    var indicator = document.getElementById('page-indicator');
+    indicator.hidden = !paginated() || gross;
+    var ordered = orderedItems(items);
+    if (paginated() && !gross) {
+      // Gleiche Kartenhoehe in CSS und Berechnung, inklusive Abstand zwischen Karten.
+      var style = window.getComputedStyle(list);
+      var probe = card(ordered[0] || { title: '' }, false);
+      list.append(probe);
+      var height = probe.getBoundingClientRect().height;
+      var gap = parseFloat(style.rowGap) || 0;
+      var capacity = Math.max(1, Math.floor((list.clientHeight + gap) / Math.max(1, height + gap)));
+      // Auch bei sehr kleinen Fenstern passt mindestens eine begrenzte Karte hinein.
+      list.style.gridAutoRows = Math.min(height, list.clientHeight) + 'px';
+      probe.remove();
+      pageCount = Math.max(1, Math.ceil(ordered.length / capacity));
+      pageIndex = Math.min(pageIndex, pageCount - 1);
+      indicator.textContent = 'Seite ' + (pageIndex + 1) + '/' + pageCount;
+      ordered.slice(pageIndex * capacity, (pageIndex + 1) * capacity).forEach(function (item) {
+        var node = card(item, false);
+        node.style.height = '100%';
+        node.prepend(el('div', item.status === 'active' ? 'Aktiv' : 'Geplant', 'tag'));
+        list.append(node);
+      });
+    } else {
+      list.style.gridAutoRows = '';
+      [['active', 'Aktiv'], ['planned', 'Geplant']].forEach(function (group) {
+        var subset = ordered.filter(function (item) { return item.status === group[0]; });
+        if (!subset.length) return;
+        if (!gross) list.append(el('h2', group[1] + ' (' + subset.length + ')', 'section-title'));
+        subset.forEach(function (item) { list.append(card(item, gross)); });
+      });
+    }
+    if (!ordered.length) list.append(el('p', 'Derzeit keine Straßensperren', 'empty'));
   }
 
   function setView(step) {
     var details = data.sperren.slice(0, MAX_DETAILS);
+    if (step >= details.length + 2) step = 0;
+    currentView = step;
     root.classList.remove('view-map', 'view-detail');
     if (step === 0) {
       renderList(data.sperren, false);
@@ -126,19 +168,31 @@
     }
   }
 
+  function advance() {
+    if (!paginated()) return;
+    if (currentView === 0 && pageIndex + 1 < pageCount) {
+      pageIndex++;
+      renderList(data.sperren, false);
+      return;
+    }
+    pageIndex = 0;
+    var rotateViews = (parseInt(data.rotation_sec, 10) || 0) > 0 && data.sperren.length >= 2;
+    if (!rotateViews) { setView(0); return; }
+    // Alle Uebersichtsseiten, Karte (falls sichtbar), dann Einzelansichten.
+    if (currentView === 0) setView(showMap ? 1 : 2);
+    else if (currentView === 1) setView(2);
+    else setView(currentView + 1);
+  }
+
   function restartRotation() {
+    setView(currentView);
+    // Ohne Ansichtsrotation bleiben weitere Listenseiten dennoch erreichbar.
+    var seconds = parseInt(data.rotation_sec, 10) || 15;
+    if (root.dataset.modus !== 'infoscreen') return;
+    if (rotationTimer && rotationSeconds === seconds) return;
     clearInterval(rotationTimer);
-    rotationStep = 0;
-    setView(0);
-    var seconds = parseInt(data.rotation_sec, 10) || 0;
-    if (root.dataset.modus !== 'infoscreen' || seconds <= 0 || data.sperren.length < 2) return;
-    // Ablauf: Übersicht → Karte (nur wenn sichtbar) → Einzelansicht je Sperre (max. MAX_DETAILS).
-    var sequence = [0].concat(showMap ? [1] : []);
-    for (var i = 0; i < Math.min(data.sperren.length, MAX_DETAILS); i++) sequence.push(i + 2);
-    rotationTimer = setInterval(function () {
-      rotationStep = (rotationStep + 1) % sequence.length;
-      setView(sequence[rotationStep]);
-    }, seconds * 1000);
+    rotationSeconds = seconds;
+    rotationTimer = setInterval(advance, Math.max(1, seconds) * 1000);
   }
 
   function render(next) {
@@ -179,6 +233,18 @@
   var full = document.getElementById('fullscreen');
   if (full) full.addEventListener('click', function () {
     if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  });
+
+  function resize() {
+    // In der Kartenansicht ist die Liste unsichtbar und nicht messbar.
+    if (currentView !== 1) renderList(currentView >= 2 ? [data.sperren[currentView - 2]] : data.sperren, currentView >= 2);
+    if (map) map.invalidateSize();
+  }
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(list);
+  mobile.addEventListener('change', function () {
+    pageIndex = 0;
+    if (mobile.matches) setView(0);
+    resize();
   });
 
   clock();
