@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Verwaltungsmenue:** Pro Fachgebiet ein Hauptpunkt, Unterseiten als URL-basierte Tabs aus einem zentralen Katalog (`admin_navigation.py`). Neue Gruppe Systemverwaltung (nur Sysadmin), Organisations-Einstellungen in vier Tabs, Systemstatus mit Tabs. Admin-Sidebar 42 -> 23, Sysadmin 54 -> 34 Eintraege; alle URLs und Rechte unveraendert. Waechter-Test ordnet jede Admin-Seite einem Hauptpunkt zu; Regel in CLAUDE.md und docs/architecture/admin-navigation.md. Keine Migration.
+
 - **Alarm-Link:** Gast-Anmeldung mit Einsatz-PIN und Namen direkt über Teams-/SMS-Link; IP-Limit und einsatzweite Fehlversuchssperre. QR-/Gastzugänge gelten ausschließlich für ihren Einsatz; Alarm-Link-Gastzugänge enden auch bei Ablauf oder Widerruf des Links. Keine Migration.
 
 - **Alarmierung und Druck:** MariaDB-Snapshot-Konflikte (1020) beim Alarm-Claim begrenzt wiederholen; Druck-Deduplizierung liest den konkurrierenden Gewinner unter bestehender Zeilensperre, ohne Fachaenderungen der aufrufenden Transaktion zu verwerfen.

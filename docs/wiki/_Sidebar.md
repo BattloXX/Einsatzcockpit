@@ -33,6 +33,10 @@
 - [Überblick](Anwender-Grosschadenslage)
 - [Einheitenansicht](Anwender-GSL-Einheitenansicht)
 
+**Verwaltung**
+- [Verwaltungsmenü](Administration-Navigation)
+- [Einstellungen](Administration-Einstellungen)
+
 **Systemadministration**
 - [Überblick und Inbetriebnahme](Administration-System-Admin-Ueberblick)
 - [Systemdiagnose](Administration-Systemdiagnose)
