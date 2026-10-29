@@ -15,8 +15,8 @@ from app.config import settings
 from app.db import SessionLocal
 from app.mcp.fehler import ExternerDienstFehler
 from app.models.osm import OsmGebaeude, OsmImportLauf
+from app.services import geodienst_statistik, shared_cache
 from app.services import hydrant_service as overpass
-from app.services import shared_cache
 from app.services.objekt_karte_service import ObjektKartenFehler
 from app.services.overpass_endpunkte import OverpassNichtVerfuegbar, abfragen
 
@@ -81,6 +81,7 @@ async def gebaeude_umrisse(lat: float, lng: float, radius_m: int = 150) -> dict:
     if settings.OSM_GEBAEUDE_IMPORT_ENABLED:
         lokal = await asyncio.to_thread(_lokale_umrisse, lat, lng, radius_m)
         if lokal is not None:
+            await geodienst_statistik.zaehlen("gebaeude", "cache_lokal")
             return lokal
         hinweis = {"quelle_hinweis": "kein lokaler Bestand fuer diesen Ort"}
     key = f"objekt-gebaeude:{lat:.7f}:{lng:.7f}:{radius_m}"
@@ -90,9 +91,11 @@ async def gebaeude_umrisse(lat: float, lng: float, radius_m: int = 150) -> dict:
             async with overpass._sperre(key):
                 cached = await overpass._lesen(key)
                 if cached is not None:
+                    await geodienst_statistik.zaehlen("gebaeude", "cache_hit")
                     return cached | {"cache_status": "hit"} | hinweis
                 negativ = await overpass._lesen(key + ":negativ") or {}
                 if negativ.get("bis", 0) > time.time():
+                    await geodienst_statistik.zaehlen("gebaeude", "negativ_cache")
                     raise ExternerDienstFehler(
                         code="OVERPASS_ALL_ENDPOINTS_FAILED", retryable=True,
                         meldung="Overpass derzeit nicht erreichbar (alle Endpunkte ausgelastet oder gesperrt)",
@@ -100,6 +103,7 @@ async def gebaeude_umrisse(lat: float, lng: float, radius_m: int = 150) -> dict:
                                  "endpunkte": negativ.get("endpunkte", []), "cache_status": "negativ_cache",
                                  "retry_after_s": max(0, int(negativ["bis"] - time.time()) + 1)},
                     )
+                await geodienst_statistik.zaehlen("gebaeude", "cache_miss")
                 try:
                     # Zwei Sekunden Reserve fuer Cache und Aufbereitung innerhalb des Gesamtbudgets.
                     rest = settings.OBJEKT_GEBAEUDE_TOTAL_TIMEOUT_SECONDS - (

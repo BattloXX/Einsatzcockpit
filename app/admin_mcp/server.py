@@ -173,6 +173,11 @@ async def admin_worker_pruefen() -> dict:
     return await call_tool("admin_worker_pruefen")
 
 
+@server.tool(description=ADMIN_TOOLS["admin_osm_pruefen"].description)
+async def admin_osm_pruefen(live: bool = True) -> dict:
+    return await call_tool("admin_osm_pruefen", live=live)
+
+
 @server.tool(description=ADMIN_TOOLS["admin_redis_pruefen"].description)
 async def admin_redis_pruefen() -> dict:
     return await call_tool("admin_redis_pruefen")

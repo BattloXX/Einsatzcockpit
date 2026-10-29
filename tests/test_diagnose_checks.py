@@ -80,6 +80,8 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
                heartbeat_at=utcnow(), expires_at=utcnow() + timedelta(seconds=20), is_leader=True,
                redis=redis, loops={})
         org = insert(db, "fire_dept", name="PRIVATE-NAME", slug="test")
+    if check_id == "osm.gebaeude_bestand":
+        monkeypatch.setattr(settings, "OSM_GEBAEUDE_QUELLEN", "")
     if check_id == "deploy.version":
         from app.services.github_readonly import GitHubReadonly
         monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
@@ -93,6 +95,8 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
     with factory() as db:
         if check_id == "deploy.version":
             monkeypatch.setattr(settings, "GIT_SHA", "")
+        elif check_id == "osm.gebaeude_bestand":
+            monkeypatch.setattr(settings, "OSM_GEBAEUDE_QUELLEN", "region=https://osm.test/region.pbf")
         elif check_id == "db.snapshot_isolation":
             monkeypatch.setattr("app.services.db_transactions.retry_statistik", lambda: {1020: 1})
         elif check_id == "db.zustand":

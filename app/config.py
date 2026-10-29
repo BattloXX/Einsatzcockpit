@@ -278,6 +278,7 @@ class Settings(BaseSettings):
     # oesterreich=https://download.geofabrik.de/europe/austria-latest.osm.pbf
     OSM_GEBAEUDE_QUELLEN: str = "vorarlberg=https://download.openstreetmap.fr/extracts/europe/austria/vorarlberg-latest.osm.pbf"
     OSM_GEBAEUDE_AKTUALISIERUNG_TAGE: int = 7
+    GEODIENST_STATISTIK_TAGE: int = 30
     OSM_GEBAEUDE_MAX_ALTER_TAGE: int = 30
     OSM_GEBAEUDE_MAX_DOWNLOAD_MB: int = 1200
     OSM_GEBAEUDE_MAX_AENDERUNG_ANTEIL: float = 0.2
