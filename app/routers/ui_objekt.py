@@ -2978,6 +2978,9 @@ def _karten_review_mutation(db, objekt, user, daten, aktion, vorschlag_id=None):
         else:
             antwort = service.vorschlag_korrigieren(db, objekt, vorschlag_id, daten.get("lat"), daten.get("lng"),
                                                    daten.get("rotation", 0), daten.get("label"), user, "ui")
+            if daten.get("freigeben") is True:
+                antwort = service.freigeben(db, objekt, [vorschlag_id], user,
+                                            daten.get("bestaetigte_warnungen", {}), "ui")
         db.commit()
         return antwort
     except objekt_karte_service.ObjektKartenFehler as exc:
