@@ -849,7 +849,10 @@ class ObjektDokumentGeoref(TenantScoped, Base):
 class ObjektKartenVorschlag(TenantScoped, Base):
     """Pruefbare Vorschlaege; produktive Marker werden separat freigegeben."""
     __tablename__ = "objekt_karten_vorschlag"
-    __table_args__ = (Index("ix_objekt_karten_vorschlag_org_objekt_status", "org_id", "objekt_id", "freigabe_status"),)
+    __table_args__ = (
+        Index("ix_objekt_karten_vorschlag_org_objekt_status", "org_id", "objekt_id", "freigabe_status"),
+        Index("ix_objekt_karten_vorschlag_org_batch", "org_id", "objekt_id", "batch_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     objekt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"))
@@ -861,6 +864,9 @@ class ObjektKartenVorschlag(TenantScoped, Base):
     )
     bild_x: Mapped[float | None] = mapped_column(Float)
     bild_y: Mapped[float | None] = mapped_column(Float)
+    bild_richtung_x: Mapped[float | None] = mapped_column(Float)
+    bild_richtung_y: Mapped[float | None] = mapped_column(Float)
+    batch_id: Mapped[str | None] = mapped_column(String(64))
     operation: Mapped[str] = mapped_column(String(20), nullable=False)
     symbol_code: Mapped[str] = mapped_column(String(40), nullable=False)
     label: Mapped[str | None] = mapped_column(String(100))

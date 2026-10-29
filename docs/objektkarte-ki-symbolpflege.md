@@ -113,6 +113,33 @@ zu kalibrieren. Die Antwort nennt Begruendung, gepruefte Hypothesenzahl, vereinf
 `eckenzahlen_osm`, bis zu drei Hypothesen, Bildgroesse, Rotation und Editor-Link.
 Referenzpunkte werden nur bei Klasse A ausgegeben; Koordinaten stammen aus OSM.
 
+## Richtung und Wiederholung
+
+Fuer Pfeile und Zugaenge `bild_richtung={"dx": 1, "dy": 0}` zusammen mit `georef_id`
+und `bild_x/bild_y` senden. Der Vektor beschreibt die sichtbare Richtung im Bild
+(Pixelverhaeltnis, also wie angezeigt; `{"dx": 1, "dy": -1}` ist 45 Grad nach rechts oben):
+rechts ist +x, unten +y; Komponenten jeweils -1..1, Laenge groesser als 1e-6. `rotation`
+darf nicht gleichzeitig angegeben werden. Der Server nutzt die lokale
+Transformationsableitung und berechnet die Peilung im Uhrzeigersinn ab Nord.
+Die nordorientierte Karte dreht ebenfalls im Uhrzeigersinn. Pfeilstile `pfeil-voll` und
+`pfeil-leer` (etwa `hauptzugang`/`nebenzugang`) zeigen bei Rotation 0 nach **Osten**:
+Rotation = round(Peilung - 90) modulo 360. Andere Symbole verwenden Basis 0 (Norden).
+Ohne gueltige Georef bleibt Rotation 0 mit `richtung_ohne_georef`. Eine kompatible neue
+Georef-Revision berechnet Position und Rotation offener Vorschlaege erneut.
+
+`batch_id` ist eine optionale Laufkennung (1-64 Zeichen aus `A-Za-z0-9_.:-`) fuer
+`anlegen` und `aendern`, auch bei Wiederholung. `auflisten` kann danach filtern.
+Bei Neuanlage mit Georef prueft der Server zuerst produktive Marker: gleicher
+Dokument-Hash, gleiche Seite und gleicher Code bei Abstand unter 3 m ergeben
+`ergebnis="unveraendert"` mit Marker-ID, ohne neuen Vorschlag oder Audit-Eintrag.
+Sonst wird ein offener Vorschlag mit gleichem Hash, Seite, Code und Operation bei
+Bildabstand unter 0.01 aktualisiert (`aktualisiert`), auch bei leicht verschobenen
+Erkennungen oder geaenderter Laufkennung. Andernfalls entsteht ein Vorschlag (`neu`).
+Andere Eingaben behalten den exakten Vergleich (`unveraendert_offen`); explizite
+Aenderungen ergeben `aktualisiert`. Die Antwort von `anlegen` zaehlt diese Ergebnisse
+in `zusammenfassung`. Der Abgleich gilt innerhalb des eigenen Objekts und der Organisation.
+Das Fehlen eines Symbols im neuen Plan ist kein Grund fuer `entfernen`.
+
 ## Status und Warnungen
 
 `position_status` beschreibt die Position, unabhängig von `freigabe_status`:
@@ -139,6 +166,7 @@ Vollständige Warnungscodes aus Vorschlags-, Georeferenz- und Freigabeservice
 | `moegliche_dublette` | Gleicher Symbolcode und gleiches nichtleeres Label oder Abstand unter 3 m zu Marker/Vorschlag; Referenz-ID beachten |
 | `einsatzkritisch_freigabe_erforderlich` | Einsatzkritisches Ziel- oder Basissymbol ausdrücklich prüfen und bestätigen |
 | `position_manuell` | Position wurde im Review manuell korrigiert; ausdrücklich bestätigen |
+| `richtung_ohne_georef` | Bildrichtung gespeichert, aber ohne gueltige Georef keine belastbare Kartenrotation |
 | `georef_ungenau` | Berechnete Positionsunsicherheit über 4 m; Position muss geprüft werden |
 | `georef_ungueltig` | Georeferenz nicht nutzbar; alte Position wird gegebenenfalls nur als `altposition` ausgegeben |
 | `georef_veraltet` | Dokument, Rendering oder Rotation passen nicht mehr zur Referenz |
@@ -208,7 +236,7 @@ in der produktiven Karte und im Objektblatt/PDF; das Änderungsaudit hält die
   abgleichen, Auswahl neu bilden. Es wurde nichts aus der Auswahl übernommen.
 - **422 bei Freigabe:** Position/Quelle ungültig oder Warnung nicht bestätigt.
   Details stehen pro ID in `ergebnisse`; pauschales Bestätigen repariert keine Quelle.
-- **Wiederholung:** Identische offene Vorschläge werden wiedererkannt; ein bereits
+- **Wiederholung:** Planvorschlaege werden ueber den Toleranzabgleich oben wiedererkannt; ein bereits
   angenommener Vorschlag wird beim zweiten Freigeben mit 409 abgewiesen.
 
 Die tatsächliche Genauigkeit bleibt durch die Referenzquelle begrenzt. Kleine

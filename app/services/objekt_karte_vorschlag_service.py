@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +23,11 @@ from app.services.objekt_service import write_objekt_change
 
 MAX_ABSTAND_OBJEKT_M = 2000
 DUBLETTEN_ABSTAND_M = 3
+BILD_TOLERANZ = 0.01
 FREIGABE_STATUS = {"offen", "angenommen", "abgelehnt", "ersetzt"}
 _FELDER = {
     "georef_id", "bild_x", "bild_y", "basis_marker_id", "operation", "symbol_code", "label", "rotation", "lat", "lng",
-    "geometry_json",
+    "geometry_json", "bild_richtung_x", "bild_richtung_y", "batch_id",
     "position_status", "position_methode", "genauigkeit_m", "erkennungs_konfidenz", "quelle_dokument_id",
     "quelle_seite", "quelle_ausschnitt", "quelle_dokument_hash", "begruendung", "expected_revision", "quelle",
 }
@@ -85,6 +87,8 @@ def _veraltet(db: Session, objekt: Objekt, v: ObjektKartenVorschlag | ObjektKart
 
 def vorschlag_dict(v: ObjektKartenVorschlag, db: Session | None = None, objekt: Objekt | None = None) -> dict[str, Any]:
     daten = {name: getattr(v, name) for name in _FELDER}
+    daten["bild_richtung"] = ({"dx": v.bild_richtung_x, "dy": v.bild_richtung_y}
+                              if v.bild_richtung_x is not None and v.bild_richtung_y is not None else None)
     daten.update(id=v.id, objekt_id=v.objekt_id, freigabe_status=v.freigabe_status,
                  warnungen=json.loads(v.warnungen_json or "[]"), erstellt_von=v.erstellt_von,
                  erstellt_am=v.erstellt_am.isoformat() if v.erstellt_am else None,
@@ -100,16 +104,37 @@ def vorschlag_dict(v: ObjektKartenVorschlag, db: Session | None = None, objekt: 
             daten.update(lat=None, lng=None, genauigkeit_m=None,
                          position_status="veraltet" if v.position_status == "veraltet" else "pruefung_erforderlich")
             daten["warnungen"] = daten["warnungen"] + [{"code": "georef_ungueltig"}, {"code": "georef_" + status}]
+            if v.bild_richtung_x is not None and v.bild_richtung_y is not None:
+                daten["rotation"] = 0
+                if not any(w["code"] == "richtung_ohne_georef" for w in daten["warnungen"]):
+                    daten["warnungen"].append({"code": "richtung_ohne_georef"})
     return daten
 
 
-def vorschlaege_auflisten(db: Session, objekt: Objekt, filter_status: str | None = None) -> list[ObjektKartenVorschlag]:
+def vorschlaege_auflisten(db: Session, objekt: Objekt, filter_status: str | None = None,
+                         batch_id: str | None = None) -> list[ObjektKartenVorschlag]:
     query = db.query(ObjektKartenVorschlag).filter_by(objekt_id=objekt.id, org_id=objekt.org_id)
     if filter_status is not None:
         if filter_status not in FREIGABE_STATUS:
             raise ObjektKartenFehler("Unbekannter Freigabestatus")
         query = query.filter_by(freigabe_status=filter_status)
+    if batch_id is not None:
+        batch_id_validieren(batch_id)
+        query = query.filter_by(batch_id=batch_id)
     return query.order_by(ObjektKartenVorschlag.id).all()
+
+
+def batch_id_validieren(batch_id: str) -> None:
+    if not isinstance(batch_id, str) or re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", batch_id) is None:
+        raise ObjektKartenFehler("batch_id: 1-64 Zeichen aus A-Za-z0-9_.:- erforderlich")
+
+
+def symbol_basisrichtung(db: Session, org_id: int | None, symbol_code: str) -> int:
+    """Pfeile zeigen ohne Rotation nach Osten, andere Symbole nach Norden."""
+    if org_id is None:
+        raise ObjektKartenFehler("Organisation erforderlich")
+    symbol = next((s for s in symbolkatalog_lesen(db, org_id) if s["code"] == symbol_code), None)
+    return 90 if symbol and symbol["stil"] in {"pfeil-voll", "pfeil-leer"} else 0
 
 
 def _zahl(wert: Any, feld: str, minimum: float, maximum: float) -> float:
@@ -133,6 +158,13 @@ def _validiere(db: Session, objekt: Objekt, daten: dict) -> dict:
     if set(daten) - _FELDER - {"geometry"}:
         raise ObjektKartenFehler("Unbekannte Vorschlagsfelder")
     d = dict(daten)
+    if d.get("bild_richtung_x") is not None or d.get("bild_richtung_y") is not None:
+        dx = _zahl(d.get("bild_richtung_x"), "dx", -1, 1)
+        dy = _zahl(d.get("bild_richtung_y"), "dy", -1, 1)
+        if math.hypot(dx, dy) <= 1e-6:
+            raise ObjektKartenFehler("bild_richtung: Vektor zu kurz")
+    if d.get("batch_id") is not None:
+        batch_id_validieren(d["batch_id"])
     if objekt.org_id is None:
         raise ObjektKartenFehler("Organisation erforderlich")
     d.setdefault("operation", "hinzufuegen")
@@ -219,6 +251,17 @@ def _dublette(code: str, label: str | None, lat: float | None, lng: float | None
 
 def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: int,
                        vorschlag_id: int | None = None, audit_quelle: str = "mcp") -> dict:
+    daten = dict(daten)
+    richtung = daten.pop("bild_richtung", None)
+    if richtung is not None:
+        if "rotation" in daten:
+            raise ObjektKartenFehler("rotation und bild_richtung gleichzeitig sind nicht erlaubt")
+        if not isinstance(richtung, dict) or set(richtung) != {"dx", "dy"}:
+            raise ObjektKartenFehler("bild_richtung: dx und dy erforderlich")
+        dx, dy = _zahl(richtung["dx"], "dx", -1, 1), _zahl(richtung["dy"], "dy", -1, 1)
+        if math.hypot(dx, dy) <= 1e-6:
+            raise ObjektKartenFehler("bild_richtung: Vektor zu kurz")
+        daten.update(bild_richtung_x=dx, bild_richtung_y=dy)
     if objekt.entwurf_von_id is not None:
         raise ObjektKartenFehler("Vorschlaege nur am Basisobjekt anlegen")
     alle = vorschlaege_auflisten(db, objekt, "offen")
@@ -227,13 +270,15 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
         raise ObjektKartenFehler("Offener Vorschlag nicht gefunden", 404)
     vorher = vorschlag_dict(v) if v else None
     bestand = {k: getattr(v, k) for k in _FELDER} if v else {}
+    if "rotation" in daten or daten.get("georef_id", bestand.get("georef_id")) is None:
+        bestand.update(bild_richtung_x=None, bild_richtung_y=None)
     if "quelle_dokument_id" in daten and daten["quelle_dokument_id"] != bestand.get("quelle_dokument_id"):
         bestand["quelle_dokument_hash"] = None
     if daten.get("georef_id") is not None and any(
         daten.get(k) is not None for k in ("lat", "lng", "geometry", "geometry_json")
     ):
         raise ObjektKartenFehler("georef_id und Geokoordinaten gleichzeitig sind nicht erlaubt")
-    if bestand.get("georef_id") is not None and any(
+    if daten.get("georef_id", bestand.get("georef_id")) is not None and any(
         daten.get(k) is not None for k in ("lat", "lng", "geometry", "geometry_json")
     ):
         raise ObjektKartenFehler("Georeferenz vor direkter Koordinateneingabe entfernen")
@@ -241,11 +286,17 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
         bestand.update(lat=None, lng=None, geometry_json=None)
     # Die alternative geometry-Eingabe ersetzt auch bestehende Geometrie.
     d = _validiere(db, objekt, bestand | daten)
+    hat_richtung = d.get("bild_richtung_x") is not None and d.get("bild_richtung_y") is not None
+    if hat_richtung:
+        if d.get("georef_id") is None or d.get("bild_x") is None or d.get("bild_y") is None:
+            raise ObjektKartenFehler("bild_richtung benoetigt georef_id und bild_x/bild_y")
+        d["rotation"] = 0
     georef_warnung = None
     if d.get("georef_id") is not None:
         from app.models.objekt import ObjektDokumentGeoref
         from app.services.objekt_georef_service import (
             MAX_POSITIONSUNSICHERHEIT_M,
+            bild_richtung_zu_peilung,
             bild_zu_geo,
             georef_pruefen,
         )
@@ -266,6 +317,9 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
         status = georef_pruefen(db, objekt, g)
         if status == "gueltig":
             d["lat"], d["lng"], d["genauigkeit_m"] = bild_zu_geo(g, x, y)
+            if hat_richtung:
+                peilung = bild_richtung_zu_peilung(g, x, y, d["bild_richtung_x"], d["bild_richtung_y"])
+                d["rotation"] = round(peilung - symbol_basisrichtung(db, objekt.org_id, d["symbol_code"])) % 360
             if d["genauigkeit_m"] <= MAX_POSITIONSUNSICHERHEIT_M:
                 d["position_status"] = "vorgeschlagen"
             else:
@@ -274,6 +328,22 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
             georef_warnung = "georef_" + status
     elif d.get("bild_x") is not None or d.get("bild_y") is not None:
         raise ObjektKartenFehler("Bildkoordinaten benoetigen georef_id")
+    if v is None and d.get("georef_id") is not None:
+        for marker in karten_objekte_lesen(db, objekt):
+            if (marker.typ == d["symbol_code"] and marker.quelle_dokument_hash == d["quelle_dokument_hash"]
+                    and marker.quelle_seite == d["quelle_seite"]
+                    and _abstand(marker.lat, marker.lng, d.get("lat"), d.get("lng")) < DUBLETTEN_ABSTAND_M):
+                return {"ergebnis": "unveraendert", "marker_id": marker.id, "symbol_code": marker.typ,
+                        "lat": marker.lat, "lng": marker.lng}
+        v = next((a for a in alle
+                  if a.quelle_dokument_hash == d["quelle_dokument_hash"] and a.quelle_seite == d["quelle_seite"]
+                  and a.symbol_code == d["symbol_code"] and a.operation == d["operation"]
+                  and a.bild_x is not None and a.bild_y is not None
+                  and math.hypot(d["bild_x"] - a.bild_x, d["bild_y"] - a.bild_y) < BILD_TOLERANZ), None)
+        if v is not None:
+            return vorschlag_speichern(db, objekt, daten, user_id=user_id,
+                                      vorschlag_id=v.id, audit_quelle=audit_quelle)
+    ergebnis = "aktualisiert" if v is not None else "neu"
     if v is None:
         schluessel: tuple[str, ...] = (
             "georef_id", "bild_x", "bild_y", "quelle", "quelle_dokument_id", "quelle_seite", "quelle_ausschnitt",
@@ -285,8 +355,13 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
             schluessel += ("label",)
         identisch = next((a for a in alle if all(getattr(a, k) == d.get(k) for k in schluessel)), None)
         if identisch:
-            return vorschlag_dict(identisch, db, objekt)
+            if "batch_id" in d:
+                identisch.batch_id = d["batch_id"]
+                db.flush()
+            return vorschlag_dict(identisch, db, objekt) | {"ergebnis": "unveraendert_offen"}
     warnungen: list[dict[str, Any]] = [{"code": georef_warnung}] if georef_warnung else []
+    if hat_richtung and georef_warnung and d.get("lat") is None:
+        warnungen.append({"code": "richtung_ohne_georef"})
     if _abstand(d.get("lat"), d.get("lng"), objekt.lat, objekt.lng) > MAX_ABSTAND_OBJEKT_M and all(
         w is not None for w in (d.get("lat"), d.get("lng"), objekt.lat, objekt.lng)
     ):
@@ -315,7 +390,7 @@ def vorschlag_speichern(db: Session, objekt: Objekt, daten: dict, *, user_id: in
     write_objekt_change(db, objekt.id, objekt.org_id, "karte", "vorschlag_geaendert" if vorher else "vorschlag_neu",
                         before=vorher, after=antwort, user_id=user_id, quelle=audit_quelle)
     db.flush()
-    return antwort
+    return antwort | {"ergebnis": ergebnis}
 
 
 def vorschlag_verwerfen(db: Session, objekt: Objekt, vorschlag_id: int, *, user_id: int) -> dict:
