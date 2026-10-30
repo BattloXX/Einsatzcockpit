@@ -5,6 +5,7 @@
 {% include "_fab_styles.html" %}
 {% include "einheit/_einheit_styles.html" %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css?v={{ ASSET_VERSION }}">
+<script src="/static/js/bsp_overlay_layer.js?v={{ ASSET_VERSION }}" defer></script>
 <script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}" defer></script>
 {# Die Outbox wird per import geladen; ohne Versions-Mapping bliebe sie wegen max-age dauerhaft im Browser-Cache. #}
 <script type="importmap">
@@ -296,6 +297,7 @@
           <label class="einheit-checkbox"><input type="checkbox" x-model="fertigeAufKarte"
                         @change="uebersichtKarteAktualisieren()"> Fertige einblenden</label>
         </div>
+        {% include "incident/_bsp_lokal.html" %}
         <div class="einheit-kartenlayout">
         <article class="fab-subcard einheit-kartenziel" x-show="kartenZiel" aria-label="Gewähltes Kartenziel"
                  :class="'einheit-prio--' + (kartenZiel?.priority || 'keine')">

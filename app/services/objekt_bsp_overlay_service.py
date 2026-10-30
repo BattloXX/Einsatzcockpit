@@ -16,7 +16,7 @@ from PIL import Image, ImageChops, ImageDraw
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.permissions import OBJEKT_VERWALTER_ROLES
+from app.core.permissions import OBJEKT_VERWALTER_ROLES, has_role
 from app.models.objekt import (
     BspOverlayEinsatz,
     Objekt,
@@ -289,7 +289,7 @@ def overlay_ist_auslieferbar(db: Session, overlay: ObjektBspOverlay) -> bool:
         return False
 
 
-def overlays_fuer_einsatz(db: Session, incident_id: int) -> list[dict]:
+def overlays_fuer_einsatz(db: Session, incident_id: int, *, einsatzvorgabe: bool = True) -> list[dict]:
     zuordnungen = db.query(ObjektEinsatz).filter_by(incident_id=incident_id, status="bestaetigt").all()
     ergebnis = []
     for zuordnung in zuordnungen:
@@ -301,8 +301,8 @@ def overlays_fuer_einsatz(db: Session, incident_id: int) -> list[dict]:
             einstellung = db.query(BspOverlayEinsatz).filter_by(
                 incident_id=incident_id, overlay_id=overlay.id, org_id=overlay.org_id
             ).first()
-            sichtbarkeit = einstellung.sichtbarkeit if einstellung else "INHERIT"
-            deckkraft = einstellung.deckkraft if einstellung else None
+            sichtbarkeit = einstellung.sichtbarkeit if einstellung and einsatzvorgabe else "INHERIT"
+            deckkraft = einstellung.deckkraft if einstellung and einsatzvorgabe else None
             ergebnis.append({
                 **_daten(overlay), "bounds": json.loads(overlay.raster_bounds_json or "[]"),
                 "sichtbarkeit": sichtbarkeit, "deckkraft": deckkraft,
@@ -310,6 +310,33 @@ def overlays_fuer_einsatz(db: Session, incident_id: int) -> list[dict]:
                 "effektiv_deckkraft": deckkraft if deckkraft is not None else overlay.standard_deckkraft,
             })
     return ergebnis
+
+
+def einsatz_overlays_json(
+    db: Session, incident_id: int, user: User, *, kann_einstellen: bool = False,
+    einsatzvorgabe: bool = True,
+) -> list[dict]:
+    """Gemeinsame, lesende Serialisierung fuer geschuetzte Einsatzkarten."""
+    liste = []
+    for daten in overlays_fuer_einsatz(db, incident_id, einsatzvorgabe=einsatzvorgabe):
+        objekt = db.get(Objekt, daten["objekt_id"])
+        # Dieselbe Leseschranke wie bei der geschuetzten Rasterauslieferung.
+        if not objekt or (objekt.status == "entwurf" and not has_role(user, "objekt_verwalter")):
+            continue
+        liste.append({
+            **{feld: daten[feld] for feld in (
+                "id", "name", "objekt_id", "plan_art", "geschoss", "bereich", "freigabe_nr",
+                "bounds", "standard_sichtbar", "standard_deckkraft", "sichtbarkeit", "deckkraft",
+                "effektiv_sichtbar", "effektiv_deckkraft",
+            )},
+            "objekt_name": objekt.name,
+            "freigegeben_am": daten["freigegeben_am"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            if daten["freigegeben_am"] else None,
+            "raster_url": f'/objekt-medien/bsp-overlay/{daten["id"]}/raster'
+                          f'?v={daten["freigabe_nr"]}-{(daten["raster_sha256"] or "")[:8]}',
+            "kann_einstellen": kann_einstellen,
+        })
+    return liste
 
 
 def original_ausschnitt_png(db: Session, overlay: ObjektBspOverlay) -> bytes:

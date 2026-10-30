@@ -10,7 +10,7 @@ const overlay = (id = 1, extra = {}) => ({id, name: 'Halle', objekt_name: 'Betri
   sichtbarkeit: 'INHERIT', deckkraft: null, kann_einstellen: true, ...extra});
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function fixture({liste = [overlay()], storageFail = false, kann = true} = {}) {
+function fixture({liste = [overlay()], storageFail = false, kann = true, nurLokal = false, listUrl = "/einsatz/1/lagefuehrung/bsp-overlays.json", storage = new Map()} = {}) {
   const elements = new Map();
   function el(id) {
     if (!elements.has(id)) elements.set(id, {events: {}, value: '', checked: false, disabled: false,
@@ -18,7 +18,7 @@ function fixture({liste = [overlay()], storageFail = false, kann = true} = {}) {
       appendChild(child) {this.children.push(child);}});
     return elements.get(id);
   }
-  const panes = {}, active = new Set(), created = [], requests = [], storage = new Map();
+  const panes = {}, active = new Set(), created = [], requests = [];
   let daten = liste, antwort;
   const map = {getPane: name => panes[name], createPane(name) {return panes[name] = {style: {}};},
     removeLayer: layer => active.delete(layer)};
@@ -26,7 +26,7 @@ function fixture({liste = [overlay()], storageFail = false, kann = true} = {}) {
     getItem(key) {if (storageFail) throw Error('gesperrt'); return storage.get(key) || null;},
     setItem(key, value) {if (storageFail) throw Error('voll'); storage.set(key, value);},
     removeItem(key) {if (storageFail) throw Error('gesperrt'); storage.delete(key);}
-  }}, document: {getElementById: el, createElement: () => ({})},
+  }}, document: {getElementById: id => nurLokal && ["lft-bsp-scope", "lft-bsp-alle"].includes(id) ? null : el(id), createElement: () => ({})},
   fetch: async (url, options) => {
     requests.push({url, options});
     if (antwort) return antwort(url, options);
@@ -37,7 +37,7 @@ function fixture({liste = [overlay()], storageFail = false, kann = true} = {}) {
     created.push(layer); return layer;
   }}};
   vm.runInNewContext(source, context);
-  const controller = context.window.EcpBspOverlay.init(map, {listUrl: '/einsatz/1/lagefuehrung/bsp-overlays.json',
+  const controller = context.window.EcpBspOverlay.init(map, {listUrl, nurLokal,
     postUrlTemplate: '/einsatz/1/bsp/{overlay_id}/einstellung', csrfToken: 'token', kannEinstellen: kann});
   return {controller, el, active, created, panes, storage, requests, api: context.window.EcpBspOverlay,
     setListe: value => {daten = value;}, setAntwort: value => {antwort = value;},
@@ -140,7 +140,8 @@ test('spaete Listen-Antwort kann entfernte Overlays nicht wiederherstellen', asy
 
 test('BSP-Raster und Listen umgehen den Service-Worker-Offlinecache', () => {
   const sw = readFileSync(new URL('../../app/static/sw.js', import.meta.url), 'utf8');
-  for (const path of ['/objekt-medien/bsp-overlay/1/raster?v=2-sha', '/einsatz/1/lagefuehrung/bsp-overlays.json']) {
+  for (const path of ['/objekt-medien/bsp-overlay/1/raster?v=2-sha', '/einsatz/1/lagefuehrung/bsp-overlays.json',
+    '/einsatz/1/info/bsp-overlays.json', '/lage/1/bsp-overlays.json', '/einheit/bsp-overlays.json?einheit=1']) {
     const listeners = new Map();
     vm.runInNewContext(sw, {self: {addEventListener: (name, fn) => listeners.set(name, fn)},
       URL, location: {origin: 'https://ecp.test'}, caches: {open() {assert.fail('Kein Offlinecache');}}});
@@ -148,3 +149,29 @@ test('BSP-Raster und Listen umgehen den Service-Worker-Offlinecache', () => {
       respondWith() {assert.fail('Privater Browser-HTTP-Cache muss greifen');}});
   }
 });
+
+for (const listUrl of ['/einsatz/1/info/bsp-overlays.json', '/lage/1/bsp-overlays.json', '/einheit/bsp-overlays.json?einheit=1']) {
+  test('nur lokale BSP-Bedienung persistiert ohne POST: ' + listUrl, async () => {
+    const f = fixture({nurLokal: true, kann: false, listUrl}); await flush();
+    f.el('lft-layer-bsp').checked = false; f.event('lft-layer-bsp', 'change');
+    f.el('lft-bsp-deckkraft').value = '0.35'; f.event('lft-bsp-deckkraft', 'change');
+    const neu = fixture({nurLokal: true, kann: false, listUrl, storage: f.storage}); await flush();
+    assert.equal(neu.active.size, 0);
+    assert.equal(neu.el('lft-bsp-deckkraft').value, 0.35);
+    assert.equal(f.requests.some(r => r.options.method === 'POST'), false);
+    neu.event('lft-bsp-reset');
+    assert.equal(neu.active.size, 1);
+    assert.equal(neu.storage.size, 0);
+  });
+  test('lokale BSP-Bedienung bleibt bei Storage-Ausfall bedienbar: ' + listUrl, async () => {
+    const f = fixture({nurLokal: true, kann: false, listUrl, storageFail: true}); await flush();
+    f.el('lft-layer-bsp').checked = false; f.event('lft-layer-bsp', 'change');
+    await f.controller.reload();
+    assert.equal(f.active.size, 0);
+    assert.match(f.el('lft-bsp-hinweis').textContent, /nur bis zum Schließen/);
+    f.el('lft-layer-bsp').checked = true;
+    f.el('lft-bsp-deckkraft').value = '0.2'; f.event('lft-bsp-deckkraft', 'change');
+    assert.equal([...f.active][0].options.opacity, 0.2);
+    assert.equal(f.requests.some(r => r.options.method === 'POST'), false);
+  });
+}

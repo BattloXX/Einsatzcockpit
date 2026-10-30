@@ -160,6 +160,9 @@ def overlay_aktion(objekt_id: int, overlay_id: int, aktion: str, daten: dict = B
 def overlay_raster(overlay_id: int, request: Request, vorschau: bool = False,
                    db: Session = Depends(get_db),
                    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN))):
+    if (getattr(request.state, "qr_incident_id", None) is not None
+            or getattr(request.state, "qr_lage_id", None) is not None):
+        raise HTTPException(401, "Anmeldung erforderlich")
     overlay = _overlay(db, overlay_id, user)
     if vorschau and not {r.code for r in user.roles} & OBJEKT_VERWALTER_ROLES:
         raise HTTPException(403, "Vorschau nur für Objektverwalter")

@@ -25,6 +25,10 @@
   var objektIds = (el.dataset.objektIds || "").split(",").filter(Boolean);
 
   var karte = L.map(el, { zoomControl: true });
+  if (el.dataset.bspUrl && window.EcpBspOverlay) {
+    var bspLayer = window.EcpBspOverlay.init(karte, {listUrl: el.dataset.bspUrl, nurLokal: true});
+    setInterval(function () { bspLayer.reload(); }, 30000);
+  }
   var tileLayer = window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
   // Karte liegt in einem Grid/Sticky-Container → nach dem Layout neu vermessen.
   setTimeout(function () { karte.invalidateSize(); }, 200);

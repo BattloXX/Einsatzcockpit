@@ -74,9 +74,11 @@
       if (root) { root.hidden = !overlays.length; }
       var o = gewaehlt();
       if (!o || !root) { return; }
-      if (!o.kann_einstellen) { scope = "lokal"; }
-      el("lft-bsp-scope").value = scope;
-      el("lft-bsp-alle").disabled = !o.kann_einstellen;
+      if (opts.nurLokal || !o.kann_einstellen) { scope = "lokal"; }
+      if (!opts.nurLokal) {
+        el("lft-bsp-scope").value = scope;
+        el("lft-bsp-alle").disabled = !o.kann_einstellen;
+      }
       var zustand = aufloesen(o, scope === "lokal" ? lokal(o.id) : null);
       el("lft-layer-bsp").checked = zustand.sichtbar;
       el("lft-bsp-deckkraft").value = zustand.deckkraft;
@@ -139,7 +141,9 @@
     }
     if (root) {
       el("lft-bsp-auswahl").addEventListener("change", function () { auswahl = Number(this.value); render(); });
-      el("lft-bsp-scope").addEventListener("change", function () { scope = this.value; render(); });
+      if (!opts.nurLokal) {
+        el("lft-bsp-scope").addEventListener("change", function () { scope = this.value; render(); });
+      }
       el("lft-layer-bsp").addEventListener("change", function () { aendern(false); });
       el("lft-bsp-deckkraft").addEventListener("input", function () {
         el("lft-bsp-prozent").textContent = Math.round(Number(this.value) * 100) + " %";
