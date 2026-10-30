@@ -13,10 +13,16 @@
     };
   }
 
-  function init(karte, opts) {
+  function bildLayer(karte, overlay, deckkraft) {
     var pane = karte.getPane("bsp") || karte.createPane("bsp");
     pane.style.zIndex = 250;
     pane.style.pointerEvents = "none";
+    return L.imageOverlay(overlay.raster_url, overlay.bounds, {
+      pane: "bsp", opacity: deckkraft, interactive: false, pmIgnore: true
+    });
+  }
+
+  function init(karte, opts) {
     var overlays = [], layers = {}, lokaleWerte = {}, fehlgeschlagen = {};
     var auswahl = null, folge = 0, speichern = false;
     var scope = opts.kannEinstellen ? "alle" : "lokal";
@@ -54,9 +60,7 @@
         if (!zustand.sichtbar || (layers[o.id] && layers[o.id].url !== o.raster_url)) { entfernen(o.id); }
         if (!zustand.sichtbar || fehlgeschlagen[o.id] === o.raster_url) { return; }
         if (!layers[o.id]) {
-          var layer = L.imageOverlay(o.raster_url, o.bounds, {
-            pane: "bsp", opacity: zustand.deckkraft, interactive: false, pmIgnore: true
-          });
+          var layer = bildLayer(karte, o, zustand.deckkraft);
           layers[o.id] = {layer: layer, url: o.raster_url};
           layer.on("error", function () {
             if (!layers[o.id] || layers[o.id].layer !== layer) { return; }
@@ -160,5 +164,5 @@
       }
     };
   }
-  window.EcpBspOverlay = {init: init, aufloesen: aufloesen};
+  window.EcpBspOverlay = {init: init, aufloesen: aufloesen, bildLayer: bildLayer};
 })();
