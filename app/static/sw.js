@@ -108,6 +108,8 @@ self.addEventListener('fetch', e => {
   // Explizite Downloads/Handoffs brauchen die aktuelle Attachment-Antwort
   // samt Authentifizierung; niemals aus dem Objekt-Offlinecache bedienen.
   if (url.searchParams.get('download') === '1' || url.searchParams.has('nt')) return;
+  // BSP immer mit aktueller Freigabe und privatem HTTP-Cache pruefen.
+  if (url.pathname.startsWith('/objekt-medien/bsp-overlay/') || /\/lagefuehrung\/bsp-overlays/.test(url.pathname)) return;
   // Never intercept WebSocket or API calls
   if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/api/')) return;
   // Aktuelle Freigabe bei JEDEM Abruf; keine Offlinekopie von Einsatzunterlagen.

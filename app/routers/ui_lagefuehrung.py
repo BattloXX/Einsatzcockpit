@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.async_bridge import run_async
@@ -485,6 +487,95 @@ def lagefuehrung_objekte(
             "kartenobjekte": kartenobjekte,
         })
     return JSONResponse(out)
+
+
+# Gemeinsame BSP-Einstellungen bleiben getrennt von der lokalen Kartenanzeige.
+class BspEinstellung(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sichtbarkeit: Literal["INHERIT", "ON", "OFF"]
+    deckkraft: float | None = Field(default=None, ge=0.1, le=1, strict=True)
+
+
+def _bsp_liste(db: Session, incident: Incident, user: User) -> list[dict]:
+    from app.models.objekt import Objekt
+    from app.services.objekt_bsp_overlay_service import overlays_fuer_einsatz
+
+    try:
+        _check_edit_access(user, incident, db)
+        kann_einstellen = True
+    except HTTPException:
+        kann_einstellen = False
+    liste = []
+    for daten in overlays_fuer_einsatz(db, incident.id):
+        objekt = db.get(Objekt, daten["objekt_id"])
+        # Dieselbe Leseschranke wie bei der geschuetzten Rasterauslieferung.
+        if not objekt or (objekt.status == "entwurf" and not has_role(user, "objekt_verwalter")):
+            continue
+        liste.append({
+            **{feld: daten[feld] for feld in (
+                "id", "name", "objekt_id", "plan_art", "geschoss", "bereich", "freigabe_nr",
+                "bounds", "standard_sichtbar", "standard_deckkraft", "sichtbarkeit", "deckkraft",
+                "effektiv_sichtbar", "effektiv_deckkraft",
+            )},
+            "objekt_name": objekt.name,
+            "freigegeben_am": daten["freigegeben_am"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            if daten["freigegeben_am"] else None,
+            "raster_url": f'/objekt-medien/bsp-overlay/{daten["id"]}/raster'
+                          f'?v={daten["freigabe_nr"]}-{(daten["raster_sha256"] or "")[:8]}',
+            "kann_einstellen": kann_einstellen,
+        })
+    return liste
+
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/bsp-overlays.json")
+def lagefuehrung_bsp_overlays(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+    return JSONResponse(_bsp_liste(db, incident, user)
+                        if getattr(request.state, "objekt_enabled", False) else [])
+
+
+@router.post("/einsatz/{incident_id}/lagefuehrung/bsp-overlays/{overlay_id}/einstellung")
+def lagefuehrung_bsp_einstellung(
+    incident_id: int, overlay_id: int, request: Request, daten: BspEinstellung,
+    db: Session = Depends(get_db), _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    from app.models.objekt import BspOverlayEinsatz, ObjektBspOverlay
+    from app.services.objekt_bsp_overlay_service import overlays_fuer_einsatz
+
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_edit_access(user, incident, db)
+    if not getattr(request.state, "objekt_enabled", False) or not any(
+        o["id"] == overlay_id for o in overlays_fuer_einsatz(db, incident_id)
+    ):
+        raise HTTPException(404, "Overlay nicht gefunden")
+    overlay = db.get(ObjektBspOverlay, overlay_id)
+    if overlay is None:
+        raise HTTPException(404, "Overlay nicht gefunden")
+    einstellung = db.query(BspOverlayEinsatz).filter_by(
+        incident_id=incident_id, overlay_id=overlay_id, org_id=overlay.org_id,
+    ).first()
+    if einstellung is None:
+        einstellung = BspOverlayEinsatz(
+            org_id=overlay.org_id, incident_id=incident_id, overlay_id=overlay_id,
+        )
+        db.add(einstellung)
+    einstellung.sichtbarkeit = daten.sichtbarkeit
+    einstellung.deckkraft = daten.deckkraft
+    einstellung.geaendert_von = user.id
+    einstellung.geaendert_am = datetime.now(UTC).replace(tzinfo=None)
+    _log_event(db, incident, user, "bsp.einstellung", "bsp_overlay", overlay_id, daten.model_dump())
+    db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "lagefuehrung.bsp.changed", "overlay_id": overlay_id,
+    })
+    return JSONResponse({"ok": True})
 
 
 # ── Auto-Layer: Wasserstellen ────────────────────────────────────────────────────

@@ -35,6 +35,7 @@ _TYP_FARBE = {
 }
 
 _EVENT_LABELS = {
+    "bsp.einstellung": "Brandschutzplan-Einstellung geändert",
     "feature.created": "Element angelegt",
     "feature.updated": "Element bearbeitet",
     "feature.deleted": "Element gelöscht",
