@@ -27,7 +27,11 @@ erscheint eine Hinweiskarte mit Link nach oben statt eines gesperrten Formulars.
 Overlay-Karten zeigen Name, Planart, Geschoss/Bereich, Freigabenummer und Status mit Icon:
 Entwurf (grau), Freigegeben (grün), Veraltet (orange mit Prüfhinweis), Zurückgezogen (grau, durchgestrichen).
 
-Drei Schritte führen durch Ausschnitt, Angaben und Prüfung/Freigabe. Die Rechteckauswahl hebt
+Drei Schritte führen durch Ausschnitt, Angaben und Prüfung/Freigabe. Neben ganzer Seite und Rechteck
+kann ein Polygon mit 3 bis 100 Punkten gezeichnet werden: Antippen setzt Punkte, der erste Punkt
+oder "Polygon abschließen" schließt die Auswahl. Eckpunkte sind danach über 44-px-Griffe
+verschiebbar. Selbstüberschneidungen, Berührungen und zu kleine Flächen sperren Abschluss und Speichern.
+Die Ausschnittauswahl hebt
 den Plan hervor und scrollt ihn ins Bild. Anzeigevorgaben und standardmäßig eingeklappte
 Druck-Einstellungen sind getrennt. "Speichern und Vorschau" speichert über die bestehenden
 Endpunkte zuerst den Entwurf und rastert danach; Freigaben erfordern weiterhin die menschliche
@@ -45,7 +49,10 @@ die Schritte bleiben im Dokumentfluss über dem vorhandenen Abstand zum Android-
 
 `objekt_bsp_overlay_service.raster_erzeugen` rechnet die Ausschnittsecken mit der Georef-Transformation auf
 Lat/Lng und warpt das gedrehte Seitenbild per PIL (affin bzw. perspektivisch) in ein nordgerichtetes
-RGBA-PNG (Langseite max. 2048 px, ausserhalb des Ausschnitts transparent). Ablage unter
+RGBA-PNG. Polygonpunkte gelten normiert auf der gedrehten Seite; die umschließende Box
+`x0,y0,x1,y1` berechnet ausschließlich der Server. Die Georef-/Bounds-Rechnung nutzt diese Box,
+die Alphamaske die Polygonpunkte (2-fache Maskenauflösung, außerhalb transparent).
+Die Raster-Langseite ist auf 2048 px begrenzt. Ablage unter
 `OBJEKT_MEDIA_DIR/bsp_overlay/<org>/`, nie unter `static`. Auslieferung nur ueber
 `/objekt-medien/bsp-overlay/{id}/raster` mit Login, Org-Pruefung, `private`-Cache und ETag.
 
@@ -80,6 +87,9 @@ und Objekt-Element `bsp_overlay` in der bestehenden `PrintRule`, nur bei `autodr
 Overlay, Idempotenz ueber `artifact_ref = "<overlay_id>:<freigabe_nr>"`. Einen automatischen Karten-Einsatzdruck
 gibt es nicht.
 
+Beide Druckwege verwenden `original_ausschnitt_png`: Das gedrehte Original wird unverzerrt
+auf die Ausschnittbox zugeschnitten. Bei Polygonen wird der Bereich außerhalb weiß maskiert.
+
 ## MCP
 
 `objekt_karte_lesen` und `objekt_karte_vorschau` liefern `bsp_overlays`. `objekt_bsp_overlay_entwurf`
@@ -88,5 +98,5 @@ Loeschen gibt es per MCP nicht. Regeln: [KI-Symbolpflege](../objektkarte-ki-symb
 
 ## Bewusst nicht enthalten
 
-Polygon-Ausschnitte, Kachelpyramide, Overlay im Lagebericht-PDF (`staticmap`), Infoscreen,
+Kachelpyramide, Overlay im Lagebericht-PDF (`staticmap`), Infoscreen,
 automatische Plan-Registrierung.

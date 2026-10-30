@@ -214,3 +214,21 @@ def test_georef_editor_rendert_bsp_bereich_und_sperre(client, overlay_plan):
         db.commit()
     assert client.get(_basis(p) + f'?seite_id={p["seite_id"]}').json()["georef_gueltig"] is False
     assert _aktion(client, p, "rastern").status_code == 400
+
+
+@pytest.mark.parametrize("ungueltig", [False, True])
+def test_polygon_entwurf_und_validierung(client, overlay_plan, ungueltig):
+    from tests.test_bsp_overlay_service import POLYGON
+
+    p = overlay_plan
+    _login(client, p)
+    crop = POLYGON | {"punkte": POLYGON["punkte"][:2]} if ungueltig else POLYGON | {"x0": -99}
+    daten = {"seite_id": p["seite_id"], "expected_rotation": 0, "name": "Polygon", "ausschnitt": crop}
+    antwort = _post(client, _basis(p), daten)
+    assert antwort.status_code == (400 if ungueltig else 200), antwort.text
+    if not ungueltig:
+        assert antwort.json()["status"] == "entwurf"
+        assert antwort.json()["ausschnitt"] == bsp.ausschnitt_validieren(POLYGON)
+    assert _aktion(client, p, "aendern", {"ausschnitt": crop, "expected_rotation": 90}).status_code == 409
+    antwort = _aktion(client, p, "aendern", {"ausschnitt": crop, "expected_rotation": 0})
+    assert antwort.status_code == (400 if ungueltig else 200), antwort.text

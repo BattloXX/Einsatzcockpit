@@ -98,3 +98,7 @@
   #bsp-overlay .bsp__segment button { flex:1 1 120px; }
   .bsp__freigabe { padding:16px; }
 }
+
+.bsp__polygon-griff { background:transparent; cursor:grab; touch-action:none; }
+.bsp__polygon-griff::after { content:""; position:absolute; inset:14px; background:var(--surface,#fff); border:3px solid var(--red-light,#b91c1c); border-radius:50%; box-shadow:0 0 2px #333; }
+.bsp__polygon-griff:first-child::after { background:var(--red-light,#b91c1c); }

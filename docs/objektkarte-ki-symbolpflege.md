@@ -175,6 +175,12 @@ Referenzpunkte werden nur bei Klasse A ausgegeben; Koordinaten stammen aus OSM.
 im Uhrzeigersinn gedreht, auch beim Thumbnail-Fallback. `bildgroesse` nennt die
 Pixelmasse der gedrehten Gesamtseite vor dem Verkleinern (beim Fallback des
 verfuegbaren Thumbnails). `rotation` als `expected_rotation` fuer Georef-Tools verwenden.
+Alternativ: `ausschnitt={"art":"polygon","punkte":[{"x":0.1,"y":0.1},{"x":0.9,"y":0.1},{"x":0.1,"y":0.9}]}`.
+3 bis 100 Punkte, normiert 0..1 auf der gedrehten Seite, ohne wiederholten Schlusspunkt.
+Kanten dürfen sich nicht selbst überschneiden oder berühren. Mindestboxgröße 0.001 je Achse,
+Mindestfläche 0.001² der Seite. Orientierung beliebig. Der Server berechnet und speichert
+`x0,y0,x1,y1`; mitgesendete Boxwerte werden ignoriert. Polygon bleibt ausschließlich Entwurf,
+`expected_rotation` und menschliche Freigabe gelten unverändert.
 
 Fuer kleine Symbole optional `ausschnitt=[x0,y0,x1,y1]` angeben: vier endliche Zahlen
 in 0..1, x0 < x1 und y0 < y1, Breite und Hoehe jeweils mindestens 0.02.

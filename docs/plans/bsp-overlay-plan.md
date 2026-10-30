@@ -60,7 +60,7 @@ selbst als Karten-Ebene. Daraus folgen die Leitplanken:
   `georef_revision`, `dokument_hash`
 - `name`, `plan_art` (lageplan/hallenbereich/gefahrenzone/geschoss/sonstig), `bereich`, `geschoss`
 - `ausschnitt_json`: `{"art": "seite"|"rechteck", "x0","y0","x1","y1"}` normiert 0..1 auf gedrehter Seite
-  (Polygon später)
+  (erweitert um `art: "polygon", punkte: [{x,y}, ...]`; Box serverseitig)
 - `status`: `entwurf` / `freigegeben` / `zurueckgezogen`; `freigabe_nr` (hochgezählt je Freigabe)
 - `freigegeben_von`, `freigegeben_am`, `erstellt_von`, `erstellt_am`, `aktualisiert_am`
 - Anzeige: `standard_sichtbar` (bool), `standard_deckkraft` (0.1..1.0, Default 0.6), `empfohlen` (bool, max. ein
@@ -199,6 +199,6 @@ Aufgabenliste abhaken; Branch/Commit macht Claude.
 
 ## 8. Bewusst nicht enthalten
 
-Polygon-Ausschnitte, mehrere empfohlene Standardoverlays, Kachelpyramide (Raster ≤ 2048 px genügt für
+Mehrere empfohlene Standardoverlays, Kachelpyramide (Raster ≤ 2048 px genügt für
 Objektgröße), Overlay im Lagebericht-PDF (`staticmap`), Infoscreen, automatische Registrierung des Plans
 (siehe `bsp-orthofoto-plan.md`, Studie D gescheitert).
