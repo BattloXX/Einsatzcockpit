@@ -39,10 +39,60 @@ def _jetzt() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _kantenschnitt(a: dict, b: dict, c: dict, d: dict) -> bool:
+    """Auch Beruehrungen und kollineare Ueberlappungen gelten als Schnitt."""
+    def kreuz(p: dict, q: dict, r: dict) -> float:
+        return (q["x"] - p["x"]) * (r["y"] - p["y"]) - (q["y"] - p["y"]) * (r["x"] - p["x"])
+
+    def auf(p: dict, q: dict, r: dict) -> bool:
+        return (min(p["x"], q["x"]) <= r["x"] <= max(p["x"], q["x"])
+                and min(p["y"], q["y"]) <= r["y"] <= max(p["y"], q["y"]))
+
+    ab_c, ab_d, cd_a, cd_b = kreuz(a, b, c), kreuz(a, b, d), kreuz(c, d, a), kreuz(c, d, b)
+    return ((ab_c * ab_d < 0 and cd_a * cd_b < 0)
+            or (ab_c == 0 and auf(a, b, c)) or (ab_d == 0 and auf(a, b, d))
+            or (cd_a == 0 and auf(c, d, a)) or (cd_b == 0 and auf(c, d, b)))
+
+
+def _polygon_validieren(daten: dict) -> dict:
+    roh = daten.get("punkte")
+    if not isinstance(roh, list) or not 3 <= len(roh) <= 100:
+        raise ObjektKartenFehler("Polygon: 3 bis 100 Punkte erforderlich")
+    punkte = []
+    for i, punkt in enumerate(roh):
+        if not isinstance(punkt, dict):
+            raise ObjektKartenFehler(f"Polygon: Punkt {i + 1} braucht x und y")
+        punkte.append({k: geo._zahl(punkt.get(k), f"Polygon Punkt {i + 1}: {k}", 0, 1) for k in ("x", "y")})
+    n = len(punkte)
+    if any(a == punkte[(i + 1) % n] for i, a in enumerate(punkte)):
+        raise ObjektKartenFehler("Polygon: Aufeinanderfolgende Punkte dürfen nicht gleich sein")
+    for i, a in enumerate(punkte):
+        b, c = punkte[(i + 1) % n], punkte[(i + 2) % n]
+        # Benachbarte Kanten duerfen nur ihren gemeinsamen Endpunkt teilen.
+        if ((b["x"] - a["x"]) * (c["y"] - b["y"]) == (b["y"] - a["y"]) * (c["x"] - b["x"])
+                and (a["x"] - b["x"]) * (c["x"] - b["x"]) + (a["y"] - b["y"]) * (c["y"] - b["y"]) > 0):
+            raise ObjektKartenFehler("Polygon: Kanten dürfen sich nicht selbst überschneiden oder berühren")
+        for j in range(i + 1, n):
+            if j == i + 1 or (i == 0 and j == n - 1):
+                continue
+            if _kantenschnitt(a, b, punkte[j], punkte[(j + 1) % n]):
+                raise ObjektKartenFehler("Polygon: Kanten dürfen sich nicht selbst überschneiden oder berühren")
+    box = {"x0": min(p["x"] for p in punkte), "y0": min(p["y"] for p in punkte),
+           "x1": max(p["x"] for p in punkte), "y1": max(p["y"] for p in punkte)}
+    flaeche = abs(sum(a["x"] * punkte[(i + 1) % n]["y"] - punkte[(i + 1) % n]["x"] * a["y"]
+                     for i, a in enumerate(punkte))) / 2
+    if (box["x1"] - box["x0"] < MIN_AUSSCHNITT or box["y1"] - box["y0"] < MIN_AUSSCHNITT
+            or flaeche < MIN_AUSSCHNITT ** 2):
+        raise ObjektKartenFehler("Polygon: Fläche oder umschließende Box zu klein")
+    return {"art": "polygon", "punkte": punkte, **box}
+
+
 def ausschnitt_validieren(daten: Any) -> dict:
     if (not isinstance(daten, dict) or not isinstance(daten.get("art"), str)
-            or daten.get("art") not in {"seite", "rechteck"}):
-        raise ObjektKartenFehler("Ausschnitt: art seite oder rechteck erforderlich")
+            or daten.get("art") not in {"seite", "rechteck", "polygon"}):
+        raise ObjektKartenFehler("Ausschnitt: art seite, rechteck oder polygon erforderlich")
+    if daten["art"] == "polygon":
+        return _polygon_validieren(daten)
     if daten["art"] == "seite":
         daten = {"art": "seite", "x0": daten.get("x0", 0), "y0": daten.get("y0", 0),
                  "x1": daten.get("x1", 1), "y1": daten.get("y1", 1)}
@@ -202,6 +252,21 @@ def _raster_rechnung(p: dict, ausschnitt: dict, breite: int, hoehe: int) -> tupl
     return koeff, (w, h), bounds
 
 
+def _ausschnitt_maske(ausschnitt: dict, groesse: tuple[int, int]) -> Image.Image:
+    breite, hoehe = groesse
+    maske = Image.new("L", groesse, 0)
+    if ausschnitt["art"] == "polygon":
+        # Subpixelmaske: dieselbe Pixelkante wie bei normierten Rechtecken.
+        gross = Image.new("L", (breite * 2, hoehe * 2), 0)
+        ImageDraw.Draw(gross).polygon([(p["x"] * breite * 2, p["y"] * hoehe * 2)
+                                      for p in ausschnitt["punkte"]], fill=255)
+        return gross.resize(groesse, Image.Resampling.BOX)
+    ImageDraw.Draw(maske).rectangle(
+        (math.ceil(ausschnitt["x0"] * breite), math.ceil(ausschnitt["y0"] * hoehe),
+         math.ceil(ausschnitt["x1"] * breite) - 1, math.ceil(ausschnitt["y1"] * hoehe) - 1), fill=255)
+    return maske
+
+
 def raster_erzeugen(db: Session, overlay: ObjektBspOverlay, user_id: int | None = None) -> ObjektBspOverlay:
     objekt = _overlay(db, overlay)
     _, g = _stand(db, overlay)
@@ -212,10 +277,7 @@ def raster_erzeugen(db: Session, overlay: ObjektBspOverlay, user_id: int | None 
             bild = original.convert("RGBA").rotate(-seite.rotation, expand=True)
         p = json.loads(g.parameter_json or "{}")
         koeff, groesse, bounds = _raster_rechnung(p, ausschnitt, *bild.size)
-        maske = Image.new("L", bild.size, 0)
-        ImageDraw.Draw(maske).rectangle(
-            (math.ceil(ausschnitt["x0"] * bild.width), math.ceil(ausschnitt["y0"] * bild.height),
-             math.ceil(ausschnitt["x1"] * bild.width) - 1, math.ceil(ausschnitt["y1"] * bild.height) - 1), fill=255)
+        maske = _ausschnitt_maske(ausschnitt, bild.size)
         bild.putalpha(ImageChops.multiply(bild.getchannel("A"), maske))
         methode = Image.Transform.PERSPECTIVE if g.modell == "homographie" else Image.Transform.AFFINE
         raster = bild.transform(groesse, methode, koeff if methode == Image.Transform.PERSPECTIVE else koeff[:6],
@@ -377,6 +439,10 @@ def original_ausschnitt_png(db: Session, overlay: ObjektBspOverlay) -> bytes:
         bild = original.convert("RGBA").rotate(-seite.rotation, expand=True)
     box = (math.floor(ausschnitt["x0"] * bild.width), math.floor(ausschnitt["y0"] * bild.height),
            math.ceil(ausschnitt["x1"] * bild.width), math.ceil(ausschnitt["y1"] * bild.height))
+    if ausschnitt["art"] == "polygon":
+        maske = ImageChops.multiply(bild.getchannel("A"), _ausschnitt_maske(ausschnitt, bild.size))
+        bild.putalpha(maske)
+        bild = Image.alpha_composite(Image.new("RGBA", bild.size, "white"), bild)
     ausgabe = BytesIO()
     bild.crop(box).save(ausgabe, format="PNG")
     return ausgabe.getvalue()

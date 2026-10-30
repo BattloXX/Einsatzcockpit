@@ -4,6 +4,32 @@
   function planNormiert(latlng, breite, hoehe) {
     return { x: latlng.lng / breite, y: -latlng.lat / hoehe };
   }
+  function polygonFlaeche(p) {
+    return Math.abs(p.reduce(function (sum, a, i) { var b = p[(i + 1) % p.length]; return sum + a.x * b.y - b.x * a.y; }, 0)) / 2;
+  }
+  function polygonEntfernen(p) { return p.slice(0, -1); }
+  function polygonFehler(p) {
+    if (p.length < 3 || p.length > 100) { return "Polygon: 3 bis 100 Punkte erforderlich."; }
+    function kreuz(a, b, c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
+    function auf(a, b, c) { return Math.min(a.x, b.x) <= c.x && c.x <= Math.max(a.x, b.x) && Math.min(a.y, b.y) <= c.y && c.y <= Math.max(a.y, b.y); }
+    function schnitt(a, b, c, d) {
+      var x = kreuz(a, b, c), y = kreuz(a, b, d), z = kreuz(c, d, a), w = kreuz(c, d, b);
+      return (x * y < 0 && z * w < 0) || (x === 0 && auf(a, b, c)) || (y === 0 && auf(a, b, d)) || (z === 0 && auf(c, d, a)) || (w === 0 && auf(c, d, b));
+    }
+    if (p.some(function (a, i) { var b = p[(i + 1) % p.length]; return a.x === b.x && a.y === b.y; })) { return "Polygon: Aufeinanderfolgende Punkte dürfen nicht gleich sein."; }
+    for (var i = 0; i < p.length; i++) {
+      var a = p[i], b = p[(i + 1) % p.length], c = p[(i + 2) % p.length];
+      if (!Number.isFinite(a.x) || !Number.isFinite(a.y) || a.x < 0 || a.x > 1 || a.y < 0 || a.y > 1) { return "Polygon: Punkte müssen innerhalb der Seite liegen."; }
+      if (kreuz(a, b, c) === 0 && (a.x - b.x) * (c.x - b.x) + (a.y - b.y) * (c.y - b.y) > 0) { return "Polygon: Kanten überschneiden oder berühren sich selbst."; }
+      for (var j = i + 1; j < p.length; j++) {
+        if (j === i + 1 || (i === 0 && j === p.length - 1)) { continue; }
+        if (schnitt(a, b, p[j], p[(j + 1) % p.length])) { return "Polygon: Kanten überschneiden oder berühren sich selbst."; }
+      }
+    }
+    var xs = p.map(function (a) { return a.x; }), ys = p.map(function (a) { return a.y; });
+    if (Math.max.apply(null, xs) - Math.min.apply(null, xs) < 0.001 || Math.max.apply(null, ys) - Math.min.apply(null, ys) < 0.001 || polygonFlaeche(p) < 0.000001) { return "Polygon: Fläche oder umschließende Box zu klein."; }
+    return "";
+  }
   function affineMatrix(pxTL, pxTR, pxBL, breite, hoehe) {
     return { a: (pxTR.x - pxTL.x) / breite, b: (pxTR.y - pxTL.y) / breite,
       c: (pxBL.x - pxTL.x) / hoehe, d: (pxBL.y - pxTL.y) / hoehe, e: pxTL.x, f: pxTL.y };
@@ -81,6 +107,7 @@
     gespeichert.setAttribute("role", "status"); gespeichert.setAttribute("data-bsp-ungespeichert", "");
     var felder = {}, ausgewaehlt = null, eintraege = [], gueltig = false, busy = false;
     var ausschnitt = { art: "seite" }, rechteck = null, raster = null, zeichnen = false, start = null;
+    var polygonOffen = false, griffe = [], griff = null, griffBewegt = false, overlayKlick = false;
     function schritt(n, titel, hilfe) {
       var karte = el("section", null, formular); karte.className = "card bsp__schritt"; karte.dataset.bspSchritt = String(n);
       el("h3", n + " " + titel, karte); el("p", hilfe, karte).className = "form-hint"; return karte;
@@ -89,7 +116,9 @@
     var cropLeiste = el("div", null, eins); cropLeiste.className = "bsp__segment";
     cropLeiste.setAttribute("role", "group"); cropLeiste.setAttribute("aria-label", "Planausschnitt");
     var ausschnittText = el("p", "Ganze Seite", eins); ausschnittText.setAttribute("aria-live", "polite");
-    el("p", "Ziehe im Plan oben ein Rechteck über den Bereich, der auf der Karte erscheinen soll.", eins).className = "form-hint";
+    el("p", "Rechteck aufziehen oder Polygonpunkte im Plan oben antippen. Der erste Punkt schließt das Polygon; danach lassen sich die Eckpunkte ziehen.", eins).className = "form-hint";
+    var polygonAktionen = el("div", null, eins); polygonAktionen.className = "bsp__aktionen"; polygonAktionen.hidden = true;
+    var polygonHinweis = el("p", "", eins); polygonHinweis.className = "bsp__warnung"; polygonHinweis.setAttribute("role", "status");
     var zwei = schritt(2, "Angaben", "Benenne den Plan so, dass Einsatzkräfte ihn rasch erkennen.");
     var feldGruppe = el("div", null, zwei); feldGruppe.className = "bsp__felder";
     function feld(name, text, typ, optionen, hilfe, parent) {
@@ -149,6 +178,7 @@
     function sperren() { formular.disabled = busy || !gueltig; formular.hidden = !gueltig; voraussetzung.hidden = gueltig; neu.disabled = busy || !gueltig; }
     function ungespeichert() {
       gespeichert.textContent = "Nicht gespeichert"; speichern.hidden = false; speichern.className = "btn btn--primary";
+      polygonPruefen();
       if (!ausgewaehlt) { return; }
       rastern.disabled = freigeben.disabled = zurueckziehen.disabled = true;
       meldung.textContent = "Änderungen zuerst als Entwurf speichern. Eine bestehende Freigabe wird dabei aufgehoben.";
@@ -158,17 +188,35 @@
     planHinweis.className = "bsp__planhinweis"; planHinweis.hidden = true; planHinweis.setAttribute("role", "status");
     function cropModus(an) {
       zeichnen = an; start = null;
-      cropKnopf.setAttribute("aria-pressed", String(an || ausschnitt.art === "rechteck"));
+      cropKnopf.setAttribute("aria-pressed", String((an && ausschnitt.art !== "polygon") || ausschnitt.art === "rechteck"));
       ganzKnopf.setAttribute("aria-pressed", String(!an && ausschnitt.art === "seite"));
       planDiv.classList.toggle("bsp__markieren", an);
-      planHinweis.hidden = !an; ende.hidden = !an;
+      polygonKnopf.setAttribute("aria-pressed", String(ausschnitt.art === "polygon"));
+      planHinweis.textContent = ausschnitt.art === "polygon" ? "Polygon: Punkte antippen. Ersten Punkt antippen oder Polygon abschließen wählen." : "Ausschnitt markieren: Ziehe ein Rechteck im Plan. Danach Auswahl beenden.";
+      planHinweis.hidden = !an; ende.hidden = !an || ausschnitt.art === "polygon";
       if (an) { planDiv.scrollIntoView({ block: "center", behavior: "smooth" }); }
       if (an) { plan.dragging.disable(); plan.touchZoom.disable(); plan.doubleClickZoom.disable(); }
-      else { plan.dragging.enable(); plan.touchZoom.enable(); plan.doubleClickZoom.enable(); }
+      else { plan.dragging.enable(); plan.touchZoom.enable(); plan.doubleClickZoom.disable(); }
       planDiv.style.touchAction = an ? "none" : "";
     }
     function zeigeAusschnitt() {
       if (rechteck) { rechteck.remove(); rechteck = null; }
+      griffe.forEach(function (g) { g.remove(); }); griffe = [];
+      polygonAktionen.hidden = ausschnitt.art !== "polygon";
+      if (ausschnitt.art === "polygon") {
+        var punkte = ausschnitt.punkte;
+        ausschnittText.textContent = "Polygon mit " + punkte.length + " Punkten, ca. " + Math.round(polygonFlaeche(punkte) * 100) + " % der Seite";
+        var ll = punkte.map(function (p) { return [-p.y * meta.bildgroesse[1], p.x * meta.bildgroesse[0]]; });
+        if (ll.length > 1) { rechteck = (polygonOffen ? L.polyline(ll, { interactive: false }) : L.polygon(ll, { interactive: false })).addTo(plan); }
+        ll.forEach(function (p, i) {
+          var g = L.marker(p, { icon: L.divIcon({ className: "bsp__polygon-griff", html: "", iconSize: [44, 44], iconAnchor: [22, 22] }), keyboard: false, bubblingMouseEvents: false }).addTo(plan);
+          g.getElement().dataset.bspPunkt = String(i);
+          g.getElement().setAttribute("aria-label", "Polygonpunkt " + (i + 1) + (i === 0 && polygonOffen ? " - Polygon schließen" : " - zum Korrigieren ziehen"));
+          griffe.push(g);
+        });
+        polygonPruefen(); return;
+      }
+      polygonHinweis.textContent = ""; speichern.disabled = false;
       ausschnittText.textContent = ausschnitt.art === "seite" ? "Ganze Seite" : "Ausschnitt: " + Math.round((ausschnitt.x1 - ausschnitt.x0) * 100) + " % Breite × " + Math.round((ausschnitt.y1 - ausschnitt.y0) * 100) + " % Höhe der Seite";
       if (ausschnitt.art === "rechteck") {
         rechteck = L.rectangle([[-ausschnitt.y1 * meta.bildgroesse[1], ausschnitt.x0 * meta.bildgroesse[0]],
@@ -178,10 +226,38 @@
     var ganzKnopf = knopf("Ganze Seite", cropLeiste, function () {
       ausschnitt = { art: "seite" }; cropModus(false); zeigeAusschnitt(); ungespeichert();
     });
-    var cropKnopf = knopf("Ausschnitt markieren", cropLeiste, function () {
-      cropModus(!zeichnen);
+    var cropKnopf = knopf("Rechteck", cropLeiste, function () {
+      var warPolygon = ausschnitt.art === "polygon";
+      if (warPolygon) { ausschnitt = { art: "seite" }; polygonOffen = false; zeigeAusschnitt(); ungespeichert(); }
+      cropModus(warPolygon || !zeichnen);
       if (zeichnen) { meldung.textContent = "Im Seitenbild ein Rechteck aufziehen, danach Auswahl beenden. Mit Finger oder Maus möglich."; }
     });
+    var polygonKnopf = knopf("Polygon", cropLeiste, function () { polygonNeu(); });
+    function polygonNeu() {
+      ausschnitt = { art: "polygon", punkte: [] }; polygonOffen = true;
+      cropModus(true); zeigeAusschnitt(); ungespeichert();
+    }
+    function polygonPruefen() {
+      var problem = ausschnitt.art === "polygon" ? polygonFehler(ausschnitt.punkte) : "";
+      polygonHinweis.textContent = problem || (polygonOffen && ausschnitt.art === "polygon" ? "Ersten Punkt antippen oder Polygon abschließen wählen." : "");
+      if (ausschnitt.art === "polygon") {
+        planHinweis.textContent = problem || "Polygon: Punkte antippen. Ersten Punkt antippen oder Polygon abschließen wählen.";
+        planHinweis.hidden = !problem && !zeichnen;
+      }
+      if (speichern) { speichern.disabled = !!problem || (ausschnitt.art === "polygon" && polygonOffen); }
+      if (abschliessen) { abschliessen.disabled = !!problem || !polygonOffen; }
+      if (entfernen) { entfernen.disabled = ausschnitt.art !== "polygon" || !ausschnitt.punkte.length; }
+    }
+    function polygonAbschluss() {
+      if (polygonFehler(ausschnitt.punkte)) { polygonPruefen(); return; }
+      polygonOffen = false; cropModus(false); zeigeAusschnitt(); ungespeichert();
+    }
+    var entfernen = knopf("Letzten Punkt entfernen", polygonAktionen, function () {
+      ausschnitt.punkte = polygonEntfernen(ausschnitt.punkte); polygonOffen = true;
+      cropModus(true); zeigeAusschnitt(); ungespeichert();
+    });
+    var abschliessen = knopf("Polygon abschließen", polygonAktionen, polygonAbschluss);
+    knopf("Neu beginnen", polygonAktionen, polygonNeu);
     var ende = knopf("Auswahl beenden", eins, function () { cropModus(false); }); ende.hidden = true;
     knopf("Ausschnitt zurücksetzen", eins, function () { ausschnitt = { art: "seite" }; cropModus(false); zeigeAusschnitt(); ungespeichert(); });
     function xy(ev) {
@@ -189,10 +265,35 @@
       return { x: Math.max(0, Math.min(1, p.x)), y: Math.max(0, Math.min(1, p.y)) };
     }
     planDiv.addEventListener("pointerdown", function (ev) {
-      if (!zeichnen || busy || !gueltig || ev.isPrimary === false) { return; }
+      if (busy || !gueltig || ev.isPrimary === false || ev.target.closest(".leaflet-control")) { return; }
+      var ziel = ev.target.closest("[data-bsp-punkt]");
+      overlayKlick = zeichnen || (ausschnitt.art === "polygon" && !!ziel);
+      if (ausschnitt.art === "polygon" && (zeichnen || ziel)) {
+        ev.preventDefault(); ev.stopPropagation();
+        if (ziel) {
+          griff = Number(ziel.dataset.bspPunkt); griffBewegt = false;
+          plan.dragging.disable(); plan.touchZoom.disable(); plan.doubleClickZoom.disable();
+        } else if (polygonOffen && ausschnitt.punkte.length < 100) {
+          ausschnitt.punkte.push(xy(ev)); zeigeAusschnitt(); ungespeichert();
+        }
+        planDiv.setPointerCapture(ev.pointerId); return;
+      }
+      if (!zeichnen) { return; }
       ev.preventDefault(); ev.stopPropagation(); start = xy(ev); planDiv.setPointerCapture(ev.pointerId);
     }, true);
+    // Pointer-Capture kann den anschliessenden Klick auf den Plan umleiten.
+    // Auch beim Schliessen darf dadurch kein Georef-Punkt entstehen.
+    planDiv.addEventListener("click", function (ev) {
+      if (overlayKlick || zeichnen || ev.target.closest("[data-bsp-punkt]")) {
+        ev.preventDefault(); ev.stopPropagation(); overlayKlick = false;
+      }
+    }, true);
     function bewegen(ev) {
+      if (griff !== null && ausschnitt.art === "polygon") {
+        ev.preventDefault(); ev.stopPropagation();
+        if (!polygonOffen) { ausschnitt.punkte[griff] = xy(ev); griffBewegt = true; zeigeAusschnitt(); ungespeichert(); }
+        return;
+      }
       if (!start) { return; }
       ev.preventDefault(); ev.stopPropagation(); var p = xy(ev);
       ausschnitt = { art: "rechteck", x0: Math.min(start.x, p.x), y0: Math.min(start.y, p.y),
@@ -200,10 +301,18 @@
     }
     planDiv.addEventListener("pointermove", bewegen, true);
     planDiv.addEventListener("pointerup", function (ev) {
+      if (ausschnitt.art === "polygon" && (zeichnen || griff !== null)) {
+        ev.preventDefault(); ev.stopPropagation();
+        var schliessen = polygonOffen && griff === 0 && !griffBewegt;
+        griff = null; planDiv.releasePointerCapture(ev.pointerId);
+        if (schliessen) { polygonAbschluss(); }
+        if (!polygonOffen) { cropModus(false); }
+        return;
+      }
       if (!start) { return; } bewegen(ev); start = null;
       planDiv.releasePointerCapture(ev.pointerId);
     }, true);
-    planDiv.addEventListener("pointercancel", function () { start = null; cropModus(false); });
+    planDiv.addEventListener("pointercancel", function () { start = null; griff = null; cropModus(false); });
     function waehlen(o) {
       ausgewaehlt = o || null; cropModus(false);
       var werte = o || { name: "BSP-Overlay", plan_art: "lageplan", standard_sichtbar: true,
@@ -213,7 +322,7 @@
         else { felder[k].value = werte[k] == null ? "" : werte[k]; }
         if (felder[k].zeigeProzent) { felder[k].zeigeProzent(); }
       });
-      ausschnitt = o ? o.ausschnitt : { art: "seite" }; cropModus(false); zeigeAusschnitt();
+      polygonOffen = false; ausschnitt = o ? JSON.parse(JSON.stringify(o.ausschnitt)) : { art: "seite" }; cropModus(false); zeigeAusschnitt();
       if (raster) { raster.remove(); raster = null; }
       if (o && o.raster_url && o.bounds) {
         rasterVorschauStart();
@@ -283,6 +392,7 @@
       }); return d;
     }
     var speichern = knopf("Speichern und Vorschau", aktionen, function () {
+      if (ausschnitt.art === "polygon" && (polygonOffen || polygonFehler(ausschnitt.punkte))) { polygonPruefen(); return; }
       if (!formular.reportValidity()) { return; }
       var d = daten();
       if (!ausgewaehlt) { d.seite_id = opts.seiteId; }
@@ -299,7 +409,7 @@
         dialog.setAttribute("aria-labelledby", titel.id);
         el("p", o.name + " · " + o.plan_art + (o.geschoss ? " · " + o.geschoss : ""), dialog);
         el("p", bspLagegenauigkeit(o.qualitaet), dialog);
-        el("p", (o.ausschnitt.art === "seite" ? "Ausschnitt: Ganze Seite. " : "Ausschnitt: markiertes Rechteck. ") + "Du gibst diesen Plan für die Einsatzkarte frei. " + (o.standard_sichtbar ? "Er wird standardmäßig eingeblendet." : "Er kann im Einsatz eingeblendet werden.") +
+        el("p", (o.ausschnitt.art === "seite" ? "Ausschnitt: Ganze Seite. " : o.ausschnitt.art === "polygon" ? "Ausschnitt: Polygon mit " + o.ausschnitt.punkte.length + " Punkten. " : "Ausschnitt: markiertes Rechteck. ") + "Du gibst diesen Plan für die Einsatzkarte frei. " + (o.standard_sichtbar ? "Er wird standardmäßig eingeblendet." : "Er kann im Einsatz eingeblendet werden.") +
           " Deckkraft: " + Math.round(o.standard_deckkraft * 100) + " %.", dialog);
         var checks = o.warnungen.map(function (code) {
           var label = el("label", null, dialog); var input = el("input", null, label); input.type = "checkbox";
@@ -321,7 +431,7 @@
     loeschen.className = "btn btn--ghost btn--xs bsp__loeschen";
     function warnText(code) { return code === "wenige_punkte" ? "Nur drei Referenzpunkte: Die Lage ist weniger gut abgesichert." : "Alle Punkte wurden frei auf der Karte gesetzt. Es fehlen eingerastete Gebäudeecken."; }
     laden().catch(fehler);
-    return { zeichnet: function () { return zeichnen; }, aktualisieren: function () {
+    return { zeichnet: function () { return zeichnen || griff !== null; }, aktualisieren: function () {
       cropModus(false); return laden(ausgewaehlt && ausgewaehlt.id).catch(fehler);
     } };
   }
@@ -636,7 +746,7 @@
     }).catch(fehler);
     return { schliessen: schliessen };
   }
-  window.objektGeorefEditor = { open: open, planNormiert: planNormiert, affineMatrix: affineMatrix, naechsterSchritt: naechsterSchritt, bspLagegenauigkeit: bspLagegenauigkeit, bspStatus: bspStatus };
+  window.objektGeorefEditor = { open: open, planNormiert: planNormiert, affineMatrix: affineMatrix, naechsterSchritt: naechsterSchritt, bspLagegenauigkeit: bspLagegenauigkeit, bspStatus: bspStatus, polygonFlaeche: polygonFlaeche, polygonFehler: polygonFehler, polygonEntfernen: polygonEntfernen };
   if (typeof document !== "undefined" && document.addEventListener) {
     document.addEventListener("DOMContentLoaded", function () {
       var container = document.getElementById("georef-editor");

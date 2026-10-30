@@ -13,11 +13,13 @@ import socket
 import subprocess
 import sys
 import time
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
 import pytest
+from PIL import Image
 from playwright.sync_api import Error, expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -284,7 +286,7 @@ def test_editor_schritte_leerzustand_und_ohne_georef(bsp_sessions, bsp_server):
     expect(root.locator(".bsp__druck")).not_to_have_attribute("open", "")
     root.locator('[name="name"]').fill("Neuer Plan")
     expect(root.locator("[data-bsp-ungespeichert]")).to_have_text("Nicht gespeichert")
-    root.get_by_role("button", name="Ausschnitt markieren", exact=True).click()
+    root.get_by_role("button", name="Rechteck", exact=True).click()
     expect(page.locator(".bsp__markieren")).to_be_visible()
     expect(page.locator(".bsp__planhinweis")).to_be_visible()
     root.get_by_role("button", name="Auswahl beenden", exact=True).click()
@@ -516,6 +518,89 @@ def test_objektkarte_bsp_lokal_und_marker_editierbar(bsp_sessions, bsp_server, f
     if ansicht == "tab":
         page.get_by_role("button", name="Lagekarte", exact=True).click()
     _bild(page)
+
+
+def _polygon_start(page, daten):
+    page.goto(f'{daten["base"]}/objekte/{daten["objekt_id"]}/dokumente/seite/{daten["seite_id"]}/georef')
+    root = page.locator("#bsp-overlay")
+    root.get_by_role("button", name="Polygon", exact=True).click()
+    plan = page.locator(".bsp__markieren")
+    # Scrollbewegung abschliessen, dann echte Klicks auf dem gedrehten Planbild.
+    plan.scroll_into_view_if_needed()
+    page.wait_for_timeout(600)
+    bild = plan.locator("img.leaflet-image-layer").bounding_box()
+    return root, plan, bild
+
+
+def _polygon_klick(page, bild, x, y):
+    page.mouse.click(bild["x"] + bild["width"] * x, bild["y"] + bild["height"] * y)
+
+
+def test_polygon_tablet_zeichnen_korrigieren_speichern_freigeben_einsatzkarte(bsp_sessions, bsp_server):
+    page = bsp_sessions("verwalter", viewport=VIEWPORTS[0])
+    root, plan, bild = _polygon_start(page, bsp_server)
+    for x, y in ((0.2, 0.25), (0.8, 0.25), (0.8, 0.75), (0.2, 0.75)):
+        _polygon_klick(page, bild, x, y)
+    expect(root).to_contain_text("Polygon mit 4 Punkten")
+    expect(root.get_by_role("button", name="Speichern und Vorschau")).to_be_disabled()
+    # Erster Punkt schliesst; Griffe bleiben als 44-px-Ziele editierbar.
+    plan.locator('[data-bsp-punkt="0"]').click()
+    expect(root.get_by_role("button", name="Speichern und Vorschau")).to_be_enabled()
+    griff = page.locator('[data-bsp-punkt="2"]')
+    assert griff.bounding_box()["width"] >= 44
+    box = griff.bounding_box()
+    page.mouse.move(box["x"] + 22, box["y"] + 22)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 12, box["y"] + 12, steps=3)
+    page.mouse.up()
+    root.locator('[name="name"]').fill("Polygon Tablet")
+    with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/bsp-overlays")) as response:
+        root.get_by_role("button", name="Speichern und Vorschau").click()
+    assert response.value.status == 200, response.value.text()
+    crop = response.value.json()["ausschnitt"]
+    assert crop["art"] == "polygon" and len(crop["punkte"]) == 4
+    assert crop["x0"] == min(p["x"] for p in crop["punkte"])
+    expect(root.get_by_role("button", name="Freigeben", exact=True)).to_be_visible()
+    root.get_by_role("button", name="Freigeben", exact=True).click()
+    dialog = root.locator("dialog")
+    expect(dialog).to_contain_text("Polygon mit 4 Punkten")
+    for check in dialog.locator('input[type="checkbox"]').all():
+        check.check()
+    dialog.get_by_role("button", name="Verbindlich freigeben").click()
+    expect(root.locator('[data-bsp-status="freigegeben"]')).to_be_visible()
+    original = page.request.get(f'{bsp_server["base"]}/objekt-medien/bsp-overlay/{response.value.json()["id"]}/ausschnitt')
+    assert original.status == 200
+    with Image.open(BytesIO(original.body())) as druck:
+        assert druck.getpixel((druck.width - 1, druck.height - 1))[:3] == (255, 255, 255)
+        assert druck.getpixel((5, 5))[:3] != (255, 255, 255)
+    raster = page.request.get(f'{bsp_server["base"]}/objekt-medien/bsp-overlay/{response.value.json()["id"]}/raster')
+    assert raster.status == 200
+    with Image.open(BytesIO(raster.body())) as bild:
+        assert bild.getpixel((bild.width - 1, bild.height - 1))[3] == 0
+        assert bild.getpixel((5, 5))[3] > 0
+    assert page.locator(".ogx__paar").count() == 3
+    page.reload()
+    root.locator(".bsp__overlay").filter(has_text="Polygon Tablet").click()
+    expect(page.locator('[data-bsp-punkt]')).to_have_count(4)
+    page.locator('[aria-label="Planseite mit Zoom und Verschieben"]').screenshot(path="/tmp/bsp-polygon-tablet.png")
+    _karte(page, bsp_server)
+    _bild(page)
+
+
+def test_polygon_selbstueberschneidung_meldung_und_punkt_entfernen(bsp_sessions, bsp_server):
+    page = bsp_sessions("verwalter", viewport=VIEWPORTS[0])
+    root, plan, bild = _polygon_start(page, bsp_server)
+    for x, y in ((0.2, 0.25), (0.8, 0.75), (0.2, 0.75), (0.8, 0.25)):
+        _polygon_klick(page, bild, x, y)
+    expect(root.locator(".bsp__warnung").first).to_contain_text("überschneiden")
+    expect(root.get_by_role("button", name="Polygon abschließen")).to_be_disabled()
+    expect(root.get_by_role("button", name="Speichern und Vorschau")).to_be_disabled()
+    root.get_by_role("button", name="Letzten Punkt entfernen").click()
+    expect(root).to_contain_text("Polygon mit 3 Punkten")
+    root.get_by_role("button", name="Polygon abschließen").click()
+    expect(root.get_by_role("button", name="Speichern und Vorschau")).to_be_enabled()
+    root.get_by_role("button", name="Neu beginnen", exact=True).click()
+    expect(root).to_contain_text("Polygon mit 0 Punkten")
 
 
 if __name__ == "__main__":

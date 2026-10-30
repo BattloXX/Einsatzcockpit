@@ -355,3 +355,25 @@ test("BSP-Statuschips: jeder Zustand hat Text, App-Badge und Systemicon", () => 
     ["veraltet", "Veraltet", "exercise", "alert-triangle"], ["zurueckgezogen", "Zurückgezogen", "muted", "archive"],
   ]) { assert.deepEqual(Array.from(bspStatus(status)), [text, badge, icon]); }
 });
+
+
+const polygon = context.window.objektGeorefEditor;
+const dreieck = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+test("Polygon: Flaeche in Prozent und beide Orientierungen", () => {
+  assert.equal(polygon.polygonFlaeche(dreieck) * 100, 50);
+  assert.equal(polygon.polygonFehler(dreieck), "");
+  assert.equal(polygon.polygonFehler([...dreieck].reverse()), "");
+});
+test("Polygon: Selbstueberschneidung, Beruehrung, Duplikate und Mindestgroesse", () => {
+  const p = (paare) => paare.map(([x, y]) => ({ x, y }));
+  assert.match(polygon.polygonFehler(p([[0, 0], [1, 1], [0, 1], [1, 0]])), /überschneiden/);
+  assert.match(polygon.polygonFehler(p([[0, 0], [1, 0], [0.5, 0], [0, 1]])), /überschneiden/);
+  assert.match(polygon.polygonFehler([...dreieck, dreieck[0]]), /gleich/);
+  assert.match(polygon.polygonFehler(p([[0, 0], [0.0001, 0], [0, 1]])), /zu klein/);
+});
+test("Polygon: Letzten Punkt entfernen veraendert Eingabe nicht", () => {
+  const weniger = polygon.polygonEntfernen(dreieck);
+  assert.equal(weniger.length, 2);
+  assert.equal(dreieck.length, 3);
+  assert.match(polygon.polygonFehler(weniger), /3 bis 100/);
+});

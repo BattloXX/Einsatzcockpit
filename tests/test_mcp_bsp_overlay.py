@@ -265,3 +265,28 @@ def test_ausschnitt_ungueltig_speichert_nichts(client, georef_plan, ausschnitt):
     assert "__fehler__" in _rufe(client, _token(client, plan, "u"), TOOL,
                                 **_args(plan, ausschnitt=ausschnitt), pruefen=False)
     assert _bestand(plan) == (0, 0)
+
+
+@pytest.mark.parametrize("ungueltig", [False, True])
+def test_polygon_entwurf_bounds_rotation_und_lesefelder(client, georef_plan, ungueltig):
+    from tests.test_bsp_overlay_service import POLYGON
+
+    plan = georef_plan
+    token = _token(client, plan, "u")
+    crop = POLYGON | {"punkte": POLYGON["punkte"][:2]} if ungueltig else POLYGON | {"x1": -99}
+    args = _args(plan, ausschnitt=crop)
+    falsch = _rufe(client, token, TOOL, **(args | {"expected_rotation": 90}), pruefen=False)
+    assert "__fehler__" in falsch and _bestand(plan) == (0, 0)
+    antwort = _rufe(client, token, TOOL, **args, pruefen=False)
+    if ungueltig:
+        assert "__fehler__" in antwort and _bestand(plan) == (0, 0)
+        return
+    assert antwort["gespeichert"] and antwort["overlay"]["status"] == "entwurf"
+    assert antwort["overlay"]["ausschnitt"] == bsp.ausschnitt_validieren(POLYGON)
+    for tool in ("objekt_karte_lesen", "objekt_karte_vorschau"):
+        assert _rufe(client, token, tool, objekt_id=plan["objekt_id"])["bsp_overlays"][0]["ausschnitt"] == antwort["overlay"]["ausschnitt"]
+    with SessionLocal() as db:
+        set_tenant_context(db, plan["org_id"])
+        overlay = db.get(ObjektBspOverlay, antwort["overlay"]["id"])
+        bsp.raster_erzeugen(db, overlay)
+        assert json.loads(overlay.raster_bounds_json) == antwort["vorschau"]["bounds"]

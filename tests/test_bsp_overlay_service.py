@@ -38,7 +38,8 @@ def umgebung(plan):
         yield db, overlay, user, plan
 
 
-def test_bounds_und_eck_rueckprojektion_rotation_affin_homographie(umgebung):
+@pytest.mark.parametrize("art", ["rechteck", "polygon"])
+def test_bounds_und_eck_rueckprojektion_rotation_affin_homographie(umgebung, art):
     # Alle Kombinationen in derselben Transaktion; echte Scherung und Perspektive.
     db, overlay, user, plan = umgebung
     objekt = db.get(Objekt, overlay.objekt_id)
@@ -48,6 +49,9 @@ def test_bounds_und_eck_rueckprojektion_rotation_affin_homographie(umgebung):
     original = Image.merge("RGB", (rot, gruen, Image.new("L", (2400, 1200), 50)))
     original.save(plan["pfad"] / "plan.png")
     ausschnitt = {"art": "rechteck", "x0": 0.17, "y0": 0.23, "x1": 0.81, "y1": 0.86}
+    if art == "polygon":
+        ausschnitt = bsp.ausschnitt_validieren({"art": "polygon", "punkte": [
+            {"x": x, "y": y} for x, y in ((0.17, 0.4), (0.35, 0.23), (0.81, 0.23), (0.81, 0.86), (0.17, 0.86))]})
     bsp.entwurf_aendern(db, overlay, {"ausschnitt": ausschnitt}, user.id)
     for rotation in (0, 90, 180, 270):
         seite.rotation = rotation
@@ -324,3 +328,68 @@ def test_migration_upgrade_downgrade_upgrade(tmp_path):
             migration.downgrade()
             assert "objekt_bsp_overlay" not in sa.inspect(conn).get_table_names()
             migration.upgrade()
+
+
+POLYGON = {"art": "polygon", "punkte": [{"x": 0.1, "y": 0.1}, {"x": 0.9, "y": 0.1}, {"x": 0.1, "y": 0.9}]}
+
+
+@pytest.mark.parametrize("umgekehrt", [False, True])
+def test_polygon_box_nur_server_und_orientierung(umgekehrt):
+    punkte = POLYGON["punkte"][::(-1 if umgekehrt else 1)]
+    crop = bsp.ausschnitt_validieren(POLYGON | {"punkte": punkte, "x0": -10, "y0": 9, "x1": None, "y1": 0})
+    assert crop == {"art": "polygon", "punkte": punkte, "x0": 0.1, "y0": 0.1, "x1": 0.9, "y1": 0.9}
+
+
+@pytest.mark.parametrize("punkte,fehler", [
+    ([], "3 bis 100"), (POLYGON["punkte"][:2], "3 bis 100"),
+    (POLYGON["punkte"] * 34, "3 bis 100"),
+    ([{"x": x, "y": y} for x, y in ((0, 0), (1, 1), (0, 1), (1, 0))], "überschneiden"),
+    ([{"x": -0.1, "y": 0}] + POLYGON["punkte"][1:], "Polygon Punkt"),
+    ([{"x": 0, "y": float("nan")}] + POLYGON["punkte"][1:], "Polygon Punkt"),
+    ([{"x": True, "y": 0}] + POLYGON["punkte"][1:], "Polygon Punkt"),
+    (POLYGON["punkte"] + [POLYGON["punkte"][-1]], "gleich"),
+    (POLYGON["punkte"] + [POLYGON["punkte"][0]], "gleich"),
+    ([{"x": 0, "y": 0}, {"x": 0.0001, "y": 0}, {"x": 0, "y": 1}], "zu klein"),
+    ([{"x": 0, "y": 0}, {"x": 1, "y": 1}, {"x": 0.5, "y": 0.50000001}], "zu klein"),
+    ([{"x": x, "y": y} for x, y in ((0, 0), (1, 0), (0.5, 0), (0, 1))], "überschneiden"),
+])
+def test_polygon_validierung(punkte, fehler):
+    with pytest.raises(ObjektKartenFehler, match=fehler):
+        bsp.ausschnitt_validieren({"art": "polygon", "punkte": punkte})
+
+
+def test_polygon_100_punkte_und_konkav():
+    kreis = [{"x": 0.5 + 0.4 * math.cos(i * math.tau / 100),
+              "y": 0.5 + 0.4 * math.sin(i * math.tau / 100)} for i in range(100)]
+    assert len(bsp.ausschnitt_validieren({"art": "polygon", "punkte": kreis})["punkte"]) == 100
+    assert bsp.ausschnitt_validieren({"art": "polygon", "punkte": [
+        {"x": x, "y": y} for x, y in ((0, 0), (1, 0), (0.4, 0.4), (0, 1))]})["x1"] == 1
+
+
+def test_polygon_raster_alpha_box_und_druck_weiss(umgebung):
+    from io import BytesIO
+
+    db, overlay, user, plan = umgebung
+    Image.new("RGB", (400, 200), "red").save(plan["pfad"] / "plan.png")
+    geo.referenzpunkte(db, db.get(Objekt, overlay.objekt_id), overlay.dokument_id, 1,
+                      "setzen", punkte(), "aehnlichkeit", user.id)
+    bsp.entwurf_aendern(db, overlay, {"ausschnitt": POLYGON}, user.id)
+    bsp.raster_erzeugen(db, overlay)
+    g = db.get(ObjektDokumentGeoref, overlay.georef_id)
+    p = json.loads(g.parameter_json)
+    crop = bsp.ausschnitt_validieren(POLYGON)
+    rectangle = crop | {"art": "rechteck"}
+    assert bsp._raster_rechnung(p, crop, 400, 200) == bsp._raster_rechnung(p, rectangle, 400, 200)
+    bounds = json.loads(overlay.raster_bounds_json)
+    with Image.open(plan["pfad"] / overlay.raster_pfad) as bild:
+        for x, y, innen in ((0.25, 0.25, True), (0.75, 0.75, False)):
+            ost, nord = geo._abbilden(p, x, y)
+            fgrad = geo.ERDRADIUS_M * math.pi / 180
+            lat, lng = p["lat0"] + nord / fgrad, p["lng0"] + ost / (fgrad * math.cos(math.radians(p["lat0"])))
+            px = int((lng - bounds[0][1]) / (bounds[1][1] - bounds[0][1]) * bild.width)
+            py = int((bounds[1][0] - lat) / (bounds[1][0] - bounds[0][0]) * bild.height)
+            assert (bild.getpixel((px, py))[3] > 0) == innen
+    with Image.open(BytesIO(bsp.original_ausschnitt_png(db, overlay))) as druck:
+        assert druck.size == (320, 160)
+        assert druck.getpixel((20, 20)) == (255, 0, 0, 255)
+        assert druck.getpixel((300, 140)) == (255, 255, 255, 255)
