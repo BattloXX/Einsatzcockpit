@@ -73,6 +73,7 @@ Was mit oder direkt nach dem Einsatz zu erledigen ist.
 | Modul | Bedienung | Einrichtung | Worum es geht |
 |---|---|---|---|
 | Objekte | [Anleitung](Anwender-Objekte) | [Admin](Administration-Objektverwaltung) | Einsatzunterlagen, Gefahren, Melderpläne mit Volltextsuche, Objektblatt |
+| BSP-Overlay | [Anleitung](Anwender-BSP-Overlay) | [Admin](Administration-BSP-Overlay) | Plan-Ausschnitt lagegenau auf der Einsatzkarte, Freigabe, Druck |
 | Externe Objektpflege | [Anleitung](Anwender-Objektpflege) | [Admin](Administration-Objektpflege) | Objektverantwortliche ohne Login zur Prüfung ihrer Daten einladen |
 | Probenplan | [Anleitung](Anwender-Probenplan) | – | Jahresplanung, Teilnehmerappell, Nachbereitung, öffentlicher Kalender |
 | Planspiele | [Anleitung](Anwender-Planspiele) | [Admin](Administration-Planspiele) | Übungseinsätze und Unwetter-GSL erzeugen, allein oder mit Regie üben |

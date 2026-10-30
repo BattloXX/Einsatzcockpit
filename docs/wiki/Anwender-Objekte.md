@@ -94,6 +94,8 @@ Gefahren-Dreiecke (EX/Gas/Chemie/Strom/PV) und Hydranten. Marker sind verschiebb
 Flächen zeichnest du mit den Werkzeugen links oben. Die Karte erscheint read-only in der
 Einsatzansicht, am Alarm-Infoscreen und (vereinfacht) am Objektblatt.
 
+Einen Ausschnitt des Lage- oder Brandschutzplans kannst du **lagegenau auf der Karte** einblenden: → [BSP-Overlay](Anwender-BSP-Overlay).
+
 Zum Drehen ein Punkt-Symbol anklicken: Im Popup stehen -15°/+15°, +90°,
 Zurücksetzen und ein Winkel-Schieberegler zur Verfügung. Die Beschriftung bleibt
 aufrecht; die Ausrichtung wird gespeichert und auch in Einsatzansicht,
