@@ -4,7 +4,9 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
-- **Objekt-Einsatzansicht:** Freigegebene, aktuelle BSP-Overlays erscheinen auch in der Lagekarte der Objekt-Einsatzansicht unter den Objektsymbolen, mit lokalem Schalter und Deckkraft; geschuetzte Objekt-JSON-Route ohne Offlinecache. Die bearbeitbare Objektkarte bleibt unveraendert.
+- **Objektkarte:** BSP-Overlays im Karten-Tab und Vollbild-Editor lokal ein-/ausblenden und Deckkraft einstellen; einklappbare Bedienung unter der Karte auch mobil. Verwalter erhalten einen Hinweis auf nicht freigegebene/veraltete Overlays, ohne Entwurfsraster auszuliefern. Marker und Geoman bleiben bedienbar.
+
+- **Objekt-Einsatzansicht:** Freigegebene, aktuelle BSP-Overlays erscheinen auch in der Lagekarte der Objekt-Einsatzansicht unter den Objektsymbolen, mit lokalem Schalter und Deckkraft; geschuetzte Objekt-JSON-Route ohne Offlinecache.
 
 - **Objektkarte / BSP-Overlay:** Freigegebene Planausschnitte erscheinen lagegenau als Raster-Ebene in der Einsatzkarte. Verwaltung im Georef-Editor (Ausschnitt, Vorschau, Freigabe mit einzeln bestätigten Warnungen); Ebene in Lageführung mit Opt-out (für alle bzw. nur für mich) und Deckkraft, lesend in Einsatzinfo-, GSL- und Einheitenkarte. Veraltete oder zurückgezogene Overlays werden nie ausgeliefert. Druck getrennt vom Bildschirm: vier Modi im Lageführung-Druckdialog, regelbasierter Ausdruck des BSP-Ausschnitts über die Druckregel (nur mit `autodruck`, idempotent je Freigabe). MCP: `objekt_bsp_overlay_entwurf` (nur Entwurf) und Lesefelder `bsp_overlays`. Migration 0336. Doku: [BSP-Overlay](docs/architecture/bsp-overlay.md).
 

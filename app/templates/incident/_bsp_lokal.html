@@ -1,4 +1,9 @@
-<div id="lft-bsp" hidden style="max-width:100%;min-width:0;padding:8px;">
+{% set bsp_tag = 'details' if bsp_einklappbar else 'div' %}
+<{{ bsp_tag }} id="lft-bsp" hidden style="max-width:100%;min-width:0;padding:8px;">
+  {% if bsp_einklappbar %}<summary style="cursor:pointer;min-height:44px;">Brandschutzplan
+    <small id="lft-bsp-pruefen" role="status" style="display:block;overflow-wrap:anywhere;"></small>
+  </summary>{% else %}<small id="lft-bsp-pruefen" role="status" style="display:block;"></small>{% endif %}
+  <div id="lft-bsp-bedienung">
   <label><input type="checkbox" id="lft-layer-bsp"> Brandschutzplan</label>
   <label for="lft-bsp-auswahl">Plan / Stand</label>
   <select id="lft-bsp-auswahl" style="width:100%;max-width:100%;min-height:44px;"></select>
@@ -8,4 +13,5 @@
   <button type="button" id="lft-bsp-aus" class="btn btn-sm">Alle Pläne lokal ausblenden</button>
   <small id="lft-bsp-lokal" style="display:block;"></small>
   <small id="lft-bsp-hinweis" role="status" style="display:block;"></small>
-</div>
+  </div>
+</{{ bsp_tag }}>

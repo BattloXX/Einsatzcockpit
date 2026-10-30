@@ -117,7 +117,7 @@ def test_fremde_org_404_und_ohne_login_gesperrt(client, einsatz_plan):
     assert client.get(_url(einsatz_plan)).status_code == 404
 
 
-def test_einbettung_und_editor_getrennt(client, einsatz_plan):
+def test_einbettung_und_editor_mit_lokalem_overlay(client, einsatz_plan):
     p = einsatz_plan
     _rolle(p, 'objekt_verwalter')
     _login(client, p)
@@ -129,8 +129,8 @@ def test_einbettung_und_editor_getrennt(client, einsatz_plan):
     assert 'bsp_overlay_layer.js' in response.text
     editor = client.get(f'/objekte/{p["objekt_id"]}/karte')
     assert editor.status_code == 200
-    assert 'id="lft-layer-bsp"' not in editor.text
-    assert 'EcpBspOverlay.init' not in editor.text
+    assert 'id="lft-layer-bsp"' in editor.text
+    assert 'EcpBspOverlay.init' in editor.text
     ansicht = client.get(f'/objekte/{p["objekt_id"]}/einsatz')
     assert ansicht.status_code == 200
     assert f'/objekte/{p["objekt_id"]}/karte/einbettung' in ansicht.text

@@ -24,7 +24,7 @@
 
   function init(karte, opts) {
     var overlays = [], layers = {}, lokaleWerte = {}, fehlgeschlagen = {};
-    var auswahl = null, folge = 0, speichern = false;
+    var auswahl = null, folge = 0, speichern = false, pruefen = 0;
     var scope = opts.kannEinstellen ? "alle" : "lokal";
     var root = document.getElementById("lft-bsp");
     function el(id) { return document.getElementById(id); }
@@ -71,7 +71,12 @@
           layer.addTo(karte);
         } else { layers[o.id].layer.setOpacity(zustand.deckkraft); }
       });
-      if (root) { root.hidden = !overlays.length; }
+      if (root) { root.hidden = !overlays.length && !pruefen; }
+      if (el("lft-bsp-bedienung")) { el("lft-bsp-bedienung").hidden = !overlays.length; }
+      if (el("lft-bsp-pruefen")) {
+        el("lft-bsp-pruefen").textContent = pruefen ? pruefen +
+          " Overlay(s) nicht freigegeben/veraltet - im Georef-Editor pruefen" : "";
+      }
       var o = gewaehlt();
       if (!o || !root) { return; }
       if (opts.nurLokal || !o.kann_einstellen) { scope = "lokal"; }
@@ -83,7 +88,7 @@
       el("lft-layer-bsp").checked = zustand.sichtbar;
       el("lft-bsp-deckkraft").value = zustand.deckkraft;
       el("lft-bsp-prozent").textContent = Math.round(zustand.deckkraft * 100) + " %";
-      el("lft-bsp-lokal").textContent = lokal(o.id) ? "Persönliche Überschreibung aktiv (nur für mich)." : "Einsatzvorgabe aktiv.";
+      el("lft-bsp-lokal").textContent = lokal(o.id) ? "Persönliche Überschreibung aktiv (nur für mich)." : (opts.listUrl.indexOf("/objekte/") === 0 ? "Objektvorgabe aktiv." : "Einsatzvorgabe aktiv.");
       el("lft-layer-bsp").disabled = speichern;
       el("lft-bsp-deckkraft").disabled = speichern;
       el("lft-bsp-reset").disabled = speichern;
@@ -106,10 +111,13 @@
       var nr = ++folge;
       return fetch(opts.listUrl, {credentials: "same-origin", cache: "no-store"}).then(function (r) {
         if (!r.ok) { throw new Error("Liste nicht verfügbar"); }
-        return r.json();
-      }).then(function (liste) {
+        return r.json().then(function (liste) {
+          return {liste: liste, pruefen: r.headers ? Number(r.headers.get("X-BSP-Pruefen")) || 0 : 0};
+        });
+      }).then(function (antwort) {
         if (nr !== folge) { return; }
-        overlays = liste;
+        overlays = antwort.liste;
+        pruefen = antwort.pruefen;
         if (!gewaehlt()) { auswahl = overlays.length ? overlays[0].id : null; }
         listeRendern(); render();
       }).catch(function () {

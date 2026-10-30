@@ -2755,7 +2755,23 @@ def bsp_overlays_json(
     from app.services.objekt_bsp_overlay_service import objekt_overlays_json
 
     objekt = _objekt_or_404(db, objekt_id, user)
-    return JSONResponse(objekt_overlays_json(db, objekt, user), headers={"Cache-Control": "private, no-store"})
+    daten = objekt_overlays_json(db, objekt, user)
+    headers = {"Cache-Control": "private, no-store"}
+    if is_objekt_verwalter(user):
+        from app.models.objekt import ObjektBspOverlay
+
+        # Keine Entwurfsdaten oder Raster-URLs ausliefern; Listenformat bleibt stabil.
+        auslieferbar = {overlay["id"] for overlay in daten}
+        anzahl = sum(
+            overlay.id not in auslieferbar
+            for overlay in db.query(ObjektBspOverlay).filter(
+                ObjektBspOverlay.objekt_id == objekt.id,
+                ObjektBspOverlay.org_id == objekt.org_id,
+                ObjektBspOverlay.status.in_(("entwurf", "freigegeben")),
+            ).all()
+        )
+        headers["X-BSP-Pruefen"] = str(anzahl)
+    return JSONResponse(daten, headers=headers)
 
 
 @router.get("/{objekt_id}/karte/einbettung", response_class=HTMLResponse)

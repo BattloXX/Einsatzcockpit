@@ -46,6 +46,10 @@
   <div id="objekt-karte-tab" class="objekt-karte-canvas objekt-karte-canvas--klein"></div>
   {% endif %}
 
+  {% if request.state.objekt_enabled %}
+  {% with bsp_einklappbar=true %}{% include "incident/_bsp_lokal.html" %}{% endwith %}
+  {% endif %}
+
   <script>
     (function () {
       // Wird per HTMX (innerHTML-Swap) geladen -> Skripte dynamisch mit onload-Kette
@@ -89,6 +93,11 @@
           csrfToken: "{{ request.state.csrf_token }}",
           editierbar: EDITIERBAR
         });
+        {% if request.state.objekt_enabled %}
+        window.EcpBspOverlay.init(karte, {
+          listUrl: "/objekte/{{ objekt.id }}/bsp-overlays.json", nurLokal: true
+        });
+        {% endif %}
         // Karte ggf. in unsichtbarem Tab initialisiert -> Groesse nachziehen.
         setTimeout(function () { if (karte) { karte.invalidateSize(); } }, 60);
         // Bei erneutem Wechsel auf den Karten-Tab erneut korrigieren.
@@ -97,9 +106,18 @@
         });
       }
 
+      function mitBspOverlay() {
+        {% if request.state.objekt_enabled %}
+        if (window.EcpBspOverlay) { init(); }
+        else { ladeScript("/static/js/bsp_overlay_layer.js", init); }
+        {% else %}
+        init();
+        {% endif %}
+      }
+
       function mitObjektKarte() {
-        if (typeof window.initObjektKarte === "function") { init(); }
-        else { ladeScript("/static/js/objekt_karte.js", init); }
+        if (typeof window.initObjektKarte === "function") { mitBspOverlay(); }
+        else { ladeScript("/static/js/objekt_karte.js", mitBspOverlay); }
       }
 
       function mitGeoman() {

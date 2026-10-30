@@ -175,3 +175,20 @@ for (const listUrl of ['/einsatz/1/info/bsp-overlays.json', '/lage/1/bsp-overlay
     assert.equal(f.requests.some(r => r.options.method === 'POST'), false);
   });
 }
+
+test('Verwalter-Hinweis bleibt ohne auslieferbare Ebene sichtbar und verschwindet nach Freigabe', async () => {
+  const f = fixture({nurLokal: true, liste: [], listUrl: '/objekte/1/bsp-overlays.json'}); await flush();
+  f.setAntwort(async () => ({ok: true, headers: {get: () => '2'}, json: async () => []}));
+  await f.controller.reload();
+  assert.equal(f.el('lft-bsp').hidden, false);
+  assert.equal(f.el('lft-bsp-bedienung').hidden, true);
+  assert.equal(f.el('lft-bsp-pruefen').textContent,
+    '2 Overlay(s) nicht freigegeben/veraltet - im Georef-Editor pruefen');
+  assert.equal(f.active.size, 0);
+  f.setAntwort(async () => ({ok: true, headers: {get: () => null}, json: async () => [overlay()]}));
+  await f.controller.reload();
+  assert.equal(f.el('lft-bsp-pruefen').textContent, '');
+  assert.equal(f.el('lft-bsp-bedienung').hidden, false);
+  assert.equal(f.active.size, 1);
+  assert.equal(f.el('lft-bsp-lokal').textContent, 'Objektvorgabe aktiv.');
+});
