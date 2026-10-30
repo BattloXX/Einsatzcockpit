@@ -204,6 +204,8 @@ def test_georef_editor_rendert_bsp_bereich_und_sperre(client, overlay_plan):
     _login(client, p)
     r = client.get(f'/objekte/{p["objekt_id"]}/dokumente/seite/{p["seite_id"]}/georef')
     assert r.status_code == 200 and 'id="bsp-overlay"' in r.text and "BSP-Overlay" in r.text
+    assert "Plan auf der Karte anzeigen (BSP-Overlay)" in r.text
+    assert "Voraussetzung ist eine gültige, gespeicherte Georeferenzierung" in r.text
     assert f'data-seite-id="{p["seite_id"]}"' in r.text
     assert client.get(_basis(p) + f'?seite_id={p["seite_id"]}').json()["georef_gueltig"] is True
     with SessionLocal() as db:

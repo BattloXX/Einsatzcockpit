@@ -37,6 +37,20 @@
     });
     return new Overlay();
   }
+  // Nur Darstellung: Die serverseitige Freigabepruefung bleibt massgeblich.
+  function bspLagegenauigkeit(q) {
+    if (!q) { return "Lagegenauigkeit: nach dem Speichern verfügbar"; }
+    var wert = q.rmse_m;
+    var bewertung = q.status !== "gueltig" ? "neu prüfen" : wert == null ? "unbekannt" :
+      wert <= 0.5 ? "gut" : wert <= 2 ? "prüfen" : "ungenau";
+    return "Lagegenauigkeit: " + bewertung + " - Abweichung " +
+      (wert == null ? "unbekannt" : wert < 0.01 ? "unter 1 cm" : wert.toLocaleString("de-AT", { maximumFractionDigits: 2 }) + " m") +
+      ", " + q.punktzahl + " Referenzpunkte";
+  }
+  function bspStatus(status) {
+    return ({ entwurf: ["Entwurf", "muted", "file-text"], freigegeben: ["Freigegeben", "success", "circle-check"],
+      veraltet: ["Veraltet", "exercise", "alert-triangle"], zurueckgezogen: ["Zurückgezogen", "muted", "archive"] })[status];
+  }
   function bspBereich(opts, plan, map, planDiv, meta, rasterVorschauStart) {
     var root = document.getElementById("bsp-overlay");
     if (!root || !opts.seiteId) { return null; }
@@ -50,38 +64,78 @@
       b.className = "btn btn--ghost"; b.onclick = fn; return b;
     }
     var basis = opts.basisUrl.replace(/\/karte$/, "/bsp-overlays");
-    var meldung = el("p", "", root); meldung.setAttribute("role", "status");
+    var meldung = el("p", "", root); meldung.className = "bsp__meldung";
+    meldung.setAttribute("role", "status"); meldung.setAttribute("aria-live", "polite");
+    var voraussetzung = el("div", null, root); voraussetzung.className = "card bsp__voraussetzung";
+    el("h3", "Zuerst Plan georeferenzieren", voraussetzung);
+    el("p", "Speichere oben eine gültige Georeferenz. Auch das aktuelle Plandokument muss freigegeben sein.", voraussetzung);
+    var nachOben = el("a", "Zur Georeferenzierung oben", voraussetzung); nachOben.href = "#georef-editor";
+    var listenKopf = el("div", null, root); listenKopf.className = "bsp__kopf";
+    el("h3", "Vorhandene Overlays", listenKopf);
+    var neu = knopf("Neues Overlay", listenKopf, function () { if (!busy) { waehlen(null); } });
     var liste = el("div", null, root); liste.className = "bsp__liste";
-    var formular = el("fieldset", null, root);
-    formular.disabled = true;
+    var formular = el("fieldset", null, root); formular.className = "bsp__formular";
+    formular.disabled = true; formular.hidden = true;
     el("legend", "Overlay bearbeiten", formular);
+    var gespeichert = el("p", "", formular); gespeichert.className = "badge badge--exercise bsp__ungespeichert";
+    gespeichert.setAttribute("role", "status"); gespeichert.setAttribute("data-bsp-ungespeichert", "");
     var felder = {}, ausgewaehlt = null, eintraege = [], gueltig = false, busy = false;
     var ausschnitt = { art: "seite" }, rechteck = null, raster = null, zeichnen = false, start = null;
-    var cropLeiste = el("div", null, formular); cropLeiste.className = "bsp__aktionen";
-    var ausschnittText = el("p", "Ganze Seite vorgeschlagen", formular);
-    function feld(name, text, typ, optionen) {
-      var label = el("label", text + " ", formular);
+    function schritt(n, titel, hilfe) {
+      var karte = el("section", null, formular); karte.className = "card bsp__schritt"; karte.dataset.bspSchritt = String(n);
+      el("h3", n + " " + titel, karte); el("p", hilfe, karte).className = "form-hint"; return karte;
+    }
+    var eins = schritt(1, "Ausschnitt wählen", "Wähle die ganze Seite oder nur den benötigten Teil des Plans.");
+    var cropLeiste = el("div", null, eins); cropLeiste.className = "bsp__segment";
+    cropLeiste.setAttribute("role", "group"); cropLeiste.setAttribute("aria-label", "Planausschnitt");
+    var ausschnittText = el("p", "Ganze Seite", eins); ausschnittText.setAttribute("aria-live", "polite");
+    el("p", "Ziehe im Plan oben ein Rechteck über den Bereich, der auf der Karte erscheinen soll.", eins).className = "form-hint";
+    var zwei = schritt(2, "Angaben", "Benenne den Plan so, dass Einsatzkräfte ihn rasch erkennen.");
+    var feldGruppe = el("div", null, zwei); feldGruppe.className = "bsp__felder";
+    function feld(name, text, typ, optionen, hilfe, parent) {
+      var label = el("label", null, parent || feldGruppe); label.className = typ === "checkbox" ? "bsp__check" : "bsp__feld";
+      var titel = el("span", text, label);
       var input = el(optionen ? "select" : "input", null, label);
       if (optionen) { optionen.forEach(function (o) { var n = el("option", o[1], input); n.value = o[0]; }); }
       else { input.type = typ || "text"; }
-      input.name = name;
-      if (typ === "number") { input.min = "0.1"; input.max = "1"; input.step = "0.1"; }
+      input.name = name; input.id = "bsp-" + name;
+      if (optionen || !typ || typ === "text") { input.className = optionen ? "form-select" : "form-input"; }
+      if (typ === "range") { input.min = "0.1"; input.max = "1"; input.step = "0.1";
+        var prozent = el("output", "", label); prozent.htmlFor = input.id;
+        input.zeigeProzent = function () { prozent.textContent = Math.round(Number(input.value) * 100) + " %"; };
+        input.addEventListener("input", input.zeigeProzent);
+      }
+      if (hilfe) { var hint = el("span", hilfe, label); hint.className = "form-hint"; hint.id = input.id + "-hilfe"; input.setAttribute("aria-describedby", hint.id); }
+      titel.className = "bsp__label";
       felder[name] = input; return input;
     }
-    feld("name", "Name").required = true;
+    feld("name", "Name (Pflichtfeld)", "text", null, "Wird bei der Planauswahl im Einsatz angezeigt.").required = true;
+    felder.name.placeholder = "z. B. Hallenplan - Erdgeschoß";
     feld("plan_art", "Planart", null, [["lageplan", "Lageplan"], ["hallenbereich", "Hallenbereich"],
-      ["gefahrenzone", "Gefahrenzone"], ["geschoss", "Geschoss"], ["sonstig", "Sonstiger Plan"]]);
-    feld("bereich", "Bereich"); feld("geschoss", "Geschoss");
-    feld("standard_sichtbar", "Standardmäßig sichtbar", "checkbox");
-    feld("standard_deckkraft", "Standard-Deckkraft (0,1 bis 1)", "number");
-    feld("empfohlen", "Empfohlen", "checkbox"); feld("autodruck", "Bei Alarm mitdrucken, wenn eine Druckregel das Element BSP-Ausschnitt enthält", "checkbox");
-    feld("druck_deckkraft", "Druck-Deckkraft (0,1 bis 1)", "number");
+      ["gefahrenzone", "Gefahrenzone"], ["geschoss", "Geschoss"], ["sonstig", "Sonstiger Plan"]], "Lageplan: Überblick; Hallenbereich oder Geschoss: Innenräume; Gefahrenzone: besonderer Gefahrenbereich.");
+    feld("geschoss", "Geschoss (optional)", "text", null, "Zum Beispiel EG oder 1. OG.");
+    feld("bereich", "Bereich (optional)", "text", null, "Zum Beispiel Halle Nord oder Lager.");
+    el("h4", "Anzeige im Einsatz", zwei);
+    feld("standard_sichtbar", "Standardmäßig einblenden", "checkbox", null, "Der Plan erscheint beim Öffnen der Einsatzkarte. Er kann dort ausgeblendet werden.", zwei).setAttribute("role", "switch");
+    feld("standard_deckkraft", "Deckkraft", "range", null, "Weniger Deckkraft lässt die Karte unter dem Plan besser erkennen.", zwei);
+    feld("empfohlen", "Als empfohlenen Plan markieren", "checkbox", null, "Kennzeichnet diesen Plan als bevorzugte Auswahl für den Einsatz.", zwei);
+    var druck = el("details", null, zwei); druck.className = "bsp__druck";
+    el("summary", "Druck-Einstellungen", druck);
+    feld("autodruck", "Bei Alarm mitdrucken", "checkbox", null, 'Wird nur gedruckt, wenn eine Druckregel das Element "BSP-Ausschnitt" enthält.', druck);
+    feld("druck_deckkraft", "Druck-Deckkraft", "range", null, "Bestimmt die Deckkraft im Ausdruck, unabhängig von der Einsatzkarte.", druck);
     felder.name.maxLength = 200; felder.bereich.maxLength = 200; felder.geschoss.maxLength = 100;
-    var aktionen = el("div", null, formular); aktionen.className = "bsp__aktionen";
-    var qualitaet = el("p", "", root);
-    var deckLabel = el("label", "Raster-Vorschau: Deckkraft ", root);
+    var drei = schritt(3, "Prüfen und freigeben", "Prüfe in der Karte oben, ob Plan und Umgebung richtig übereinanderliegen.");
+    var qualitaet = el("p", "", drei); qualitaet.dataset.bspQualitaet = "";
+    var qualDetails = el("details", null, drei); el("summary", "Technische Georeferenz-Daten", qualDetails);
+    var rohwerte = el("p", "", qualDetails);
+    var warnung = el("p", "", drei); warnung.className = "bsp__warnung";
+    var deckLabel = el("label", "Vorschau-Deckkraft ", drei); deckLabel.className = "bsp__feld";
     var deck = el("input", null, deckLabel); deck.type = "range"; deck.min = "10"; deck.max = "100"; deck.value = "60";
-    deck.oninput = function () { if (raster) { raster.setOpacity(Number(deck.value) / 100); } };
+    var deckProzent = el("output", "60 %", deckLabel);
+    el("span", "Ändert nur die Vorschau auf der Karte oben.", deckLabel).className = "form-hint";
+    deck.oninput = function () { deckProzent.textContent = deck.value + " %"; if (raster) { raster.setOpacity(Number(deck.value) / 100); } };
+    var freigabeStand = el("p", "", drei); freigabeStand.setAttribute("aria-live", "polite");
+    var aktionen = el("div", null, drei); aktionen.className = "bsp__aktionen";
     function api(pfad, daten) {
       var config = { headers: { "X-CSRF-Token": opts.csrfToken } };
       if (daten !== undefined) {
@@ -91,36 +145,45 @@
         if (!r.ok) { throw new Error(typeof d.detail === "string" ? d.detail : "Ungültige Eingabe"); } return d;
       }); });
     }
-    function fehler(err) { meldung.textContent = err.message; }
-    function sperren() { formular.disabled = busy || !gueltig; }
+    function fehler(err) { meldung.textContent = err.message; meldung.className = "bsp__meldung bsp__meldung--fehler"; meldung.setAttribute("role", "alert"); }
+    function sperren() { formular.disabled = busy || !gueltig; formular.hidden = !gueltig; voraussetzung.hidden = gueltig; neu.disabled = busy || !gueltig; }
     function ungespeichert() {
+      gespeichert.textContent = "Nicht gespeichert"; speichern.hidden = false; speichern.className = "btn btn--primary";
       if (!ausgewaehlt) { return; }
       rastern.disabled = freigeben.disabled = zurueckziehen.disabled = true;
       meldung.textContent = "Änderungen zuerst als Entwurf speichern. Eine bestehende Freigabe wird dabei aufgehoben.";
     }
     Object.keys(felder).forEach(function (k) { felder[k].addEventListener("input", ungespeichert); });
+    var planHinweis = el("div", "Ausschnitt markieren: Ziehe ein Rechteck im Plan. Danach Auswahl beenden.", planDiv);
+    planHinweis.className = "bsp__planhinweis"; planHinweis.hidden = true; planHinweis.setAttribute("role", "status");
     function cropModus(an) {
       zeichnen = an; start = null;
-      cropKnopf.textContent = an ? "Ausschnitt-Auswahl beenden" : "Rechteck aufziehen";
+      cropKnopf.setAttribute("aria-pressed", String(an || ausschnitt.art === "rechteck"));
+      ganzKnopf.setAttribute("aria-pressed", String(!an && ausschnitt.art === "seite"));
+      planDiv.classList.toggle("bsp__markieren", an);
+      planHinweis.hidden = !an; ende.hidden = !an;
+      if (an) { planDiv.scrollIntoView({ block: "center", behavior: "smooth" }); }
       if (an) { plan.dragging.disable(); plan.touchZoom.disable(); plan.doubleClickZoom.disable(); }
       else { plan.dragging.enable(); plan.touchZoom.enable(); plan.doubleClickZoom.enable(); }
       planDiv.style.touchAction = an ? "none" : "";
     }
     function zeigeAusschnitt() {
       if (rechteck) { rechteck.remove(); rechteck = null; }
-      ausschnittText.textContent = ausschnitt.art === "seite" ? "Ganze Seite vorgeschlagen" : "Rechteck auf der gedrehten Seite gewählt";
+      ausschnittText.textContent = ausschnitt.art === "seite" ? "Ganze Seite" : "Ausschnitt: " + Math.round((ausschnitt.x1 - ausschnitt.x0) * 100) + " % Breite × " + Math.round((ausschnitt.y1 - ausschnitt.y0) * 100) + " % Höhe der Seite";
       if (ausschnitt.art === "rechteck") {
         rechteck = L.rectangle([[-ausschnitt.y1 * meta.bildgroesse[1], ausschnitt.x0 * meta.bildgroesse[0]],
           [-ausschnitt.y0 * meta.bildgroesse[1], ausschnitt.x1 * meta.bildgroesse[0]]], { interactive: false }).addTo(plan);
       }
     }
-    knopf("Ganze Seite", cropLeiste, function () {
-      cropModus(false); ausschnitt = { art: "seite" }; zeigeAusschnitt(); ungespeichert();
+    var ganzKnopf = knopf("Ganze Seite", cropLeiste, function () {
+      ausschnitt = { art: "seite" }; cropModus(false); zeigeAusschnitt(); ungespeichert();
     });
-    var cropKnopf = knopf("Rechteck aufziehen", cropLeiste, function () {
+    var cropKnopf = knopf("Ausschnitt markieren", cropLeiste, function () {
       cropModus(!zeichnen);
       if (zeichnen) { meldung.textContent = "Im Seitenbild ein Rechteck aufziehen, danach Auswahl beenden. Mit Finger oder Maus möglich."; }
     });
+    var ende = knopf("Auswahl beenden", eins, function () { cropModus(false); }); ende.hidden = true;
+    knopf("Ausschnitt zurücksetzen", eins, function () { ausschnitt = { art: "seite" }; cropModus(false); zeigeAusschnitt(); ungespeichert(); });
     function xy(ev) {
       var p = planNormiert(plan.mouseEventToLatLng(ev), meta.bildgroesse[0], meta.bildgroesse[1]);
       return { x: Math.max(0, Math.min(1, p.x)), y: Math.max(0, Math.min(1, p.y)) };
@@ -148,20 +211,36 @@
       Object.keys(felder).forEach(function (k) {
         if (felder[k].type === "checkbox") { felder[k].checked = !!werte[k]; }
         else { felder[k].value = werte[k] == null ? "" : werte[k]; }
+        if (felder[k].zeigeProzent) { felder[k].zeigeProzent(); }
       });
-      ausschnitt = o ? o.ausschnitt : { art: "seite" }; zeigeAusschnitt();
+      ausschnitt = o ? o.ausschnitt : { art: "seite" }; cropModus(false); zeigeAusschnitt();
       if (raster) { raster.remove(); raster = null; }
       if (o && o.raster_url && o.bounds) {
         rasterVorschauStart();
         deck.value = String(o.standard_deckkraft * 100);
         raster = L.imageOverlay(o.raster_url, o.bounds, { opacity: Number(deck.value) / 100, interactive: false }).addTo(map);
-        raster.on("error", function () { if (raster) { raster.remove(); raster = null; } meldung.textContent = "Raster-Vorschau nicht verfügbar. Bitte neu rastern."; });
+        raster.on("error", function () { if (raster) { raster.remove(); raster = null; } fehler(new Error("Raster-Vorschau nicht verfügbar. Bitte erneut speichern und Vorschau prüfen.")); });
         map.fitBounds(o.bounds);
       }
       var q = o && o.qualitaet;
-      qualitaet.textContent = q ? "Georef: " + q.status + " · RMSE: " + meter(q.rmse_m) + " · " +
-        q.punktzahl + " Punkte · Modell: " + q.modell + " · Revision " + q.revision +
-        " · Dokument-Version " + o.dokument_version + " · Freigabe-Nr. " + o.freigabe_nr : "";
+      qualitaet.textContent = bspLagegenauigkeit(q);
+      rohwerte.textContent = q ? "RMSE: " + meter(q.rmse_m) + " · " + q.punktzahl + " Punkte · Modell: " + q.modell +
+        " · Revision " + q.revision + " · Dokument-Version " + o.dokument_version + " · Freigabe-Nr. " + o.freigabe_nr : "Noch kein gespeicherter Entwurf.";
+      qualitaet.title = rohwerte.textContent;
+      warnung.textContent = o ? o.warnungen.map(warnText).join(" ") : "";
+      gespeichert.textContent = "";
+      deckProzent.textContent = deck.value + " %";
+      freigabeStand.textContent = o && o.status === "freigegeben" ? "Im Einsatz sichtbar · Freigabe-Nr. " + o.freigabe_nr :
+        o && o.status === "veraltet" ? "Plan oder Georeferenz wurde geändert - neu prüfen" : "Erst nach der Freigabe im Einsatz sichtbar.";
+      speichern.hidden = !!o && (o.status === "freigegeben" || o.status === "veraltet");
+      rastern.className = "btn btn--primary";
+      speichern.className = "btn " + (o && o.raster_url && o.status === "entwurf" ? "btn--ghost" : "btn--primary");
+      freigeben.hidden = !o || o.status !== "entwurf" || !o.raster_url;
+      freigeben.className = "btn btn--primary";
+      rastern.hidden = !o || o.status !== "veraltet";
+      zurueckziehen.hidden = !o || o.status !== "freigegeben";
+      loeschen.hidden = !o || o.status !== "entwurf";
+      liste.querySelectorAll("[data-overlay-id]").forEach(function (b) { b.setAttribute("aria-pressed", String(!!o && Number(b.dataset.overlayId) === o.id)); });
       rastern.disabled = freigeben.disabled = zurueckziehen.disabled = loeschen.disabled = !o;
       if (o) { loeschen.disabled = o.status !== "entwurf"; }
     }
@@ -169,54 +248,68 @@
     function laden(id) {
       return api("?seite_id=" + opts.seiteId).then(function (d) {
         gueltig = d.georef_gueltig; eintraege = d.overlays; liste.replaceChildren();
-        meldung.textContent = gueltig ? "Gültige Georeferenz vorhanden. Ganzer Plan oder Rechteck möglich." :
-          "BSP-Overlay deaktiviert: Eine gültige gespeicherte Georeferenz und ein aktuelles freigegebenes Dokument sind erforderlich.";
+        meldung.textContent = ""; meldung.className = "bsp__meldung"; meldung.setAttribute("role", "status");
+        if (!eintraege.length) {
+          var leer = el("div", null, liste); leer.className = "card bsp__leer"; leer.dataset.bspLeer = "";
+          el("strong", "Noch kein Overlay vorhanden", leer);
+          el("p", "Mit Neues Overlay bereitest du diesen Plan für die Einsatzkarte vor. Erst die Freigabe macht ihn im Einsatz sichtbar.", leer);
+        }
         eintraege.forEach(function (o) {
-          var row = el("div", null, liste);
-          knopf(o.name + " · " + o.status, row, function () { waehlen(o); });
-          if (o.hinweis) { el("p", o.hinweis, row); }
+          var row = knopf("", liste, function () { waehlen(o); }); row.className = "card bsp__overlay"; row.dataset.overlayId = o.id;
+          var stand = bspStatus(o.status);
+          var chip = el("span", null, row); chip.className = "badge badge--" + stand[1]; chip.dataset.bspStatus = o.status;
+          var symbol = el("span", null, chip); symbol.insertAdjacentHTML("afterbegin", ecpIcon(stand[2], { size: "sm" }));
+          el("span", stand[0], chip);
+          el("strong", o.name, row);
+          el("span", [felder.plan_art.options[Array.from(felder.plan_art.options).findIndex(function (v) { return v.value === o.plan_art; })].text, o.geschoss, o.bereich].filter(Boolean).join(" · "), row);
+          el("span", o.freigabe_nr ? "Freigabestand: Nr. " + o.freigabe_nr : "Noch nicht freigegeben", row).className = "form-hint";
+          if (o.status === "veraltet") { el("span", "Plan oder Georeferenz wurde geändert - neu prüfen", row).className = "bsp__warnung"; }
         });
         waehlen(eintraege.find(function (o) { return o.id === id; })); sperren();
       });
     }
-    function ausfuehren(pfad, daten) {
+    function ausfuehren(pfad, daten, vorschau) {
       if (busy) { return Promise.resolve(); }
       busy = true; cropModus(false); sperren();
-      return api(pfad, daten).then(function (d) { return laden(d.id); }).catch(fehler)
+      return api(pfad, daten).then(function (d) {
+        return (vorschau ? api("/" + d.id + "/rastern", {}) : Promise.resolve(d)).then(function () { return laden(d.id); });
+      }).catch(fehler)
         .finally(function () { busy = false; sperren(); });
     }
     function daten() {
       var d = { ausschnitt: ausschnitt, expected_rotation: meta.rotation };
       Object.keys(felder).forEach(function (k) {
-        var input = felder[k]; d[k] = input.type === "checkbox" ? input.checked : input.type === "number" ? Number(input.value) : input.value;
+        var input = felder[k]; d[k] = input.type === "checkbox" ? input.checked : (input.type === "number" || input.type === "range") ? Number(input.value) : input.value;
       }); return d;
     }
-    knopf("Neuer Entwurf", root, function () { if (!busy) { waehlen(null); } });
-    knopf("Entwurf speichern", aktionen, function () {
+    var speichern = knopf("Speichern und Vorschau", aktionen, function () {
       if (!formular.reportValidity()) { return; }
       var d = daten();
       if (!ausgewaehlt) { d.seite_id = opts.seiteId; }
-      ausfuehren(ausgewaehlt ? "/" + ausgewaehlt.id + "/aendern" : "", d);
+      ausfuehren(ausgewaehlt ? "/" + ausgewaehlt.id + "/aendern" : "", d, true);
     });
-    var rastern = knopf("Neu rastern", aktionen, function () { ausfuehren("/" + ausgewaehlt.id + "/rastern", {}); });
+    var rastern = knopf("Neu prüfen", aktionen, function () { speichern.onclick(); });
     var freigeben = knopf("Freigeben", aktionen, function () {
       // Unmittelbar vor der Bestaetigung Qualitaet und Warnungen erneut vom Server holen.
       api("?seite_id=" + opts.seiteId).then(function (d) {
         var o = d.overlays.find(function (item) { return item.id === ausgewaehlt.id; });
         if (!o || !o.georef_gueltig) { throw new Error("Gültige Georeferenz erforderlich"); }
         var dialog = el("dialog", null, root); dialog.className = "bsp__freigabe";
-        el("h3", "BSP-Overlay freigeben", dialog);
-        el("p", o.name + " · Georef: " + o.qualitaet.status + " · RMSE: " + meter(o.qualitaet.rmse_m) + " · " +
-          o.qualitaet.punktzahl + " Punkte · Modell: " + o.qualitaet.modell, dialog);
+        var titel = el("h3", "Plan für den Einsatz freigeben", dialog); titel.id = "bsp-freigabe-titel";
+        dialog.setAttribute("aria-labelledby", titel.id);
+        el("p", o.name + " · " + o.plan_art + (o.geschoss ? " · " + o.geschoss : ""), dialog);
+        el("p", bspLagegenauigkeit(o.qualitaet), dialog);
+        el("p", (o.ausschnitt.art === "seite" ? "Ausschnitt: Ganze Seite. " : "Ausschnitt: markiertes Rechteck. ") + "Du gibst diesen Plan für die Einsatzkarte frei. " + (o.standard_sichtbar ? "Er wird standardmäßig eingeblendet." : "Er kann im Einsatz eingeblendet werden.") +
+          " Deckkraft: " + Math.round(o.standard_deckkraft * 100) + " %.", dialog);
         var checks = o.warnungen.map(function (code) {
           var label = el("label", null, dialog); var input = el("input", null, label); input.type = "checkbox";
-          el("span", code === "wenige_punkte" ? "Nur drei Referenzpunkte: Ich habe die Lage geprüft." :
-            "Nur freie Kartenklicks: Ich habe die Lage geprüft.", label);
+          el("span", warnText(code) + " Ich habe die Lage auf der Karte geprüft.", label);
           return { code: code, input: input };
         });
         var bestaetigen = knopf("Verbindlich freigeben", dialog, function () {
           dialog.close(); ausfuehren("/" + o.id + "/freigeben", { bestaetigte_warnungen: checks.map(function (c) { return c.code; }) });
         });
+        bestaetigen.className = "btn btn--primary";
         function pruefen() { bestaetigen.disabled = checks.some(function (c) { return !c.input.checked; }); }
         checks.forEach(function (c) { c.input.onchange = pruefen; }); pruefen();
         knopf("Abbrechen", dialog, function () { dialog.close(); });
@@ -225,6 +318,8 @@
     });
     var zurueckziehen = knopf("Zurückziehen", aktionen, function () { ausfuehren("/" + ausgewaehlt.id + "/zurueckziehen", {}); });
     var loeschen = knopf("Entwurf löschen", aktionen, function () { ausfuehren("/" + ausgewaehlt.id + "/loeschen", {}); });
+    loeschen.className = "btn btn--ghost btn--xs bsp__loeschen";
+    function warnText(code) { return code === "wenige_punkte" ? "Nur drei Referenzpunkte: Die Lage ist weniger gut abgesichert." : "Alle Punkte wurden frei auf der Karte gesetzt. Es fehlen eingerastete Gebäudeecken."; }
     laden().catch(fehler);
     return { zeichnet: function () { return zeichnen; }, aktualisieren: function () {
       cropModus(false); return laden(ausgewaehlt && ausgewaehlt.id).catch(fehler);
@@ -541,7 +636,7 @@
     }).catch(fehler);
     return { schliessen: schliessen };
   }
-  window.objektGeorefEditor = { open: open, planNormiert: planNormiert, affineMatrix: affineMatrix, naechsterSchritt: naechsterSchritt };
+  window.objektGeorefEditor = { open: open, planNormiert: planNormiert, affineMatrix: affineMatrix, naechsterSchritt: naechsterSchritt, bspLagegenauigkeit: bspLagegenauigkeit, bspStatus: bspStatus };
   if (typeof document !== "undefined" && document.addEventListener) {
     document.addEventListener("DOMContentLoaded", function () {
       var container = document.getElementById("georef-editor");

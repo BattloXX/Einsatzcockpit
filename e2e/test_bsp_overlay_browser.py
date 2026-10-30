@@ -215,13 +215,13 @@ def _freigeben(session, daten):
     root.locator('[name="name"]').fill("E2E Hallenplan")
     root.locator('[name="standard_sichtbar"]').check()
     with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/bsp-overlays")) as created:
-        root.get_by_role("button", name="Entwurf speichern", exact=True).click()
+        root.get_by_role("button", name="Speichern und Vorschau", exact=True).click()
     assert created.value.status == 200, created.value.text()
     overlay = created.value.json()
     assert overlay["ausschnitt"] == {"art": "seite", "x0": 0, "y0": 0, "x1": 1, "y1": 1}
     root.get_by_role("button", name="Freigeben", exact=True).click()
     dialog = root.locator("dialog")
-    expect(dialog).to_contain_text("3 Punkte")
+    expect(dialog).to_contain_text("3 Referenzpunkte")
     checks = dialog.locator('input[type="checkbox"]')
     expect(checks).to_have_count(2)
     confirm = dialog.get_by_role("button", name="Verbindlich freigeben")
@@ -232,7 +232,8 @@ def _freigeben(session, daten):
     with page.expect_response(lambda r: r.url.endswith("/freigeben")) as released:
         confirm.click()
     assert released.value.status == 200, released.value.text()
-    expect(root.get_by_role("button", name="E2E Hallenplan · freigegeben", exact=True)).to_be_visible()
+    expect(root.locator('[data-bsp-status="freigegeben"]')).to_have_text("Freigegeben")
+    expect(root.locator(".bsp__overlay")).to_contain_text("E2E Hallenplan")
     assert released.value.json()["freigabe_nr"] == 1
     return page, overlay["id"]
 
@@ -270,6 +271,84 @@ def _sichtbar(page, wert):
 
 def test_verwalter_ganze_seite_freigabe_mit_warnungen(bsp_sessions, bsp_server):
     _freigeben(bsp_sessions, bsp_server)
+
+
+def test_editor_schritte_leerzustand_und_ohne_georef(bsp_sessions, bsp_server):
+    page = bsp_sessions("verwalter")
+    url = f'{bsp_server["base"]}/objekte/{bsp_server["objekt_id"]}/dokumente/seite/{bsp_server["seite_id"]}/georef'
+    page.goto(url)
+    root = page.locator("#bsp-overlay")
+    expect(root.locator("[data-bsp-leer]")).to_contain_text("Noch kein Overlay vorhanden")
+    expect(root.locator("[data-bsp-schritt]")).to_have_count(3)
+    for text in ("1 Ausschnitt wählen", "2 Angaben", "3 Prüfen und freigeben"):
+        expect(root.get_by_role("heading", name=text, exact=True)).to_be_visible()
+    expect(root.locator(".bsp__druck")).not_to_have_attribute("open", "")
+    root.locator('[name="name"]').fill("Neuer Plan")
+    expect(root.locator("[data-bsp-ungespeichert]")).to_have_text("Nicht gespeichert")
+    root.get_by_role("button", name="Ausschnitt markieren", exact=True).click()
+    expect(page.locator(".bsp__markieren")).to_be_visible()
+    expect(page.locator(".bsp__planhinweis")).to_be_visible()
+    root.get_by_role("button", name="Auswahl beenden", exact=True).click()
+
+    csrf = page.locator("#georef-editor").get_attribute("data-csrf")
+    response = page.request.post(
+        f'{bsp_server["base"]}/objekte/{bsp_server["objekt_id"]}/karte/georef/verwerfen',
+        headers={"X-CSRF-Token": csrf},
+        data={"dokument_id": bsp_server["dokument_id"], "seite": 1,
+              "expected_revision": 1, "expected_rotation": 0},
+    )
+    assert response.status == 200, response.text()
+    page.reload()
+    expect(root.get_by_role("heading", name="Zuerst Plan georeferenzieren")).to_be_visible()
+    expect(root.locator("fieldset")).to_be_hidden()
+    expect(root.get_by_role("link", name="Zur Georeferenzierung oben")).to_have_attribute("href", "#georef-editor")
+
+
+def test_editor_statuschips_und_mobile_screenshots(bsp_sessions, bsp_server, freigabe):
+    page = freigabe[0]
+    root = page.locator("#bsp-overlay")
+    root.get_by_role("button", name="Neues Overlay", exact=True).click()
+    root.locator('[name="name"]').fill("E2E Entwurf - Erdgeschoß")
+    root.get_by_role("button", name="Speichern und Vorschau", exact=True).click()
+    expect(root.locator('[data-bsp-status="entwurf"]')).to_be_visible()
+    expect(root.locator('[data-bsp-status="freigegeben"]')).to_be_visible()
+    expect(root.locator("[data-bsp-qualitaet]")).to_contain_text("Lagegenauigkeit: gut")
+    expect(root.locator(".bsp__druck")).not_to_have_attribute("open", "")
+    for width, height, path in ((1440, 1000, "/tmp/bsp-design-desktop.png"), (390, 844, "/tmp/bsp-design-handy.png")):
+        page.set_viewport_size({"width": width, "height": height})
+        root.scroll_into_view_if_needed()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        root.screenshot(path=path, style=".bottom-nav, .profil-sheet { visibility:hidden !important; }")
+    root.locator(".bsp__overlay").filter(has_text="E2E Hallenplan").click()
+    expect(root).to_contain_text("Im Einsatz sichtbar")
+    root.get_by_role("button", name="Zurückziehen", exact=True).click()
+    expect(root.locator('[data-bsp-status="zurueckgezogen"]')).to_be_visible()
+
+    # Veraltete Freigabe mit echten Serverdaten erzeugen: Entwurf freigeben, Georef ändern.
+    root.locator(".bsp__overlay").filter(has_text="E2E Entwurf").click()
+    root.get_by_role("button", name="Freigeben", exact=True).click()
+    dialog = root.locator("dialog")
+    expect(dialog).to_be_visible()
+    expect(dialog.locator('input[type="checkbox"]')).to_have_count(2)
+    for checkbox in dialog.locator('input[type="checkbox"]').all():
+        checkbox.check()
+    dialog.get_by_role("button", name="Verbindlich freigeben").click()
+    expect(root.locator('[data-bsp-status="freigegeben"]')).to_be_visible()
+    csrf = page.locator("#georef-editor").get_attribute("data-csrf")
+    response = page.request.post(
+        f'{bsp_server["base"]}/objekte/{bsp_server["objekt_id"]}/karte/georef',
+        headers={"X-CSRF-Token": csrf},
+        data={"dokument_id": bsp_server["dokument_id"], "seite": 1, "punkte": bsp_server["punkte"],
+              "modell": "aehnlichkeit", "expected_revision": 1, "expected_rotation": 0},
+    )
+    assert response.status == 200, response.text()
+    page.reload()
+    expect(root.locator('[data-bsp-status="veraltet"]')).to_be_visible()
+    expect(root).to_contain_text("Plan oder Georeferenz wurde geändert - neu prüfen")
+    root.locator(".bsp__overlay").filter(has_text="E2E Entwurf").click()
+    root.get_by_role("button", name="Neu prüfen", exact=True).click()
+    expect(root.locator('[data-bsp-status="entwurf"]')).to_be_visible()
+    expect(root.get_by_role("button", name="Freigeben", exact=True)).to_be_enabled()
 
 
 @pytest.mark.parametrize("viewport", VIEWPORTS, ids=["tablet", "handy"])
