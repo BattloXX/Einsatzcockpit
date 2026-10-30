@@ -17,17 +17,18 @@ def test_static_assets_use_exact_versioned_cache_key_before_network():
     assert static_branch[:network_fetch].count("ignoreSearch") == 0
 
 
-def test_static_cache_version_is_v25():
+def test_static_cache_version_is_v26():
     source = SW_PATH.read_text(encoding="utf-8")
-    assert "const CACHE = 'ec-v25';" in source
+    assert "const CACHE = 'ec-v26';" in source
 
 
 def test_objekt_and_kontakt_pages_are_cached_for_offline_navigation():
     source = SW_PATH.read_text(encoding="utf-8")
 
-    assert "url.pathname === '/objekte/' || url.pathname === '/kontakte'" in source
+    assert r"/^\/objekte\/?$/.test(url.pathname)" in source
+    assert r"/^\/kontakte\/?$/.test(url.pathname)" in source
     assert "^\\/kontakte\\/\\d+$" in source
-    assert "^\\/objekte\\/\\d+(\\/einsatz)?$" in source
+    assert "^\\/objekte\\/\\d+(\\/einsatz)?\\/?$" in source
     assert "await cache.put(e.request, res.clone());" in source
     assert "caches.match(e.request, { cacheName: OBJEKT_CACHE })" in source
 
@@ -43,7 +44,8 @@ def test_objekt_detail_fragments_are_cached_for_offline_htmx_requests():
     assert "Kein Offline-Banner" in source
 
 
-def test_icons_are_in_core_precache():
+def test_icons_and_offline_page_are_in_core_precache():
     source = SW_PATH.read_text(encoding="utf-8")
     core = source.split("const CORE_PRECACHE = [", 1)[1].split("];", 1)[0]
     assert "'/static/js/icons.js'" in core
+    assert "'/static/offline.html'" in core

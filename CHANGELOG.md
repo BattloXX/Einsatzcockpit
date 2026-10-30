@@ -6,6 +6,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 - **Teams-Alarmkarte:** Gemeinsame Alarmdaten mit der Einsatz-Mail einschließlich Objekt/Gefahren, farbiges Stichwort-Badge, Übungsbanner und übersichtliche Detailfelder. Adaptive Card 1.4 in voller Breite; Navigation auch über die Adresse, Inhalts-Schalter und PIN-Anmeldung bleiben erhalten.
 
+- **Offline-Objekte:** Listen mit Suchparametern und URL-Varianten verwenden den synchronisierten Bestand. Ältere Objektcaches können auf die Einsatzansicht zurückfallen. Fehlende Seiten zeigen eine lokale Offline-Hilfe mit Direktlinks statt der Startseite oder einer technischen Fehlermeldung.
+
 - **Einsatzlink-Gast:** Neue PIN-/Namen-Anmeldungen verwenden einen separaten Nur-Lesen-Principal (readonly); Schreibzugriffe einschließlich Notizen, Uploads und Funkjournal sind gesperrt. Direkte PIN-Anmeldung in Teams-Karte und Einsatz-Mail, optionaler SMS-Platzhalter `{anmeldelink}`. Bestehende Gast-Sessions und QR-Druck-Zugang bleiben unverändert.
 
 - BSP-Overlay: Freie Polygon-Ausschnitte im Georef-Editor mit Touch-Griffen, Geometrieprüfung

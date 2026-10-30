@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v25';
+const CACHE = 'ec-v26';
 const BOARD_CACHE = 'ec-board-v4';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; Version 2 entfernt alte Kontaktseiten mit zu weiten Rechten)
@@ -22,6 +22,7 @@ const CORE_PRECACHE = [
   '/static/js/sortable.min.js',
   '/static/manifest.webmanifest',
   '/login',
+  '/static/offline.html',
   '/static/einsatzwissen-offline.html',
   '/static/js/einsatzwissen_offline.js',
   '/static/css/einsatzwissen.css',
@@ -93,6 +94,36 @@ self.addEventListener('message', e => {
     }).map(request => cache.delete(request)));
   }));
 });
+
+// Nur Hauptnavigationen erhalten HTML; HTMX/API-Aufrufe behalten ihren Fehlerstatus.
+async function offlineFallback(request) {
+  if (request.mode === 'navigate') {
+    const page = await caches.match('/static/offline.html', { cacheName: CACHE });
+    if (page) return new Response(await page.text(), {
+      status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Offline': '1' },
+    });
+  }
+  return new Response('Offline', {
+    status: 503, headers: { 'Content-Type': 'text/plain', 'X-Offline': '1' },
+  });
+}
+
+async function objektNavigationCache(request) {
+  const url = new URL(request.url);
+  url.pathname = url.pathname.replace(/\/$/, '');
+  for (const name of [BOARD_CACHE, OBJEKT_CACHE]) {
+    const cached = await caches.match(request, { cacheName: name })
+      || await caches.match(url.href, { cacheName: name });
+    if (cached) return cached;
+  }
+  // Aeltere Sync-Bestaende enthalten nur die Einsatzansicht. Einsatzbezogene
+  // Querys bleiben strikt getrennt, damit kein anderer Einsatz ausgeliefert wird.
+  if (request.mode === 'navigate' && /^\/objekte\/\d+$/.test(url.pathname) && !url.search) {
+    url.pathname += '/einsatz';
+    return await caches.match(url.href, { cacheName: OBJEKT_CACHE })
+      || await caches.match(url.href, { cacheName: BOARD_CACHE });
+  }
+}
 
 // STAB-3-Regression (2026-07-06): Ein per fetch() aus dem Service Worker
 // erneut abgesetzter Tile-Request setzt Sec-Fetch-Dest auf "empty" statt
@@ -259,7 +290,7 @@ self.addEventListener('fetch', e => {
   // Board pages (/einsatz/<id>[/info]) sowie Objekt-Verwaltungs- und
   // Einsatzansichten (/objekte/<id>[/einsatz])
   // — network-first, cache last successful response (Objektinfo im Fahrzeug bei Funkloch)
-  if (/^\/einsatz\/\d+(\/info)?$/.test(url.pathname) || /^\/objekte\/\d+(\/einsatz)?$/.test(url.pathname)) {
+  if (/^\/einsatz\/\d+(\/info)?$/.test(url.pathname) || /^\/objekte\/\d+(\/einsatz)?\/?$/.test(url.pathname)) {
     e.respondWith(
       fetch(e.request)
         .then(async res => {
@@ -273,8 +304,7 @@ self.addEventListener('fetch', e => {
         })
         .catch(async () => {
           // Erst besuchte Seiten (BOARD_CACHE), dann Objekt-Precache (Android-Sync)
-          const cached = await caches.match(e.request, { cacheName: BOARD_CACHE })
-            || await caches.match(e.request, { cacheName: OBJEKT_CACHE });
+          const cached = await objektNavigationCache(e.request);
           if (cached) {
             // Inject offline banner into the cached HTML response
             const html = await cached.text();
@@ -287,7 +317,7 @@ self.addEventListener('fetch', e => {
               headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Offline': '1' },
             });
           }
-          return await caches.match('/') || new Response('Offline', { status: 503 });
+          return offlineFallback(e.request);
         })
     );
     return;
@@ -323,7 +353,7 @@ self.addEventListener('fetch', e => {
   // Übersichten aktualisiert außerdem jeder normale Online-Aufruf. Ohne diese
   // Regel fiel eine spätere Navigation im Funkloch durch, weil der generische
   // Netzwerkpfad HTML-Antworten nicht speichert.
-  if (url.pathname === '/objekte/' || url.pathname === '/kontakte' || /^\/kontakte\/\d+$/.test(url.pathname)
+  if (/^\/objekte\/?$/.test(url.pathname) || /^\/kontakte\/?$/.test(url.pathname) || /^\/kontakte\/\d+$/.test(url.pathname)
       || /^\/kontakte\/\d+\/profilbild$/.test(url.pathname)) {
     e.respondWith(
       fetch(e.request, { cache: "no-store" })
@@ -337,12 +367,15 @@ self.addEventListener('fetch', e => {
           return res;
         })
         .catch(async () => {
-          const cached = await caches.match(e.request, { cacheName: OBJEKT_CACHE });
+          let cached = await caches.match(e.request, { cacheName: OBJEKT_CACHE });
+          if (!cached && /^\/(objekte|kontakte)\/?$/.test(url.pathname)) {
+            // Listenfilter/Sortierung sind serverseitig: offline die vollstaendige
+            // synchronisierte Liste anbieten, nicht eine beliebige gefilterte Kopie.
+            const path = url.pathname.startsWith('/objekte') ? '/objekte/' : '/kontakte';
+            cached = await caches.match(path, { cacheName: OBJEKT_CACHE });
+          }
           if (cached) return cached;
-          return new Response('Offline', {
-            status: 503,
-            headers: { 'Content-Type': 'text/plain', 'X-Offline': '1' },
-          });
+          return offlineFallback(e.request);
         })
     );
     return;
@@ -410,7 +443,7 @@ self.addEventListener('fetch', e => {
 
   // Everything else — network-first, fall back to cache
   e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+    fetch(e.request).catch(async () => (await caches.match(e.request)) || offlineFallback(e.request))
   );
 });
 
