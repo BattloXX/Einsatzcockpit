@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **BSP-Verwaltung:** Geführter Ablauf mit drei Schritten, Overlay-Karten mit Statuschips, verständlicher Lagegenauigkeit und Freigabezusammenfassung. Ausschnitt-Markierung hebt den Plan hervor; Anzeige und eingeklappte Druck-Einstellungen sind getrennt. Ungespeicherte Änderungen, fehlende Georeferenz und Fehler sind sichtbar; Bedienung auch am Handy.
+
 - **Objektkarte:** BSP-Overlays im Karten-Tab und Vollbild-Editor lokal ein-/ausblenden und Deckkraft einstellen; einklappbare Bedienung unter der Karte auch mobil. Verwalter erhalten einen Hinweis auf nicht freigegebene/veraltete Overlays, ohne Entwurfsraster auszuliefern. Marker und Geoman bleiben bedienbar.
 
 - **Objekt-Einsatzansicht:** Freigegebene, aktuelle BSP-Overlays erscheinen auch in der Lagekarte der Objekt-Einsatzansicht unter den Objektsymbolen, mit lokalem Schalter und Deckkraft; geschuetzte Objekt-JSON-Route ohne Offlinecache.

@@ -19,6 +19,28 @@ Dokumentversion, aktuelle Georef gueltig und identisch (id, Revision, Hash), Ras
 Pruefsumme. Wird das PDF ersetzt oder die Georef korrigiert, verschwindet das Overlay aus Einsatz und
 Druck, bis es neu geprueft und freigegeben ist. Keine stille Uebernahme auf neue Planversionen.
 
+## Verwaltung
+
+Im Georef-Editor erklärt "Plan auf der Karte anzeigen (BSP-Overlay)" die Voraussetzung:
+eine gültige gespeicherte Georeferenz und das aktuelle freigegebene Dokument. Fehlt sie,
+erscheint eine Hinweiskarte mit Link nach oben statt eines gesperrten Formulars.
+Overlay-Karten zeigen Name, Planart, Geschoss/Bereich, Freigabenummer und Status mit Icon:
+Entwurf (grau), Freigegeben (grün), Veraltet (orange mit Prüfhinweis), Zurückgezogen (grau, durchgestrichen).
+
+Drei Schritte führen durch Ausschnitt, Angaben und Prüfung/Freigabe. Die Rechteckauswahl hebt
+den Plan hervor und scrollt ihn ins Bild. Anzeigevorgaben und standardmäßig eingeklappte
+Druck-Einstellungen sind getrennt. "Speichern und Vorschau" speichert über die bestehenden
+Endpunkte zuerst den Entwurf und rastert danach; Freigaben erfordern weiterhin die menschliche
+Bestätigung aller serverseitigen Warnungen. Ungespeicherte Änderungen werden gekennzeichnet.
+
+Die reine JS-Funktion `bspLagegenauigkeit` bewertet ausschließlich die Darstellung: RMSE bis
+0,5 m "gut", bis 2 m "prüfen", darüber "ungenau"; eine ungültige Georef heißt "neu prüfen".
+Diese Anzeige ersetzt keine serverseitige Validierung. Rohwerte stehen in technischen Details
+und im Tooltip; wenige Punkte und freie Kartenklicks werden als Warnsätze angezeigt.
+Der Freigabedialog fasst Plan, Ausschnitt, Anzeige und Lagegenauigkeit zusammen.
+Mobil bis 760 px sind Felder und Aktionen einspaltig mit mindestens 44 px großen Touch-Zielen;
+die Schritte bleiben im Dokumentfluss über dem vorhandenen Abstand zum Android-Dock.
+
 ## Rasterung
 
 `objekt_bsp_overlay_service.raster_erzeugen` rechnet die Ausschnittsecken mit der Georef-Transformation auf
