@@ -9,9 +9,10 @@
   <link rel="manifest" href="/static/manifest.webmanifest?v={{ IMG_VERSION }}">
   <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
   <script src="/static/js/csrf.js" defer></script>
-  <script src="/static/js/native-bridge.js"></script>
-  <script src="/static/js/alpine.min.js" defer></script>
+  {# native-bridge.js liest beim Laden window.ECPullToRefresh: native-ptr.js muss davor stehen. #}
   <script src="/static/js/native-ptr.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/native-bridge.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/alpine.min.js" defer></script>
 </head>
 <body class="login-body">
   <div class="login-container">
