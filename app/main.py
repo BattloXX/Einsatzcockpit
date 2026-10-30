@@ -118,6 +118,7 @@ from app.routers import (
     ui_mfa,
     ui_nachschlagewerke,
     ui_objekt,
+    ui_objekt_bsp_overlay,
     ui_objekt_dokumente,
     ui_objekt_pflege_review,
     ui_org_backup,
@@ -1074,6 +1075,7 @@ app.include_router(ui_bma_import.router)
 app.include_router(ui_einsatz_import.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
+app.include_router(ui_objekt_bsp_overlay.router)
 app.include_router(ui_objekt_pflege_review.router)
 app.include_router(ui_kontakt_druck.router)
 app.include_router(ui_kontakt.router)

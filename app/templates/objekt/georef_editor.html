@@ -17,10 +17,14 @@
   <div class="section">
   <div id="georef-editor" data-objekt-id="{{ objekt.id }}" data-dokument-id="{{ dokument_id }}"
        data-seite="{{ seiten_nr }}" data-basis-url="{{ basis_url }}"
+       data-seite-id="{{ seite.id }}"
        data-lat="{{ startpunkt.lat if startpunkt else '' }}" data-lng="{{ startpunkt.lng if startpunkt else '' }}"
        data-zurueck-url="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ seite.id }}"
        data-csrf="{{ csrf }}"></div>
   </div>
+  <section id="bsp-overlay" class="section" aria-label="BSP-Overlay">
+    <h2>BSP-Overlay</h2>
+  </section>
 </div>
 {% endblock %}
 {% block scripts %}

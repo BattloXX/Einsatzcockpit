@@ -37,6 +37,199 @@
     });
     return new Overlay();
   }
+  function bspBereich(opts, plan, map, planDiv, meta, rasterVorschauStart) {
+    var root = document.getElementById("bsp-overlay");
+    if (!root || !opts.seiteId) { return null; }
+    function el(tag, text, parent) {
+      var n = document.createElement(tag);
+      if (text != null) { n.textContent = text; }
+      parent.appendChild(n); return n;
+    }
+    function knopf(text, parent, fn) {
+      var b = el("button", text, parent); b.type = "button";
+      b.className = "btn btn--ghost"; b.onclick = fn; return b;
+    }
+    var basis = opts.basisUrl.replace(/\/karte$/, "/bsp-overlays");
+    var meldung = el("p", "", root); meldung.setAttribute("role", "status");
+    var liste = el("div", null, root); liste.className = "bsp__liste";
+    var formular = el("fieldset", null, root);
+    formular.disabled = true;
+    el("legend", "Overlay bearbeiten", formular);
+    var felder = {}, ausgewaehlt = null, eintraege = [], gueltig = false, busy = false;
+    var ausschnitt = { art: "seite" }, rechteck = null, raster = null, zeichnen = false, start = null;
+    var cropLeiste = el("div", null, formular); cropLeiste.className = "bsp__aktionen";
+    var ausschnittText = el("p", "Ganze Seite vorgeschlagen", formular);
+    function feld(name, text, typ, optionen) {
+      var label = el("label", text + " ", formular);
+      var input = el(optionen ? "select" : "input", null, label);
+      if (optionen) { optionen.forEach(function (o) { var n = el("option", o[1], input); n.value = o[0]; }); }
+      else { input.type = typ || "text"; }
+      input.name = name;
+      if (typ === "number") { input.min = "0.1"; input.max = "1"; input.step = "0.1"; }
+      felder[name] = input; return input;
+    }
+    feld("name", "Name").required = true;
+    feld("plan_art", "Planart", null, [["lageplan", "Lageplan"], ["hallenbereich", "Hallenbereich"],
+      ["gefahrenzone", "Gefahrenzone"], ["geschoss", "Geschoss"], ["sonstig", "Sonstiger Plan"]]);
+    feld("bereich", "Bereich"); feld("geschoss", "Geschoss");
+    feld("standard_sichtbar", "Standardmäßig sichtbar", "checkbox");
+    feld("standard_deckkraft", "Standard-Deckkraft (0,1 bis 1)", "number");
+    feld("empfohlen", "Empfohlen", "checkbox"); feld("autodruck", "Automatisch drucken", "checkbox");
+    feld("druck_deckkraft", "Druck-Deckkraft (0,1 bis 1)", "number");
+    felder.name.maxLength = 200; felder.bereich.maxLength = 200; felder.geschoss.maxLength = 100;
+    var aktionen = el("div", null, formular); aktionen.className = "bsp__aktionen";
+    var qualitaet = el("p", "", root);
+    var deckLabel = el("label", "Raster-Vorschau: Deckkraft ", root);
+    var deck = el("input", null, deckLabel); deck.type = "range"; deck.min = "10"; deck.max = "100"; deck.value = "60";
+    deck.oninput = function () { if (raster) { raster.setOpacity(Number(deck.value) / 100); } };
+    function api(pfad, daten) {
+      var config = { headers: { "X-CSRF-Token": opts.csrfToken } };
+      if (daten !== undefined) {
+        config.method = "POST"; config.headers["Content-Type"] = "application/json"; config.body = JSON.stringify(daten);
+      }
+      return fetch(basis + pfad, config).then(function (r) { return r.json().then(function (d) {
+        if (!r.ok) { throw new Error(typeof d.detail === "string" ? d.detail : "Ungültige Eingabe"); } return d;
+      }); });
+    }
+    function fehler(err) { meldung.textContent = err.message; }
+    function sperren() { formular.disabled = busy || !gueltig; }
+    function ungespeichert() {
+      if (!ausgewaehlt) { return; }
+      rastern.disabled = freigeben.disabled = zurueckziehen.disabled = true;
+      meldung.textContent = "Änderungen zuerst als Entwurf speichern. Eine bestehende Freigabe wird dabei aufgehoben.";
+    }
+    Object.keys(felder).forEach(function (k) { felder[k].addEventListener("input", ungespeichert); });
+    function cropModus(an) {
+      zeichnen = an; start = null;
+      cropKnopf.textContent = an ? "Ausschnitt-Auswahl beenden" : "Rechteck aufziehen";
+      if (an) { plan.dragging.disable(); plan.touchZoom.disable(); plan.doubleClickZoom.disable(); }
+      else { plan.dragging.enable(); plan.touchZoom.enable(); plan.doubleClickZoom.enable(); }
+      planDiv.style.touchAction = an ? "none" : "";
+    }
+    function zeigeAusschnitt() {
+      if (rechteck) { rechteck.remove(); rechteck = null; }
+      ausschnittText.textContent = ausschnitt.art === "seite" ? "Ganze Seite vorgeschlagen" : "Rechteck auf der gedrehten Seite gewählt";
+      if (ausschnitt.art === "rechteck") {
+        rechteck = L.rectangle([[-ausschnitt.y1 * meta.bildgroesse[1], ausschnitt.x0 * meta.bildgroesse[0]],
+          [-ausschnitt.y0 * meta.bildgroesse[1], ausschnitt.x1 * meta.bildgroesse[0]]], { interactive: false }).addTo(plan);
+      }
+    }
+    knopf("Ganze Seite", cropLeiste, function () {
+      cropModus(false); ausschnitt = { art: "seite" }; zeigeAusschnitt(); ungespeichert();
+    });
+    var cropKnopf = knopf("Rechteck aufziehen", cropLeiste, function () {
+      cropModus(!zeichnen);
+      if (zeichnen) { meldung.textContent = "Im Seitenbild ein Rechteck aufziehen, danach Auswahl beenden. Mit Finger oder Maus möglich."; }
+    });
+    function xy(ev) {
+      var p = planNormiert(plan.mouseEventToLatLng(ev), meta.bildgroesse[0], meta.bildgroesse[1]);
+      return { x: Math.max(0, Math.min(1, p.x)), y: Math.max(0, Math.min(1, p.y)) };
+    }
+    planDiv.addEventListener("pointerdown", function (ev) {
+      if (!zeichnen || busy || !gueltig || ev.isPrimary === false) { return; }
+      ev.preventDefault(); ev.stopPropagation(); start = xy(ev); planDiv.setPointerCapture(ev.pointerId);
+    }, true);
+    function bewegen(ev) {
+      if (!start) { return; }
+      ev.preventDefault(); ev.stopPropagation(); var p = xy(ev);
+      ausschnitt = { art: "rechteck", x0: Math.min(start.x, p.x), y0: Math.min(start.y, p.y),
+        x1: Math.max(start.x, p.x), y1: Math.max(start.y, p.y) }; zeigeAusschnitt(); ungespeichert();
+    }
+    planDiv.addEventListener("pointermove", bewegen, true);
+    planDiv.addEventListener("pointerup", function (ev) {
+      if (!start) { return; } bewegen(ev); start = null;
+      planDiv.releasePointerCapture(ev.pointerId);
+    }, true);
+    planDiv.addEventListener("pointercancel", function () { start = null; cropModus(false); });
+    function waehlen(o) {
+      ausgewaehlt = o || null; cropModus(false);
+      var werte = o || { name: "BSP-Overlay", plan_art: "lageplan", standard_sichtbar: true,
+        standard_deckkraft: 0.6, druck_deckkraft: 0.6 };
+      Object.keys(felder).forEach(function (k) {
+        if (felder[k].type === "checkbox") { felder[k].checked = !!werte[k]; }
+        else { felder[k].value = werte[k] == null ? "" : werte[k]; }
+      });
+      ausschnitt = o ? o.ausschnitt : { art: "seite" }; zeigeAusschnitt();
+      if (raster) { raster.remove(); raster = null; }
+      if (o && o.raster_url && o.bounds) {
+        rasterVorschauStart();
+        deck.value = String(o.standard_deckkraft * 100);
+        raster = L.imageOverlay(o.raster_url, o.bounds, { opacity: Number(deck.value) / 100, interactive: false }).addTo(map);
+        raster.on("error", function () { if (raster) { raster.remove(); raster = null; } meldung.textContent = "Raster-Vorschau nicht verfügbar. Bitte neu rastern."; });
+        map.fitBounds(o.bounds);
+      }
+      var q = o && o.qualitaet;
+      qualitaet.textContent = q ? "Georef: " + q.status + " · RMSE: " + meter(q.rmse_m) + " · " +
+        q.punktzahl + " Punkte · Modell: " + q.modell + " · Revision " + q.revision +
+        " · Dokument-Version " + o.dokument_version + " · Freigabe-Nr. " + o.freigabe_nr : "";
+      rastern.disabled = freigeben.disabled = zurueckziehen.disabled = loeschen.disabled = !o;
+      if (o) { loeschen.disabled = o.status !== "entwurf"; }
+    }
+    function meter(n) { return n == null ? "unbekannt" : n.toFixed(2) + " m"; }
+    function laden(id) {
+      return api("?seite_id=" + opts.seiteId).then(function (d) {
+        gueltig = d.georef_gueltig; eintraege = d.overlays; liste.replaceChildren();
+        meldung.textContent = gueltig ? "Gültige Georeferenz vorhanden. Ganzer Plan oder Rechteck möglich." :
+          "BSP-Overlay deaktiviert: Eine gültige gespeicherte Georeferenz und ein aktuelles freigegebenes Dokument sind erforderlich.";
+        eintraege.forEach(function (o) {
+          var row = el("div", null, liste);
+          knopf(o.name + " · " + o.status, row, function () { waehlen(o); });
+          if (o.hinweis) { el("p", o.hinweis, row); }
+        });
+        waehlen(eintraege.find(function (o) { return o.id === id; })); sperren();
+      });
+    }
+    function ausfuehren(pfad, daten) {
+      if (busy) { return Promise.resolve(); }
+      busy = true; cropModus(false); sperren();
+      return api(pfad, daten).then(function (d) { return laden(d.id); }).catch(fehler)
+        .finally(function () { busy = false; sperren(); });
+    }
+    function daten() {
+      var d = { ausschnitt: ausschnitt, expected_rotation: meta.rotation };
+      Object.keys(felder).forEach(function (k) {
+        var input = felder[k]; d[k] = input.type === "checkbox" ? input.checked : input.type === "number" ? Number(input.value) : input.value;
+      }); return d;
+    }
+    knopf("Neuer Entwurf", root, function () { if (!busy) { waehlen(null); } });
+    knopf("Entwurf speichern", aktionen, function () {
+      if (!formular.reportValidity()) { return; }
+      var d = daten();
+      if (!ausgewaehlt) { d.seite_id = opts.seiteId; }
+      ausfuehren(ausgewaehlt ? "/" + ausgewaehlt.id + "/aendern" : "", d);
+    });
+    var rastern = knopf("Neu rastern", aktionen, function () { ausfuehren("/" + ausgewaehlt.id + "/rastern", {}); });
+    var freigeben = knopf("Freigeben", aktionen, function () {
+      // Unmittelbar vor der Bestaetigung Qualitaet und Warnungen erneut vom Server holen.
+      api("?seite_id=" + opts.seiteId).then(function (d) {
+        var o = d.overlays.find(function (item) { return item.id === ausgewaehlt.id; });
+        if (!o || !o.georef_gueltig) { throw new Error("Gültige Georeferenz erforderlich"); }
+        var dialog = el("dialog", null, root); dialog.className = "bsp__freigabe";
+        el("h3", "BSP-Overlay freigeben", dialog);
+        el("p", o.name + " · Georef: " + o.qualitaet.status + " · RMSE: " + meter(o.qualitaet.rmse_m) + " · " +
+          o.qualitaet.punktzahl + " Punkte · Modell: " + o.qualitaet.modell, dialog);
+        var checks = o.warnungen.map(function (code) {
+          var label = el("label", null, dialog); var input = el("input", null, label); input.type = "checkbox";
+          el("span", code === "wenige_punkte" ? "Nur drei Referenzpunkte: Ich habe die Lage geprüft." :
+            "Nur freie Kartenklicks: Ich habe die Lage geprüft.", label);
+          return { code: code, input: input };
+        });
+        var bestaetigen = knopf("Verbindlich freigeben", dialog, function () {
+          dialog.close(); ausfuehren("/" + o.id + "/freigeben", { bestaetigte_warnungen: checks.map(function (c) { return c.code; }) });
+        });
+        function pruefen() { bestaetigen.disabled = checks.some(function (c) { return !c.input.checked; }); }
+        checks.forEach(function (c) { c.input.onchange = pruefen; }); pruefen();
+        knopf("Abbrechen", dialog, function () { dialog.close(); });
+        dialog.addEventListener("close", function () { dialog.remove(); }); dialog.showModal();
+      }).catch(fehler);
+    });
+    var zurueckziehen = knopf("Zurückziehen", aktionen, function () { ausfuehren("/" + ausgewaehlt.id + "/zurueckziehen", {}); });
+    var loeschen = knopf("Entwurf löschen", aktionen, function () { ausfuehren("/" + ausgewaehlt.id + "/loeschen", {}); });
+    laden().catch(fehler);
+    return { zeichnet: function () { return zeichnen; }, aktualisieren: function () {
+      cropModus(false); return laden(ausgewaehlt && ausgewaehlt.id).catch(fehler);
+    } };
+  }
   function open(opts) {
     var seitenModus = opts.modus === "seite" || !!opts.container;
     var dialog = seitenModus ? opts.container : document.createElement("dialog");
@@ -102,7 +295,7 @@
     var aktionen = el("div", null, dialog, "ogx__aktionen");
     var paare = [], pending = null, plan, map, meta, revision = 0, generation = 0, offen = true;
     var marker = [], vorgemerkt = null, saving = false, hatGeoref = false;
-    var vorschau = null, ecken = null, erstmals = true;
+    var vorschau = null, ecken = null, erstmals = true, bsp = null;
     var overlayLabel = el("label", "Plan über Karte legen ", leiste, "ogx__feld ogx__feld--check");
     var overlayAn = el("input", null, overlayLabel); overlayAn.type = "checkbox";
     var deckLabel = el("label", "Deckkraft ", leiste, "ogx__feld");
@@ -155,6 +348,7 @@
       post("/georef", payload(false)).then(function (antwort) {
         revision = antwort.georeferenz ? antwort.georeferenz.revision : revision + 1;
         hatGeoref = true;
+        if (bsp) { bsp.aktualisieren(); }
         status.textContent = "Georeferenz gespeichert. Vorschläge wurden neu berechnet.";
         return opts.onGespeichert ? opts.onGespeichert() : null;
       }).then(function () {
@@ -172,7 +366,7 @@
       modell.disabled = true; verwerfen.disabled = true;
       post("/georef/verwerfen", payload(false)).then(function (antwort) {
         if (antwort.georeferenz) { revision = antwort.georeferenz.revision; }
-        hatGeoref = false; ecken = null; entferneVorschau(); hinweise.replaceChildren();
+        hatGeoref = false; if (bsp) { bsp.aktualisieren(); } ecken = null; entferneVorschau(); hinweise.replaceChildren();
         return opts.onGespeichert ? opts.onGespeichert() : null;
       }).then(function () {
         if (seitenModus) { paare = []; pending = null; if (vorgemerkt) { vorgemerkt.remove(); vorgemerkt = null; } verwerfen.disabled = true; render(); status.textContent = "Georeferenz verworfen"; } else { dialog.close(); }
@@ -311,7 +505,13 @@
       if (osm) { osm.remove(); }
       ortho.addTo(map);
       L.control.layers({ OpenStreetMap: osm, Orthofoto: ortho }).addTo(map);
+      if (seitenModus) {
+        bsp = bspBereich(opts, plan, map, planDiv, meta, function () {
+          overlayAn.checked = false; erstmals = false; entferneVorschau();
+        });
+      }
       plan.on("click", function (ev) {
+        if (bsp && bsp.zeichnet()) { return; }
         if (saving) { return; }
         var xy = planNormiert(ev.latlng, meta.bildgroesse[0], meta.bildgroesse[1]);
         if (xy.x < 0 || xy.x > 1 || xy.y < 0 || xy.y > 1) { return; }
@@ -348,7 +548,7 @@
       if (!container) { return; }
       var d = container.dataset;
       open({ modus: "seite", container: container, basisUrl: d.basisUrl, dokumentId: Number(d.dokumentId),
-        seite: Number(d.seite), csrfToken: d.csrf, zurueckUrl: d.zurueckUrl,
+        seite: Number(d.seite), seiteId: Number(d.seiteId), csrfToken: d.csrf, zurueckUrl: d.zurueckUrl,
         startCenter: d.lat && d.lng ? [Number(d.lat), Number(d.lng)] : null });
     });
   }
