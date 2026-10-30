@@ -6,6 +6,8 @@
  * sodass die Web-App weiterhin voll funktionsfähig bleibt.
  *
  * Verfügbare Funktionen:
+ *   ELNative.downloadFile(url, filename?) – Datei nativ nach Downloads laden
+ *   ELNative.openFile(url)               – Datei mit externer App öffnen
  *   ELNative.keepAwake(on)              – Bildschirm aktiv halten (oder freigeben)
  *   ELNative.startLocation()            – Hintergrund-GPS starten
  *   ELNative.stopLocation()             – Hintergrund-GPS stoppen
@@ -231,46 +233,125 @@
     return _registerFcmToken();
   }
 
-  // ─── URLs oeffnen (PDFs etc.) ────────────────────────────────────────────────
-  // Downloads und extern zu oeffnende PDFs werden an einen
-  // Custom Tab (@capacitor/browser) uebergeben. Custom Tabs teilen sich
-  // aber NICHT den Cookie-Jar der App-WebView, weshalb die URL zuerst gegen
-  // /api/v1/device/native-link getauscht wird (kurzlebiges, pfadgebundenes Token,
-  // siehe app/core/security.py::sign_native_link_token).
-  async function openUrl(url) {
-    if (!_isNative()) { window.open(url, '_blank', 'noopener'); return; }
-    try {
-      const { Browser } = window.Capacitor.Plugins;
-      if (!Browser) { window.open(url, '_blank', 'noopener'); return; }
-      let target = url;
-      // a.href und der Dokumentenviewer liefern absolute URLs. Auch dafuer
-      // bei Same-Origin ein Token anfordern; fremde Origins nie authentifizieren.
-      const parsed = new URL(url, window.location.href);
-      if (parsed.origin === window.location.origin && /^https?:$/.test(parsed.protocol)) {
-        try {
-          const r = await fetch('/api/v1/device/native-link', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ path: parsed.pathname + parsed.search }),
-          });
-          if (r.ok) { const d = await r.json(); target = d.url + parsed.hash; }
-        } catch (e) { console.warn('[ELNative] native-link Fehler:', e); }
-      }
-      await Browser.open({ url: target });
-    } catch (e) {
-      console.warn('[ELNative] openUrl Fehler:', e);
-      window.open(url, '_blank', 'noopener');
+  // ─── Dateien und URLs öffnen ──────────────────────────────────────────────
+  function _fileUrl(url) {
+    const parsed = new URL(url, window.location.href);
+    if (parsed.origin !== window.location.origin || !/^https?:$/.test(parsed.protocol)) {
+      throw new Error('Dateien können nur vom eigenen Server geöffnet werden.');
+    }
+    // NativeFiles übernimmt die WebView-Cookies; alte Handoff-Tokens nie weitergeben.
+    parsed.searchParams.delete('nt');
+    return parsed;
+  }
+
+  function _isDocumentUrl(parsed) {
+    return parsed.origin === window.location.origin &&
+      /(?:\.pdf$|\/pdf(?:\/|$)|\/original$|\/sammel-pdf$)/i.test(parsed.pathname);
+  }
+
+  function _fileNotice(message) {
+    const appEl = document.querySelector('[x-data="appState()"]');
+    if (appEl && window.Alpine) {
+      window.Alpine.$data(appEl).addToast(message, 'warn');
+    } else {
+      window.alert(message);
     }
   }
 
-  // WebView verarbeitet weder neue Tabs noch <a download> verlaesslich.
-  // Downloads mit ?download=1 starten im Custom Tab als Attachment.
+  // Nur diese Serverrouten garantieren mit download=1 Content-Disposition: attachment.
+  function _attachmentDownload(parsed) {
+    return /^\/objekt-medien\/(?:seite\/\d+\/pdf|dokument\/\d+\/original)$/.test(parsed.pathname) ||
+      /^\/objekte\/\d+\/dokumente\/sammel-pdf$/.test(parsed.pathname) ||
+      parsed.pathname === '/druck/viewer/pdf' ||
+      /^\/medien\/(?:(?:meldung|person)\/)?datei\/\d+$/.test(parsed.pathname);
+  }
+
+  async function _openBrowser(parsed) {
+    const Browser = window.Capacitor?.Plugins?.Browser;
+    if (!Browser) return false;
+    let target = parsed.href;
+    // Custom Tabs teilen die WebView-Cookies nicht: nur hier ein Handoff anfordern.
+    if (parsed.origin === window.location.origin && /^https?:$/.test(parsed.protocol)) {
+      try {
+        const r = await fetch('/api/v1/device/native-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify({ path: parsed.pathname + parsed.search }),
+        });
+        if (r.ok) { const d = await r.json(); target = d.url + parsed.hash; }
+      } catch (e) { console.warn('[ELNative] native-link Fehler:', e); }
+    }
+    await Browser.open({ url: target });
+    return true;
+  }
+
+  async function _fileAction(url, filename, download) {
+    try {
+      const parsed = _fileUrl(url);
+      if (!_isNative()) {
+        if (download) {
+          const a = document.createElement('a');
+          a.href = parsed.href; a.download = filename || '';
+          document.body.appendChild(a); a.click(); a.remove();
+        } else { window.open(parsed.href, '_blank', 'noopener'); }
+        return;
+      }
+      const plugin = window.Capacitor?.Plugins?.NativeFiles;
+      if (plugin) {
+        if (download) {
+          return await plugin.download({ url: parsed.href, ...(filename ? { filename } : {}) });
+        }
+        try { return await plugin.openFile({ url: parsed.href }); }
+        catch (e) {
+          if (/keine app/i.test(e?.message || String(e))) {
+            return await plugin.download({ url: parsed.href });
+          }
+          throw e;
+        }
+      }
+      if (download) parsed.searchParams.set('download', '1');
+      if (await _openBrowser(parsed)) return;
+      _fileNotice('Bitte die App aktualisieren, um Dateien herunterzuladen.');
+      if (download && _attachmentDownload(parsed)) window.location.assign(parsed.href);
+    } catch (e) {
+      console.warn('[ELNative] Dateiaktion fehlgeschlagen:', e);
+      _fileNotice('Die Datei konnte nicht geöffnet oder heruntergeladen werden. ' + (e?.message || 'Bitte erneut versuchen.'));
+    }
+  }
+
+  function downloadFile(url, filename) { return _fileAction(url, filename, true); }
+  function openFile(url) { return _fileAction(url, undefined, false); }
+
+  async function openUrl(url) {
+    if (!_isNative()) { window.open(url, '_blank', 'noopener'); return; }
+    try {
+      const parsed = new URL(url, window.location.href);
+      if (parsed.origin === window.location.origin && parsed.searchParams.get('download') === '1') {
+        return await downloadFile(url);
+      }
+      if (_isDocumentUrl(parsed)) return await openFile(url);
+      if (await _openBrowser(parsed)) return;
+      _fileNotice('Bitte die App aktualisieren, um Links zu öffnen.');
+    } catch (e) {
+      console.warn('[ELNative] openUrl Fehler:', e);
+      _fileNotice('Der Link konnte nicht geöffnet werden. Bitte erneut versuchen.');
+    }
+  }
+
+  // Capture vor dem Viewer: dessen defaultPrevented-Prüfung verhindert Doppelaktionen.
   document.addEventListener('click', async function (ev) {
     if (!_isNative() || ev.defaultPrevented) return;
     const a = ev.target.closest && ev.target.closest('a[target="_blank"], a[download], a[data-dv-download]');
     if (!a || !a.href) return;
     ev.preventDefault();
-    await openUrl(a.href);
+    const parsed = new URL(a.href, window.location.href);
+    // Fremde Links bleiben Browser-Links und erhalten niemals WebView-Cookies.
+    if (parsed.origin !== window.location.origin) { await openUrl(a.href); return; }
+    if (a.hasAttribute('download') || a.hasAttribute('data-dv-download') || parsed.searchParams.get('download') === '1') {
+      await downloadFile(a.href, a.getAttribute('download') || undefined);
+    } else if (a.hasAttribute('data-dv-original') || a.hasAttribute('data-dv-excerpt') || _isDocumentUrl(parsed)) {
+      await openFile(a.href);
+    } else { await openUrl(a.href); }
   }, true);
 
   // Die native Kontaktansicht verwendet die synchronisierte Room-Datenbank.
@@ -626,6 +707,8 @@
     stopLocation,
     scanQr,
     openUrl,
+    downloadFile,
+    openFile,
     registerPush,
     setBatterySaver(on) { _setBatterySaver(on); },
     get batterySaverActive() { return _batterySaver; },
