@@ -27,7 +27,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
@@ -2743,6 +2743,19 @@ def karte_editor(
     ctx["symbol_typen"] = lade_symbol_labels(db, objekt.org_id)
     _karten_review_context(db, objekt, ctx)
     return templates.TemplateResponse(request, "objekt/karte.html", ctx)
+
+
+@router.get("/{objekt_id}/bsp-overlays.json")
+def bsp_overlays_json(
+    objekt_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.services.objekt_bsp_overlay_service import objekt_overlays_json
+
+    objekt = _objekt_or_404(db, objekt_id, user)
+    return JSONResponse(objekt_overlays_json(db, objekt, user), headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/{objekt_id}/karte/einbettung", response_class=HTMLResponse)
