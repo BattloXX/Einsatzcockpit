@@ -512,6 +512,15 @@
       }).catch(function (err) { showToast(fehlerText(err, "Objekte konnten nicht geladen werden."), "warn"); });
     }
 
+    var bspLayer = opts.objektEnabled && window.EcpBspOverlay ? window.EcpBspOverlay.init(karte, {
+      listUrl: apiBase + "/bsp-overlays.json",
+      postUrlTemplate: apiBase + "/bsp-overlays/{overlay_id}/einstellung",
+      csrfToken: opts.csrfToken, kannEinstellen: opts.editierbar
+    }) : null;
+    // Objektzuordnungen haben nicht in jedem Schreibweg einen eigenen WS-Event.
+    // Polling entfernt auch ohne Event inzwischen ungueltige Freigaben.
+    if (bspLayer) { setInterval(function () { bspLayer.reload(); }, 30000); }
+
     // ── Auto-Layer: Wasserstellen (Löschwasser-Stammdaten, statisch je Ladung) ──
     var WASSERSTELLE_ICON_TEXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
     function wasserstelleIcon(kat) {
@@ -1040,7 +1049,7 @@
             a.innerHTML = '<img src="' + bildUrl + '" alt="" loading="lazy"><span>' + escapeHtml(titel) + "</span>";
             li.appendChild(a);
           } else {
-            li.textContent = zeit + " · " + e.event_typ;
+            li.textContent = zeit + " · " + (e.event_typ === "bsp.einstellung" ? "Brandschutzplan-Einstellung geändert" : e.event_typ);
           }
           el.appendChild(li);
         });
@@ -1699,6 +1708,8 @@
         try { data = JSON.parse(ev.data); } catch (e) { return; }
         if (!data || typeof data.type !== "string") { return; }
 
+        if (bspLayer) { bspLayer.handleEvent(data); }
+
         if (data.type === "lagefuehrung.feature.created" || data.type === "lagefuehrung.feature.updated") {
           if (data.feature) {
             if (editingFeatureId !== data.feature.id) { renderFeature(data.feature); }
@@ -1714,6 +1725,8 @@
           } else {
             ladeFeatures();
           }
+          ladeChronologie();
+        } else if (data.type === "lagefuehrung.bsp.changed") {
           ladeChronologie();
         } else if (data.type === "lagefuehrung.chronologie_changed") {
           ladeChronologie();
@@ -1740,6 +1753,7 @@
             // (siehe can_edit_via_rolle in ui_lagefuehrung.py) -- ein Entzug wirkt sich auf
             // solche Nutzer also nicht aus.
             applyEditierbarChange(opts.editierbarViaRolle || !!data.granted);
+            if (bspLayer) { bspLayer.reload(); }
           }
         }
       };
