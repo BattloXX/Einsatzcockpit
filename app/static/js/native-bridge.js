@@ -232,9 +232,8 @@
   }
 
   // ─── URLs oeffnen (PDFs etc.) ────────────────────────────────────────────────
-  // Android-WebView hat KEINEN eingebauten PDF-Viewer (anders als Chrome) - PDFs
-  // (Objektblatt, Brandschutzplaene, Dokumentseiten...) muessen daher an einen
-  // Custom Tab (@capacitor/browser) uebergeben werden. Custom Tabs teilen sich
+  // Downloads und extern zu oeffnende PDFs werden an einen
+  // Custom Tab (@capacitor/browser) uebergeben. Custom Tabs teilen sich
   // aber NICHT den Cookie-Jar der App-WebView, weshalb die URL zuerst gegen
   // /api/v1/device/native-link getauscht wird (kurzlebiges, pfadgebundenes Token,
   // siehe app/core/security.py::sign_native_link_token).
@@ -244,16 +243,17 @@
       const { Browser } = window.Capacitor.Plugins;
       if (!Browser) { window.open(url, '_blank', 'noopener'); return; }
       let target = url;
-      // Nur fuer Same-Origin-Pfade (relative URLs) ein Handoff-Token anfordern -
-      // externe/absolute URLs (z.B. fremde Teams-Webhook-Test-Links) unveraendert weiterreichen.
-      if (url.startsWith('/')) {
+      // a.href und der Dokumentenviewer liefern absolute URLs. Auch dafuer
+      // bei Same-Origin ein Token anfordern; fremde Origins nie authentifizieren.
+      const parsed = new URL(url, window.location.href);
+      if (parsed.origin === window.location.origin && /^https?:$/.test(parsed.protocol)) {
         try {
           const r = await fetch('/api/v1/device/native-link', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ path: url }),
+            body: JSON.stringify({ path: parsed.pathname + parsed.search }),
           });
-          if (r.ok) { const d = await r.json(); target = d.url; }
+          if (r.ok) { const d = await r.json(); target = d.url + parsed.hash; }
         } catch (e) { console.warn('[ELNative] native-link Fehler:', e); }
       }
       await Browser.open({ url: target });
@@ -263,15 +263,14 @@
     }
   }
 
-  // Bestehende "target=_blank"-Links (z.B. Objekt-Dokumente-Liste) faenden im
-  // WebView sonst still ins Leere - global abfangen statt jede Stelle einzeln
-  // umzubauen.
+  // WebView verarbeitet weder neue Tabs noch <a download> verlaesslich.
+  // Downloads mit ?download=1 starten im Custom Tab als Attachment.
   document.addEventListener('click', async function (ev) {
-    if (!_isNative()) return;
-    const a = ev.target.closest && ev.target.closest('a[target="_blank"]');
+    if (!_isNative() || ev.defaultPrevented) return;
+    const a = ev.target.closest && ev.target.closest('a[target="_blank"], a[download], a[data-dv-download]');
     if (!a || !a.href) return;
     ev.preventDefault();
-    openUrl(a.href);
+    await openUrl(a.href);
   }, true);
 
   // Die native Kontaktansicht verwendet die synchronisierte Room-Datenbank.

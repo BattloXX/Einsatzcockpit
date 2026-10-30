@@ -92,7 +92,7 @@
             <div>Version {{ dokument.versionsnummer }} · {{ dokument.dateiname_original }}</div>
             <div class="text-muted">Hochgeladen: {{ dokument.hochgeladen_am|local_datetime }}</div>
             <div class="text-muted">Hochgeladen von: {{ eintrag.hochgeladen_von.username if eintrag.hochgeladen_von else 'Extern oder unbekannt' }}</div>
-            <a href="/objekt-medien/dokument/{{ dokument.id }}/original" target="_blank">Neue Datei ansehen</a>
+            <a href="/objekt-medien/dokument/{{ dokument.id }}/original" data-dv-document data-dv-kind="pdf" data-dv-title="{{ dokument.dateiname_original }}">Neue Datei ansehen</a>
           </div>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
