@@ -27,7 +27,7 @@ RGBA-PNG (Langseite max. 2048 px, ausserhalb des Ausschnitts transparent). Ablag
 `OBJEKT_MEDIA_DIR/bsp_overlay/<org>/`, nie unter `static`. Auslieferung nur ueber
 `/objekt-medien/bsp-overlay/{id}/raster` mit Login, Org-Pruefung, `private`-Cache und ETag.
 
-## Einsatzansicht
+## Einsatzansicht und Objektkarte
 
 - Lageführung: `GET /einsatz/{id}/lagefuehrung/bsp-overlays.json` und
   `POST .../bsp-overlays/{overlay_id}/einstellung` (nur Bearbeitungsrecht; Event-Log, WebSocket
@@ -35,7 +35,14 @@ RGBA-PNG (Langseite max. 2048 px, ausserhalb des Ausschnitts transparent). Ablag
 - Objekt-Einsatzansicht `/objekte/{id}/einsatz`: Die per HTMX eingebettete Readonly-Karte
   (`objekt/_karte_readonly.html`) zeigt die Ebene lesend mit lokalem Schalter ueber
   `GET /objekte/{id}/bsp-overlays.json` (nur Overlays dieses Objekts, nur auslieferbar, Objekt-Vorgabe
-  statt Einsatz-Einstellung). Die bearbeitbare Objektkarte bleibt unveraendert.
+  statt Einsatz-Einstellung).
+- Objektverwaltung: Karten-Tab und Vollbild-Editor `/objekte/{id}/karte` nutzen dieselbe lokale Ebene.
+  Das einklappbare Panel unter der Karte verdeckt auch mobil keine Palette oder Zeichenwerkzeuge.
+  `dataset.initialisiert` verhindert doppelte Karten/Ebenen beim Tab-Wechsel. Geoman ignoriert das Raster.
+  Die JSON-Liste enthaelt weiterhin ausschliesslich auslieferbare Overlays. Nur Verwalter erhalten im
+  Antwort-Header `X-BSP-Pruefen` die Anzahl der Entwuerfe und veralteten Freigaben dieses Objekts
+  (ohne Raster-URL); das Panel weist auch ohne auslieferbare Ebene auf die Pruefung im Georef-Editor hin.
+  Zurueckgezogene Overlays werden nicht mitgezaehlt.
 - Einsatz-Info, GSL-Karte und Einheitenansicht: lesend mit lokalem Schalter (localStorage). QR- und
   Token-Zugaenge erhalten kein Overlay.
 - Leaflet-Modul `app/static/js/bsp_overlay_layer.js`: eigene Pane `bsp` (zIndex 250), nicht interaktiv,

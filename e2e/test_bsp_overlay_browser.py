@@ -175,6 +175,10 @@ def bsp_sessions(bsp_browser, bsp_server):
         contexts.append(context)
         # Nur externe Grundkarten ersetzen; alle App-/BSP-Requests bleiben echt.
         def route_external(route):
+            if urlsplit(route.request.url).path.endswith("/karte/gebaeude.json"):
+                # OSM-Gebaeudeecken sind ein externer Dienst, in der Testumgebung nicht erreichbar.
+                route.fulfill(content_type="application/json", body='{"gebaeude": []}')
+                return
             host = urlsplit(route.request.url).hostname or ""
             tile_host = host == "tile.openstreetmap.org" or host.endswith((".tile.openstreetmap.org", ".basemap.at"))
             if route.request.resource_type == "image" and tile_host:
@@ -184,7 +188,7 @@ def bsp_sessions(bsp_browser, bsp_server):
         context.route("**/*", route_external)
         def capture(page):
             page.on("pageerror", lambda error: errors.append(str(error)))
-            page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+            page.on("console", lambda message: errors.append(message.text + " " + str(message.location)) if message.type == "error" else None)
         page = context.new_page()
         page.goto(bsp_server["base"] + "/login")
         page.locator("#username").fill(username)
@@ -380,6 +384,60 @@ def test_neue_georef_revision_entfernt_overlay_ohne_js_fehler(bsp_sessions, bsp_
     expect(page.locator(".leaflet-popup-content")).to_contain_text("BSP Testhalle")
     expect(page.locator(".leaflet-control-zoom-in")).to_be_visible()
     # pageerror und console.error werden fuer alle Sessions bis zum Teardown geprueft.
+
+
+@pytest.mark.parametrize("viewport", VIEWPORTS, ids=["tablet", "handy"])
+@pytest.mark.parametrize("ansicht", ["tab", "editor"])
+def test_objektkarte_bsp_lokal_und_marker_editierbar(bsp_sessions, bsp_server, freigabe, viewport, ansicht):
+    # Marker nur fuer diesen Ablauf anlegen: kein Ueberdecken des Objektmarkers in Einsatztests.
+    editor = freigabe[0]
+    csrf = editor.locator("#georef-editor").get_attribute("data-csrf")
+    response = editor.request.post(
+        f'{bsp_server["base"]}/objekte/{bsp_server["objekt_id"]}/karte/objekte',
+        headers={"X-CSRF-Token": csrf},
+        data={"typ": "bmz", "lat": 47, "lng": 9, "label": "BSP Testmarker"},
+    )
+    assert response.status == 200, response.text()
+    page = bsp_sessions("verwalter", viewport=viewport)
+    url = f'{bsp_server["base"]}/objekte/{bsp_server["objekt_id"]}'
+    page.goto(url + ("/karte" if ansicht == "editor" else ""))
+    if ansicht == "tab":
+        page.get_by_role("button", name="Lagekarte", exact=True).click()
+    canvas = page.locator("#objekt-karte" if ansicht == "editor" else "#objekt-karte-tab")
+    expect(canvas).to_be_visible()
+    image = _bild(page)
+    expect(page.locator(".leaflet-bsp-pane")).to_have_css("z-index", "250")
+    expect(page.locator(".leaflet-bsp-pane")).to_have_css("pointer-events", "none")
+    panel = page.locator("#lft-bsp")
+    expect(panel).to_be_visible()
+    assert panel.bounding_box()["y"] >= canvas.bounding_box()["y"] + canvas.bounding_box()["height"]
+    panel.locator("summary").click()
+    checkbox = panel.locator("#lft-layer-bsp")
+    checkbox.uncheck()
+    expect(page.locator(BILD)).to_have_count(0)
+    checkbox.check()
+    image = _bild(page)
+    expect(image).to_have_css("opacity", "0.6")
+    assert panel.evaluate("el => el.getBoundingClientRect().right <= innerWidth")
+    marker = canvas.locator(".oks-divicon").filter(has_text="BSP Testmarker")
+    marker.click()
+    expect(canvas.locator(".leaflet-popup-content")).to_contain_text("BSP Testmarker")
+    expect(canvas.get_by_role("button", name="Entfernen", exact=True)).to_be_visible()
+    canvas.locator(".leaflet-popup-close-button").press("Enter")
+    tool = canvas.locator(".leaflet-pm-icon-polygon")
+    tool.click()
+    expect(tool.locator("../..")).to_have_class(re.compile(r"\bactive\b"))
+    tool.click()
+    if ansicht == "tab":
+        page.get_by_role("button", name="Übersicht", exact=True).click()
+        page.get_by_role("button", name="Lagekarte", exact=True).click()
+        expect(canvas.locator(".leaflet-bsp-pane")).to_have_count(1)
+        expect(canvas.locator(".leaflet-pm-toolbar").first).to_be_visible()
+        _bild(page)
+    page.reload()
+    if ansicht == "tab":
+        page.get_by_role("button", name="Lagekarte", exact=True).click()
+    _bild(page)
 
 
 if __name__ == "__main__":
