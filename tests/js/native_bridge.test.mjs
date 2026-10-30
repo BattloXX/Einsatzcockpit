@@ -7,19 +7,20 @@ import vm from "node:vm";
 const ptrQuelle = readFileSync(new URL("../../app/static/js/native-ptr.js", import.meta.url), "utf8");
 const quelle = readFileSync(new URL("../../app/static/js/native-bridge.js", import.meta.url), "utf8");
 
-function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, fullBridge = true, now = () => 0, fetchMock } = {}) {
-  const aufrufe = { done: 0, failed: [], reload: 0, events: [], blocked: [] };
+function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, fullBridge = true, now = () => 0, fetchMock, loadViewer = false } = {}) {
+  const aufrufe = { done: 0, failed: [], reload: 0, events: [], blocked: [], notices: [], assigned: [] };
   const listener = new Map();
   const docListener = new Map();
   const window = {
     scrollY,
+    alert(message) { aufrufe.notices.push(message); },
     getComputedStyle(el) { return { overflowY: el.overflowY || "visible" }; },
     ECPtr: {
       done() { aufrufe.done += 1; },
       failed(msg) { aufrufe.failed.push(msg); },
       setBlocked(value) { aufrufe.blocked.push(value); },
     },
-    location: { href: 'https://ecp.test/objekte/1', origin: 'https://ecp.test', reload() { aufrufe.reload += 1; } },
+    location: { href: 'https://ecp.test/objekte/1', origin: 'https://ecp.test', reload() { aufrufe.reload += 1; }, assign(url) { aufrufe.assigned.push(url); } },
     addEventListener(name, fn) { listener.set(name, [...(listener.get(name) || []), fn]); },
     dispatchEvent(event) {
       aufrufe.events.push(event);
@@ -38,6 +39,7 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, full
       if (selector === '[contenteditable="true"]') return [];
       return overlays;
     },
+    querySelector() { return null; },
     body: {},
   };
   const kontext = {
@@ -52,6 +54,7 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, full
   window.navigator = kontext.navigator;
   vm.runInNewContext(ptrQuelle, kontext);
   if (fullBridge) vm.runInNewContext(quelle, kontext);
+  if (loadViewer) vm.runInNewContext(readFileSync(new URL('../../app/static/js/dokumentviewer.js', import.meta.url), 'utf8'), kontext);
   return { window, document, aufrufe, native: window.ELNative, listener,
     emit(type, event) { return Promise.all((docListener.get(type) || []).map(fn => fn(event))); },
   };
@@ -303,7 +306,8 @@ test('Refresh prueft aktuelle Sperre erneut und wartet auf den Resync-Auftrag', 
 });
 
 function downloadKlick(href, attribute) {
-  const link = { href };
+  const attrs = { [attribute]: '' };
+  const link = { href, hasAttribute(name) { return name in attrs; }, getAttribute(name) { return attrs[name] ?? null; } };
   return {
     defaultPrevented: false,
     preventDefault() { this.defaultPrevented = true; },
@@ -362,4 +366,148 @@ test('openUrl authentifiziert auch relative Objekt-URLs mit Filter und Download-
   await u.native.openUrl(path + '#page=2');
   assert.deepEqual(requests, [path]);
   assert.deepEqual(opened, ['https://ecp.test' + path + '&nt=token#page=2']);
+});
+
+function mitDateiPlugin(options = {}) {
+  const u = umgebung({ loadViewer: true, fetchMock: async () => { throw Error('Kein Handoff mit NativeFiles'); } });
+  const calls = [];
+  u.window.Capacitor = { isNativePlatform: () => true, Plugins: {
+    NativeFiles: {
+      download: async args => { calls.push(['download', { ...args }]); return { started: true }; },
+      openFile: async args => { calls.push(['openFile', { ...args }]); return { opened: true }; },
+      ...options,
+    },
+    Browser: { open: async () => { throw Error('NativeFiles hat Vorrang'); } },
+  } };
+  return { ...u, calls };
+}
+
+test('NativeFiles: absolute Same-Origin-URLs, Dateiname und kein nt/Handoff', async () => {
+  const u = mitDateiPlugin();
+  await u.native.downloadFile('/objekt-medien/seite/7/pdf?nt=alt&download=1', 'Plan.pdf');
+  await u.native.openFile('https://ecp.test/plaene/3/pdf?version_id=4&nt=alt#page=2');
+  assert.deepEqual(u.calls, [
+    ['download', { url: 'https://ecp.test/objekt-medien/seite/7/pdf?download=1', filename: 'Plan.pdf' }],
+    ['openFile', { url: 'https://ecp.test/plaene/3/pdf?version_id=4#page=2' }],
+  ]);
+  assert.deepEqual(u.aufrufe.notices, []);
+});
+
+test('Keine App zum Öffnen: NativeFiles.download übernimmt; andere Fehler werden angezeigt', async () => {
+  const u = mitDateiPlugin({ openFile: async () => { throw Error('Keine App zum Öffnen vorhanden'); } });
+  await u.native.openFile('/plan.pdf');
+  assert.deepEqual(u.calls, [['download', { url: 'https://ecp.test/plan.pdf' }]]);
+  assert.deepEqual(u.aufrufe.notices, []);
+  const v = mitDateiPlugin({ openFile: async () => { throw Error('HTTP 403'); } });
+  await v.native.openFile('/plan.pdf');
+  assert.deepEqual(v.calls, []);
+  assert.match(v.aufrufe.notices[0], /HTTP 403/);
+});
+
+test('Datei-API gibt fremde Origins und nicht-HTTP-URLs niemals an NativeFiles weiter', async () => {
+  const u = mitDateiPlugin();
+  await u.native.downloadFile('https://other.test/plan.pdf');
+  await u.native.openFile('javascript:alert(1)');
+  assert.deepEqual(u.calls, []);
+  assert.equal(u.aufrufe.notices.length, 2);
+});
+
+test('Alte App ohne Plugins: Hinweis und Navigation nur für bestätigte Attachment-Routen', async () => {
+  const u = umgebung();
+  u.window.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+  await u.native.downloadFile('/objekt-medien/dokument/7/original?version=2#page=1');
+  assert.deepEqual(u.aufrufe.assigned, ['https://ecp.test/objekt-medien/dokument/7/original?version=2&download=1#page=1']);
+  await u.native.downloadFile('/druck/dokument.pdf?document_type=einsatzinfo');
+  await u.native.downloadFile('/unbekannt.pdf');
+  await u.native.openFile('/plan.pdf');
+  assert.equal(u.aufrufe.assigned.length, 1);
+  assert.equal(u.aufrufe.notices.length, 4);
+  assert.ok(u.aufrufe.notices.every(msg => msg === 'Bitte die App aktualisieren, um Dateien herunterzuladen.'));
+});
+
+test('Dateihinweise nutzen den vorhandenen Alpine-Toast', async () => {
+  const u = umgebung();
+  const app = {};
+  u.document.querySelector = () => app;
+  u.window.Alpine = { $data: el => {
+    assert.equal(el, app);
+    return { addToast: (message, type) => u.aufrufe.notices.push([message, type]) };
+  } };
+  u.window.Capacitor = { isNativePlatform: () => true };
+  await u.native.openFile('/plan.pdf');
+  assert.deepEqual(u.aufrufe.notices, [['Bitte die App aktualisieren, um Dateien herunterzuladen.', 'warn']]);
+});
+
+test('Klicks: download-Attribute, Viewer-Download und Query laden; PDF-Tabs öffnen', async () => {
+  for (const [attribute, path, action] of [
+    ['download', '/datei', 'download'],
+    ['data-dv-download', '/datei', 'download'],
+    ['target="_blank"', '/plan.pdf?download=1', 'download'],
+    ['target="_blank"', '/plaene/3/pdf', 'openFile'],
+    ['target="_blank"', '/objekt-medien/dokument/7/original', 'openFile'],
+  ]) {
+    const u = mitDateiPlugin();
+    const event = downloadKlick('https://ecp.test' + path, attribute);
+    await u.emit('click', event);
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(u.calls, [[action, { url: 'https://ecp.test' + path }]]);
+    // Ein bereits verarbeiteter Klick wird nicht erneut ausgeführt.
+    await u.emit('click', event);
+    assert.equal(u.calls.length, 1);
+  }
+});
+
+test('Viewer-Original und Auszug nutzen auch bei Dateipfaden ohne PDF-Suffix NativeFiles', async () => {
+  for (const attribute of ['data-dv-original', 'data-dv-excerpt']) {
+    const u = mitDateiPlugin();
+    const link = { href: 'https://ecp.test/datei/7?auswahl=1-3',
+      hasAttribute: name => name === attribute, getAttribute: () => null };
+    const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; },
+      target: { closest: selector => selector.includes('a[target=') ? link : null } };
+    await u.emit('click', event);
+    assert.deepEqual(u.calls, [['openFile', { url: link.href }]]);
+    assert.equal(event.defaultPrevented, true);
+  }
+});
+
+test('Druckdialog doLocal: gemeinsame PDF und UAS-Pfade gehen über openUrl an NativeFiles', async () => {
+  const template = readFileSync(new URL('../../app/templates/_print_dialog.html', import.meta.url), 'utf8');
+  const helper = template.slice(template.indexOf('  function localUrlFor(c)'), template.indexOf('  function showTarget(t)'));
+  const u = mitDateiPlugin();
+  const context = { window: u.window, URLSearchParams };
+  vm.runInNewContext(helper + '\nwindow.testDoLocal = doLocal;', context);
+  // doLocal selbst wartet nicht auf das Promise; der Plugin-Aufruf erfolgt synchron.
+  u.window.testDoLocal({ document_type: 'einsatzinfo', incident_id: 42 });
+  u.window.testDoLocal({ localUrl: '/uas/einsatz/9/pdf/gesamt' });
+  assert.deepEqual(u.calls, [
+    ['openFile', { url: 'https://ecp.test/druck/dokument.pdf?document_type=einsatzinfo&incident_id=42' }],
+    ['openFile', { url: 'https://ecp.test/uas/einsatz/9/pdf/gesamt' }],
+  ]);
+});
+
+test('Normale neue Tabs nutzen weiterhin Browser und den Same-Origin-Handoff', async () => {
+  const opened = [], paths = [];
+  const u = umgebung({ fetchMock: async (_url, options) => {
+    paths.push(JSON.parse(options.body).path);
+    return { ok: true, json: async () => ({ url: 'https://ecp.test/kontakte?nt=neu' }) };
+  } });
+  u.window.Capacitor = { isNativePlatform: () => true, Plugins: {
+    Browser: { open: async ({ url }) => opened.push(url) },
+    NativeFiles: { openFile: () => assert.fail('Kein Dokument') },
+  } };
+  await u.emit('click', downloadKlick('https://ecp.test/kontakte', 'target="_blank"'));
+  assert.deepEqual(paths, ['/kontakte']);
+  assert.deepEqual(opened, ['https://ecp.test/kontakte?nt=neu']);
+});
+
+test('Viewer-defaultPrevented: Capture-Dateiaktion wird vom geladenen Viewer nicht erneut geöffnet', async () => {
+  const u = mitDateiPlugin();
+  const link = { href: 'https://ecp.test/plan.pdf',
+    hasAttribute: () => false, getAttribute: () => null,
+    closest() { assert.fail('Viewer darf den bereits behandelten Klick nicht verarbeiten'); } };
+  const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; },
+    target: { closest: () => link } };
+  await u.emit('click', event);
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(u.calls, [['openFile', { url: link.href }]]);
 });
