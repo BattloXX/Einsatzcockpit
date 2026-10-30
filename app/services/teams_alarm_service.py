@@ -102,11 +102,17 @@ async def _post_payload(webhook_url: str, payload: dict, *, log_label: str) -> t
 async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlarmConfig,
                              *, base_url: str, org: FireDept | None,
                              text_prefix: str = "") -> tuple[bool, bool, str | None, bool]:
-    payload = build_incident_message_card(incident, cfg, base_url=base_url, org=org)
+    from sqlalchemy.orm import object_session
+
+    db = object_session(incident)
+    payload = build_incident_message_card(
+        incident, cfg, base_url=base_url, org=org, db=db,
+    )
     if text_prefix:
-        payload["attachments"][0]["content"]["body"][0]["text"] = (
-            text_prefix + payload["attachments"][0]["content"]["body"][0]["text"]
-        )
+        body = payload["attachments"][0]["content"]["body"]
+        body.insert(1 if incident.is_exercise else 0, {
+            "type": "TextBlock", "text": text_prefix, "weight": "Bolder", "wrap": True,
+        })
     return await _post_payload(webhook_url, payload, log_label=f"Einsatz {incident.id}")
 
 

@@ -17,7 +17,6 @@ auch von den (auslaufenden) klassischen Connectors korrekt inkl. Bild/Buttons da
 """
 from __future__ import annotations
 
-from app.core.timezones import format_local_datetime
 from app.models.fahrtenbuch import Fahrt
 from app.models.incident import Incident
 from app.models.master import VehicleMaster
@@ -33,85 +32,81 @@ def _combined_address(incident: Incident) -> str:
 
 def build_incident_message_card(
     incident: Incident, cfg: TeamsAlarmConfig, *, base_url: str, org=None,
+    db=None, alarm_type=None, org_settings=None,
 ) -> dict:
-    """Baut die Adaptive Card (in "attachments" gewrappt) für den Webhook-Basis-Modus —
-    respektiert die include_map/include_gmaps_link/include_qr_link-Schalter aus
-    TeamsAlarmConfig. Siehe Modul-Docstring zum Hintergrund (Workflows-Webhook verwirft
-    Bild/Buttons im alten MessageCard-Schema)."""
-    base_url = base_url.rstrip("/")
-    exercise_prefix = "[ÜBUNG] " if incident.is_exercise else ""
-    title = f"{exercise_prefix}🚒 Einsatz {incident.alarm_type_code}"
-    address = _combined_address(incident)
+    """Baut eine Workflows-kompatible Adaptive Card aus denselben Daten wie die Mail.
 
-    lines = [f"**Adresse:** {address}" if address else "**Adresse:** –"]
-    meldung = incident.report_text or incident.reason
-    if meldung:
-        lines.append(f"**Meldung:** {meldung}")
-    if incident.reason and incident.reason.strip() != (meldung or "").strip():
-        lines.append(f"**Einsatzgrund:** {incident.reason}")
-    if incident.lis_operation_number:
-        lines.append(f"**Leitstellennummer:** {incident.lis_operation_number}")
-    if incident.started_at:
-        lines.append(f"**Zeit:** {format_local_datetime(incident.started_at, org)} Uhr")
+    DB und Stammdaten sind optional, damit bestehende Aufrufer weiterhin nur mit
+    Incident-Feldern arbeiten können. Inhalts-Schalter betreffen Bild und Links.
+    """
+    from app.services.einsatzinfo_mail_service import build_mail_view
 
-    body: list[dict] = [
-        {"type": "TextBlock", "text": title, "weight": "Bolder", "size": "Large", "wrap": True},
-        {"type": "TextBlock", "text": "\n\n".join(lines), "wrap": True},
-    ]
+    if alarm_type is None and db is not None and incident.primary_org_id:
+        from app.services.alarm_service import get_alarm_type_by_code
+        alarm_type = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)
+    v = build_mail_view(
+        db, incident, org, alarm_type, org_settings, "", None, base_url=base_url,
+    )
+    badge_style = {"#c8102e": "attention", "#1d4ed8": "accent"}.get(v["kategorie_farbe"], "emphasis")
 
-    has_coords = incident.lat is not None and incident.lng is not None
-    if cfg.include_map and has_coords and incident.alarm_token:
+    def text_block(text: str, **options) -> dict:
+        return {"type": "TextBlock", "text": text, "wrap": True, **options}
+
+    body: list[dict] = []
+    if v["is_exercise"]:
         body.append({
-            "type": "Image",
-            "url": f"{base_url}/api/v1/teams/map/{incident.alarm_token}.png",
-            "size": "Stretch",
+            "type": "Container", "style": "warning",
+            "items": [text_block("[ÜBUNG] – kein Realeinsatz", weight="Bolder")],
         })
+    heading = [text_block(f"Einsatz {v['stichwort']}", weight="Bolder", size="Large")]
+    if v["stichwort_label"]:
+        heading.append(text_block(v["stichwort_label"]))
+    if v["alarmzeit"]:
+        heading.append(text_block(f"{v['alarmzeit']} Uhr", isSubtle=True))
+    body.append({
+        "type": "ColumnSet", "columns": [
+            {"type": "Column", "width": "auto", "items": [{
+                "type": "Container", "style": badge_style,
+                "items": [text_block(v["stichwort"], weight="Bolder", size="Large")],
+            }]},
+            {"type": "Column", "width": "stretch", "items": heading},
+        ],
+    })
+    if v["adresse"]:
+        body.append(text_block(v["adresse"], weight="Bolder", size="Large"))
+    if v["meldung"]:
+        body.append(text_block(v["meldung"], weight="Bolder", size="Medium"))
+    if v["details"]:
+        body.append({
+            "type": "FactSet",
+            "facts": [{"title": label, "value": value} for label, value in v["details"]],
+        })
+    if cfg.include_map and v["map_image_url"]:
+        body.append({"type": "Image", "url": v["map_image_url"], "size": "Stretch", "altText": "Einsatzort"})
 
     actions = []
-    # Primäraktion: öffentliche Einsatzinformation (No-Login, Karte + Hydranten).
-    # Der extern weitergeleitete Link geht immer hierher.
-    if cfg.include_qr_link and incident.alarm_token:
+    if cfg.include_qr_link and v["info_link"]:
         actions.append({
-            "type": "Action.OpenUrl",
-            "title": "ℹ️ Einsatzinformation",
-            "url": f"{base_url}/alarm/{incident.alarm_token}",
+            "type": "Action.OpenUrl", "title": "ℹ️ Einsatzinformation",
+            "url": v["info_link"], "style": "positive",
         })
-    if incident.access_pin_hash and incident.alarm_token:
-        actions.append({
-            "type": "Action.OpenUrl",
-            "title": "Mit PIN anmelden",
-            "url": f"{base_url}/alarm/{incident.alarm_token}/anmelden",
-        })
-    if cfg.include_gmaps_link and has_coords:
-        actions.append({
-            "type": "Action.OpenUrl",
-            "title": "🗺 Google Maps",
-            "url": f"https://maps.google.com/?q={incident.lat},{incident.lng}",
-        })
-    if cfg.include_board_link:
-        # Login-pflichtig (kein QR-Auto-Login wie die Alarmübersicht) — bewusst dieselbe
-        # URL wie der Web-Push (siehe incident_notify.py), damit kein zusätzliches
-        # Auth-Token in der Teams-Kanalhistorie landet.
-        actions.append({
-            "type": "Action.OpenUrl",
-            "title": "🖥 Einsatz-Board öffnen",
-            "url": f"{base_url}/einsatz/{incident.id}",
-        })
+    if v["anmeldelink"]:
+        actions.append({"type": "Action.OpenUrl", "title": "Mit PIN anmelden", "url": v["anmeldelink"]})
+    if cfg.include_gmaps_link and v["navi_link"]:
+        actions.append({"type": "Action.OpenUrl", "title": "🗺 Google Maps", "url": v["navi_link"]})
+    if cfg.include_board_link and v["board_link"]:
+        actions.append({"type": "Action.OpenUrl", "title": "🖥 Einsatz-Board öffnen", "url": v["board_link"]})
 
     adaptive_card: dict = {
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-        "type": "AdaptiveCard",
-        "version": "1.4",
+        "type": "AdaptiveCard", "version": "1.4", "msteams": {"width": "Full"},
         "body": body,
     }
     if actions:
         adaptive_card["actions"] = actions
-
     return {
         "type": "message",
-        "attachments": [
-            {"contentType": "application/vnd.microsoft.card.adaptive", "content": adaptive_card},
-        ],
+        "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": adaptive_card}],
     }
 
 

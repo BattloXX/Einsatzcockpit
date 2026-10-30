@@ -29,6 +29,15 @@ Blockieren.
 
 ---
 
+Die Webhook-Karte verwendet **Adaptive Cards 1.4** im `attachments`-Wrapper für
+Workflows und nutzt die gleichen Alarmdaten wie die Einsatz-Mail: Stichwort mit
+Bezeichnung, Alarmzeit in der Organisations-Zeitzone, Adresse, Meldung sowie vorhandene
+Details zu Einsatzgrund, Brandmeldeanlage, bestätigtem Objekt, Gefahren und Einsatznummern.
+Ein farbiges Stichwort-Badge und ein eigener Übungsbanner erleichtern das Erfassen.
+Leere Felder werden ausgelassen. Unter dem optionalen Kartenbild stehen die Buttons
+**Einsatzinformation**, bei gesetzter PIN **Mit PIN anmelden**, **Google Maps** und
+**Einsatz-Board öffnen** (mit regulärer Anmeldung).
+
 ## Master-Schalter und Inhalts-Bausteine
 
 Unter **Admin → Teams-Alarmierung** (`/admin/teams-alarmierung`):
@@ -38,7 +47,8 @@ Unter **Admin → Teams-Alarmierung** (`/admin/teams-alarmierung`):
 | Teams-Alarmierung aktiviert | Master-Schalter — aus bedeutet: für diese Organisation passiert weder Webhook- noch Bot-Versand |
 | Übungseinsätze auch senden | Standardmäßig **aus** (analog zur SMS-Einsatzinfo-Konvention) — Übungen lösen nur dann eine Teams-Karte aus, wenn hier aktiviert |
 | Kartenbild einbetten | Serverseitig aus OpenStreetMap gerendertes Kartenbild um die Einsatzadresse |
-| Google-Maps-Link | Direktlink `https://maps.google.com/?q=<lat>,<lng>` als Button in der Karte |
+| Google-Maps-Link | Navigation zu den Koordinaten, ersatzweise zur Einsatzadresse |
+| Einsatz-Board-Link | Link zum Einsatz-Board mit regulärer Anmeldung |
 | Alarmübersicht-Link (QR) | Link zu einer No-Login-Seite mit den Alarm-Kerndaten (Stichwort, Adresse, Meldung, Karte — **keine** Mannschafts-/Personendaten) |
 
 Jeder Baustein ist einzeln abschaltbar, z. B. wenn ein Kartenbild aus Datenschutz- oder

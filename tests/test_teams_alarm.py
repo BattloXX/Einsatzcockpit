@@ -1,6 +1,7 @@
 """Tests für die Teams-Alarmierung: Karteninhalt (teams_card.py) und Dispatch-Entscheidung
 Bot vs. Webhook-Fallback (teams_alarm_service.py) — Webhook-Versand mit gemocktem httpx,
 kein echter Netzwerkzugriff."""
+import json
 from datetime import UTC, datetime
 
 import httpx
@@ -158,7 +159,19 @@ def _adaptive_content(card: dict) -> dict:
 
 
 def _body_texts(card: dict) -> str:
-    return "\n".join(b.get("text", "") for b in _adaptive_content(card)["body"])
+    def texts(node):
+        if isinstance(node, dict):
+            if node.get("type") == "TextBlock":
+                yield node["text"]
+            if node.get("type") == "FactSet":
+                for fact in node["facts"]:
+                    yield f"**{fact['title']}:** {fact['value']}"
+            for value in node.values():
+                yield from texts(value)
+        elif isinstance(node, list):
+            for item in node:
+                yield from texts(item)
+    return "\n".join(texts(_adaptive_content(card)["body"]))
 
 
 def _images(card: dict) -> list[dict]:
@@ -188,7 +201,7 @@ def test_build_incident_message_card_includes_all_bausteine_by_default():
 def test_identische_meldung_und_einsatzgrund_erscheinen_nur_einmal():
     text = _body_texts(build_incident_message_card(
         _incident(report_text="Verkehrsunfall"), _cfg(), base_url="https://example.com"))
-    assert text.count("**Meldung:**") == 1
+    assert text.count("Verkehrsunfall") == 1
     assert "**Einsatzgrund:**" not in text
 
 
@@ -196,14 +209,14 @@ def test_abweichender_einsatzgrund_bleibt_erhalten():
     text = _body_texts(build_incident_message_card(
         _incident(report_text="Pkw gegen Baum", reason="Verkehrsunfall"),
         _cfg(), base_url="https://example.com"))
-    assert "**Meldung:** Pkw gegen Baum" in text
+    assert "Pkw gegen Baum" in text
     assert "**Einsatzgrund:** Verkehrsunfall" in text
 
 
 def test_nur_einsatzgrund_ohne_report_text_erzeugt_eine_meldungszeile():
     text = _body_texts(build_incident_message_card(
         _incident(report_text=None), _cfg(), base_url="https://example.com"))
-    assert text.count("**Meldung:**") == 1
+    assert text.count("Verkehrsunfall") == 1
     assert "**Einsatzgrund:**" not in text
 
 
@@ -264,9 +277,10 @@ def test_build_incident_message_card_no_map_without_coords():
     cfg = _cfg()
     card = build_incident_message_card(incident, cfg, base_url="https://example.com")
     assert not _images(card)
-    # Google-Maps-Button darf ohne Koordinaten nicht auftauchen
-    action_titles = [a["title"] for a in _adaptive_content(card).get("actions", [])]
-    assert not any("Google Maps" in t for t in action_titles)
+    # Wie in der Mail bleibt Navigation über die Adresse möglich.
+    actions = _adaptive_content(card).get("actions", [])
+    maps = next(a for a in actions if "Google Maps" in a["title"])
+    assert "destination=Bundesstra%C3%9Fe+1%2C+Wolfurt" in maps["url"]
 
 
 # ── Karten-Base-URL: öffentlich erreichbares Kartenbild für Teams ────────────
@@ -575,3 +589,107 @@ def test_teams_pin_anmeldung_nur_mit_pin_und_token(pin, token):
     if login_actions:
         assert login_actions[0] == {"type": "Action.OpenUrl", "title": "Mit PIN anmelden",
                                     "url": "https://example.com/alarm/abc/anmelden"}
+
+
+@pytest.mark.parametrize("code,style", [("F3", "attention"), ("T4", "accent"), ("S1", "emphasis")])
+def test_teams_layout_schema_badge_und_groesse(code, style):
+    card = build_incident_message_card(
+        _incident(id=185, alarm_type_code=code, access_pin_hash="hash",
+                  report_text="Pkw gegen Baum", dibos_bma_no="42", dibos_diagnose="Melder 1"),
+        _cfg(), base_url="https://example.com",
+    )
+    content = _adaptive_content(card)
+    assert content["version"] == "1.4"
+    assert content["msteams"] == {"width": "Full"}
+    header = content["body"][0]
+    assert header["type"] == "ColumnSet"
+    assert header["columns"][0]["items"][0]["style"] == style
+    facts = next(b["facts"] for b in content["body"] if b["type"] == "FactSet")
+    assert {f["title"]: f["value"] for f in facts} == {
+        "Einsatzgrund": "Verkehrsunfall", "Brandmeldeanlage": "BMZ 42 – Melder 1", "Einsatznummer": "#185",
+    }
+    assert all(b["wrap"] for b in content["body"] if b["type"] == "TextBlock")
+    assert content["actions"][0]["style"] == "positive"
+    assert len(content["actions"]) <= 6
+    assert len(json.dumps(card).encode("utf-8")) < 28_000
+
+
+def test_teams_leere_felder_und_banner():
+    incident = Incident(alarm_type_code="T1", is_exercise=True)
+    content = _adaptive_content(build_incident_message_card(incident, _cfg(), base_url="https://example.com"))
+    assert content["body"][0] == {
+        "type": "Container", "style": "warning",
+        "items": [{"type": "TextBlock", "text": "[ÜBUNG] – kein Realeinsatz", "wrap": True, "weight": "Bolder"}],
+    }
+    assert not any(b["type"] in ("FactSet", "Image") for b in content["body"])
+    assert not any(b["type"] == "TextBlock" for b in content["body"])
+    incident.is_exercise = False
+    content = _adaptive_content(build_incident_message_card(incident, _cfg(), base_url="https://example.com"))
+    assert content["body"][0]["type"] == "ColumnSet"
+
+
+@pytest.mark.parametrize("toggle,missing", [
+    ("include_map", ".png"), ("include_gmaps_link", "google.com"),
+    ("include_qr_link", "Einsatzinformation"), ("include_board_link", "Einsatz-Board"),
+])
+def test_teams_einzelne_inhaltsschalter(toggle, missing):
+    card = build_incident_message_card(_incident(), _cfg(**{toggle: False}), base_url="https://example.com")
+    assert missing not in json.dumps(card, ensure_ascii=False)
+    assert len(_adaptive_content(card)["actions"]) == (3 if toggle == "include_map" else 2)
+
+
+def test_teams_und_mail_zeigen_dieselben_daten_inkl_objekt_gefahren(monkeypatch):
+    from app.config import settings
+    from app.models.objekt import GefahrenKatalog, ObjektGefahr
+    from app.services.einsatzinfo_mail_service import build_mail_view
+
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://example.com")
+    with _session() as db:
+        org = db.get(FireDept, ORG_ID)
+        alarm = AlarmType(org_id=ORG_ID, code="FTEST", category="F", label="Zimmerbrand")
+        incident = _incident(alarm_type_code="FTEST", report_text="Rauch im Keller", access_pin_hash="hash",
+                             dibos_bma_no="42", dibos_diagnose="Melder 1", lis_operation_number="F123")
+        objekt = Objekt(org_id=ORG_ID, nummer=987654321, name="Wohnanlage")
+        gefahr = GefahrenKatalog(org_id=ORG_ID, name="Gasanschluss", piktogramm_typ="gas")
+        db.add_all([alarm, incident, objekt, gefahr])
+        db.flush()
+        db.add_all([
+            ObjektEinsatz(org_id=ORG_ID, incident_id=incident.id, objekt_id=objekt.id,
+                          quelle="manuell", status="bestaetigt"),
+            ObjektGefahr(org_id=ORG_ID, objekt_id=objekt.id, gefahr_id=gefahr.id),
+        ])
+        db.flush()
+        view = build_mail_view(db, incident, org, alarm, None, "", None)
+        card = build_incident_message_card(incident, _cfg(), base_url="https://example.com", org=org, db=db)
+        content = _adaptive_content(card)
+        text = _body_texts(card)
+        for key in ("stichwort", "stichwort_label", "adresse", "meldung", "alarmzeit"):
+            assert view[key] in text
+        facts = next(b["facts"] for b in content["body"] if b["type"] == "FactSet")
+        assert [(f["title"], f["value"]) for f in facts] == view["details"]
+        assert "Wohnanlage" in text and "Gasanschluss" in text
+        assert _images(card)[0]["url"] == view["map_image_url"]
+        assert [a["url"] for a in content["actions"]] == [
+            view[k] for k in ("info_link", "anmeldelink", "navi_link", "board_link")
+        ]
+        assert len(json.dumps(card).encode("utf-8")) < 28_000
+
+
+def test_webhook_nachversand_praefix_bleibt_mit_neuem_kopf_erhalten(monkeypatch):
+    import asyncio
+
+    sent = []
+
+    async def post(_url, payload, **kwargs):
+        sent.append(payload)
+        return True, False, None, False
+
+    monkeypatch.setattr(teams_alarm_service, "_post_payload", post)
+    asyncio.run(teams_alarm_service._post_via_webhook(
+        "https://example.com/hook", _incident(is_exercise=True), _cfg(),
+        base_url="https://example.com", org=None, text_prefix="Nachversand: ",
+    ))
+    body = _adaptive_content(sent[0])["body"]
+    assert body[0]["style"] == "warning"
+    assert body[1]["text"] == "Nachversand: "
+    assert body[2]["type"] == "ColumnSet"
