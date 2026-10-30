@@ -28,7 +28,7 @@ from app.models.master import FireDept
 from app.models.teams_bot import AlarmToken
 from app.routers.auth import _set_session_cookie
 from app.services import alarmlink_login_service as login_guard
-from app.services.incident_qr_service import ensure_incident_qr_token, get_or_create_qr_principal
+from app.services.incident_qr_service import ensure_incident_qr_token, get_or_create_alarmlink_gast_principal
 
 logger = logging.getLogger("einsatzleiter.teams_bot")
 
@@ -132,7 +132,7 @@ def alarm_login_submit(
     name = "".join(c for c in display_name if not unicodedata.category(c).startswith("C")).strip()[:120].rstrip()
     if not name:
         return _login_form(request, token, incident, error="Bitte deinen Namen eingeben.", status_code=422)
-    principal = get_or_create_qr_principal(db, incident.primary_org_id)
+    principal = get_or_create_alarmlink_gast_principal(db, incident.primary_org_id)
     ensure_incident_qr_token(db, incident, issuing_user_id=principal.id)
     session = sign_session(principal.id, qr=True, incident_id=incident.id,
                            display_name=name, alarm_token_id=alarm.id)

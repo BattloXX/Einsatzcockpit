@@ -119,3 +119,28 @@ async def test_dispatch_html_and_render_fallback(setup_db, monkeypatch):
         db.close()
     await service.dispatch_einsatzinfo_mail(org_id, incident_id)
     assert "Rauchentwicklung" in sent[-1].get_body(preferencelist=("html",)).get_content()
+
+
+@pytest.mark.parametrize("pin,token", [(None, "abc123"), ("hash", "abc123"), ("hash", None)])
+def test_mail_pin_anmeldung_nur_mit_pin_und_token(setup_db, monkeypatch, pin, token):
+    from app.config import settings
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.services.einsatzinfo_mail_service import (
+        build_einsatzinfo_mail_context, build_mail_view, render_einsatzinfo_mail_html,
+    )
+
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://mail.example.test")
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        org, org_settings, alarm, incident = _data(db, f"pin-{pin}-{token}")
+        incident.access_pin_hash, incident.alarm_token = pin, token
+        view = build_mail_view(db, incident, org, alarm, org_settings, "Alarm", None)
+        context = build_einsatzinfo_mail_context(incident, org, datetime.now(UTC))
+        rendered = render_einsatzinfo_mail_html(view)
+        expected = "https://mail.example.test/alarm/abc123/anmelden" if pin and token else ""
+        assert (view["anmeldelink"] or "") == expected
+        assert context["anmeldelink"] == expected
+        assert ("Mit PIN anmelden" in rendered) == bool(expected)
+        if expected:
+            assert f'href="{expected}"' in rendered

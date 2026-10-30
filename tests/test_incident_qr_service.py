@@ -95,3 +95,21 @@ def test_org_fremder_systemadmin_verwendet_qr_principal_der_lage():
 
     assert _lage_qr_aussteller_id(systemadmin, lage) is None
     assert _lage_qr_aussteller_id(org_admin, lage) == 78
+
+
+def test_alarmlink_principal_ist_separat_readonly_und_nicht_interaktiv(db):
+    from app.services.incident_qr_service import get_or_create_alarmlink_gast_principal
+
+    org = _stammdaten(db)
+    db.add(Role(code="readonly", label="Nur Lesen"))
+    db.commit()
+    druck = get_or_create_qr_principal(db, org.id)
+    gast = get_or_create_alarmlink_gast_principal(db, org.id)
+    db.commit()
+    assert get_or_create_alarmlink_gast_principal(db, org.id).id == gast.id
+    assert gast.id != druck.id
+    assert gast.username == f"alarmlink-gast@org{org.id}"
+    assert gast.display_name == "Einsatzlink-Gast"
+    assert gast.is_device and gast.active and gast.password_hash is None
+    assert gast.role_codes == {"readonly"}
+    assert druck.role_codes == {"recorder"}

@@ -12,7 +12,7 @@ from app.models.teams_bot import AlarmToken
 from app.models.user import AuditLog, User
 from app.services import alarmlink_login_service as guard
 from app.services.incident_qr_service import ensure_incident_qr_token, get_or_create_qr_principal
-from tests.conftest import TestingSession
+from tests.conftest import TestingSession, flatten_routes
 
 
 def make_alarm(*, org_id=1, pin="1234"):
@@ -53,7 +53,7 @@ def test_pin_und_name_session_und_audit(client):
     with TestingSession() as db:
         set_tenant_context(db, None)
         user = db.get(User, session[0])
-        assert user.org_id == 1 and user.role_codes == {"recorder"}
+        assert user.org_id == 1 and user.role_codes == {"readonly"}
         assert db.query(IncidentToken).filter_by(incident_id=inc_id, issued_by_user_id=user.id).first()
         assert db.query(AuditLog).filter_by(action="auth.alarmlink_login", incident_id=inc_id).first()
     assert client.get(f"/alarm/{token}", follow_redirects=False).headers["location"] == f"/einsatz/{inc_id}/info"
@@ -187,3 +187,45 @@ def test_anmeldung_braucht_csrf(client):
     response = client.post(f"/alarm/{token}/anmelden", data={"pin": "1234", "display_name": "Maria"})
     assert response.status_code == 403
     assert "session" not in client.cookies
+
+
+def test_readonly_gast_alle_einsatz_schreibrouten_gesperrt(client):
+    from app.main import app
+    import re
+
+    inc_id, token, _ = make_alarm()
+    assert login(client, token).status_code == 302
+    assert client.get(f"/einsatz/{inc_id}").status_code == 200
+    # Alle registrierten Einsatz-Mutationen, auch ohne Rollen-Dependency und
+    # mit readonly-Ausnahme, muessen vor Validierung/Mutation 403 liefern.
+    checked = set()
+    for route in flatten_routes(app.routes):
+        path = getattr(route, "path", "")
+        if "{incident_id}" not in path:
+            continue
+        path = path.replace("{incident_id}", str(inc_id))
+        path = re.sub(r"\{[^}]+\}", "1", path)
+        for method in getattr(route, "methods", set()) & {"POST", "PUT", "PATCH", "DELETE"}:
+            response = client.request(method, path, data={"_csrf": client.cookies["ec_csrf"],
+                                      "title": "Gast", "text": "Gast", "message": "Gast"},
+                                      follow_redirects=False)
+            assert response.status_code == 403, (method, path, response.text)
+            assert response.json()["detail"] == "Gastzugang erlaubt nur Lesen"
+            checked.add(path)
+    assert {f"/einsatz/{inc_id}/{suffix}" for suffix in
+            ("meldung", "aufgabe", "fahrzeug-hinzufuegen", "log", "funkjournal", "route/neu")} <= checked
+
+
+def test_bestehende_gast_session_bleibt_recorder(client):
+    inc_id, _, alarm_id = make_alarm()
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        principal = get_or_create_qr_principal(db, 1)
+        ensure_incident_qr_token(db, db.get(Incident, inc_id), issuing_user_id=principal.id)
+        cookie = sign_session(principal.id, qr=True, incident_id=inc_id,
+                              display_name="Bestehender Gast", alarm_token_id=alarm_id)
+        db.commit()
+    client.cookies.set("session", cookie)
+    client.get(f"/einsatz/{inc_id}")
+    response = client.post(f"/einsatz/{inc_id}/log", data={"_csrf": client.cookies["ec_csrf"], "text": "Bestand"})
+    assert response.status_code == 204

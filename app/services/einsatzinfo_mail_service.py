@@ -99,6 +99,7 @@ def build_einsatzinfo_mail_context(incident: Incident, org: FireDept, now_utc: d
         "datum": local_now.strftime("%d.%m.%Y"),
         "zeit": local_now.strftime("%H:%M"),
         "link": link,
+        "anmeldelink": f"{link}/anmelden" if link and incident.access_pin_hash else "",
         "leitstellennummer": incident.lis_operation_number or "",
         "einsatznummer": incident.id,
         "kartenlink": map_link,
@@ -246,6 +247,10 @@ def build_mail_view(db, incident: Incident, org: FireDept, alarm_type: AlarmType
         "alarmzeit": alarmzeit,
         "meldung": message,
         "info_link": f"{public_base}/alarm/{incident.alarm_token}" if public_base and incident.alarm_token else None,
+        "anmeldelink": (
+            f"{public_base}/alarm/{incident.alarm_token}/anmelden"
+            if public_base and incident.alarm_token and incident.access_pin_hash else None
+        ),
         "navi_link": navi_link,
         "map_image_url": (
             f"{public_base}/api/v1/teams/map/{incident.alarm_token}.png"
@@ -381,6 +386,8 @@ async def dispatch_einsatzinfo_mail(
             if incident.is_exercise:
                 subject = f"[ÜBUNG] {subject}"
             body = _render_mail_template(body_template, context)
+            if context["anmeldelink"]:
+                body += f"\n\nMit PIN anmelden: {context['anmeldelink']}"
             log_entry = MailEinsatzinfoLog(
                 org_id=org_id, incident_id=incident_id, variant=variant, alarm_type_code=incident.alarm_type_code,
                 subject=subject, body=body, recipient_count=len(recipients), success_count=0,

@@ -58,8 +58,12 @@ python -m app.cli revoke-tokens --incident-id 42
 
 Die öffentliche Einsatzinfo bietet unter **Teilnehmen** die Anmeldung mit dem eigenen Konto an.
 Bei einem aktiven Einsatz mit gesetzter Einsatz-PIN ist zusätzlich **Mit PIN und Namen anmelden** verfügbar.
-PIN und Name werden gemeinsam eingegeben; der Gast arbeitet als Bearbeiter (recorder) ausschließlich in diesem Einsatz.
-Der Anzeigename wird bei Einträgen protokolliert. Ohne Einsatz-PIN gibt es diesen Gastzugang nicht.
+PIN und Name werden gemeinsam eingegeben; der Gast erhält ausschließlich Nur-Lesen-Zugriff (readonly) auf diesen Einsatz.
+Schreiben, Notizen und Uploads sind gesperrt. Der Anzeigename wird bei der Anmeldung protokolliert. Ohne Einsatz-PIN gibt es diesen Gastzugang nicht.
+
+Teams-Karte und Einsatz-Mail bieten bei gesetzter PIN direkt **Mit PIN anmelden** an.
+SMS-Vorlagen können dafür optional `{anmeldelink}` verwenden; ohne PIN bleibt der Platzhalter leer.
+Bestehende Gast-Sessions und der QR-Druck-Zugang (recorder) bleiben unverändert.
 
 Pro IP sind fünf Anmeldeversuche in 15 Minuten erlaubt. Nach 20 falschen PIN-Eingaben für denselben Einsatz
 ist die Gast-Anmeldung für 15 Minuten gesperrt (mit Redis gemeinsam für alle Worker, sonst je Prozess).

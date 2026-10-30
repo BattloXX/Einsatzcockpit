@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Einsatzlink-Gast:** Neue PIN-/Namen-Anmeldungen verwenden einen separaten Nur-Lesen-Principal (readonly); Schreibzugriffe einschließlich Notizen, Uploads und Funkjournal sind gesperrt. Direkte PIN-Anmeldung in Teams-Karte und Einsatz-Mail, optionaler SMS-Platzhalter `{anmeldelink}`. Bestehende Gast-Sessions und QR-Druck-Zugang bleiben unverändert.
+
 - BSP-Overlay: Freie Polygon-Ausschnitte im Georef-Editor mit Touch-Griffen, Geometrieprüfung
   und MCP-Entwürfen; transparente Kartenraster und weiß maskierte, unverzerrte Druckausschnitte.
 

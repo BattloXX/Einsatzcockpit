@@ -561,12 +561,13 @@ async def api_redoc(request: Request, _=Depends(_require_system_admin)):
 
 
 class _QrUser:
-    """Wraps a User for QR-Code sessions, exposing only the recorder role."""
+    """Begrenzt QR-Sessions auf ihre Einsatzrolle (Druck: recorder, Einsatzlink-Gast: readonly)."""
 
     def __init__(self, user, recorder_role, incident_id=None):
         self._user = user
         self.qr_incident_id = incident_id
         self.roles = [recorder_role] if recorder_role else []
+        self.is_readonly_guest = bool(recorder_role and recorder_role.code == "readonly")
 
     def __getattr__(self, name):
         return getattr(self._user, name)
@@ -696,8 +697,13 @@ async def _session_mit_kontext(request: Request, call_next):
                         if not db_token or not inc or inc.status != "active" or not alarm_valid:
                             user = None  # Incident closed or token revoked → logged out
                         else:
-                            recorder = db.query(Role).filter(Role.code == "recorder").first()
-                            user = _QrUser(user, recorder, qr_incident_id)  # type: ignore[assignment]
+                            # Nur der neue Principal erhaelt readonly; alte Gast-Sessions
+                            # mit dem Druck-Principal behalten ihre recorder-Berechtigung.
+                            role_code = (
+                                "readonly" if user.username == f"alarmlink-gast@org{user.org_id}" else "recorder"
+                            )
+                            qr_role = db.query(Role).filter(Role.code == role_code).first()
+                            user = _QrUser(user, qr_role, qr_incident_id)  # type: ignore[assignment]
                     else:
                         user = None  # QR session without incident_id or lage_id → force re-login
                 elif user and is_device:
@@ -770,6 +776,20 @@ async def _session_mit_kontext(request: Request, call_next):
                     logger.exception("session_middleware: nt-Token User-Lookup fehlgeschlagen")
                 finally:
                     db.close()
+
+    # Einsatzlink-Gaeste duerfen auch ueber alte readonly-Ausnahmen (Notizen,
+    # Uploads, Funkjournal) und Routen ohne Rollen-Dependency nichts schreiben.
+    guest = request.state.user
+    if (
+        guest is not None
+        and request.state.qr_incident_id is not None
+        and guest.username == f"alarmlink-gast@org{guest.org_id}"
+        and request.method not in {"GET", "HEAD", "OPTIONS"}
+        and _path not in {"/logout", "/login"}
+        and not (_path.startswith("/alarm/") and _path.endswith("/anmelden"))
+    ):
+        reset_request_client_id(client_token)
+        return JSONResponse({"detail": "Gastzugang erlaubt nur Lesen"}, status_code=403)
 
     # Zentral fuer Passwort, SSO, Kontowechsel, PIN und Native-Link-Handoff.
     # Ein MFA-Marker gilt fuer die urspruengliche Session, nicht den Sliding-Refresh.

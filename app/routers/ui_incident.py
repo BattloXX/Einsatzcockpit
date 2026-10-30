@@ -3069,7 +3069,8 @@ def vehicle_detail(
 
     card_journal = get_card_journal(db, incident_id, "incident_vehicle", vehicle_id)
     can_edit = _board_can_edit(user, incident)
-    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(user, "is_readonly_guest", False))
     vehicle_logs = _entity_logs(db, incident_id, "vehicle", vehicle_id)
     return templates.TemplateResponse(request, "incident/_vehicle_modal.html", {
         "user": user, "incident": incident, "vehicle": vehicle,
@@ -3144,7 +3145,8 @@ def task_detail(
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(user, incident)
-    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(user, "is_readonly_guest", False))
     task_logs = _entity_logs(db, incident_id, "task", task_id)
     card_journal = get_card_journal(db, incident_id, "task", task_id)
     return templates.TemplateResponse(request, "incident/_task_modal.html", {
@@ -3167,7 +3169,8 @@ def message_detail(
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(user, incident)
-    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(user, "is_readonly_guest", False))
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     card_journal = get_card_journal(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
@@ -3201,7 +3204,8 @@ def update_message_endpoint(
     })
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     card_journal = get_card_journal(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
@@ -3240,7 +3244,8 @@ def assign_message(
     })
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     card_journal = get_card_journal(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
@@ -3263,7 +3268,8 @@ def person_detail(
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(user, incident)
-    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(user, "is_readonly_guest", False))
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     card_journal = get_card_journal(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
@@ -3322,7 +3328,8 @@ def update_person_endpoint(
     })
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     card_journal = get_card_journal(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
@@ -3400,7 +3407,8 @@ def update_task_endpoint(
     })
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     task_logs = _entity_logs(db, incident_id, "task", task_id)
     vehicle = db.get(IncidentVehicle, task.vehicle_id) if task.vehicle_id else None
     org_ids = [incident.primary_org_id] if incident.primary_org_id else []
@@ -3619,7 +3627,8 @@ async def upload_task_media(
             "column_id": task.column_id,
         })
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
     return templates.TemplateResponse(request, "incident/_task_media.html", {
         "user": request.state.user, "task": task, "incident": incident,
@@ -3653,7 +3662,8 @@ def delete_task_media(
         "column_id": task.column_id,
     })
     can_edit = _board_can_edit(user, incident)
-    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(user, "is_readonly_guest", False))
     return templates.TemplateResponse(request, "incident/_task_media.html", {
         "user": user, "task": task, "incident": incident,
         "can_edit": can_edit, "can_note": can_note, "errors": [],
@@ -3706,7 +3716,8 @@ async def upload_message_media(
             "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": msg.column_id,
         })
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
@@ -3731,7 +3742,8 @@ def delete_message_media(
     db.refresh(msg, ["media"])
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
         "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
@@ -3786,7 +3798,8 @@ async def upload_person_media(
             "column_id": person.column_id, "vehicle_uid": person.vehicle_id,
         })
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
@@ -3811,7 +3824,8 @@ def delete_person_media(
     db.refresh(person, ["media"])
     incident = _incident_or_404(incident_id, db)
     can_edit = _board_can_edit(request.state.user, incident)
-    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    can_note = (has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+                and not getattr(request.state.user, "is_readonly_guest", False))
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
         "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
@@ -4159,7 +4173,8 @@ def funkjournal_page(
         "comms": comms,
         "open_requests": open_requests,
         "can_edit": has_role(user, "incident_leader", "admin", "org_admin", "recorder"),
-        "can_note": has_role(user, "incident_leader", "admin", "org_admin", "recorder", "readonly"),
+        "can_note": (has_role(user, "incident_leader", "admin", "org_admin", "recorder", "readonly")
+                and not getattr(user, "is_readonly_guest", False)),
         "uas_einsatz_id": fj_uas_einsatz_id,
     })
 
