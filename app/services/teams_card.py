@@ -76,6 +76,12 @@ def build_incident_message_card(
             "title": "ℹ️ Einsatzinformation",
             "url": f"{base_url}/alarm/{incident.alarm_token}",
         })
+    if incident.access_pin_hash and incident.alarm_token:
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "Mit PIN anmelden",
+            "url": f"{base_url}/alarm/{incident.alarm_token}/anmelden",
+        })
     if cfg.include_gmaps_link and has_coords:
         actions.append({
             "type": "Action.OpenUrl",

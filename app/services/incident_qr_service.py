@@ -17,12 +17,23 @@ from app.models.user import Role, User, UserRole
 
 def get_or_create_qr_principal(db: Session, org_id: int) -> User:
     """Liefert den langlebigen, nicht interaktiv anmeldbaren QR-Benutzer einer Org."""
-    benutzername = f"qr-druck@org{org_id}"
+    return _get_or_create_principal(db, org_id, f"qr-druck@org{org_id}", "QR-Zugang (Druck)", "recorder")
+
+
+def get_or_create_alarmlink_gast_principal(db: Session, org_id: int) -> User:
+    """Liefert den nicht interaktiv anmeldbaren Nur-Lesen-Gast einer Org."""
+    return _get_or_create_principal(db, org_id, f"alarmlink-gast@org{org_id}", "Einsatzlink-Gast", "readonly")
+
+
+def _get_or_create_principal(
+    db: Session, org_id: int, benutzername: str, display_name: str, role_code: str,
+) -> User:
+    """Gemeinsame Anlage und Race-Behandlung fuer Druck- und Einsatzlink-Zugaenge."""
     benutzer = db.query(User).filter(User.username == benutzername).first()
     if benutzer is None:
         benutzer = User(
             username=benutzername,
-            display_name="QR-Zugang (Druck)",
+            display_name=display_name,
             org_id=org_id,
             is_device=True,
             active=True,
@@ -46,9 +57,9 @@ def get_or_create_qr_principal(db: Session, org_id: int) -> User:
             )
             if benutzer is None:
                 raise
-    rolle = db.query(Role).filter(Role.code == "recorder").first()
+    rolle = db.query(Role).filter(Role.code == role_code).first()
     if rolle is None:
-        raise RuntimeError("Rolle recorder fehlt")
+        raise RuntimeError(f"Rolle {role_code} fehlt")
     if not any(zuordnung.role_id == rolle.id for zuordnung in benutzer.user_roles):
         try:
             with db.begin_nested():

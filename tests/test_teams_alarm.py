@@ -562,3 +562,16 @@ def test_post_payload_classifies_retryability(monkeypatch, response, expected):
     import asyncio
 
     assert asyncio.run(teams_alarm_service._post_payload("https://example.test", {}, log_label="test")) == expected
+
+
+@pytest.mark.parametrize("pin,token", [(None, "abc"), ("hash", "abc"), ("hash", None)])
+def test_teams_pin_anmeldung_nur_mit_pin_und_token(pin, token):
+    incident = Incident(id=1, alarm_type_code="T1", access_pin_hash=pin, alarm_token=token)
+    cfg = TeamsAlarmConfig(include_qr_link=False, include_board_link=False)
+    card = build_incident_message_card(incident, cfg, base_url="https://example.com/")
+    actions = _adaptive_content(card).get("actions", [])
+    login_actions = [action for action in actions if action["title"] == "Mit PIN anmelden"]
+    assert len(login_actions) == int(bool(pin and token))
+    if login_actions:
+        assert login_actions[0] == {"type": "Action.OpenUrl", "title": "Mit PIN anmelden",
+                                    "url": "https://example.com/alarm/abc/anmelden"}

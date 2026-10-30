@@ -594,3 +594,43 @@ async def test_send_bulk_handles_exception():
 
     assert total == 1
     assert success == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pin,token", [(None, "sms-token"), ("hash", "sms-token"), ("hash", None)])
+async def test_dispatch_anmeldelink_nur_mit_pin_und_alarmtoken(setup_db, monkeypatch, pin, token):
+    from app.config import settings
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.incident import Incident
+    from app.models.master import OrgSettings
+    from app.services import sms_dispatch_service as svc
+
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://sms.example.test")
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        org_settings = db.query(OrgSettings).filter_by(org_id=1).first()
+        if org_settings is None:
+            org_settings = OrgSettings(org_id=1)
+            db.add(org_settings)
+        org_settings.einsatzinfo_sms_enabled = True
+        org_settings.einsatzinfo_sms_template = "Gast: {anmeldelink}"
+        incident = Incident(primary_org_id=1, alarm_type_code="T1", status="active",
+                            access_pin_hash=pin, alarm_token=token)
+        db.add(incident)
+        db.commit()
+        incident_id = incident.id
+    contexts = []
+    original = svc.render_template
+
+    def render(template, ctx):
+        contexts.append(ctx.copy())
+        return original(template, ctx)
+
+    monkeypatch.setattr(svc, "render_template", render)
+    monkeypatch.setattr(svc, "collect_einsatzinfo_recipients", lambda *_args: {})
+    await svc.dispatch_einsatzinfo(1, "T1", "Adresse", "Ort", "Meldung", None, False,
+                                  incident_id=incident_id)
+    assert len(contexts) == 1
+    expected = "https://sms.example.test/alarm/sms-token/anmelden" if pin and token else ""
+    assert contexts[0]["anmeldelink"] == expected

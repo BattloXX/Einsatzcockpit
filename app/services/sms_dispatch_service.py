@@ -82,6 +82,7 @@ def render_template(template: str, ctx: dict) -> str:
       {datum}       Datum der Alarmierung (TT.MM.JJJJ)
       {zeit}        Uhrzeit der Alarmierung (HH:MM)
       {link}        Öffentliche Einsatzinformation (No-Login-Link /alarm/{token})
+      {anmeldelink}  Gast-Anmeldung mit PIN (nur mit Einsatz-PIN und Alarm-Token)
       {leitstellennummer} Leitstellen-Einsatznummer (falls vorhanden)
     """
 
@@ -611,6 +612,14 @@ async def dispatch_einsatzinfo(
         except Exception:
             local_now = now
 
+        anmeldelink = ""
+        if incident_id is not None and allowed is not None and allowed.access_pin_hash and allowed.alarm_token:
+            from app.config import settings
+
+            anmeldelink = (
+                f"{settings.effective_public_base_url.rstrip('/')}/alarm/{allowed.alarm_token}/anmelden"
+            )
+
         # Platzhalter befuellen
         exercise_prefix = "[UEBUNG] " if is_exercise else ""
         ctx = {
@@ -622,6 +631,7 @@ async def dispatch_einsatzinfo(
             "datum": local_now.strftime("%d.%m.%Y"),
             "zeit": local_now.strftime("%H:%M"),
             "link": link or "",
+            "anmeldelink": anmeldelink,
             "leitstellennummer": leitstellennummer or "",
         }
         # .strip(): entfernt trailing Space, falls {link} leer ist (Altdaten ohne AlarmToken)

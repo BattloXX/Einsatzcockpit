@@ -60,6 +60,11 @@
         <a href="{{ v.info_link }}" style="display:block;background:{{ v.brand_color }};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 18px;border-radius:8px;text-align:center;">Einsatzinformation öffnen</a>
       </td></tr>
       {% endif %}
+      {% if v.anmeldelink %}
+      <tr><td align="center" style="padding-bottom:10px;">
+        <a href="{{ v.anmeldelink }}" style="display:block;background:{{ v.brand_color }};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 18px;border-radius:8px;text-align:center;">Mit PIN anmelden</a>
+      </td></tr>
+      {% endif %}
       {% if v.navi_link %}
       <tr><td align="center" style="padding-bottom:10px;">
         <a href="{{ v.navi_link }}" style="display:block;background:#ffffff;color:#1f2933;text-decoration:none;font-size:15px;font-weight:bold;padding:12px 18px;border-radius:8px;border:2px solid #d1d5db;text-align:center;">Navigation starten</a>
