@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Brandschutzplan-Overlay:** Die Einstellungen stehen auf der Einsatzinfo-Seite unter der Karte statt darüber und sind im Dunkelmodus lesbar gestaltet (Auswahlfeld, Schieber, Aktionsbuttons, Hinweise).
+
 - **Teams-Alarmkarte:** Gemeinsame Alarmdaten mit der Einsatz-Mail einschließlich Objekt/Gefahren, farbiges Stichwort-Badge, Übungsbanner und übersichtliche Detailfelder. Adaptive Card 1.4 in voller Breite; Navigation auch über die Adresse, Inhalts-Schalter und PIN-Anmeldung bleiben erhalten.
 
 - **Offline-Objekte:** Listen mit Suchparametern und URL-Varianten verwenden den synchronisierten Bestand. Ältere Objektcaches können auf die Einsatzansicht zurückfallen. Fehlende Seiten zeigen eine lokale Offline-Hilfe mit Direktlinks statt der Startseite oder einer technischen Fehlermeldung.
