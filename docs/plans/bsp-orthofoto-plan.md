@@ -70,7 +70,7 @@ Warum das besser ist:
 - Idempotenz: Live-Wiederholung des identischen Vorschlags beim nächsten Pilotlauf als Abnahmepunkt.
 
 ### Phase F – Doku, Regeln, Memory
-- `docs/objektkarte-ki-symbolpflege.md`, Wiki, CHANGELOG, Pflichtabschnitt in `CLAUDE.md` (Orthofoto-Quelle, Quelle `orthofoto_auto`, Attribution), Projekt-Memory.
+- `docs/konzepte/objektkarte-ki-symbolpflege.md`, Wiki, CHANGELOG, Pflichtabschnitt in `CLAUDE.md` (Orthofoto-Quelle, Quelle `orthofoto_auto`, Attribution), Projekt-Memory.
 
 ## 5. Reihenfolge und Empfehlung
 A → B → C → (D parallel als Studie) → E → F. A zuerst, weil sie ohne neue Datenquelle die Messbarkeit liefert, die der Pilot braucht. B/C bringen die eigentliche Zuverlässigkeit für Foto-Pläne.

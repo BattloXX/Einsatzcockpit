@@ -95,7 +95,7 @@ Der Begriff „aktiv“ ist hier besonders riskant: [`dispatch_aktiv_filter`](..
 - **Offline-Lesen:** [`sw.js:121`](../app/static/sw.js#L121) speichert erfolgreich geladene HTML-/Zustands-/Detailantworten; Fallback trägt `X-EC-Offline: 1`. Zusätzlich hält IndexedDB den letzten Gesamtzustand. Ohne zuvor geladenes Detail stehen nur Basisdaten zur Verfügung. Keine garantierte vollständige Offline-Karte: Kacheln/Navigation und echte Gerätelaufzeiten sind getrennt zu prüfen.
 - **Synchronisation:** WebSocket, Online-/Sichtbarkeitswechsel, Android-Resync und 30-Sekunden-Polling; Zustand nutzt ETag/304. Die UI unterscheidet serverbestätigten und lokal ausstehenden Status. Bei terminalem GK-/QR-Zugangsfehler stoppt der Versand, offene Einträge bleiben als `blockiert_zugang` kopierbar. Das ist keine Empfangsbestätigung durch die Einsatzleitung.
 
-Digitale Anforderungs-/Chat-/Quittierungsketten sind kein bedienbarer Bestandteil dieser Ansicht. Namen in `ZUGANG_AKTIONEN` allein belegen keine Endpunkte. Der [konsolidierte Gesamtplan, G4](plans/gsl-ressourcen-einheitenmodus-gesamtplan.md) streicht diese Funktionen ausdrücklich; der ältere [Einheitenmodus-Plan](plans/gsl-einheitenmodus-plan.md) enthält überholte Bestandsaussagen, etwa eine damals noch fehlende Outbox.
+Digitale Anforderungs-/Chat-/Quittierungsketten sind kein bedienbarer Bestandteil dieser Ansicht. Namen in `ZUGANG_AKTIONEN` allein belegen keine Endpunkte. Der [konsolidierte Gesamtplan, G4](../plans/gsl-ressourcen-einheitenmodus-gesamtplan.md) streicht diese Funktionen ausdrücklich; der ältere [Einheitenmodus-Plan](../plans/gsl-einheitenmodus-plan.md) enthält überholte Bestandsaussagen, etwa eine damals noch fehlende Outbox.
 
 ## 6. Zugangs- und Berechtigungsgrenzen
 

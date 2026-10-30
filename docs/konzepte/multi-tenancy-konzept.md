@@ -271,8 +271,8 @@ Reihenfolge ist abhängigkeitsgetrieben; jeder PR ist eigenständig deploybar, M
 
 ### Hinweise für die Claude-Code-Sessions
 
-- **Ein PR pro Session**, Start jeweils mit: „Lies `docs/multi-tenancy-konzept.md` Abschnitt X und implementiere PR n. Führe vor dem Commit `pytest` aus."
-- Konzeptdatei als `docs/multi-tenancy-konzept.md` ins Repo legen – Claude Code referenziert sie dann direkt.
+- **Ein PR pro Session**, Start jeweils mit: „Lies `docs/konzepte/multi-tenancy-konzept.md` Abschnitt X und implementiere PR n. Führe vor dem Commit `pytest` aus."
+- Konzeptdatei als `docs/konzepte/multi-tenancy-konzept.md` ins Repo legen – Claude Code referenziert sie dann direkt.
 - Nach PR 2 und PR 6 jeweils Migrationstest gegen Kopie der Produktiv-DB, bevor weitergebaut wird.
 - Die Isolationstest-Fixture aus PR 1 in **jedem** Folge-PR um die neuen Endpoints erweitern lassen – das explizit in jeden Prompt schreiben.
 

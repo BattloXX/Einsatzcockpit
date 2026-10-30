@@ -163,7 +163,7 @@ Objekt ("veraltet, bitte neu prüfen").
 - Erweiterung statt neuem Teilsystem: `objekt_karte_lesen`/`objekt_karte_vorschau` liefern Overlay-Liste und
   Status; **ein** neues Tool `objekt_bsp_overlay_entwurf` (anlegen/ändern als Entwurf, Klasse A; Ausschnitt in
   normierten Bildkoordinaten, Server rechnet Bounds) mit `editor_link` für den Menschen. **Kein**
-  Freigabe-Tool. Doku in `docs/objektkarte-ki-symbolpflege.md`, CLAUDE.md-Abschnitt BSP ergänzen.
+  Freigabe-Tool. Doku in `docs/konzepte/objektkarte-ki-symbolpflege.md`, CLAUDE.md-Abschnitt BSP ergänzen.
 - Tests analog `tests/test_mcp_objekt_georef.py`.
 
 ### P7 – Härtung, Doku, Rollout

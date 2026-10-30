@@ -197,7 +197,7 @@ def test_keine_status_eingabe_und_nur_ein_overlay_tool(client, georef_plan):
     assert TOOLS[TOOL].required_roles == ("objekt_verwalter",) and TOOLS[TOOL].module_check
     for text in ("nie ohne menschliche Freigabe", "expected_rotation", "pruefen=true", "editor_link", "Klasse A"):
         assert text in TOOLS[TOOL].description
-    doku = (Path(__file__).resolve().parents[1] / "docs/objektkarte-ki-symbolpflege.md").read_text()
+    doku = (Path(__file__).resolve().parents[1] / "docs/konzepte/objektkarte-ki-symbolpflege.md").read_text()
     assert "## BSP-Overlay" in doku and TOOL in doku and "BSP_GEOREF_UNGUELTIG" in doku
 
 

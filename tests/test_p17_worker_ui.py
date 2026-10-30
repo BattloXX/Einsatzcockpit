@@ -87,7 +87,7 @@ async def test_hq_without_redis_and_failure(monkeypatch):
 
 def test_weather_history_worker_limitation_documented():
     service = Path("app/services/weather_station_service.py").read_text()
-    rollout = Path("docs/multi-worker-rollout.md").read_text()
+    rollout = Path("docs/multi-worker/multi-worker-rollout.md").read_text()
     assert "Fallback gilt pro Worker" in service
     assert "Wetter-DB benötigt" in service
     assert "Wetterstationsverläufe gilt pro Worker" in rollout

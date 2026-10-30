@@ -78,4 +78,4 @@ Verklausung, Kartenlegenden, taktische Zeichen), Kompatibilitätsfelder in JSON-
 Jede verbliebene Stelle steht mit Begründung in `tests/data/icon_emoji_baseline.txt`
 (Gründe: `AUSNAHME_GRUENDE` in `scripts/icon_inventar.py`).
 
-Siehe [Plan](https://github.com/BattloXX/Einsatzcockpit/blob/main/docs/plans/icon-system-plan.md) und [Inventar](https://github.com/BattloXX/Einsatzcockpit/blob/main/docs/icon-inventar.md).
+Siehe [Plan](https://github.com/BattloXX/Einsatzcockpit/blob/main/docs/plans/icon-system-plan.md) und [Inventar](https://github.com/BattloXX/Einsatzcockpit/blob/main/docs/konzepte/icon-inventar.md).

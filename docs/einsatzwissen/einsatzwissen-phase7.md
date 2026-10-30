@@ -38,7 +38,7 @@ Bedienung, Fachmodell, Architektur, Freigaben, KI, MCP und Betrieb des gesamten 
 | Web | `ui_katplan`, Anhangsvorlagen, gemeinsame Plan-CSS, `katplan_editor.js` |
 | Viewer | `dokumentviewer.js`, `dokumentviewer.css`, Assetcache `ec-v22` |
 | MCP | `mcp/tools/einsatzwissen.py`, `mcp/server.py`, bestehende Plan-Schreibwerkzeuge und MCP-Datenaufbereitung |
-| Dokumentation | `docs/einsatzwissen.md`, dieser Bericht, README-Verweise |
+| Dokumentation | `docs/einsatzwissen/einsatzwissen.md`, dieser Bericht, README-Verweise |
 | Prüfungen | neue Phase-7-Fachtests, Scroll-/Pflege-Browsertests, MariaDB-Referenz-/Konflikttest, bestehende Regression |
 
 Die neuen Dokumentfunktionen verwenden die vorhandenen Planstatus und

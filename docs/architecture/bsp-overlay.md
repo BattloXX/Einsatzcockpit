@@ -94,7 +94,7 @@ auf die Ausschnittbox zugeschnitten. Bei Polygonen wird der Bereich außerhalb w
 
 `objekt_karte_lesen` und `objekt_karte_vorschau` liefern `bsp_overlays`. `objekt_bsp_overlay_entwurf`
 (`anlegen` / `aendern` / `status`, Trockenlauf Standard) speichert nur Entwuerfe. Freigabe, Zurueckziehen und
-Loeschen gibt es per MCP nicht. Regeln: [KI-Symbolpflege](../objektkarte-ki-symbolpflege.md).
+Loeschen gibt es per MCP nicht. Regeln: [KI-Symbolpflege](../konzepte/objektkarte-ki-symbolpflege.md).
 
 ## Bewusst nicht enthalten
 

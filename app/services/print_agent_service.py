@@ -1,6 +1,6 @@
 """Lease-basierte Zustellung von Druckaufträgen an Windows-Druckagents.
 
-Spezifikation: docs/print-agent-architektur.md. Kernidee: Die DB ist die einzige
+Spezifikation: docs/konzepte/print-agent-architektur.md. Kernidee: Die DB ist die einzige
 Wahrheit. Jede Zustandsänderung eines Agent-Jobs ist ein bedingtes Einzelzeilen-UPDATE
 (Primärschlüssel + erwarteter Zustand + Lease-Token); rowcount == 1 entscheidet. Damit
 ist der Ablauf sicher bei mehreren Cloud-Workern und mehreren Agents gleichzeitig.

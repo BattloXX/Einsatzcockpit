@@ -500,4 +500,4 @@ Klasse A, Rollen und `expected_rotation` sind weiterhin erforderlich.
 Es werden dabei keine produktiven Kartenmarker freigegeben oder veraendert.
 
 Konfiguration, Aktualisierung und Freigabe auffaelliger Importe:
-[Lokaler OSM-Gebaeudebestand](architecture/osm-gebaeude.md).
+[Lokaler OSM-Gebaeudebestand](../architecture/osm-gebaeude.md).

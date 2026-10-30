@@ -91,7 +91,7 @@ bestehenden READ-COMMITTED-Ableger bleiben unverändert.
 - Zähler für 1020/1213/1205 in `db_transactions` (Logzeile und Metrik), damit Restfälle in
   Produktion sichtbar werden, statt als 500 zu verschwinden.
 - Wiki: Abschnitt in der Administrationsdoku (Hintergrund, Schalter, Diagnose,
-  Notfall-Rücknahme). `docs/multi-worker-phase6.md` auf die neue Regel verweisen.
+  Notfall-Rücknahme). `docs/multi-worker/multi-worker-phase6.md` auf die neue Regel verweisen.
 
 ### Phase 5: Flaky Tests im selben Zug
 

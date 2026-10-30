@@ -43,7 +43,7 @@ jeder Eintrag braucht eine Begründung in `AUSNAHME_GRUENDE`. Feuerwehr-/Fachzei
 Tabler-Entsprechung und Gefahren-Piktogramme bleiben unverändert (`=fw` im Inventar).
 Flex-Container mit Icon + Text brauchen `gap`; `x-text`/`textContent` nie mit SVG.
 Details: [Icon-System-Plan](docs/plans/icon-system-plan.md) und
-[Icon-Inventar](docs/icon-inventar.md).
+[Icon-Inventar](docs/konzepte/icon-inventar.md).
 
 ## Pflicht: Third-Party-JavaScript über npm vendoren
 
@@ -156,7 +156,7 @@ npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an a
 - Keine Entfernung wegen fehlender Symbole; keine Geschossplan-Symbole als Aussensymbole.
 - Externe Geodienst-Fehler als `ExternerDienstFehler` mit Code, nie als Eingabefehler behandeln.
 - Neue Overpass-Nutzer verwenden `overpass_endpunkte.abfragen`.
-- Details: [OSM-Bestand](docs/architecture/osm-gebaeude.md), [KI-Symbolpflege](docs/objektkarte-ki-symbolpflege.md).
+- Details: [OSM-Bestand](docs/architecture/osm-gebaeude.md), [KI-Symbolpflege](docs/konzepte/objektkarte-ki-symbolpflege.md).
 
 ## Pflicht: Verwaltungsnavigation (ein Hauptpunkt, Unterseiten als Tabs)
 

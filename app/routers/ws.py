@@ -1088,7 +1088,7 @@ async def _dispatch_print_job_local(org_id: int, job_id: int, payload: dict, tim
 
 
 # ── Windows-Druckagent (Lease-Protokoll) ───────────────────────────────────────
-# Spezifikation: docs/print-agent-architektur.md. Anders als /ws/gateway wird hier nichts
+# Spezifikation: docs/konzepte/print-agent-architektur.md. Anders als /ws/gateway wird hier nichts
 # gepusht: der Agent holt sich Jobs per lease_request, die Cloud entscheidet atomar in der DB.
 # Gezielte Hinweise (job_available, cancel_job, config_sync) laufen über den Bus-Kind
 # "agent" an genau die adressierten Agents – egal, an welchem Worker deren Socket hängt.
