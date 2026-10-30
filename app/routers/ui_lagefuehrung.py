@@ -554,34 +554,14 @@ class BspEinstellung(BaseModel):
 
 
 def _bsp_liste(db: Session, incident: Incident, user: User) -> list[dict]:
-    from app.models.objekt import Objekt
-    from app.services.objekt_bsp_overlay_service import overlays_fuer_einsatz
+    from app.services.objekt_bsp_overlay_service import einsatz_overlays_json
 
     try:
         _check_edit_access(user, incident, db)
         kann_einstellen = True
     except HTTPException:
         kann_einstellen = False
-    liste = []
-    for daten in overlays_fuer_einsatz(db, incident.id):
-        objekt = db.get(Objekt, daten["objekt_id"])
-        # Dieselbe Leseschranke wie bei der geschuetzten Rasterauslieferung.
-        if not objekt or (objekt.status == "entwurf" and not has_role(user, "objekt_verwalter")):
-            continue
-        liste.append({
-            **{feld: daten[feld] for feld in (
-                "id", "name", "objekt_id", "plan_art", "geschoss", "bereich", "freigabe_nr",
-                "bounds", "standard_sichtbar", "standard_deckkraft", "sichtbarkeit", "deckkraft",
-                "effektiv_sichtbar", "effektiv_deckkraft",
-            )},
-            "objekt_name": objekt.name,
-            "freigegeben_am": daten["freigegeben_am"].strftime("%Y-%m-%dT%H:%M:%SZ")
-            if daten["freigegeben_am"] else None,
-            "raster_url": f'/objekt-medien/bsp-overlay/{daten["id"]}/raster'
-                          f'?v={daten["freigabe_nr"]}-{(daten["raster_sha256"] or "")[:8]}',
-            "kann_einstellen": kann_einstellen,
-        })
-    return liste
+    return einsatz_overlays_json(db, incident.id, user, kann_einstellen=kann_einstellen)
 
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/bsp-overlays.json")

@@ -203,7 +203,9 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
     <div class="ei-map-wrap">
       <div id="anfahrt-hinweis" class="anfahrt-hinweis" hidden></div>
       <div class="card" style="padding:0;overflow:hidden;">
+        {% if objekt_enabled %}{% include "incident/_bsp_lokal.html" %}{% endif %}
         <div id="einsatz-info-karte"
+             data-bsp-url="{% if objekt_enabled %}/einsatz/{{ incident.id }}/info/bsp-overlays.json{% endif %}"
              data-incident-id="{{ incident.id }}"
              data-lat="{% if incident.lat is not none %}{{ incident.lat }}{% endif %}"
              data-lng="{% if incident.lng is not none %}{{ incident.lng }}{% endif %}"
@@ -266,5 +268,6 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 <script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/objekt_karte.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/bsp_overlay_layer.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/einsatz_info.js?v={{ ASSET_VERSION }}"></script>
 {% endblock %}
