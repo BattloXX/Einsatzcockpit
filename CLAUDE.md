@@ -150,6 +150,8 @@ npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an a
 - Georef zuerst ohne Speichern pruefen; nur Klasse A ist speicherbar.
 - Klasse C nie automatisch speichern oder eine Hypothese waehlen; `editor_link` liefern.
 - Keine Speicherung mit veralteten OSM-Daten.
+- BSP-Overlays per MCP ausschliesslich als Entwurf; Freigabe immer menschlich im Editor.
+- Nur freigegebene Overlays mit aktueller gueltiger Georef und geprueftem Raster sind auslieferbar.
 - Vorschlaege bleiben offen bis zur menschlichen Freigabe; `objekt_karte_freigeben` nur nach ausdruecklicher Bestaetigung.
 - Keine Entfernung wegen fehlender Symbole; keine Geschossplan-Symbole als Aussensymbole.
 - Externe Geodienst-Fehler als `ExternerDienstFehler` mit Code, nie als Eingabefehler behandeln.
