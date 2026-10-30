@@ -13,6 +13,7 @@ from app.core.security import sign_artifact_token, unsign_artifact_token
 from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
     DOC_AS_PRUEFUNG,
+    DOC_BSP_OVERLAY,
     DOC_CROSS_KARTE,
     DOC_DOKUMENTPAKET,
     DOC_EINSATZINFO,
@@ -90,6 +91,8 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_einsatzinfo(db, job, base_url)
     if job.document_type == DOC_OBJEKTBLATT:
         return _render_objektblatt(db, job, base_url)
+    if job.document_type == DOC_BSP_OVERLAY:
+        return _render_bsp_overlay(db, job, base_url)
     if job.document_type == DOC_OBJEKT_DOKUMENT:
         return _render_objekt_dokument(db, job)
     if job.document_type == DOC_GSL_LAGEBLATT:
@@ -174,6 +177,49 @@ def _render_objekt_dokument(db, job: PrintJob) -> bytes:
     if not pfad.exists():
         raise ArtifactError("Einzel-PDF-Datei fehlt")
     return pfad.read_bytes()
+
+
+def _render_bsp_overlay(db, job: PrintJob, base_url: str) -> bytes:
+    """Freigegebenen Originalausschnitt drucken, mit erneuter Stand- und Org-Prüfung."""
+    import base64
+
+    from sqlalchemy.orm.exc import NoResultFound
+
+    from app.core.templating import templates
+    from app.core.timezones import format_local_datetime
+    from app.models.objekt import Objekt, ObjektBspOverlay, ObjektDokument
+    from app.services.objekt_bsp_overlay_service import (
+        original_ausschnitt_png,
+        overlay_ist_auslieferbar,
+    )
+    from app.services.objekt_karte_service import ObjektKartenFehler
+
+    try:
+        overlay_id, freigabe_nr = (int(wert) for wert in (job.artifact_ref or "").split(":"))
+    except (TypeError, ValueError):
+        raise ArtifactError("BSP-Ausschnitt ohne gültigen Overlay-/Freigabebezug") from None
+    overlay = db.get(ObjektBspOverlay, overlay_id)
+    if overlay is None or overlay.org_id != job.org_id or overlay.objekt_id != job.objekt_id:
+        raise ArtifactError("BSP-Overlay für diese Organisation/dieses Objekt nicht gefunden")
+    if overlay.freigabe_nr != freigabe_nr or not overlay_ist_auslieferbar(db, overlay):
+        raise ArtifactError("BSP-Overlay nicht mehr auslieferbar oder Freigabe inzwischen geändert")
+    objekt = db.query(Objekt).filter_by(id=overlay.objekt_id, org_id=job.org_id).first()
+    dokument = db.query(ObjektDokument).filter_by(
+        id=overlay.dokument_id, org_id=job.org_id, objekt_id=overlay.objekt_id,
+    ).first()
+    if objekt is None or dokument is None:
+        raise ArtifactError("BSP-Overlay: Objekt oder Quelldokument nicht gefunden")
+    try:
+        bild = original_ausschnitt_png(db, overlay)
+    except (ObjektKartenFehler, OSError, ValueError, NoResultFound) as exc:
+        raise ArtifactError("BSP-Overlay: Originalausschnitt nicht verfügbar") from exc
+    org = _org(db, overlay.org_id)
+    html_str = templates.env.get_template("pdf/bsp_overlay.html").render(
+        overlay=overlay, objekt=objekt, dokument=dokument,
+        freigabe_datum=format_local_datetime(overlay.freigegeben_am, org),
+        bild_datauri="data:image/png;base64," + base64.b64encode(bild).decode("ascii"),
+    )
+    return _html_to_pdf(html_str, base_url)
 
 
 def _render_gsl_lageblatt(db, job: PrintJob, base_url: str) -> bytes:

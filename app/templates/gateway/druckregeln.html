@@ -268,11 +268,15 @@
 
                   <div class="gwx-sechd">{{ icon("building", size="md") }} Objekt-Elemente (bei zugeordnetem Objekt)</div>
                   <div class="gwx-checks" x-show="['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)">
-                    {% for key, label in objekt_element_labels.items() %}
+                    {% for key, label in objekt_element_labels.items() if key != "bsp_overlay" or request.state.objekt_enabled %}
                     <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}" :disabled="!['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)"
                       {{ 'checked' if key in (r.objekt_elements or []) }}> {{ label }}</label>
                     {% endfor %}
                   </div>
+
+                  {% if request.state.objekt_enabled %}
+                  <p class="gwx-help">BSP-Ausschnitte beachten die Farbeinstellung der Regel und die Druckervorgabe. Bei S/W können farbige Planzeichen schwerer lesbar sein.</p>
+                  {% endif %}
 
                   <div class="gwx-sechd">{{ icon("printer", size="md") }} Zieldrucker</div>
                   {% if not printers %}
@@ -435,7 +439,7 @@
                                   {{ 'checked' if 'objekt_elements' in stufen_option }}> abweichend
                               </label></summary>
                               <div class="gwx-checks">
-                                {% for key, label in objekt_element_labels.items() %}
+                                {% for key, label in objekt_element_labels.items() if key != "bsp_overlay" or request.state.objekt_enabled %}
                                 <label class="gwx-check"><input type="checkbox" name="stufe_{{ s.code }}_objekt_elements" value="{{ key }}"
                                   {{ 'checked' if key in (stufen_option.get('objekt_elements') or []) }}> {{ label }}</label>
                                 {% endfor %}
@@ -479,7 +483,7 @@
                                     {{ 'checked' if 'objekt_elements' in stufen_option }}> abweichend
                                 </label></summary>
                                 <div class="gwx-checks">
-                                  {% for key, label in objekt_element_labels.items() %}
+                                  {% for key, label in objekt_element_labels.items() if key != "bsp_overlay" or request.state.objekt_enabled %}
                                   <label class="gwx-check">
                                     <input type="checkbox" name="stufe_{{ code }}_objekt_elements" value="{{ key }}"
                                       {{ 'checked' if key in (stufen_option.get('objekt_elements') or []) }}> {{ label }}

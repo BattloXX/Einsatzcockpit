@@ -3,12 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
-from io import BytesIO
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import Response
-from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.core.permissions import EINSATZ_LESE_ROLLEN, OBJEKT_VERWALTER_ROLES, require_role
@@ -190,17 +187,7 @@ def overlay_ausschnitt(overlay_id: int, request: Request, db: Session = Depends(
     if not bsp.overlay_ist_auslieferbar(db, overlay):
         raise HTTPException(404, "Ausschnitt nicht verfügbar")
     try:
-        seite = db.query(ObjektDokumentSeite).filter_by(
-            org_id=overlay.org_id, objekt_id=overlay.objekt_id,
-            dokument_id=overlay.dokument_id, seiten_nr=overlay.seite).one()
-        ausschnitt = bsp.ausschnitt_validieren(json.loads(overlay.ausschnitt_json))
-        with Image.open(bsp._pfad(seite.bild_pfad)) as original:
-            bild = original.convert("RGBA").rotate(-seite.rotation, expand=True)
-        box = (math.floor(ausschnitt["x0"] * bild.width), math.floor(ausschnitt["y0"] * bild.height),
-               math.ceil(ausschnitt["x1"] * bild.width), math.ceil(ausschnitt["y1"] * bild.height))
-        ausgabe = BytesIO()
-        bild.crop(box).save(ausgabe, format="PNG")
-        inhalt = ausgabe.getvalue()
+        inhalt = bsp.original_ausschnitt_png(db, overlay)
     except (ObjektKartenFehler, OSError, ValueError) as exc:
         raise HTTPException(404, "Ausschnitt nicht verfügbar") from exc
     etag = '"' + hashlib.sha256(inhalt).hexdigest() + '"'

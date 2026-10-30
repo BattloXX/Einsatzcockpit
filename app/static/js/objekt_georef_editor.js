@@ -74,7 +74,7 @@
     feld("bereich", "Bereich"); feld("geschoss", "Geschoss");
     feld("standard_sichtbar", "Standardmäßig sichtbar", "checkbox");
     feld("standard_deckkraft", "Standard-Deckkraft (0,1 bis 1)", "number");
-    feld("empfohlen", "Empfohlen", "checkbox"); feld("autodruck", "Automatisch drucken", "checkbox");
+    feld("empfohlen", "Empfohlen", "checkbox"); feld("autodruck", "Bei Alarm mitdrucken, wenn eine Druckregel das Element BSP-Ausschnitt enthält", "checkbox");
     feld("druck_deckkraft", "Druck-Deckkraft (0,1 bis 1)", "number");
     felder.name.maxLength = 200; felder.bereich.maxLength = 200; felder.geschoss.maxLength = 100;
     var aktionen = el("div", null, formular); aktionen.className = "bsp__aktionen";
