@@ -24,6 +24,13 @@
 .ogx__fehler { color:var(--red-light); }
 .ogx__nummer { background:var(--surface-high);color:var(--text);border:2px solid var(--red-light);border-radius:50%;text-align:center;font-weight:bold; }
 .ogx__aktionen { display:flex;flex-wrap:wrap;gap:8px; }
+/* Platz zum Hochschieben ueber das Android-Dock; Dialoge behalten ihr Layout. */
+.georef-editor-page { padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px)); }
+.georef-editor-page #georef-editor { isolation:isolate; }
+.georef-editor-page #georef-editor .ogx__aktionen {
+  position:sticky;bottom:0;z-index:1001;
+  padding:12px 0;background:var(--surface);border-top:1px solid var(--border);
+}
 @media(max-width:760px) { .ogx__layout { grid-template-columns:1fr; } .ogx__karte { height:36vh; } }
 /* Ebenen-Umschalter: leaflet.min.css verweist auf ein nicht ausgeliefertes Sprite. */
 .ogx .leaflet-control-layers-toggle,
