@@ -45,8 +45,11 @@ Weitere Filter ohne GET-Formular müssen `data-no-dirty` erhalten.
 Der Touchpunkt bestimmt den nächsten vertikal scrollbaren Vorfahren.
 `scrollTop <= 0` erlaubt PTR, sofern keine Eingaben, Karten, Editorbereiche oder
 Dialoge sperren. Touchmove und Scroll aktualisieren den nativen Zustand.
-Eine gesperrte Ziehgeste meldet einmal ihren Grund über den vorhandenen nativen
-Toast (`ECPtr.failed`). Vor dem Refresh wird die Sperre nochmals geprüft.
+Scrollpositionen blockieren still, auch bei einem direkten `refresh()`-Aufruf
+(Spinner-Ende über `ECPtr.done`). Dialoge, Karte/Editor und ungespeicherte Eingaben
+werden höchstens einmal je Geste und alle 30 Sekunden je Seite und Grund über den
+nativen Toast (`ECPtr.failed`) erklärt. Vor dem Refresh wird die Sperre nochmals geprüft;
+bei unterdrücktem Hinweis beendet `ECPtr.done` den Spinner.
 `pagehide` gibt den nativen Zustand frei.
 
 ## Android-Patch

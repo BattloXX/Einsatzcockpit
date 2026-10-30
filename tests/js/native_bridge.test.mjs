@@ -7,7 +7,7 @@ import vm from "node:vm";
 const ptrQuelle = readFileSync(new URL("../../app/static/js/native-ptr.js", import.meta.url), "utf8");
 const quelle = readFileSync(new URL("../../app/static/js/native-bridge.js", import.meta.url), "utf8");
 
-function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, fullBridge = true } = {}) {
+function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, fullBridge = true, now = () => 0 } = {}) {
   const aufrufe = { done: 0, failed: [], reload: 0, events: [], blocked: [] };
   const listener = new Map();
   const docListener = new Map();
@@ -42,6 +42,7 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, full
   };
   const kontext = {
     window, document, console,
+    Date: { now },
     navigator: { onLine: online },
     CustomEvent: class { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } },
     setTimeout, clearTimeout, setInterval() { return 1; }, clearInterval() {},
@@ -177,7 +178,7 @@ test('Naechster echter Scrollbereich entscheidet auch bei gescrollter aeusserer 
   assert.equal(u.native.ptrBlocked(ziel), true);
 });
 
-test('Touchpunkt, touchmove und scroll aktualisieren Sperre; Hinweis einmal pro Geste', () => {
+test('Touchpunkt, touchmove und scroll aktualisieren Sperre ohne Scroll-Toast', () => {
   const ziel = scrollbereich({ scrollTop: 20 });
   const u = umgebung();
   u.document.elementFromPoint = () => ziel;
@@ -185,13 +186,77 @@ test('Touchpunkt, touchmove und scroll aktualisieren Sperre; Hinweis einmal pro 
   assert.equal(u.aufrufe.blocked.at(-1), true);
   u.emit('touchmove', { touches: [{ clientY: 80 }] });
   u.emit('touchmove', { touches: [{ clientY: 90 }] });
-  assert.equal(u.aufrufe.failed.length, 1);
+  assert.equal(u.aufrufe.failed.length, 0);
   ziel.scrollTop = 0;
   u.emit('scroll', { target: u.document });
   assert.equal(u.aufrufe.blocked.at(-1), false);
   ziel.scrollTop = 5;
   u.emit('touchmove', { touches: [{ clientY: 100 }] });
   assert.equal(u.aufrufe.blocked.at(-1), true);
+  assert.equal(u.aufrufe.failed.length, 0);
+});
+
+test('Scrollsperre beendet direkten Refresh still, auch offline und im inneren Scrollbereich', async () => {
+  for (const online of [true, false]) {
+    for (const innen of [true, false]) {
+      const u = umgebung({ online, scrollY: innen ? 0 : 20 });
+      if (innen) {
+        u.emit('touchstart', { target: scrollbereich({ scrollTop: 20 }), touches: [{ clientY: 10 }] });
+      }
+      assert.equal(await u.native.refresh(), false);
+      assert.equal(u.aufrufe.done, 1);
+      assert.equal(u.aufrufe.failed.length, 0);
+      assert.equal(u.aufrufe.reload, 0);
+      assert.equal(u.aufrufe.events.length, 0);
+    }
+  }
+});
+
+test('Dialog, Karte/Editor und Eingaben: einmal je Geste, 30s Cooldown je Grund und Seite', async () => {
+  let zeit = 0;
+  const overlays = [{ offsetParent: {} }];
+  const f = feld();
+  const u = umgebung({ overlays, felder: [f], now: () => zeit });
+  const ziel = scrollbereich();
+  const start = () => u.emit('touchstart', { target: ziel, touches: [{ clientY: 10 }] });
+  const move = () => u.emit('touchmove', { touches: [{ clientY: 80 }] });
+  start();
+  move();
+  zeit = 30000;
+  move(); // Selbst nach Ablauf des Cooldowns kein zweiter Hinweis in derselben Geste.
+  assert.equal(u.aufrufe.failed.length, 1);
+  u.emit('touchend', {});
+  start();
+  move();
+  assert.equal(u.aufrufe.failed.length, 2);
+  assert.match(u.aufrufe.failed.at(-1), /Dialog/);
+  zeit = 59999;
+  start();
+  move();
+  assert.equal(u.aufrufe.failed.length, 2);
+  assert.equal(await u.native.refresh(), false);
+  assert.equal(u.aufrufe.done, 1); // Unterdrueckter Toast darf keinen Spinner zuruecklassen.
+  overlays.length = 0;
+  ziel.matches = () => true;
+  start();
+  move();
+  assert.match(u.aufrufe.failed.at(-1), /Karte, Editor/);
+  ziel.matches = () => false;
+  u.emit('input', { target: f, isTrusted: true });
+  start();
+  move();
+  assert.match(u.aufrufe.failed.at(-1), /Ungespeicherte/);
+  assert.equal(u.aufrufe.failed.length, 4);
+  start();
+  move();
+  assert.equal(await u.native.refresh(), false);
+  assert.equal(u.aufrufe.failed.length, 4);
+  zeit += 30000;
+  assert.equal(await u.native.refresh(), false);
+  assert.equal(u.aufrufe.failed.length, 5);
+  const v = umgebung({ overlays: [{ offsetParent: {} }], now: () => zeit });
+  assert.equal(await v.native.refresh(), false);
+  assert.equal(v.aufrufe.failed.length, 1); // Neue Seite hat einen eigenen Cooldown.
 });
 
 test('Eingaben verhindern auch Resync; abgelehnte Auftraege melden Fehler', async () => {

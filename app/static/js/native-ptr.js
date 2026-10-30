@@ -11,6 +11,21 @@
   const _PTR_TARGET_SELECTOR = '.leaflet-container, [data-no-ptr], .cm-editor, .ql-editor, .sortable-chosen, .sortable-ghost';
   // Blockiert, sobald eines dieser Elemente sichtbar ist (Dialog, Overlay, laufendes Ziehen)
   const _PTR_OVERLAY_SELECTOR = 'dialog[open], .modal--open, .person-flyout-backdrop, .sortable-chosen';
+  const _PTR_MESSAGES = {
+    dialog: 'Bitte zuerst den offenen Dialog schliessen.',
+    target: 'Aktualisierung in Karte, Editor oder Ziehbereich gesperrt.',
+    dirty: 'Ungespeicherte Eingaben – bitte zuerst speichern.',
+  };
+  const _lastExplanation = new Map();
+  function _explainBlocked(reason) {
+    const message = _PTR_MESSAGES[reason];
+    const now = Date.now();
+    if (!message || !window.ECPtr?.failed
+        || now - (_lastExplanation.get(reason) ?? -Infinity) < 30000) return false;
+    _lastExplanation.set(reason, now);
+    window.ECPtr.failed(message);
+    return true;
+  }
 
   function _visible(el) {
     return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length > 0)));
@@ -41,22 +56,22 @@
     try {
       const overlays = document.querySelectorAll(_PTR_OVERLAY_SELECTOR);
       for (const overlay of overlays) {
-        if (_visible(overlay)) return 'Bitte zuerst den offenen Dialog schliessen.';
+        if (_visible(overlay)) return 'dialog';
       }
       let scroller = null;
       for (let el = target; el && el !== document.documentElement; el = el.parentElement) {
-        if (el.matches && el.matches(_PTR_TARGET_SELECTOR)) return 'Aktualisierung in Karte, Editor oder Ziehbereich gesperrt.';
+        if (el.matches && el.matches(_PTR_TARGET_SELECTOR)) return 'target';
         if (!scroller && el.nodeType === 1 && el.scrollHeight > el.clientHeight
             && /^(auto|scroll|overlay)$/.test(window.getComputedStyle(el).overflowY)) scroller = el;
       }
       // Der naechste echte Scrollbereich entscheidet, auch in 100dvh-Layouts.
       const top = scroller ? scroller.scrollTop
         : Math.max(window.scrollY || 0, document.scrollingElement?.scrollTop || 0);
-      if (top > 0) return 'Zum Aktualisieren zuerst ganz nach oben scrollen.';
-      if (_formDirty()) return 'Ungespeicherte Eingaben – bitte zuerst speichern.';
+      if (top > 0) return 'scroll'; // Normales Scrollen still blockieren.
+      if (_formDirty()) return 'dirty';
       return '';
     } catch (_) {
-      return 'Aktualisierung derzeit nicht moeglich.';
+      return 'blocked';
     }
   }
 
@@ -87,7 +102,7 @@
     const reason = _blockedReason(_touchTarget);
     if (!_explained && reason && _touchY !== null && event.touches[0]?.clientY - _touchY > 60) {
       _explained = true;
-      if (window.ECPtr?.failed) window.ECPtr.failed(reason);
+      _explainBlocked(reason);
     }
   }, { passive: true, capture: true });
   document.addEventListener('touchend', () => { _touchY = null; }, { passive: true });
@@ -106,13 +121,17 @@
     const ptr = window.ECPtr;
     const done = () => { if (ptr && ptr.done) ptr.done(); };
     const failed = (msg) => { if (ptr && ptr.failed) ptr.failed(msg); };
-    if (navigator.onLine === false) {
-      failed('Keine Internetverbindung – Aktualisierung nicht möglich.');
-      return false;
-    }
     try {
       const reason = _blockedReason(_touchTarget);
-      if (reason) { failed(reason); return false; }
+      if (reason) {
+        // Auch ohne Toast muss die native Seite ihren Spinner beenden.
+        if (!_explainBlocked(reason)) done();
+        return false;
+      }
+      if (navigator.onLine === false) {
+        failed('Keine Internetverbindung – Aktualisierung nicht möglich.');
+        return false;
+      }
       const detail = { source: 'pull', handled: false, promises: [] };
       window.dispatchEvent(new CustomEvent('ec:resync', { detail }));
       if (detail.handled) {
@@ -127,7 +146,7 @@
         return true;
       }
       if (_formDirty()) {
-        failed('Ungespeicherte Eingaben – bitte zuerst speichern.');
+        if (!_explainBlocked('dirty')) done();
         return false;
       }
       done();
