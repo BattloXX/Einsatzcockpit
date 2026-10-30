@@ -155,24 +155,25 @@ def _absolute_url(path: str | None) -> str | None:
     return f"{base}/{path.lstrip('/')}"
 
 
-def build_mail_view(db, incident: Incident, org: FireDept, alarm_type: AlarmType | None,
-                    org_settings: OrgSettings | None, subject: str, hinweis: str | None) -> dict:
-    """Baut den View-Kontext fuer die strukturierte Einsatzinfo-Mail."""
+def build_mail_view(db, incident: Incident, org: FireDept | None, alarm_type: AlarmType | None,
+                    org_settings: OrgSettings | None, subject: str, hinweis: str | None,
+                    *, base_url: str | None = None) -> dict:
+    """Gemeinsame Alarmdaten für Mail und Teams; ohne DB nur Incident-Felder."""
     from sqlalchemy.orm import selectinload
 
     from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, Objekt, ObjektEinsatz
 
-    if org_settings is None:
+    if org_settings is None and db is not None and org is not None:
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org.id).first()
     address = _incident_address(incident)
     street = " ".join(filter(None, [
         (incident.address_street or "").strip(), (incident.address_no or "").strip(),
     ]))
-    base = settings.effective_public_base_url.rstrip("/")
+    base = (base_url if base_url is not None else settings.effective_public_base_url).rstrip("/")
     public_base = base if base.startswith(("https://", "http://")) else None
     message = (incident.report_text or incident.reason or "").strip()
     alarmzeit = format_local_datetime(incident.started_at or incident.created_at, org)
-    category = (getattr(alarm_type, "category", "") or "").upper()
+    category = (getattr(alarm_type, "category", "") or (incident.alarm_type_code or "")[:1]).upper()
     category_color = {"F": "#c8102e", "T": "#1d4ed8"}.get(category, "#4b5563")
     code = incident.alarm_type_code or ""
     label = (getattr(alarm_type, "label", "") or "").strip()
@@ -193,11 +194,12 @@ def build_mail_view(db, incident: Incident, org: FireDept, alarm_type: AlarmType
         .options(selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren))
         .filter(
             ObjektEinsatz.incident_id == incident.id,
+            ObjektEinsatz.org_id == incident.primary_org_id,
             ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
         )
         .order_by(ObjektEinsatz.erstellt_am)
         .first()
-    )
+    ) if db is not None and incident.id is not None else None
     if objekt_link and objekt_link.objekt:
         objekt = objekt_link.objekt
         objekt_name = (objekt.name or "").strip()
@@ -228,9 +230,9 @@ def build_mail_view(db, incident: Incident, org: FireDept, alarm_type: AlarmType
     return {
         "subject": subject,
         "preheader": preheader,
-        "org_name": org.name,
+        "org_name": org.name if org else "",
         "logo_url": _absolute_url(
-            getattr(org_settings, "logo_path", None) or org.logo_path
+            getattr(org_settings, "logo_path", None) or (org.logo_path if org else None)
         ),
         "brand_color": (
             org_settings.primary_color
