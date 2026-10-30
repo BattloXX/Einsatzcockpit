@@ -32,6 +32,10 @@ RGBA-PNG (Langseite max. 2048 px, ausserhalb des Ausschnitts transparent). Ablag
 - Lageführung: `GET /einsatz/{id}/lagefuehrung/bsp-overlays.json` und
   `POST .../bsp-overlays/{overlay_id}/einstellung` (nur Bearbeitungsrecht; Event-Log, WebSocket
   `lagefuehrung.bsp.changed`). Nur bestaetigt zugeordnete Objekte.
+- Objekt-Einsatzansicht `/objekte/{id}/einsatz`: Die per HTMX eingebettete Readonly-Karte
+  (`objekt/_karte_readonly.html`) zeigt die Ebene lesend mit lokalem Schalter ueber
+  `GET /objekte/{id}/bsp-overlays.json` (nur Overlays dieses Objekts, nur auslieferbar, Objekt-Vorgabe
+  statt Einsatz-Einstellung). Die bearbeitbare Objektkarte bleibt unveraendert.
 - Einsatz-Info, GSL-Karte und Einheitenansicht: lesend mit lokalem Schalter (localStorage). QR- und
   Token-Zugaenge erhalten kein Overlay.
 - Leaflet-Modul `app/static/js/bsp_overlay_layer.js`: eigene Pane `bsp` (zIndex 250), nicht interaktiv,

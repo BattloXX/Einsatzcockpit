@@ -141,7 +141,7 @@ test('spaete Listen-Antwort kann entfernte Overlays nicht wiederherstellen', asy
 test('BSP-Raster und Listen umgehen den Service-Worker-Offlinecache', () => {
   const sw = readFileSync(new URL('../../app/static/sw.js', import.meta.url), 'utf8');
   for (const path of ['/objekt-medien/bsp-overlay/1/raster?v=2-sha', '/einsatz/1/lagefuehrung/bsp-overlays.json',
-    '/einsatz/1/info/bsp-overlays.json', '/lage/1/bsp-overlays.json', '/einheit/bsp-overlays.json?einheit=1']) {
+    '/einsatz/1/info/bsp-overlays.json', '/lage/1/bsp-overlays.json', '/einheit/bsp-overlays.json?einheit=1', '/objekte/1/bsp-overlays.json']) {
     const listeners = new Map();
     vm.runInNewContext(sw, {self: {addEventListener: (name, fn) => listeners.set(name, fn)},
       URL, location: {origin: 'https://ecp.test'}, caches: {open() {assert.fail('Kein Offlinecache');}}});
@@ -150,7 +150,7 @@ test('BSP-Raster und Listen umgehen den Service-Worker-Offlinecache', () => {
   }
 });
 
-for (const listUrl of ['/einsatz/1/info/bsp-overlays.json', '/lage/1/bsp-overlays.json', '/einheit/bsp-overlays.json?einheit=1']) {
+for (const listUrl of ['/einsatz/1/info/bsp-overlays.json', '/lage/1/bsp-overlays.json', '/einheit/bsp-overlays.json?einheit=1', '/objekte/1/bsp-overlays.json']) {
   test('nur lokale BSP-Bedienung persistiert ohne POST: ' + listUrl, async () => {
     const f = fixture({nurLokal: true, kann: false, listUrl}); await flush();
     f.el('lft-layer-bsp').checked = false; f.event('lft-layer-bsp', 'change');

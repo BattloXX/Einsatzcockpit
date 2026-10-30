@@ -303,13 +303,31 @@ def overlays_fuer_einsatz(db: Session, incident_id: int, *, einsatzvorgabe: bool
             ).first()
             sichtbarkeit = einstellung.sichtbarkeit if einstellung and einsatzvorgabe else "INHERIT"
             deckkraft = einstellung.deckkraft if einstellung and einsatzvorgabe else None
-            ergebnis.append({
-                **_daten(overlay), "bounds": json.loads(overlay.raster_bounds_json or "[]"),
-                "sichtbarkeit": sichtbarkeit, "deckkraft": deckkraft,
-                "effektiv_sichtbar": sichtbarkeit == "ON" or (sichtbarkeit == "INHERIT" and overlay.standard_sichtbar),
-                "effektiv_deckkraft": deckkraft if deckkraft is not None else overlay.standard_deckkraft,
-            })
+            ergebnis.append(_anzeige_daten(overlay, sichtbarkeit, deckkraft))
     return ergebnis
+
+
+def _anzeige_daten(
+    overlay: ObjektBspOverlay, sichtbarkeit: str = "INHERIT", deckkraft: float | None = None,
+) -> dict:
+    return {
+        **_daten(overlay), "bounds": json.loads(overlay.raster_bounds_json or "[]"),
+        "sichtbarkeit": sichtbarkeit, "deckkraft": deckkraft,
+        "effektiv_sichtbar": sichtbarkeit == "ON" or (sichtbarkeit == "INHERIT" and overlay.standard_sichtbar),
+        "effektiv_deckkraft": deckkraft if deckkraft is not None else overlay.standard_deckkraft,
+    }
+
+
+def objekt_overlays_json(db: Session, objekt: Objekt, user: User) -> list[dict]:
+    """Auslieferbare Objekt-Ebenen ohne einsatzbezogene Einstellungen."""
+    daten = [
+        _anzeige_daten(overlay)
+        for overlay in db.query(ObjektBspOverlay).filter_by(
+            objekt_id=objekt.id, org_id=objekt.org_id
+        ).order_by(ObjektBspOverlay.id).all()
+        if overlay_ist_auslieferbar(db, overlay)
+    ]
+    return _overlays_json(db, daten, user)
 
 
 def einsatz_overlays_json(
@@ -317,8 +335,17 @@ def einsatz_overlays_json(
     einsatzvorgabe: bool = True,
 ) -> list[dict]:
     """Gemeinsame, lesende Serialisierung fuer geschuetzte Einsatzkarten."""
+    return _overlays_json(
+        db, overlays_fuer_einsatz(db, incident_id, einsatzvorgabe=einsatzvorgabe), user,
+        kann_einstellen=kann_einstellen,
+    )
+
+
+def _overlays_json(
+    db: Session, overlays: list[dict], user: User, *, kann_einstellen: bool = False,
+) -> list[dict]:
     liste = []
-    for daten in overlays_fuer_einsatz(db, incident_id, einsatzvorgabe=einsatzvorgabe):
+    for daten in overlays:
         objekt = db.get(Objekt, daten["objekt_id"])
         # Dieselbe Leseschranke wie bei der geschuetzten Rasterauslieferung.
         if not objekt or (objekt.status == "entwurf" and not has_role(user, "objekt_verwalter")):
