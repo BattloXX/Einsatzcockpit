@@ -241,10 +241,16 @@ def test_org_einsatz_aendert_fahrzeug_tracking_nicht(client, setup_db):
     ("statuses", "own_status", "expected_phase", "expected_source"),
     [
         ([], None, "alarmiert", "org"),
+        (["Alarmiert", "Alarmiert"], None, "alarmiert", "org"),
+        (["Einsatzbereit", "Alarmiert"], None, "alarmiert", "org"),
         (["Einsatz übernommen"], None, "anfahrt", "org"),
+        (["Alarmiert", "Einsatz übernommen", "Einsatzbereit"], None, "anfahrt", "org"),
         (["Einsatzbereit", "Am Einsatzort"], None, "einsatzstelle", "org"),
+        (["Einsatz übernommen", "Am Einsatzort"], None, "einsatzstelle", "org"),
         (["Einsatzbereit", "Einsatzbereit"], None, "abschluss", "org"),
         (["Am Einsatzort"], "Einsatz übernommen", "anfahrt", "vehicle"),
+        (["Am Einsatzort"], "Alarmiert", "alarmiert", "vehicle"),
+        (["Alarmiert"], "Einsatzbereit", "abschluss", "vehicle"),
     ],
 )
 def test_phasenmatrix(client, setup_db, statuses, own_status, expected_phase, expected_source):

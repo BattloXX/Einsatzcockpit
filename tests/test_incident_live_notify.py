@@ -1,5 +1,5 @@
 """Tests fuer WebSocket-Fan-out und persistente Live-Push-Drosselung."""
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -32,7 +32,7 @@ def live_db(monkeypatch):
     db.flush()
     db.add(IncidentVehicle(
         incident_id=incident.id, column_id=1, vehicle_master_id=1,
-        unit_status="Einsatz uebernommen",
+        unit_status="Einsatz übernommen",
     ))
     db.commit()
     yield db, incident
@@ -54,6 +54,43 @@ def test_same_phase_and_minimum_interval_are_suppressed(live_db, monkeypatch):
     db.commit()
     _dispatch_live_push(incident.id, 1, "unit_status")
     assert len(calls) == 1
+
+
+def test_phase_zero_push_and_transition(live_db, monkeypatch):
+    db, incident = live_db
+    vehicle = db.query(IncidentVehicle).filter_by(incident_id=incident.id).one()
+    vehicle.unit_status = "Alarmiert"
+    db.commit()
+    extras = []
+    monkeypatch.setattr(
+        push_service, "notify_org_web",
+        lambda *a, **kw: extras.append(kw["extra"]) or 1,
+    )
+
+    _dispatch_live_push(incident.id, 1, "unit_status")
+    db.refresh(incident)
+    assert incident.live_push_phase == 0
+    assert extras[0]["live"]["phase_index"] == 0
+    assert extras[0]["live"]["phase_label"] == "Alarmiert"
+
+    # Gleiche Phase bleibt auch nach Ablauf der Zeitsperre unterdrueckt.
+    incident.live_push_at -= timedelta(seconds=91)
+    db.commit()
+    _dispatch_live_push(incident.id, 1, "unit_status")
+    assert len(extras) == 1
+
+    vehicle.unit_status = "Einsatz übernommen"
+    db.commit()
+    _dispatch_live_push(incident.id, 1, "unit_status")
+    assert [extra["live"]["phase_index"] for extra in extras] == [0, 1]
+
+    # Auch die Rueckkehr zu Phase 0 wird als Phasenwechsel erkannt.
+    db.refresh(incident)
+    incident.live_push_at -= timedelta(seconds=91)
+    vehicle.unit_status = "Alarmiert"
+    db.commit()
+    _dispatch_live_push(incident.id, 1, "unit_status")
+    assert [extra["live"]["phase_index"] for extra in extras] == [0, 1, 0]
 
 
 def test_closed_always_pushes_with_same_tag(live_db, monkeypatch):

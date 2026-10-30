@@ -61,7 +61,9 @@ def _derive_phase(db: Session, incident: Incident, device_token) -> tuple[int, s
         return 3, "org"
     if any(status == "Am Einsatzort" for status in statuses):
         return 2, "org"
-    return 1, "org"
+    if any(status == "Einsatz übernommen" for status in statuses):
+        return 1, "org"
+    return 0, "org"
 
 
 def _active_incidents_q(db: Session, user):
