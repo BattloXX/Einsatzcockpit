@@ -38,3 +38,9 @@ def test_next_kann_kein_script_ausbrechen(client):
     r = client.get("/login?next=/x</script><script>alert(1)</script>", headers=HTML)
     assert r.status_code == 200
     assert "</script><script>alert(1)" not in r.text
+
+
+def test_login_laedt_native_ptr_vor_native_bridge(client):
+    """native-bridge.js liest beim Laden window.ECPullToRefresh (sonst TypeError)."""
+    html = client.get("/login", headers=HTML).text
+    assert html.index("native-ptr.js") < html.index("native-bridge.js")

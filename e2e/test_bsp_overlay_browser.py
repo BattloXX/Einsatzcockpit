@@ -190,14 +190,13 @@ def bsp_sessions(bsp_browser, bsp_server):
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on("console", lambda message: errors.append(message.text + " " + str(message.location)) if message.type == "error" else None)
         page = context.new_page()
+        capture(page)
         page.goto(bsp_server["base"] + "/login")
         page.locator("#username").fill(username)
         page.locator("#password").fill("BspBrowser123!")
         page.get_by_role("button", name="Anmelden", exact=True).click()
         page.wait_for_url(lambda url: urlsplit(url).path != "/login")
-        # Geprueft werden die BSP-Ansichten ab erfolgreichem Login, inkl. Druck-Popups.
-        # Separater Bestandsbefund: login.html:12 laedt native-bridge vor native-ptr.
-        capture(page)
+        # Geprueft wird ab der Login-Seite, inkl. Druck-Popups.
         context.on("page", capture)
         return page
 
