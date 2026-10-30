@@ -1262,3 +1262,58 @@ class KontaktAenderungsvorschlag(TenantScoped, Base):
     geprueft_von_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class ObjektBspOverlay(TenantScoped, Base):
+    """Gepruefter Planausschnitt bzw. gemeinsame Einsatz-Einstellung."""
+
+    __tablename__ = "objekt_bsp_overlay"
+    __table_args__ = (Index("ix_bsp_overlay_org_objekt", "org_id", "objekt_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    objekt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"))
+    dokument_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt_dokument.id", ondelete="CASCADE"))
+    seite: Mapped[int] = mapped_column(Integer)
+    georef_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_dokument_georef.id", ondelete="SET NULL")
+    )
+    georef_revision: Mapped[int | None] = mapped_column(Integer)
+    dokument_hash: Mapped[str | None] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(200))
+    plan_art: Mapped[str] = mapped_column(String(30), default="lageplan", server_default="lageplan")
+    bereich: Mapped[str | None] = mapped_column(String(200))
+    geschoss: Mapped[str | None] = mapped_column(String(100))
+    ausschnitt_json: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="entwurf", server_default="entwurf")
+    freigabe_nr: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    freigegeben_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    freigegeben_am: Mapped[datetime | None] = mapped_column(DateTime)
+    erstellt_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+    aktualisiert_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+    standard_sichtbar: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    standard_deckkraft: Mapped[float] = mapped_column(Float, default=0.6, server_default="0.6")
+    empfohlen: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    autodruck: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    druck_deckkraft: Mapped[float] = mapped_column(Float, default=0.6, server_default="0.6")
+    raster_pfad: Mapped[str | None] = mapped_column(String(500))
+    raster_sha256: Mapped[str | None] = mapped_column(String(64))
+    raster_bounds_json: Mapped[str | None] = mapped_column(Text)
+    raster_breite: Mapped[int | None] = mapped_column(Integer)
+    raster_hoehe: Mapped[int | None] = mapped_column(Integer)
+    quelle_text: Mapped[str | None] = mapped_column(Text)
+
+
+class BspOverlayEinsatz(TenantScoped, Base):
+    """Gepruefter Planausschnitt bzw. gemeinsame Einsatz-Einstellung."""
+
+    __tablename__ = "bsp_overlay_einsatz"
+    __table_args__ = (UniqueConstraint("incident_id", "overlay_id", name="uq_bsp_overlay_einsatz"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"))
+    overlay_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt_bsp_overlay.id", ondelete="CASCADE"))
+    sichtbarkeit: Mapped[str] = mapped_column(String(10), default="INHERIT", server_default="INHERIT")
+    deckkraft: Mapped[float | None] = mapped_column(Float)
+    geaendert_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    geaendert_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))

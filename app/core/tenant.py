@@ -200,6 +200,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "objekt_dokument",
     "objekt_dokument_seite",
     "objekt_karten_objekt",
+    "objekt_bsp_overlay",
+    "bsp_overlay_einsatz",
     "objekt_karten_vorschlag",
     "objekt_einsatz",
     "alarm_infoscreen_token",

@@ -167,6 +167,7 @@ from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.nachschlagewerk import RettungsdatenblattCache, RettungskartenKatalog
 from app.models.objekt import (
     AlarmInfoscreenToken,
+    BspOverlayEinsatz,
     GefahrenKatalog,
     InfoscreenUrl,
     KontaktAenderungsvorschlag,
@@ -174,6 +175,7 @@ from app.models.objekt import (
     Objekt,
     ObjektAuswahl,
     ObjektBMA,
+    ObjektBspOverlay,
     ObjektChange,
     ObjektDokument,
     ObjektDokumentSeite,
@@ -468,6 +470,8 @@ __all__ = [
     "ObjektDokument",
     "ObjektDokumentSeite",
     "ObjektKartenObjekt",
+    "ObjektBspOverlay",
+    "BspOverlayEinsatz",
     "ObjektKartenVorschlag",
     "ObjektEinsatz",
     "ObjektSymbol",
