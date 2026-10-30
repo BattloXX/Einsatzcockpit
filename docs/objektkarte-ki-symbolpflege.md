@@ -212,6 +212,52 @@ uebernommenen Punkte. Nur bestandene Paarpruefung und Status `gueltig` ergeben
 Klasse A. Analyseaufrufe schreiben nichts. Klasse C speichert auch bei
 `speichern=true` nichts; `editor_link` fuer die neue Seite an den Menschen geben.
 
+## BSP-Overlay
+
+`objekt_karte_lesen` und `objekt_karte_vorschau` liefern rein lesend `bsp_overlays`:
+ID, Name, Status, Planart, Geschoss, Bereich, Dokument/Seite, Freigabenummer,
+gespeicherte Georef-ID/-Revision, Ausschnitt, Auslieferbarkeit und `editor_link`
+zum BSP-Bereich des Georef-Editors. Nicht auslieferbare Eintraege nennen
+`auslieferbar_grund`; `raster_bounds` gibt es nur bei auslieferbaren Overlays.
+Einsatz-Leserollen duerfen diese Liste lesen. Lesen aendert weder Status noch Audit.
+
+`objekt_bsp_overlay_entwurf` ist ausschliesslich fuer `objekt_verwalter` und
+berechtigte Admin-Rollen sichtbar und erlaubt. Es hat genau drei Aktionen:
+
+- `anlegen`: `objekt_id`, `dokument_id`, `seite`, `name`, optional `plan_art`
+  (`lageplan`, `hallenbereich`, `gefahrenzone`, `geschoss`, `sonstig`), `bereich`,
+  `geschoss` und `ausschnitt` angeben.
+- `aendern`: `objekt_id`, `overlay_id` und die zu aendernden Felder angeben.
+  Dokument und Seite bleiben fest. Auch ein zuvor freigegebenes Overlay wird
+  wieder `entwurf`; sein Raster wird invalidiert.
+- `status`: `objekt_id` und `overlay_id` lesen, ohne Schreibwirkung.
+
+Vor anlegen/aendern die Seite mit `objekt_dokument_seite_ansehen` ansehen und deren
+`rotation` als `expected_rotation` senden. `ausschnitt={"art": "seite"}` meint die
+ganze Seite (Standard). Ein Rechteck verwendet
+`{"art": "rechteck", "x0": 0.1, "y0": 0.2, "x1": 0.8, "y1": 0.9}`:
+normierte Werte 0..1 auf der **gedrehten Gesamtseite**, Ursprung oben links,
+x0 < x1 und y0 < y1, Mindestbreite/-hoehe 0.001. Keine Weltkoordinaten liefern.
+
+`pruefen=true` ist der Standard: Trockenlauf mit Rollback, ohne Overlay, Rasterdatei
+oder Aenderungsaudit zu speichern. Mit denselben geprueften Eingaben und
+`pruefen=false` wird ausschliesslich ein Entwurf (Klasse A) gespeichert.
+IDs eines Trockenlaufs sind nicht dauerhaft gueltig. `vorschau` enthaelt serverseitig
+aus der aktuell gueltigen, gespeicherten Georef berechnete Bounds, Rastergroesse
+und die dafuer verwendete Georef-ID/-Revision. Dies erzeugt kein Raster.
+`qualitaet` nennt RMSE, Punktzahl, Modell und `freigabe_warnungen` (etwa
+`wenige_punkte`, `nur_freie_klicks`). Die gespeicherte Rasterbindung im
+Overlay-Eintrag kann bis zur Rastererzeugung fehlen oder einen Altstand nennen.
+
+Ohne aktuelle gueltige Georef und freigegebenes aktuelles Dokument liefert das
+Tool `gespeichert=false`, Klasse C und `code="BSP_GEOREF_UNGUELTIG"`.
+`objekt_karte_georef_zuordnen` oder `objekt_karte_georef_uebernehmen` nutzen;
+keine Koordinaten raten. Bei Klasse C den `editor_link` an den Menschen geben.
+Auch Klasse A ist keine Freigabe: Overlays erscheinen nie ohne menschliche
+Pruefung/Freigabe im Einsatz. Es gibt per MCP keine Overlay-Freigabe, kein
+Zurueckziehen und kein Loeschen. Nur freigegeben plus aktuelle gueltige Georef,
+passender Dokumentstand und gueltiges Raster ergeben `auslieferbar=true`.
+
 ## Richtung und Wiederholung
 
 Fuer Pfeile und Zugaenge `bild_richtung={"dx": 1, "dy": 0}` zusammen mit `georef_id`

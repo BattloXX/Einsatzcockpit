@@ -1,14 +1,52 @@
 """MCP-Workflow fuer Lagekarten: lesen, georeferenzieren, vorschlagen und freigeben."""
 
 import asyncio
+import json
 
 from app.core.permissions import EINSATZ_LESE_ROLLEN
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.mcp.tools.objekt import objekt_modul_aktiv
-from app.models.objekt import OBJEKT_SYMBOL_TYPEN, Objekt
+from app.models.objekt import OBJEKT_SYMBOL_TYPEN, Objekt, ObjektBspOverlay, ObjektDokumentSeite
 from app.services.objekt_karte_service import _karten_objekt_dict, karten_objekte_lesen, symbolkatalog_lesen
 from app.services.objekt_symbol_service import lade_symbol_katalog
+
+
+def _bsp_overlay_dict(context: MCPContext, overlay: ObjektBspOverlay) -> dict:
+    from app.config import settings
+    from app.services import objekt_bsp_overlay_service as bsp
+
+    auslieferbar = bsp.overlay_ist_auslieferbar(context.db, overlay)
+    seite = context.db.query(ObjektDokumentSeite).filter_by(
+        org_id=context.org_id, objekt_id=overlay.objekt_id,
+        dokument_id=overlay.dokument_id, seiten_nr=overlay.seite,
+    ).first()
+    daten = {feld: getattr(overlay, feld) for feld in (
+        "id", "name", "status", "plan_art", "geschoss", "bereich", "dokument_id", "seite",
+        "freigabe_nr", "georef_id", "georef_revision",
+    )}
+    daten.update({
+        "auslieferbar": auslieferbar,
+        "ausschnitt": json.loads(overlay.ausschnitt_json),
+        "editor_link": (
+            f"{settings.effective_public_base_url.rstrip('/')}/objekte/{overlay.objekt_id}"
+            f"/dokumente/seite/{seite.id}/georef#bsp-overlay"
+        ) if seite else None,
+    })
+    if auslieferbar:
+        daten["raster_bounds"] = json.loads(overlay.raster_bounds_json or "[]")
+    else:
+        daten["auslieferbar_grund"] = (
+            "Menschliche Freigabe erforderlich" if overlay.status != "freigegeben"
+            else "Georeferenz, Dokumentstand oder Raster nicht mehr aktuell bzw. gueltig"
+        )
+    return daten
+
+
+def _bsp_overlays(context: MCPContext, objekt: Objekt) -> list[dict]:
+    return [_bsp_overlay_dict(context, overlay) for overlay in context.db.query(ObjektBspOverlay).filter_by(
+        objekt_id=objekt.id, org_id=context.org_id,
+    ).order_by(ObjektBspOverlay.id).all()]
 
 
 @register_tool(
@@ -44,6 +82,7 @@ async def objekt_karte_lesen(context: MCPContext, objekt_id: int, arbeitskopie: 
     return {
         "objekt": {"id": objekt.id, "name": objekt.name, "lat": objekt.lat, "lng": objekt.lng},
         "marker": marker,
+        "bsp_overlays": _bsp_overlays(context, objekt),
         "anzahl_marker": len(marker),
         "basis_objekt_id": basis_objekt_id,
         "hat_arbeitskopie": kopie is not None,
@@ -417,6 +456,115 @@ async def objekt_karte_georef_uebernehmen(
 
 
 @register_tool(
+    name="objekt_bsp_overlay_entwurf",
+    description=(
+        "BSP-Overlay als Entwurf anlegen, aendern oder status lesen (overlay_id fuer aendern/status). "
+        "Nur Objektverwaltung; pruefen=true ist standardmaessig ein Trockenlauf mit Rollback. "
+        "Seite vorher mit objekt_dokument_seite_ansehen ansehen und expected_rotation angeben. "
+        "ausschnitt: {art: seite} oder {art: rechteck, x0,y0,x1,y1}, normiert 0..1 auf der "
+        "gedrehten Seite. Gueltige gespeicherte Georef erforderlich; Server berechnet Vorschau-Bounds. "
+        "Keine Koordinaten erfinden oder liefern. Nur Klasse A wird als entwurf gespeichert. "
+        "editor_link zur menschlichen Pruefung/Freigabe weitergeben. "
+        "Overlays erscheinen nie ohne menschliche Freigabe im Einsatz. Keine Freigabe per MCP."
+    ),
+    required_roles=("objekt_verwalter",),
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_bsp_overlay_entwurf(
+    context: MCPContext, objekt_id: int, aktion: str, dokument_id: int | None = None,
+    seite: int | None = None, overlay_id: int | None = None, name: str | None = None,
+    plan_art: str | None = None, bereich: str | None = None, geschoss: str | None = None,
+    ausschnitt: dict | None = None, expected_rotation: int | None = None, pruefen: bool = True,
+) -> dict:
+    from app.config import settings
+    from app.core.permissions import has_role
+    from app.mcp.context import MCPPermissionError
+    from app.services import objekt_bsp_overlay_service as bsp
+    from app.services import objekt_georef_service as geo
+    from app.services.objekt_karte_service import ObjektKartenFehler
+    from app.services.objekt_karte_vorschlag_service import produktives_objekt
+
+    if context.org_id != context.user.org_id or not has_role(context.user, "objekt_verwalter"):
+        raise MCPPermissionError("Objektverwaltung erforderlich")
+    if aktion not in {"anlegen", "aendern", "status"}:
+        raise ValueError("Nur anlegen, aendern oder status erlaubt; Freigabe ausschliesslich durch Menschen im Editor")
+    db = context.db
+    try:
+        objekt = produktives_objekt(db, context.org_id, objekt_id)
+        overlay = None
+        if aktion != "anlegen":
+            overlay = db.query(ObjektBspOverlay).filter_by(
+                id=overlay_id, objekt_id=objekt.id, org_id=context.org_id,
+            ).first()
+            if overlay is None:
+                raise ObjektKartenFehler("Overlay nicht gefunden", 404)
+            if ((dokument_id is not None and dokument_id != overlay.dokument_id)
+                    or (seite is not None and seite != overlay.seite)):
+                raise ValueError("Dokument und Seite eines Overlays sind unveraenderlich")
+            dokument_id, seite = overlay.dokument_id, overlay.seite
+        elif overlay_id is not None or dokument_id is None or seite is None:
+            raise ValueError("anlegen benoetigt dokument_id und seite ohne overlay_id")
+        assert dokument_id is not None and seite is not None
+        s = geo._seite(db, objekt, dokument_id, seite)
+        if aktion != "status" and (type(expected_rotation) is not int or expected_rotation != s.rotation):
+            raise ObjektKartenFehler(
+                "Dokumentseite wurde inzwischen gedreht oder expected_rotation fehlt; Seite neu ansehen"
+            )
+        kandidat = overlay if overlay is not None else ObjektBspOverlay(
+            objekt_id=objekt.id, org_id=context.org_id, dokument_id=dokument_id, seite=seite,
+        )
+        try:
+            _, g = bsp._stand(db, kandidat)
+        except ObjektKartenFehler:
+            return {
+                "gespeichert": False, "klasse": "C", "code": "BSP_GEOREF_UNGUELTIG",
+                "fehler": "Aktuelles freigegebenes Dokument mit gueltiger Georeferenz erforderlich",
+                "hinweis": "objekt_karte_georef_zuordnen oder objekt_karte_georef_uebernehmen nutzen",
+                "editor_link": (
+                    f"{settings.effective_public_base_url.rstrip('/')}"
+                    f"/objekte/{objekt.id}/dokumente/seite/{s.id}/georef#bsp-overlay"
+                ),
+                "overlay": _bsp_overlay_dict(context, overlay) if overlay is not None else None,
+            }
+        daten = {k: v for k, v in {
+            "name": name, "plan_art": plan_art, "bereich": bereich, "geschoss": geschoss,
+            "ausschnitt": ausschnitt,
+        }.items() if v is not None}
+        if aktion == "status" and daten:
+            raise ValueError("status erlaubt keine Aenderungen")
+        crop = bsp.ausschnitt_validieren(ausschnitt if ausschnitt is not None else (
+            json.loads(overlay.ausschnitt_json) if overlay else {"art": "seite"}
+        ))
+        _, groesse, bounds = bsp._raster_rechnung(json.loads(g.parameter_json or "{}"), crop, *geo._bildgroesse(s))
+        if aktion == "anlegen":
+            overlay = bsp.entwurf_anlegen(db, objekt.id, dokument_id, seite, daten, context.user.id)
+        elif aktion == "aendern":
+            assert overlay is not None
+            overlay = bsp.entwurf_aendern(db, overlay, daten, context.user.id)
+        assert overlay is not None
+        overlay_daten = _bsp_overlay_dict(context, overlay)
+        antwort = {
+            "overlay": overlay_daten, "klasse": "A",
+            "gespeichert": aktion != "status" and not pruefen,
+            "vorschau": {"bounds": bounds, "raster_groesse": list(groesse), "georef_id": g.id,
+                         "georef_revision": g.revision},
+            "qualitaet": {"rmse_m": g.rmse_m, "punktzahl": len(json.loads(g.referenzpunkte_json)),
+                          "modell": g.modell, "freigabe_warnungen": bsp.freigabe_warnungen(db, overlay)},
+            "editor_link": overlay_daten["editor_link"],
+            "hinweis": "Vorschau aus gueltiger Georef; menschliche Pruefung und Freigabe im Editor erforderlich",
+        }
+        if aktion != "status":
+            if pruefen:
+                db.rollback()
+            else:
+                db.commit()
+        return antwort
+    except Exception:
+        db.rollback()
+        raise
+
+
+@register_tool(
     name="objekt_karte_vorschau",
     description=("Liest Marker und Vorschlaege getrennt mit Warnungen, Dubletten und Prueflink. "
                  "Nach Vorschlagserstellung den ui_link zur menschlichen Pruefung weitergeben. Keine Schreibwirkung."),
@@ -431,6 +579,7 @@ async def objekt_karte_vorschau(context: MCPContext, objekt_id: int,
 
     objekt = produktives_objekt(context.db, context.org_id, objekt_id)
     return {"marker": (await objekt_karte_lesen(context, objekt_id))["marker"],
+            "bsp_overlays": _bsp_overlays(context, objekt),
             "vorschlaege": review_liste(context.db, objekt, status_filter),
             "pruefung": pruefe_karte(context.db, objekt),
             "ui_link": f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}/karte"}

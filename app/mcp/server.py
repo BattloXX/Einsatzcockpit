@@ -2423,6 +2423,20 @@ async def objekt_karte_georef_uebernehmen(
     )
 
 
+@server.tool(name="objekt_bsp_overlay_entwurf", description=TOOLS["objekt_bsp_overlay_entwurf"].description)
+async def objekt_bsp_overlay_entwurf(
+    objekt_id: int, aktion: str, dokument_id: int | None = None, seite: int | None = None,
+    overlay_id: int | None = None, name: str | None = None, plan_art: str | None = None,
+    bereich: str | None = None, geschoss: str | None = None, ausschnitt: dict | None = None,
+    expected_rotation: int | None = None, pruefen: bool = True, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_bsp_overlay_entwurf", objekt_id=objekt_id, aktion=aktion, dokument_id=dokument_id,
+        seite=seite, overlay_id=overlay_id, name=name, plan_art=plan_art, bereich=bereich,
+        geschoss=geschoss, ausschnitt=ausschnitt, expected_rotation=expected_rotation, pruefen=pruefen,
+    )
+
+
 @server.tool(name="objekt_karte_vorschau", description=TOOLS["objekt_karte_vorschau"].description)
 async def objekt_karte_vorschau(
     objekt_id: int, status_filter: str | None = None, ctx: Context | None = None,
