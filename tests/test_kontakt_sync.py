@@ -236,3 +236,21 @@ def test_bma_import_emits_contact_and_mapping_delta(client):
         item["entity"] == "zuordnung" and item["operation"] == "upsert" and item["id"] == zuordnung_id
         for item in delta["changes"]
     )
+
+
+def test_delta_normalisiert_alte_delete_operation_zu_tombstone(client):
+    from app.models.kontakt import KontaktSyncAenderung
+
+    _, org_id, raw_token = _setup_device_sync_user()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.add(KontaktSyncAenderung(org_id=org_id, entitaet="zuordnung", entitaet_id=7, operation="delete"))
+        db.commit()
+    finally:
+        db.close()
+    headers = {"Authorization": f"Bearer {raw_token}"}
+
+    delta = client.get("/api/v1/device/kontakte/sync?cursor=0", headers=headers).json()
+
+    assert [(c["entity"], c["operation"]) for c in delta["changes"]] == [("zuordnung", "tombstone")]

@@ -487,7 +487,7 @@ def kontakt_zuordnung_entfernen(
     name = zuordnung.zentraler_kontakt.anzeigename if zuordnung.zentraler_kontakt else str(zuordnung.kontakt_id)
     from app.services.kontakt_sync_service import record_change
 
-    record_change(db, objekt.org_id, "zuordnung", zuordnung.id, "delete", {})
+    record_change(db, objekt.org_id, "zuordnung", zuordnung.id, "tombstone")
     write_objekt_change(
         db, objekt.id, objekt.org_id, "kontakte", "kontakt_entfernt", name, None, user_id, quelle
     )

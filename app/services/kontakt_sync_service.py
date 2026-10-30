@@ -117,7 +117,8 @@ def delta(db: Session, org_id: int, cursor: int, limit: int) -> dict[str, Any]:
                 "cursor": change.id,
                 "entity": change.entitaet,
                 "id": change.entitaet_id,
-                "operation": change.operation,
+                # Altzeilen der Objektpflege tragen "delete"; der Vertrag kennt nur "tombstone"
+                "operation": "tombstone" if change.operation == "delete" else change.operation,
                 "payload": payload,
             }
         )
