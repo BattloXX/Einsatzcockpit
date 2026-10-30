@@ -126,11 +126,52 @@ Die deklarative Integration verwendet `data-dv-document`, `data-dv-kind`,
 `data-dv-original`. `data-dv-group` grenzt eine Dokumentfolge ab. Dies funktioniert
 auch nach HTMX-Aktualisierungen über einen einzigen delegierten Click-Handler.
 
-Die Objektverwaltung kann diese Schnittstelle später an ihre vorhandenen
-Dokument-/Seiten- und Bearbeitungsfunktionen anbinden. Ihr bisheriger eigener
-Objektviewer wird in Phase 2 nicht umgebaut. Bestehende Medienaufrufe im Board
+Die Original-Dateien-Liste der Objektverwaltung öffnet ihre Dateien als gemeinsame
+Dokumentfolge mit dem Dateinamen als Titel. „Neue Datei ansehen“ in der Pflegeprüfung
+und der PDF-Button im Objekt-Seitenviewer verwenden ebenfalls den zentralen Viewer.
+Der PDF-Button ermittelt die aktuelle Seiten-ID beim Alpine-Klick; die gerasterte
+Objektansicht mit Suche, Rotation und Bearbeitung bleibt bestehen. Viewer-JS und CSS
+werden bereits über `base.html` geladen. Objekt-URLs erfüllen die Same-Origin-Prüfung
+von `localUrl`; Änderungen am PDF.js-Rendering sind dafür nicht nötig.
+Bestehende Medienaufrufe im Board
 verwenden bereits über die kompatiblen Adapter dieselbe PDF-/Bildkomponente;
 neue Board- oder Einsatzübernahmeabläufe wurden nicht ergänzt.
+
+### Downloads in der Android-App
+
+Original-Dateien haben zusätzlich einen sichtbaren Download-Link; die Dokumentliste
+bietet einen Sammel-PDF-Download. Die Seiten-PDF lässt sich im zentralen Viewer über
+„Download“ speichern. Original-, Seiten- und Sammel-PDF liefern bei `?download=1`
+`Content-Disposition: attachment`, sonst weiterhin `inline`.
+
+`native-bridge.js` fängt ausschließlich in Capacitor Klicks auf `a[download]` und
+`a[data-dv-download]` zusammen mit bestehenden `target="_blank"`-Links ab und öffnet
+sie über `Browser.open`. Auch absolute Same-Origin-URLs (wie `a.href` und die
+Viewer-Download-URL) erhalten nun einen Handoff. Fremde Origins erhalten kein Token.
+Der bestehende Endpunkt `/api/v1/device/native-link` bewahrt die Query einschließlich
+`download=1`; nur `pathname + search` wird übergeben. Das Token bleibt exakt
+pfadgebunden und 120 Sekunden gültig; Query-Parameter gehören wie bisher nicht zur
+Signatur. Es gibt keine zusätzliche Pfad-Allowlist; Modul-, Rollen- und Tenantprüfungen
+gelten weiterhin für den authentifizierten Dateiaufruf. Der Handoff setzt kein
+allgemeines Session-Cookie im Custom Tab.
+
+Der Service Worker umgeht für explizite Downloads und `nt`-Handoffs seinen Cache;
+die bestehende Offline-Behandlung normaler Objektmedien bleibt erhalten.
+Automatisierte Tests prüfen Attachment/Inline, Viewer-Einstiege, Touch-Klick und
+PDF.js-Darstellung, Query-Erhalt, Handoff ohne Cookies, Pfadbindung sowie die native
+Bridge und den Cache-Bypass. Die tatsächliche Übergabe eines Attachments vom Custom
+Tab an den Android-Download-Manager muss auf einem Gerät geprüft werden; ein
+JavaScript-Mock oder Desktop-Chromium kann diesen Betriebssystemablauf nicht belegen.
+
+Gezielte Prüfbefehle für diese Ergänzung:
+
+```sh
+.venv/bin/python -m pytest tests/test_objekt_dokument_download.py
+.venv/bin/python -m pytest tests/test_native_link.py
+.venv/bin/python -m pytest tests/test_sw_static_cache_busting.py
+node --test tests/js/native_bridge.test.mjs
+node --test tests/js/sw_download.test.mjs
+```
 
 ## Sicherheit, Kompatibilität und Prüfung
 

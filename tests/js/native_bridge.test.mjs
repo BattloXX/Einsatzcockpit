@@ -7,7 +7,7 @@ import vm from "node:vm";
 const ptrQuelle = readFileSync(new URL("../../app/static/js/native-ptr.js", import.meta.url), "utf8");
 const quelle = readFileSync(new URL("../../app/static/js/native-bridge.js", import.meta.url), "utf8");
 
-function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, fullBridge = true, now = () => 0 } = {}) {
+function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, fullBridge = true, now = () => 0, fetchMock } = {}) {
   const aufrufe = { done: 0, failed: [], reload: 0, events: [], blocked: [] };
   const listener = new Map();
   const docListener = new Map();
@@ -19,7 +19,7 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, full
       failed(msg) { aufrufe.failed.push(msg); },
       setBlocked(value) { aufrufe.blocked.push(value); },
     },
-    location: { reload() { aufrufe.reload += 1; } },
+    location: { href: 'https://ecp.test/objekte/1', origin: 'https://ecp.test', reload() { aufrufe.reload += 1; } },
     addEventListener(name, fn) { listener.set(name, [...(listener.get(name) || []), fn]); },
     dispatchEvent(event) {
       aufrufe.events.push(event);
@@ -41,7 +41,7 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, full
     body: {},
   };
   const kontext = {
-    window, document, console,
+    window, document, console, URL, fetch: fetchMock,
     Date: { now },
     navigator: { onLine: online },
     CustomEvent: class { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } },
@@ -53,7 +53,7 @@ function umgebung({ online = true, felder = [], overlays = [], scrollY = 0, full
   vm.runInNewContext(ptrQuelle, kontext);
   if (fullBridge) vm.runInNewContext(quelle, kontext);
   return { window, document, aufrufe, native: window.ELNative, listener,
-    emit(type, event) { (docListener.get(type) || []).forEach(fn => fn(event)); },
+    emit(type, event) { return Promise.all((docListener.get(type) || []).map(fn => fn(event))); },
   };
 }
 
@@ -300,4 +300,66 @@ test('Refresh prueft aktuelle Sperre erneut und wartet auf den Resync-Auftrag', 
   finish();
   assert.equal(await pending, true);
   assert.equal(v.aufrufe.done, 1);
+});
+
+function downloadKlick(href, attribute) {
+  const link = { href };
+  return {
+    defaultPrevented: false,
+    preventDefault() { this.defaultPrevented = true; },
+    target: { closest(selector) {
+      return selector.split(', ').includes(`a[${attribute}]`) ? link : null;
+    } },
+  };
+}
+
+test('Native Downloads: download, Viewer-Link und neuer Tab nutzen genau einen Handoff mit Query', async () => {
+  for (const attribute of ['download', 'data-dv-download', 'target="_blank"']) {
+    const requests = [], opened = [];
+    const path = '/objekt-medien/seite/7/pdf?download=1';
+    const tokenUrl = 'https://ecp.test' + path + '&nt=test-token';
+    const u = umgebung({ fetchMock: async (url, options) => {
+      requests.push([url, JSON.parse(options.body).path]);
+      return { ok: true, json: async () => ({ url: tokenUrl }) };
+    } });
+    u.window.Capacitor = { isNativePlatform: () => true, Plugins: {
+      Browser: { open: async ({ url }) => { opened.push(url); } },
+    } };
+    const event = downloadKlick('https://ecp.test' + path, attribute);
+    await u.emit('click', event);
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(requests, [['/api/v1/device/native-link', path]]);
+    assert.deepEqual(opened, [tokenUrl]);
+  }
+});
+
+test('Web-Downloads bleiben beim Browser; fremde Origins erhalten kein Handoff-Token', async () => {
+  const opened = [], requests = [];
+  const u = umgebung({ fetchMock: async (url) => { requests.push(url); return { ok: false }; } });
+  const event = downloadKlick('https://ecp.test/datei?download=1', 'download');
+  await u.emit('click', event);
+  assert.equal(event.defaultPrevented, false);
+  u.window.Capacitor = { isNativePlatform: () => true, Plugins: {
+    Browser: { open: async ({ url }) => { opened.push(url); } },
+  } };
+  const external = downloadKlick('https://other.test/datei?download=1', 'download');
+  await u.emit('click', external);
+  assert.equal(external.defaultPrevented, true);
+  assert.deepEqual(opened, ['https://other.test/datei?download=1']);
+  assert.deepEqual(requests, []);
+});
+
+test('openUrl authentifiziert auch relative Objekt-URLs mit Filter und Download-Query', async () => {
+  const requests = [], opened = [];
+  const path = '/objekte/1/dokumente/sammel-pdf?nur_einsatzdruck=1&download=1';
+  const u = umgebung({ fetchMock: async (_url, options) => {
+    requests.push(JSON.parse(options.body).path);
+    return { ok: true, json: async () => ({ url: 'https://ecp.test' + path + '&nt=token' }) };
+  } });
+  u.window.Capacitor = { isNativePlatform: () => true, Plugins: {
+    Browser: { open: async ({ url }) => { opened.push(url); } },
+  } };
+  await u.native.openUrl(path + '#page=2');
+  assert.deepEqual(requests, [path]);
+  assert.deepEqual(opened, ['https://ecp.test' + path + '&nt=token#page=2']);
 });

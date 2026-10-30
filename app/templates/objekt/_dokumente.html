@@ -11,6 +11,7 @@
       </form>
       {% endif %}
       {% if gesamt > 0 %}
+      <a href="/objekte/{{ objekt.id }}/dokumente/sammel-pdf?download=1" download class="btn btn--ghost btn--xs">Sammel-PDF herunterladen</a>
       <button type="button" class="btn btn--ghost btn--xs"
               onclick="ecpgPrint({document_type:'objekt_sammel', objekt_id:{{ objekt.id }}, artifact_ref:'einsatzdruck', title:'Einsatzdruck-Mappe', localUrl:'/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1'})">{{ icon("file-text", size="xs") }} "Bei Einsatz drucken"-Mappe</button>
       {% endif %}
@@ -357,10 +358,10 @@
     <summary class="text-muted" style="cursor:pointer;">Original-Dateien ({{ dokumente|length }})</summary>
     <table class="table-admin" style="margin-top:8px;">
       <thead><tr><th>Datei</th><th>Seiten</th><th>Status</th><th>Hochgeladen</th><th></th></tr></thead>
-      <tbody>
+      <tbody data-dv-group>
         {% for d in dokumente %}
         <tr>
-          <td><a href="/objekt-medien/dokument/{{ d.id }}/original" target="_blank">{{ d.dateiname_original }}</a></td>
+          <td><a href="/objekt-medien/dokument/{{ d.id }}/original" data-dv-document data-dv-kind="pdf" data-dv-title="{{ d.dateiname_original }}">{{ d.dateiname_original }}</a></td>
           <td>{{ d.seitenzahl }}</td>
           <td>
             {% if d.status == 'fertig' %}<span class="badge-pill badge-pill--green">fertig</span>
@@ -369,6 +370,7 @@
           </td>
           <td>{{ d.hochgeladen_am|local_datetime }}</td>
           <td>
+            <a href="/objekt-medien/dokument/{{ d.id }}/original?download=1" download class="btn btn--ghost btn--xs">Download</a>
             {% if ist_verwalter %}
             {% if d.status == 'fehler' %}{% include "objekt/_dokument_erneut.html" %}{% endif %}
             <form hx-post="/objekte/{{ objekt.id }}/dokumente/{{ d.id }}/loeschen"

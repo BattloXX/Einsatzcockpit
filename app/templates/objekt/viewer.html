@@ -146,7 +146,9 @@
       <button type="button" class="btn btn--ghost btn--xs" @click="dreheRechts()" title="90° nach rechts drehen" aria-label="90° nach rechts drehen">{{ icon("refresh", size="xs") }}</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoomOut()" aria-label="Verkleinern">{{ icon("minus", size="xs") }}</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoomIn()">+ Zoom</button>
-      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" target="_blank" class="btn btn--ghost btn--xs">{{ icon("file-text", size="xs") }} PDF</a>
+      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'"
+         @click.prevent="openDocumentViewer([{url: '/objekt-medien/seite/' + seiten[idx] + '/pdf', kind: 'pdf', title: infos[idx] || ('Seite ' + nummern[idx])}], 0)"
+         class="btn btn--ghost btn--xs">{{ icon("file-text", size="xs") }} PDF</a>
     </div>
   </div>
 
