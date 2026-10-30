@@ -21,6 +21,7 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.gateway import (
+    DOC_BSP_OVERLAY,
     DOC_DOKUMENTPAKET,
     DOC_OBJEKT_DOKUMENT,
     DOCUMENT_TYPE_LABELS,
@@ -532,7 +533,7 @@ def gateway_druckregeln(
             document_type: DOCUMENT_TYPE_LABELS.get(document_type, document_type)
             for document_type in sorted(set().union(*TRIGGER_DOCUMENT_TYPES.values()))
             # Objekt-Dokumentseiten laufen über die Objekt-Inhalte, nicht als eigene Spalte.
-            if document_type != DOC_OBJEKT_DOKUMENT
+            if document_type not in {DOC_OBJEKT_DOKUMENT, DOC_BSP_OVERLAY}
         },
         "trigger_labels": TRIGGER_LABELS,
         "matrix": matrix,
@@ -1095,6 +1096,8 @@ def rule_save(
             stufen_dokumente = list(rule.documents)
             dokument_abweichend = False
             for dokument in erlaubte_dokumente:
+                if dokument in {DOC_OBJEKT_DOKUMENT, DOC_BSP_OVERLAY}:
+                    continue  # Objekt-Inhalte werden ausschließlich als Elemente gewählt.
                 wert = str(form.get(f"stufe_{code}_doc_{dokument}", "")).strip()
                 if wert == "ja" and dokument not in stufen_dokumente:
                     stufen_dokumente.append(dokument)

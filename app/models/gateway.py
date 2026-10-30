@@ -67,6 +67,7 @@ DOC_GSL_LAGEBLATT = "gsl_lageblatt"
 DOC_ALARM_ROHTEXT = "alarm_rohtext"
 DOC_OBJEKTBLATT = "objektblatt"
 DOC_OBJEKT_DOKUMENT = "objekt_dokument"
+DOC_BSP_OVERLAY = "bsp_overlay"
 DOC_AS_PRUEFUNG = "as_pruefung"          # Atemschutzgeräteprüfung (artifact_ref = kommagetrennte IDs)
 DOC_TROOP_PROTOKOLL = "troop_protokoll"  # Atemschutztrupp (incident_id + artifact_ref = troop_id)
 DOC_TEILNAHME = "teilnahme"              # Teilnehmerliste (artifact_ref = "<bezug_typ>:<bezug_id>[:<sort>]")
@@ -103,6 +104,7 @@ DOCUMENT_TYPE_LABELS = {
     DOC_ALARM_ROHTEXT: "Alarm-Rohtext",
     DOC_OBJEKTBLATT: "Objektblatt",
     DOC_OBJEKT_DOKUMENT: "Objekt-Dokument",
+    DOC_BSP_OVERLAY: "BSP-Ausschnitt",
     DOC_AS_PRUEFUNG: "Atemschutzprüfung",
     DOC_TROOP_PROTOKOLL: "Atemschutz-Protokoll",
     DOC_TEILNAHME: "Teilnehmerliste",
@@ -193,6 +195,7 @@ TRIGGER_LABELS = {
 # renderbar bzw. über einen dedizierten Trigger mit Kontext versorgt (verleih_schein via
 # TRIGGER_VERLEIH_CREATED). Die übrigen DOCUMENT_TYPE_LABELS (teilnahme, uas, …) brauchen
 # eine artifact_ref und laufen nur über den manuellen/lokalen Druck – daher NICHT im Regel-Editor.
+# objekt_dokument und bsp_overlay werden stattdessen als Objekt-Elemente gewählt.
 RULE_DOCUMENT_LABELS = {
     DOC_EINSATZINFO: DOCUMENT_TYPE_LABELS[DOC_EINSATZINFO],
     DOC_GSL_LAGEBLATT: DOCUMENT_TYPE_LABELS[DOC_GSL_LAGEBLATT],
@@ -206,9 +209,11 @@ RULE_DOCUMENT_LABELS = {
 }
 
 TRIGGER_DOCUMENT_TYPES = {
-    TRIGGER_EINSATZ_CREATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT}),
-    TRIGGER_EINSATZ_CREATED_GSL: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT, DOC_SITE_KARTE}),
-    TRIGGER_EINSATZ_UPDATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT}),
+    TRIGGER_EINSATZ_CREATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT, DOC_BSP_OVERLAY}),
+    TRIGGER_EINSATZ_CREATED_GSL: frozenset({
+        DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT, DOC_BSP_OVERLAY, DOC_SITE_KARTE,
+    }),
+    TRIGGER_EINSATZ_UPDATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT, DOC_BSP_OVERLAY}),
     TRIGGER_GSL_CREATED: frozenset({DOC_GSL_LAGEBLATT, DOC_GSL_BERICHT}),
     TRIGGER_GSL_LAGE_UPDATED: frozenset({DOC_GSL_LAGEBLATT, DOC_GSL_BERICHT}),
     TRIGGER_ALARM_SERIAL: frozenset({DOC_ALARM_ROHTEXT}),
@@ -219,11 +224,10 @@ TRIGGER_DOCUMENT_TYPES = {
 }
 
 # Objekt-Elemente, die eine Druckregel bei zugeordnetem Objekt mitdrucken kann.
-# Schlüssel bilden echte, im Dispatcher auflösbare Objekt-Dokumentseiten ab
-# (ObjektDokumentSeite): "bei_einsatz_drucken" = alle so markierten Seiten, alle
-# übrigen Schlüssel = ObjektDokumentSeite.dokumentart (siehe DOKUMENTARTEN in
-# app/models/objekt.py). So druckt eine Regel bei zugeordnetem Objekt genau diese Seiten.
+# "bei_einsatz_drucken" = markierte ObjektDokumentSeite-Seiten,
+# "bsp_overlay" = freigegebene BSP-Ausschnitte; übrige Schlüssel = dokumentart.
 OBJEKT_ELEMENT_LABELS = {
+    "bsp_overlay": "BSP-Ausschnitt (freigegeben)",
     "bei_einsatz_drucken": "Seiten „bei Einsatz drucken\"",
     "brandschutzplan": "Brandschutzplan",
     "lageplan": "Lageplan",

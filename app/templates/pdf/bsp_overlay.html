@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>{{ overlay.name }} - BSP-Overlay</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    body { font-family: sans-serif; font-size: 10pt; margin: 0; }
+    h1 { font-size: 17pt; margin: 0 0 3mm; }
+    p { margin: 0 0 2mm; }
+    .ausschnitt { display: block; max-width: 185mm; max-height: 180mm; margin: 3mm auto 0; }
+  </style>
+</head>
+<body>
+  <h1>{{ overlay.name }}</h1>
+  <p><strong>BSP-Overlay</strong> | Objekt: {{ objekt.nummer }} - {{ objekt.name }}</p>
+  <p>Planart: {{ overlay.plan_art }} | Geschoss: {{ overlay.geschoss or '-' }} | Bereich: {{ overlay.bereich or '-' }}</p>
+  <p>Quelle: {{ dokument.dateiname_original }} | Seite {{ overlay.seite }} | Version {{ dokument.versionsnummer }}</p>
+  <p>Freigabe-Nr. {{ overlay.freigabe_nr }} | Freigabe-Datum: {{ freigabe_datum }}</p>
+  <img class="ausschnitt" src="{{ bild_datauri }}" alt="BSP-Ausschnitt">
+</body>
+</html>

@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from app.models.objekt import (
     ObjektBspOverlay,
     ObjektDokument,
     ObjektDokumentGeoref,
+    ObjektDokumentSeite,
     ObjektEinsatz,
 )
 from app.models.user import User
@@ -308,3 +310,19 @@ def overlays_fuer_einsatz(db: Session, incident_id: int) -> list[dict]:
                 "effektiv_deckkraft": deckkraft if deckkraft is not None else overlay.standard_deckkraft,
             })
     return ergebnis
+
+
+def original_ausschnitt_png(db: Session, overlay: ObjektBspOverlay) -> bytes:
+    """Unverzerrter Ausschnitt der gedrehten Originalseite für beide Druckwege."""
+    _overlay(db, overlay)
+    seite = db.query(ObjektDokumentSeite).filter_by(
+        org_id=overlay.org_id, objekt_id=overlay.objekt_id,
+        dokument_id=overlay.dokument_id, seiten_nr=overlay.seite).one()
+    ausschnitt = ausschnitt_validieren(json.loads(overlay.ausschnitt_json))
+    with Image.open(_pfad(seite.bild_pfad)) as original:
+        bild = original.convert("RGBA").rotate(-seite.rotation, expand=True)
+    box = (math.floor(ausschnitt["x0"] * bild.width), math.floor(ausschnitt["y0"] * bild.height),
+           math.ceil(ausschnitt["x1"] * bild.width), math.ceil(ausschnitt["y1"] * bild.height))
+    ausgabe = BytesIO()
+    bild.crop(box).save(ausgabe, format="PNG")
+    return ausgabe.getvalue()
