@@ -17,6 +17,12 @@
   @page { size: {{ fmt }}; margin: 10mm; }
   body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #111; }
 
+  .bsp-metadaten { font-size:8pt; margin:3px 0; }
+  .bsp-hinweis { border:2px solid #b91c1c; padding:8px; }
+  .bsp-seite { break-inside:avoid; font-size:9pt; }
+  .bsp-seite h1 { font-size:14pt; }
+  .neue-seite { page-break-before:always; break-before:page; }
+  .bsp-ausschnitt { width:100%; height:{{ map_h - 15 }}mm; object-fit:contain; }
   .no-print {}
   @media print { .no-print { display: none !important; } }
 
@@ -86,6 +92,15 @@
 <div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
 {% endif %}
 
+{% if bsp_modus == "BSP_EXCERPT_ONLY" and not bsp_overlays %}
+<h1>Brandschutzplan - Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</h1>
+{% endif %}
+{% for name in bsp_fehlend %}
+<p class="bsp-hinweis">BSP-Overlay nicht verfügbar (veraltet oder zurückgezogen): {{ name }}</p>
+{% endfor %}
+<p class="bsp-metadaten" id="bsp-druck-status">BSP-Overlay wird gedruckt: {{ "ja" if bsp_overlays else "nein" }}</p>
+{% if bsp_modus != "BSP_EXCERPT_ONLY" %}
+<section id="druck-karte">
 <div class="karte-kopf">
   <div>
     <div class="kk-titel">Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} · {{ incident.alarm_type_code }}{% if incident.reason %} – {{ incident.reason }}{% endif %}</div>
@@ -98,6 +113,12 @@
   <div class="kk-sub">Beginn: {{ incident.started_at|local_datetime }}</div>
 </div>
 
+{% if bsp_modus == "MAP_WITH_BSP" %}
+{% for o in bsp_overlays %}
+<p class="bsp-metadaten" data-bsp-nachweis>BSP-Overlay: {{ o.name }}, {{ o.plan_art }}{% if o.geschoss %}/{{ o.geschoss }}{% endif %}, Freigabe-Nr. {{ o.freigabe_nr }} vom {{ o.freigegeben_am|local_datetime }}, Quelle {{ o.quelle }} · Objekt {{ o.objekt_name }}</p>
+{% endfor %}
+{% endif %}
+<div id="bsp-ladefehler" class="bsp-hinweis" hidden></div>
 <div id="karte-map"></div>
 
 <div id="karte-legende" class="karte-legende"></div>
@@ -105,16 +126,41 @@
 <div class="karte-footer">
   <div class="fc">{{ fmt_name }}</div>
   <div class="fc fc--right">
-    <div id="print-ts" style="font-weight:700;">–</div>
+    <div id="print-ts" style="font-weight:700;">Stand: {{ druck_stand|local_datetime }}</div>
   </div>
 </div>
+</section>
+{% endif %}
+{% if bsp_modus in ["BSP_EXCERPT_ONLY", "MAP_AND_BSP_SEPARATE"] %}
+{% for o in bsp_overlays %}
+<section class="bsp-seite{% if bsp_modus == 'MAP_AND_BSP_SEPARATE' or not loop.first %} neue-seite{% endif %}">
+  <h1>Brandschutzplan - {{ o.name }}</h1>
+  <p>Objekt: {{ o.objekt_name }} · Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</p>
+  <p>{{ o.plan_art }}{% if o.geschoss %}/{{ o.geschoss }}{% endif %}{% if o.bereich %} · {{ o.bereich }}{% endif %}</p>
+  <p>Quelle {{ o.quelle }}</p>
+  <p>Freigabe-Nr. {{ o.freigabe_nr }} vom {{ o.freigegeben_am|local_datetime }}</p>
+  <img class="bsp-ausschnitt" src="{{ o.ausschnitt_url }}" alt="Plan-Ausschnitt {{ o.name }}">
+</section>
+{% endfor %}
+{% endif %}
 </div>{# /print-content #}
 
 <script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/icons.js"></script>
+<script src="/static/js/bsp_overlay_layer.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/map-config.js"></script>
 <script>
+document.querySelectorAll(".bsp-ausschnitt").forEach(function (img) {
+  img.addEventListener("error", function () {
+    document.getElementById("bsp-druck-status").textContent = "BSP-Overlay wird gedruckt: nein";
+    var p = document.createElement("p");
+    p.className = "bsp-hinweis";
+    p.textContent = "BSP-Overlay nicht verfügbar (veraltet oder zurückgezogen): " + img.alt;
+    img.replaceWith(p);
+  });
+});
 (function () {
+  if (!document.getElementById("karte-map")) { return; }
   var apiBase = "{{ api_base }}";
   var layers = {{ active_layers_json | safe }};
   var hasLayer = {};
@@ -152,6 +198,21 @@
   var usedZeichen = {}; // key -> true
 
   var fetches = [];
+  var bspLayers = [];
+  function bspFehler(name) {
+    bspLayers.forEach(function (layer) { map.removeLayer(layer); });
+    document.getElementById("bsp-druck-status").textContent = "BSP-Overlay wird gedruckt: nein";
+    document.querySelectorAll("[data-bsp-nachweis]").forEach(function (el) { el.hidden = true; });
+    var el = document.getElementById("bsp-ladefehler");
+    el.hidden = false;
+    el.textContent = "BSP-Overlay nicht verfügbar (veraltet oder zurückgezogen): " + name;
+  }
+  ({{ bsp_map|tojson }}).forEach(function (o) {
+    var layer = window.EcpBspOverlay.bildLayer(map, o, {{ bsp_deckkraft }});
+    bspLayers.push(layer);
+    layer.on("error", function () { bspFehler(o.name); });
+    layer.addTo(map);
+  });
 
   if (hasLayer.einsatzort) {
     {% if incident.lat is not none and incident.lng is not none %}
@@ -301,23 +362,7 @@
   setTimeout(fitView, 200);
   window.addEventListener('beforeprint', fitView);
 
-  var printed = false;
-  function doPrint() {
-    if (printed) { return; }
-    printed = true;
-    document.getElementById('print-ts').textContent =
-      'Stand: ' + new Date().toLocaleString('de-AT', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      });
-    renderLegende();
-    setTimeout(function () { window.print(); }, 700);
-  }
-
-  Promise.all(fetches).then(function () {
-    tiles.on('load', doPrint);
-    setTimeout(doPrint, 6000);
-  });
+  Promise.all(fetches).then(renderLegende);
 }());
 </script>
 </body>
