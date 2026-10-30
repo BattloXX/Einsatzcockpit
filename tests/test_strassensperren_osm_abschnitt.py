@@ -174,3 +174,22 @@ async def test_resolve_section_faellt_ohne_osm_auf_hausnummern_zurueck(monkeypat
     missing = await section_service.resolve_section(Db(), org, "Kellaweg", "", "")
     assert missing.geometry is None and missing.geometry_status == "missing"
     assert "erneut versuchen" in missing.hinweise[0]
+
+
+async def test_overpass_502_wechselt_endpunkt(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.config import settings
+
+    osm_street_service._CACHE.clear()
+    fallback = "https://fallback.test/api/interpreter"
+    monkeypatch.setattr(settings, "OVERPASS_FALLBACK_URLS", fallback)
+    monkeypatch.setattr(osm_street_service, "RETRY_DELAY_SECONDS", 0)
+    post = AsyncMock(side_effect=[
+        httpx.Response(502, request=httpx.Request("POST", settings.STRASSEN_OVERPASS_URL)),
+        httpx.Response(200, json=KELLAWEG, request=httpx.Request("POST", fallback)),
+    ])
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    netz = await osm_street_service.fetch_street_network("Kellaweg", 47.46, 9.75)
+    assert netz and netz.ways[0].name == "Kellaweg"
+    assert [aufruf.args[0] for aufruf in post.call_args_list] == [settings.STRASSEN_OVERPASS_URL, fallback]

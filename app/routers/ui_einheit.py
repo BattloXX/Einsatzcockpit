@@ -1471,6 +1471,34 @@ async def material_zurueck(
     return JSONResponse(answer, status_code=code)
 
 
+@router.get("/bsp-overlays.json")
+def einheit_bsp_overlays(
+    request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db),
+):
+    from app.models.incident import Incident
+    from app.services.einheit_vorschau_service import einsatzobjekte
+    from app.services.objekt_bsp_overlay_service import einsatz_overlays_json
+
+    user = getattr(request.state, "user", None)
+    if not user or ctx.quelle == "zugang" or getattr(request.state, "qr_incident_id", None) is not None or getattr(request.state, "qr_lage_id", None) is not None:
+        raise HTTPException(401, "Anmeldung erforderlich")
+    overlays = {}
+    rows = db.query(EinheitSiteDispatch).join(IncidentSite).filter(
+        EinheitSiteDispatch.einheit_id == ctx.einheit.id,
+        EinheitSiteDispatch.withdrawn_at.is_(None), EinheitSiteDispatch.abgezogen_at.is_(None),
+        IncidentSite.major_incident_id == ctx.lage.id, IncidentSite.org_id == ctx.org_id,
+    ).all()
+    for dispatch in rows:
+        incident = db.query(Incident).filter_by(id=dispatch.site.incident_id, primary_org_id=ctx.org_id).first()
+        if not incident:
+            continue
+        objekt_ids = {o.id for o in einsatzobjekte(db, ctx, dispatch)}
+        for overlay in einsatz_overlays_json(db, incident.id, user, einsatzvorgabe=False):
+            if overlay["objekt_id"] in objekt_ids:
+                overlays[overlay["id"]] = overlay
+    return JSONResponse(list(overlays.values()), headers={"Cache-Control": "private, no-store"})
+
+
 @router.get("/api/karte")
 def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
     from app.services.einheit_karten_service import hat_zielkoordinaten

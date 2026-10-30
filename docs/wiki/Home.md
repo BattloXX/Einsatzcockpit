@@ -119,6 +119,7 @@ Für Org-Administratoren. Die Einrichtung der einzelnen Module steht oben bei de
 
 | Seite | Worum es geht |
 |---|---|
+| [Verwaltungsmenü](Administration-Navigation) | Hauptpunkte und Tabs der Verwaltung im Überblick |
 | [Einstellungen](Administration-Einstellungen) | Org-Stammdaten, Logo, Module ein/aus, Auto-Schließen |
 | [Benutzer und Rollen](Administration-Benutzer-und-Rollen) | Benutzer anlegen und einladen, Rollen, Sperren |
 | [Stammdaten pflegen](Administration-Stammdaten-pflegen) | Fahrzeuge, Alarmtypen, Auftragsvorschläge |

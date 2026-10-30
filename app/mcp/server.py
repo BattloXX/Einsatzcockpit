@@ -23,9 +23,11 @@ from mcp_types import ContentBlock, ImageContent, TextContent
 from pydantic import AnyHttpUrl, AnyUrl, BaseModel
 
 from app.config import settings
+from app.core.fehlerlog import neue_korrelations_id
 from app.core.security import hash_api_key
 from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
+from app.mcp.fehler import ExternerDienstFehler
 from app.mcp.registry import TOOLS
 from app.mcp.tools import alarm_parser as _alarm_parser  # noqa: F401 - registriert Alarmdiagnose
 from app.mcp.tools import benutzer as _benutzer  # noqa: F401 - registriert Benutzer-Lesetools
@@ -302,6 +304,15 @@ async def _call_registered_tool(tool_name: str, **arguments) -> dict[str, object
         raise ToolError(str(exc)) from exc
     try:
         return await definition.handler(context, **arguments)
+    except ExternerDienstFehler as exc:
+        correlation_id = neue_korrelations_id()
+        logger.warning("Externer MCP-Fehler: code=%s tool=%s correlation_id=%s", exc.code, tool_name, correlation_id)
+        # Das Client-Label (z. B. INVALID_ARGUMENT) bestimmt der Client; der Inhalt
+        # kennzeichnet den Fehler eindeutig als extern und seine Wiederholbarkeit.
+        raise ToolError(json.dumps(exc.details | {
+            "fehlerart": "extern", "code": exc.code, "meldung": exc.meldung,
+            "retryable": exc.retryable, "correlation_id": correlation_id,
+        })) from exc
     except (ValueError, MCPPermissionError) as exc:
         # Nur fachliche Meldungen an den Client geben; das SDK maskiert sonst jede Ausnahme.
         raise ToolError(str(exc)) from exc
@@ -1872,12 +1883,12 @@ async def objekt_dokumente_auflisten(objekt_id: int, ctx: Context | None = None)
     return await _call_registered_tool("objekt_dokumente_auflisten", objekt_id=objekt_id)
 
 
-@server.tool(name="objekt_dokument_seite_ansehen", description=("Liest einen Plan visuell Seite fuer Seite, etwa BMZ, "
-             "FBF, Laufkarten und Schluesselsafe-Standorte; volltext ist OCR und kann Fehler enthalten."))
+@server.tool(name="objekt_dokument_seite_ansehen", description=TOOLS["objekt_dokument_seite_ansehen"].description)
 async def objekt_dokument_seite_ansehen(dokument_id: int, seite: int, bild: bool = True,
-                                        max_kante_px: int = 1600, ctx: Context | None = None) -> list[ContentBlock]:
+                                        max_kante_px: int = 1600, ausschnitt: list[float] | None = None,
+                                        ctx: Context | None = None) -> list[ContentBlock]:
     return await _dokument_seite_inhalt("objekt_dokument_seite_ansehen", dokument_id=dokument_id, seite=seite,
-                                        bild=bild, max_kante_px=max_kante_px)
+                                        bild=bild, max_kante_px=max_kante_px, ausschnitt=ausschnitt)
 
 
 @server.tool(name="objekt_dokument_text", description="Liest den OCR-/Textindex eines Objektdokuments seitenweise.")
@@ -2337,6 +2348,13 @@ async def objekt_karte_lesen(
     return await _call_registered_tool("objekt_karte_lesen", objekt_id=objekt_id, arbeitskopie=arbeitskopie)
 
 
+@server.tool(name="objekt_karte_bsp_arbeitsliste", description=TOOLS["objekt_karte_bsp_arbeitsliste"].description)
+async def objekt_karte_bsp_arbeitsliste(objekt_id: int | None = None, nur_offen: bool = True,
+                                      limit: int = 50, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("objekt_karte_bsp_arbeitsliste", objekt_id=objekt_id,
+                                       nur_offen=nur_offen, limit=limit)
+
+
 @server.tool(name="objekt_karte_symbolkatalog", description=TOOLS["objekt_karte_symbolkatalog"].description)
 async def objekt_karte_symbolkatalog(ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("objekt_karte_symbolkatalog")
@@ -2347,11 +2365,12 @@ async def objekt_karte_vorschlaege(
     objekt_id: int, aktion: str, vorschlaege: list[dict] | None = None,
     vorschlag_id: int | None = None, filter_status: str | None = None,
     pruefen: bool = False, veraltete_markieren: bool = False, ctx: Context | None = None,
+    batch_id: str | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
         "objekt_karte_vorschlaege", objekt_id=objekt_id, aktion=aktion, vorschlaege=vorschlaege,
         vorschlag_id=vorschlag_id, filter_status=filter_status, pruefen=pruefen,
-        veraltete_markieren=veraltete_markieren,
+        veraltete_markieren=veraltete_markieren, batch_id=batch_id,
     )
 
 
@@ -2377,6 +2396,45 @@ async def objekt_karte_gebaeude_umrisse(
     objekt_id: int, radius_m: int = 150, ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool("objekt_karte_gebaeude_umrisse", objekt_id=objekt_id, radius_m=radius_m)
+
+
+@server.tool(name="objekt_karte_georef_zuordnen", description=TOOLS["objekt_karte_georef_zuordnen"].description)
+async def objekt_karte_georef_zuordnen(
+    objekt_id: int, dokument_id: int, seite: int, bild_ecken: list[dict], expected_rotation: int,
+    osm_id: int | None = None, radius_m: int = 150, modell: str = "aehnlichkeit",
+    speichern: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_karte_georef_zuordnen", objekt_id=objekt_id, dokument_id=dokument_id, seite=seite,
+        bild_ecken=bild_ecken, expected_rotation=expected_rotation, osm_id=osm_id,
+        radius_m=radius_m, modell=modell, speichern=speichern,
+    )
+
+
+@server.tool(name="objekt_karte_georef_uebernehmen", description=TOOLS["objekt_karte_georef_uebernehmen"].description)
+async def objekt_karte_georef_uebernehmen(
+    objekt_id: int, von_dokument_id: int, von_seite: int, nach_dokument_id: int, nach_seite: int,
+    punktpaare: list[dict], expected_rotation: int, speichern: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_karte_georef_uebernehmen", objekt_id=objekt_id, von_dokument_id=von_dokument_id,
+        von_seite=von_seite, nach_dokument_id=nach_dokument_id, nach_seite=nach_seite,
+        punktpaare=punktpaare, expected_rotation=expected_rotation, speichern=speichern,
+    )
+
+
+@server.tool(name="objekt_bsp_overlay_entwurf", description=TOOLS["objekt_bsp_overlay_entwurf"].description)
+async def objekt_bsp_overlay_entwurf(
+    objekt_id: int, aktion: str, dokument_id: int | None = None, seite: int | None = None,
+    overlay_id: int | None = None, name: str | None = None, plan_art: str | None = None,
+    bereich: str | None = None, geschoss: str | None = None, ausschnitt: dict | None = None,
+    expected_rotation: int | None = None, pruefen: bool = True, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_bsp_overlay_entwurf", objekt_id=objekt_id, aktion=aktion, dokument_id=dokument_id,
+        seite=seite, overlay_id=overlay_id, name=name, plan_art=plan_art, bereich=bereich,
+        geschoss=geschoss, ausschnitt=ausschnitt, expected_rotation=expected_rotation, pruefen=pruefen,
+    )
 
 
 @server.tool(name="objekt_karte_vorschau", description=TOOLS["objekt_karte_vorschau"].description)

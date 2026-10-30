@@ -6,6 +6,9 @@
     {% endif %}
   </div>
   <div id="objekt-karte-ro" class="objekt-karte-canvas objekt-karte-canvas--klein"></div>
+  {% if request.state.objekt_enabled %}
+  {% include "incident/_bsp_lokal.html" %}
+  {% endif %}
   <script>
     (function () {
       // Partial wird per HTMX (innerHTML-Swap) geladen: <script src> wuerde dabei
@@ -23,19 +26,36 @@
         var el = document.getElementById("objekt-karte-ro");
         if (!el || el.dataset.initialisiert) { return; }
         el.dataset.initialisiert = "1";
-        initObjektKarte({
+        var karte = initObjektKarte({
           elementId: "objekt-karte-ro",
           objektId: {{ objekt.id }},
           csrfToken: "{{ request.state.csrf_token }}",
           editierbar: false
         });
+        {% if request.state.objekt_enabled %}
+        window.EcpBspOverlay.init(karte, {
+          listUrl: "/objekte/{{ objekt.id }}/bsp-overlays.json", nurLokal: true
+        });
+        {% endif %}
+      }
+
+      function mitBspOverlay() {
+        {% if request.state.objekt_enabled %}
+        if (window.EcpBspOverlay) {
+          init();
+        } else {
+          ladeScript("/static/js/bsp_overlay_layer.js", init);
+        }
+        {% else %}
+        init();
+        {% endif %}
       }
 
       function mitObjektKarte() {
         if (typeof window.initObjektKarte === "function") {
-          init();
+          mitBspOverlay();
         } else {
-          ladeScript("/static/js/objekt_karte.js", init);
+          ladeScript("/static/js/objekt_karte.js", mitBspOverlay);
         }
       }
 

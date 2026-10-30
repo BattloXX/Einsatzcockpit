@@ -22,6 +22,35 @@ EINSATZKRITISCHE_SYMBOLTYPEN = frozenset({
 })
 
 
+SYMBOL_ALIASE: dict[str, list[str]] = {
+    "fsd": ["Feuerwehrschlüsseldepot", "FSD", "Schlüsselsafe"],
+    "schluesselbox": ["Schlüsselbox"],
+    "bsp": ["Brandschutzplan-Ablage", "Brandschutzplanablage"],
+    "bmz": ["Brandmeldezentrale", "Brandmelderzentrale", "BMZ"],
+    "fbf": ["Feuerwehrbedienfeld", "Feuerwehr-Bedienfeld", "FBF"],
+    "dlk_stellplatz": ["Drehleiter-Stellplatz", "Drehleiteraufstellfläche"],
+    "objektfunk": ["Objektfunk-Bedienfeld"],
+    "sammelplatz": ["Sammelplatz", "Sammelstelle"],
+    "feuerloescher": ["Feuerlöscher", "Tragbarer Feuerlöscher"],
+    "hauptzugang": ["Feuerwehrzugang", "Hauptzugang", "Angriffsweg"],
+    "nebenzugang": ["Nebenzugang"],
+    "stiege": ["Stiege", "Stiegenhaus", "Treppenhaus"],
+    "aufzug": ["Aufzug", "Lift"],
+    "gefahr_ex": ["Explosionsgefahr", "EX-Bereich"],
+    "gefahr_gas": ["Gasgefahr"],
+    "gefahr_chemie": ["Chemische Gefahr"],
+    "gefahr_strom": ["Hochspannung", "Elektrische Gefahr"],
+    "gefahr_pv": ["Photovoltaikanlage", "PV-Anlage"],
+    "hydrant_ueberflur": ["Überflurhydrant", "OH"],
+    "hydrant_unterflur": ["Unterflurhydrant", "UH"],
+}
+
+
+def stil_basisrichtung(stil: str) -> int:
+    """Pfeilstile zeigen bei Rotation 0 nach Osten."""
+    return 90 if stil in {"pfeil-voll", "pfeil-leer"} else 0
+
+
 class ObjektKartenFehler(ValueError):
     def __init__(self, detail: str, status_code: int = 400):
         super().__init__(detail)
@@ -165,6 +194,9 @@ def symbolkatalog_lesen(db: Session, org_id: int) -> list[dict]:
             "stil": s.stil,
             "text": s.text,
             "system": s.system,
+            "aliase": list(SYMBOL_ALIASE.get(s.code, [])),
+            "traegt_richtung": stil_basisrichtung(s.stil) == 90,
+            "basisrichtung_grad": stil_basisrichtung(s.stil),
             "einsatzkritisch": s.code in EINSATZKRITISCHE_SYMBOLTYPEN or s.code.startswith(("gefahr_", "hydrant_")),
         }
         for s in lade_symbol_katalog(db, org_id)

@@ -16,6 +16,7 @@ def test_base_html_laedt_verbindungsstatus_und_sw_cached_ihn():
 def test_native_bridge_stellt_pull_to_refresh_bereit():
     js = _text("app/static/js/native-bridge.js")
     assert "refresh," in js and "ptrBlocked," in js
+    js = _text("app/static/js/native-ptr.js")
     assert "window.ECPtr" in js and "setBlocked" in js
     assert "'ec:resync'" in js and "source: 'pull'" in js
 
@@ -38,3 +39,12 @@ def test_globale_websocket_hat_je_verbindung_genau_ein_ping_intervall():
 def test_einheit_reagiert_auf_pull_und_wiederverbindung_ohne_doppelte_ladevorgaenge():
     js = _text("app/static/js/einheit_modus.js")
     assert 'quelle !== "pull" && quelle !== "ws-reconnect"' in js
+
+
+def test_alle_browser_dokumente_laden_ptr():
+    for template in Path("app/templates").rglob("*.html"):
+        if template.parts[2] in {"email", "pdf"} or template.name == "dashboard_report.html":
+            continue
+        text = template.read_text(encoding="utf-8")
+        if "<html" in text:
+            assert "/static/js/native-ptr.js" in text, template

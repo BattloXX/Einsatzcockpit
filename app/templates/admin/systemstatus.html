@@ -4,6 +4,8 @@
 {% block title %}Systemstatus – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Systemstatus'}]) }}{% endblock %}
 {% block admin_content %}
+{% with section_id='systemstatus' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-content">
   <div class="page-header"><div><h1>Systemstatus</h1><p class="page-header__sub">Überwachung technischer Dienste und externe Statusabfrage. Letzter Monitorlauf: {{ loop_letzter_lauf_dt|local_datetime if loop_letzter_lauf_dt else "noch nie" }}</p></div></div>
   {% if gespeichert %}<div class="alert alert--success mb-4">Einstellungen gespeichert.</div>{% endif %}

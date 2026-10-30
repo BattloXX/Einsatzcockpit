@@ -101,7 +101,7 @@ def test_produktive_sicht_ignoriert_alte_versionen(version_db, monkeypatch, tmp_
 
     monkeypatch.setattr("app.core.permissions.is_objekt_verwalter", lambda user: False)
     user = SimpleNamespace(is_system_admin=False, org_id=org.id)
-    request = Request({"type": "http", "method": "GET", "path": "/"})
+    request = Request({"type": "http", "method": "GET", "path": "/", "query_string": b""})
     context = _galerie_context(request, db, user, objekt)
     assert [seite.id for seite in context["seiten"]] == [seite.id for seite in aktuelle_seiten]
     assert context["zaehler"] == {"bma_melderplan": 1}

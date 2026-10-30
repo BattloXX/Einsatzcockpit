@@ -2,14 +2,16 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Stichwort-Referenz{% endblock %}
 {% block head_extra %}
+{{ super() }}
   {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
-{% block content %}
+{% block admin_content %}
+{% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <section class="ps-page">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Stichwort-Referenz", "href": none}]) }}
   <div class="ps-header"><h1>Stichwort-Referenz</h1></div>
-  {% include "planspiel/_tabs.html" %}
   <div class="ps-card ps-table-wrap"><table class="ps-table"><thead><tr><th>Code</th><th>Bezeichnung</th><th>Beschreibung</th><th>in Org vorhanden</th><th>Szenarien (aktiv)</th></tr></thead><tbody>{% for item, vorhanden, count, gewicht in rows %}<tr><td><a href="/admin/settings/planspiele/szenarien?stichwort={{ item.code }}"><span class="ps-badge ps-badge--gray">{{ item.code }}</span></a></td><td>{{ item.bezeichnung }}</td><td>{{ item.beschreibung }}</td><td>{{ vorhanden or 'nein' }}</td><td>{{ count }} / Gewicht {{ gewicht }}</td></tr>{% endfor %}</tbody></table></div>
   <p>Quelle: {{ quelle }}<br>Revision: {{ revision }}</p>
 </section>

@@ -9,7 +9,7 @@ Multi-User, mandantenfähig, Echtzeit. Für Feuerwehr, BOS und Gemeinden.
 [![Docker Build](https://github.com/BattloXX/Einsatzcockpit/actions/workflows/docker-build.yml/badge.svg)](https://github.com/BattloXX/Einsatzcockpit/pkgs/container/einsatzcockpit)
 ![Python](https://img.shields.io/badge/python-3.14-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
-![Version](https://img.shields.io/badge/version-2026.10.26-orange)
+![Version](https://img.shields.io/badge/version-2026.10.28-orange)
 
 **Dokumentation:** [GitHub Wiki](https://github.com/BattloXX/Einsatzcockpit/wiki) · [Wiki-Quellen](docs/wiki/Home.md) · [Lizenz](#lizenz)
 
@@ -164,6 +164,7 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 | [Dokumentendruck – Phase 3](docs/einsatzwissen/dokumentdruck-phase3.md) | Seitenauswahl und Dokumentpakete, lokaler Druck, vorhandene Stationsdrucker und Status |
 | [Dokumente im Einsatz – Phase 4](docs/einsatzwissen/einsatzdokumente-phase4.md) | Unveränderliche Übernahmen, Auftrag und Einheitenfreigaben, Board, Archiv und Backup |
 | [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen, Modulschalter |
+| [Lokaler OSM-Gebaeudebestand](docs/architecture/osm-gebaeude.md) | Import, Overpass-Rueckfall, Statistik und Diagnose |
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |
 | [MCP-Server](docs/wiki/Administration-MCP-Server.md) | KI-Anwendungen, OAuth, Aktivierung und Betrieb |
@@ -231,7 +232,7 @@ Produktivbetrieb umfasst neben Updates insbesondere automatisierte Datenbank- un
 
 ## Version
 
-Aktuell: **2026.10.26** · → [Vollständige Versionshistorie](CHANGELOG.md)
+Aktuell: **2026.10.28** · → [Vollständige Versionshistorie](CHANGELOG.md)
 
 ## Lizenz
 

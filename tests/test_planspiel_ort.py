@@ -339,3 +339,23 @@ def test_szenario_zufall_beachtet_pool_und_zufallsregeln():
         assert a == szenario_zufall(db, org.id, random.Random(7), art="einzel")[0].code
     finally:
         db.close()
+
+
+async def test_overpass_502_wechselt_endpunkt(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    import httpx
+
+    from app.config import settings
+    from app.services import planspiel_ort_service as service
+
+    fallback = "https://fallback.test/api/interpreter"
+    monkeypatch.setattr(settings, "OVERPASS_FALLBACK_URLS", fallback)
+    monkeypatch.setattr(service, "_OSM_WARTEN_S", (0.0, 0.0))
+    post = AsyncMock(side_effect=[
+        httpx.Response(502, request=httpx.Request("POST", settings.STRASSEN_OVERPASS_URL)),
+        httpx.Response(200, json={"elements": [{"id": 1}]}, request=httpx.Request("POST", fallback)),
+    ])
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    assert await service._overpass_abrufen("query") == [{"id": 1}]
+    assert [aufruf.args[0] for aufruf in post.call_args_list] == [settings.STRASSEN_OVERPASS_URL, fallback]

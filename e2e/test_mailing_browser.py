@@ -62,17 +62,17 @@ def test_mailing_end_to_end(page: Page, tmp_path: Path) -> None:
     expect(page.locator('a[href="/mailing/"]')).to_have_count(0)
 
     # Two-tier feature flag: system first, then the bootstrap admin's own org.
-    page.goto(BASE_URL + "/admin/settings")
+    page.goto(BASE_URL + "/admin/settings/module")
     system_toggle = page.locator('form[action="/admin/settings/system/mailing-toggle"] input[name="enabled_raw"]')
     expect(system_toggle).not_to_be_checked()
     system_toggle.check()
-    page.wait_for_url("**/admin/settings?saved=1")
+    page.wait_for_url("**/admin/settings/module?saved=1")
     org_toggle = page.locator('input[name="mailing_module_enabled_raw"]')
     expect(org_toggle).to_be_enabled()
     org_toggle.check()
     org_form = org_toggle.locator("xpath=ancestor::form[1]")
     org_form.get_by_role("button", name="Speichern").click()
-    page.wait_for_url("**/admin/settings?saved=1**")
+    page.wait_for_url("**/admin/settings/module?saved=1**")
     page.goto(BASE_URL + "/?org=1")
     expect(page.locator('a[href="/mailing/"]')).to_be_visible()
 

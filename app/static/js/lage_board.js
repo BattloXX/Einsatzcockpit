@@ -62,17 +62,25 @@
     });
   }
 
-  function resyncBoard(lageId) {
+  function resyncBoard(lageId, pull = false) {
     const scroll = { x: window.scrollX, y: window.scrollY };
     const focusedId = document.activeElement && document.activeElement.id;
-    htmx.trigger(document.body, 'sitePhaseChanged');
-    htmx.ajax('GET', `/lage/${lageId}/kopf`, { target: document.body, swap: 'none' });
-    htmx.trigger(document.body, 'crossMarkerChanged');
+    const work = [htmx.ajax('GET', `/lage/${lageId}/kopf`, { target: document.body, swap: 'none' })];
+    if (pull) {
+      // Alle sichtbaren Board-Spalten in den Refresh-Auftrag aufnehmen.
+      document.querySelectorAll('#lage-board .phase-col__body[hx-get]').forEach(column => {
+        work.push(htmx.ajax('GET', column.getAttribute('hx-get'), { target: column, swap: 'innerHTML' }));
+      });
+    } else {
+      htmx.trigger(document.body, 'sitePhaseChanged');
+      htmx.trigger(document.body, 'crossMarkerChanged');
+    }
     if (typeof window.applyBoardFilters === 'function') window.applyBoardFilters();
     requestAnimationFrame(() => {
       window.scrollTo(scroll.x, scroll.y);
       if (focusedId) document.getElementById(focusedId)?.focus({ preventScroll: true });
     });
+    return Promise.all(work);
   }
 
   function updateConnectionStatus(status) {
@@ -279,13 +287,23 @@
       const lageId = getLageId();
       initBoard();
       initWs(lageId);
-      window.addEventListener('ec:resync', (e) => { if (e.detail) e.detail.handled = true; resyncBoard(lageId); });
+      window.addEventListener('ec:resync', (e) => {
+        if (!lageId) return;
+        if (e.detail) e.detail.handled = true;
+        const work = resyncBoard(lageId, e.detail?.source === 'pull');
+        if (e.detail?.promises) e.detail.promises.push(work);
+      });
     });
   } else {
     const lageId = getLageId();
     initBoard();
     initWs(lageId);
-    window.addEventListener('ec:resync', (e) => { if (e.detail) e.detail.handled = true; resyncBoard(lageId); });
+    window.addEventListener('ec:resync', (e) => {
+      if (!lageId) return;
+      if (e.detail) e.detail.handled = true;
+      const work = resyncBoard(lageId, e.detail?.source === 'pull');
+      if (e.detail?.promises) e.detail.promises.push(work);
+    });
   }
 
   document.body.addEventListener('htmx:afterSwap',    scheduleInit);

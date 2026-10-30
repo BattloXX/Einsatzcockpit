@@ -162,3 +162,66 @@ test('Beide lokalen EL-Formulare aktualisieren nur bei erfolgreichem POST', () =
   }
   assert.deepEqual(calls, ['42', '42']);
 });
+
+test('Resync auf Unterseiten beansprucht keinen Refresh; Kanban meldet Ladeauftrag', async () => {
+  const listeners = new Map();
+  let kanban = null;
+  const context = vm.createContext({
+    window: { addEventListener(name, callback) { listeners.set(name, callback); } },
+    document: {
+      body: { addEventListener() {} },
+      getElementById(id) { return id === 'kanban' ? kanban : null; },
+    },
+    localStorage: { getItem() { return null; } },
+    sessionStorage: { getItem() { return 'client'; }, setItem() {} },
+    setInterval() {},
+  });
+  vm.runInContext(boardSource, context);
+  const board = context.incidentBoard(42);
+  board._connectWS = () => {};
+  board._trackOpenModalEntity = () => {};
+  board.init();
+  const event = { detail: { source: 'pull', handled: false, promises: [] } };
+  listeners.get('ec:resync')(event);
+  assert.equal(event.detail.handled, false);
+  assert.equal(event.detail.promises.length, 0);
+  kanban = {};
+  const work = Promise.resolve();
+  board._resyncBoard = () => work;
+  listeners.get('ec:resync')(event);
+  assert.equal(event.detail.handled, true);
+  assert.equal(event.detail.promises[0], work);
+  await event.detail.promises[0];
+});
+
+test('Lage-PTR wartet auf Kopf und alle Spalten und reicht Spaltenfehler weiter', async () => {
+  const lageSource = readFileSync(new URL('../../app/static/js/lage_board.js', import.meta.url), 'utf8');
+  const resyncSource = lageSource.slice(lageSource.indexOf('  function resyncBoard('), lageSource.indexOf('  function updateConnectionStatus('));
+  const calls = [];
+  const pending = [];
+  const columns = ['/phase/neu', '/uebergreifend/board-col'].map(url => ({ getAttribute() { return url; } }));
+  const context = vm.createContext({
+    window: { scrollTo() {} },
+    document: { body: {}, querySelectorAll() { return columns; } },
+    htmx: {
+      ajax(method, url, options) {
+        calls.push({ url, options });
+        return new Promise((resolve, reject) => pending.push({ resolve, reject }));
+      },
+      trigger() { assert.fail('Pull muss die Auftraege direkt erfassen'); },
+    },
+    requestAnimationFrame(fn) { fn(); },
+  });
+  vm.runInContext(resyncSource, context);
+  let finished = false;
+  const work = context.resyncBoard(42, true);
+  work.then(() => { finished = true; }, () => {});
+  assert.deepEqual(calls.map(c => c.url), ['/lage/42/kopf', '/phase/neu', '/uebergreifend/board-col']);
+  assert.equal(calls[1].options.target, columns[0]);
+  pending[0].resolve();
+  pending[1].resolve();
+  await Promise.resolve();
+  assert.equal(finished, false);
+  pending[2].reject(new Error('Spalte fehlgeschlagen'));
+  await assert.rejects(work, /Spalte fehlgeschlagen/);
+});

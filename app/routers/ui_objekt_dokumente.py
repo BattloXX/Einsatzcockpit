@@ -697,13 +697,13 @@ def dokumente_sammel_pdf(
         raise HTTPException(status_code=404, detail="Keine Seiten fuer Sammel-PDF")
 
     pdf = sammel_pdf(seiten)
-    # inline: Browser-PDF-Viewer zeigt direkt an (Speichern dort weiterhin moeglich)
+    disposition = "attachment" if request.query_params.get("download") == "1" else "inline"
     dokumentarten = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
     name = f"{objekt.anzeige_nummer}_{dokumentarten.get(art, 'dokumente')}.pdf".replace(" ", "_")
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{name}"'},
+        headers={"Content-Disposition": f'{disposition}; filename="{name}"'},
     )
 
 
@@ -831,11 +831,10 @@ def seite_pdf(
         raise HTTPException(status_code=404, detail="Datei fehlt")
     dateiname = f"seite_{seite.seiten_nr:04d}.pdf"
     db.close()
-    # content_disposition_type="inline": direkt im Browser-PDF-Viewer anzeigen
     return FileResponse(
         pfad, media_type="application/pdf",
         filename=dateiname,
-        content_disposition_type="inline",
+        content_disposition_type="attachment" if request.query_params.get("download") == "1" else "inline",
     )
 
 

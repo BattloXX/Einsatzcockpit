@@ -6,6 +6,7 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Organisation'}]) }}{% endblock %}
 
 {% block admin_content %}
+{% with section_id='settings' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 <div class="page-header">
   <div>
     <h1>Einstellungen</h1>
@@ -25,7 +26,7 @@
   <div class="card-body" style="padding:16px 20px;">
     <label style="font-weight:600;margin-bottom:6px;display:block;">Organisation wählen:</label>
     <select class="form-control" style="max-width:320px"
-            onchange="location.href='/admin/settings?org_id='+this.value">
+            onchange="location.href='{{ request.url.path }}?org_id='+this.value">
       <option value="">-- bitte wählen --</option>
       {% for o in all_orgs %}
       <option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>
@@ -37,12 +38,13 @@
 
 {% if is_sysadmin %}
 {% set _uas_sys_on = sys_settings.get('uas_module_enabled') == 'true' %}
-<section class="card mb-4">
+<section class="card mb-4" {% if settings_tab != 'module' %}hidden{% endif %}>
   <div class="card-header"><h2>&#x1F6E1;&#xFE0F; Systemweite Module</h2></div>
   <div class="card-body">
     <form method="post" action="/admin/settings/system/uas-toggle">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">&#x1F681; UAS-Modul (Drohne/BOS)</label>
@@ -78,6 +80,8 @@
 
     {% set _mcp_sys_on = sys_settings.get('mcp_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/mcp-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" name="enabled_raw" value="1" {% if _mcp_sys_on %}checked{% endif %} onchange="this.form.submit()"> KI-Anwendungen (MCP) systemweit aktivieren</label>
       <small class="form-hint">Erlaubt Organisationen, verbundene KI-Anwendungen einzuschalten.</small>
@@ -85,8 +89,9 @@
 
     {% set _objekt_sys_on = sys_settings.get('objekt_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/objekt-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">&#x1F3E2; Objektverwaltung</label>
@@ -114,8 +119,9 @@
 
     {% set _kontakte_sys_on = sys_settings.get('kontakte_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/kontakte-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px"><label style="font-weight:600">{{ modul_icon("kontakte", size="sm") }} Zentrale Kontaktverwaltung</label><p class="form-hint" style="margin-top:.25rem">Organisationweite Kontakte mit Zuordnungen zu Objekten, Import, Export und SMS-Aktionen. Zweistufig schaltbar: zuerst systemweit, dann je Organisation.</p></div>
         <div style="display:flex;align-items:center;gap:.75rem"><label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" name="enabled_raw" value="1" {% if _kontakte_sys_on %}checked{% endif %} onchange="this.form.submit()"><span>Systemweit aktivieren</span></label><span class="badge {% if _kontakte_sys_on %}badge--success{% else %}badge--muted{% endif %}">{% if _kontakte_sys_on %}AN{% else %}AUS{% endif %}</span></div>
@@ -125,12 +131,15 @@
     {% set _gateway_sys_on = sys_settings.get('gateway_module_enabled') == 'true' %}
     {% set _mailing_sys_on = sys_settings.get('mailing_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/mailing-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;justify-content:space-between;gap:1rem"><div><label style="font-weight:600">Mailing-Modul</label><p class="form-hint">Vorlagen, Empfängerlisten und Kampagnenversand über Resend.</p></div><label><input type="checkbox" name="enabled_raw" value="1" {% if _mailing_sys_on %}checked{% endif %} onchange="this.form.submit()"> Systemweit aktivieren</label></div>
     </form>
     <form method="post" action="/admin/settings/system/gateway-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">&#x1F5A8; Print &amp; Alarm Gateway</label>
@@ -159,8 +168,9 @@
 
     {% set _nachschlagewerke_sys_on = sys_settings.get('nachschlagewerke_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/nachschlagewerke-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">&#x1F4DA; Nachschlagewerke</label>
@@ -191,8 +201,9 @@
     {% set _strassensperren_sys_on = sys_settings.get('strassensperren_module_enabled') == 'true' %}
     {% set _planspiel_sys_on = sys_settings.get('planspiel_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/planspiel-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">Planspiele &amp; Simulation</label>
@@ -206,8 +217,9 @@
     </form>
     {% set _katplan_sys_on = sys_settings.get('katplan_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/katplan-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">Einsatzwissen</label>
@@ -220,8 +232,9 @@
       </div>
     </form>
     <form method="post" action="/admin/settings/system/strassensperren-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">Straßensperren &amp; Anfahrtsrouting</label>
@@ -235,8 +248,9 @@
     </form>
 
     <form method="post" action="/admin/settings/system/probenplanung-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">&#x1F5D3; Probenplanung</label>
@@ -264,8 +278,9 @@
 
     {% set _foerderstrecke_sys_on = sys_settings.get('foerderstrecke_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/foerderstrecke-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">&#x1F6B0; Förderstrecken-Planer</label>
@@ -294,8 +309,9 @@
 
     {% set _lagefuehrung_sys_on = sys_settings.get('lagefuehrung_modul_aktiv') == 'true' %}
     <form method="post" action="/admin/settings/system/lagefuehrung-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">&#x1F5FA;&#xFE0F; Lageführung (Lagekarte)</label>
@@ -324,8 +340,9 @@
 
     {% set _breathing_sys_on = sys_settings.get('breathing_enabled','true') != 'false' %}
     <form method="post" action="/admin/settings/system/breathing-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <label style="font-weight:600">{{ modul_icon("atemschutz", size="sm") }} Atemschutzüberwachung</label>
@@ -360,8 +377,10 @@
 <section class="card mb-4">
   <div class="card-header"><h2>Organisation: {{ org.name }}</h2></div>
   <div class="card-body">
-    <form method="post" action="/admin/settings/org" enctype="multipart/form-data">
+    <form method="post" action="/admin/settings/org" enctype="multipart/form-data" id="orgSettingsForm">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
     {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+      <div data-settings-panel="stammdaten" {% if settings_tab != 'stammdaten' %}hidden{% endif %}>
       <div class="form-grid">
         <div class="form-group">
           <label>Organisationsname</label>
@@ -390,6 +409,28 @@
           <label>Ort</label>
           <input type="text" name="city" value="{{ org.city or '' }}" class="form-control">
         </div>
+      </div>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Karte / Lagekarte.info</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fallback-Breitengrad (lat)</label>
+          <input type="number" name="fallback_lat" id="settingsFallbackLat" step="0.000001"
+                 value="{{ org.fallback_lat if org.fallback_lat is not none else '' }}"
+                 class="form-control" style="max-width:200px" placeholder="47.466400">
+          <small class="form-hint">Startposition des Karten-Pickers bei neuen Einsätzen, wenn Geocoding keinen Treffer liefert.</small>
+        </div>
+        <div class="form-group">
+          <label>Fallback-Längengrad (lng)</label>
+          <input type="number" name="fallback_lng" id="settingsFallbackLng" step="0.000001"
+                 value="{{ org.fallback_lng if org.fallback_lng is not none else '' }}"
+                 class="form-control" style="max-width:200px" placeholder="9.741600">
+        </div>
+      </div>
+      <div id="settingsMapPicker" style="height:240px;border-radius:6px;border:1px solid var(--border);margin-bottom:1rem"></div>
+
+      </div>
+      <div data-settings-panel="erscheinungsbild" {% if settings_tab != 'erscheinungsbild' %}hidden{% endif %}>
+      <div class="form-grid">
         <div class="form-group">
           <label>Primärfarbe (Hex)</label>
           <div style="display:flex;gap:.5rem;align-items:center">
@@ -441,6 +482,283 @@
         </div>
       </div>
 
+      </div>
+      <div data-settings-panel="module" {% if settings_tab != 'module' %}hidden{% endif %}>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F681; UAS-Modul (Drohne)</h3>
+      {% set _uas_org_on = (org_settings.uas_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not uas_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="uas_module_enabled_raw" value="1"
+                 {% if _uas_org_on %}checked{% endif %}
+                 {% if not uas_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          UAS-Modul für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet das Drohnenmodul (Geräteregister, Piloten, Flugbuch, Karten-Integration) für diese Org ein.
+          {% if not uas_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Verbundene KI-Anwendungen</h3>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem{% if not mcp_sys_enabled %};opacity:.5{% endif %}">
+          <input type="checkbox" name="mcp_modul_aktiv_raw" value="1" {% if org_settings and org_settings.mcp_modul_aktiv %}checked{% endif %} {% if not mcp_sys_enabled %}disabled{% endif %}>
+          MCP für diese Organisation aktivieren
+        </label>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">{{ modul_icon("atemschutz", size="md") }} Atemschutzüberwachung</h3>
+      {% set _breathing_org_on = (org_settings.atemschutz_ueberwachung_modul_aktiv if org_settings.atemschutz_ueberwachung_modul_aktiv is not none else true) if org_settings else true %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not breathing_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="atemschutz_ueberwachung_modul_aktiv_raw" value="1"
+                 {% if _breathing_org_on %}checked{% endif %}
+                 {% if not breathing_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Atemschutzüberwachung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet die einsatzbezogene Trupp-, Druck- und Zeitüberwachung für diese Organisation ein.
+          {% if not breathing_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">{{ modul_icon("probenplan", size="md") }} Probenplanung</h3>
+      {% set _probenplanung_org_on = (org_settings.probenplanung_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not probenplanung_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="probenplanung_modul_aktiv_raw" value="1" {% if _probenplanung_org_on %}checked{% endif %} {% if not probenplanung_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Probenplanung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Schaltet Probearten und die Probenplanung für diese Organisation frei.</small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Straßensperren &amp; Anfahrtsrouting</h3>
+      {% set _strassensperren_org_on = (org_settings.strassensperren_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not strassensperren_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="strassensperren_modul_aktiv_raw" value="1" {% if _strassensperren_org_on %}checked{% endif %} {% if not strassensperren_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Straßensperren &amp; Anfahrtsrouting für diese Organisation aktivieren
+        </label>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Planspiele &amp; Simulation</h3>
+      {% set _planspiel_org_on = (org_settings.planspiel_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not planspiel_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="planspiel_modul_aktiv_raw" value="1" {% if _planspiel_org_on %}checked{% endif %} {% if not planspiel_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Planspiele &amp; Simulation fuer diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Uebungseinsaetze und Uebungs-GSLs generieren und steuern; loest keine echten Alarmierungen aus.</small>
+      </div>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Zentrale Suche</h3>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" name="suche_aktiv_raw" value="1" {% if org_settings and org_settings.suche_aktiv %}checked{% endif %} {% if not suche_sys_enabled %}disabled{% endif %}>
+          Zentrale Suche für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Durchsucht Objekte, Objektdokumente und freigegebene Einsatz- und Katastrophenpläne über einen Index, dazu live Einsätze, Sperren, Wasserstellen und GSL. Kontakte sind nicht enthalten.</small>
+        {% if suche_sys_enabled %}<a href="/einstellungen/suche">Indexstatus und Neuaufbau</a>{% else %}<p class="form-hint">Systemweit deaktiviert - bitte System-Admin kontaktieren.</p>{% endif %}
+      </div>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Einsatzwissen</h3>
+      {% set _katplan_org_on = (org_settings.katplan_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not katplan_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="katplan_modul_aktiv_raw" value="1" {% if _katplan_org_on %}checked{% endif %} {% if not katplan_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Einsatzwissen für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Pläne, Führungswissen und Lehrbehelfe erfassen, freigeben und durchsuchen. Das Nachschlagewerk wird separat aktiviert.</small>
+      </div>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Förderstrecken-Planer</h3>
+      {% set _foerderstrecke_org_on = (org_settings.foerderstrecke_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not foerderstrecke_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="foerderstrecke_module_enabled_raw" value="1"
+                 {% if _foerderstrecke_org_on %}checked{% endif %}
+                 {% if not foerderstrecke_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Förderstrecken-Planer für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet den Förderstrecken-Planer (Pumpen-/Schlauchkatalog mit Kennlinien,
+          Hydraulik-Berechnung, Einsatzplan) für diese Org ein. Gerätepflege über Org-Admin.
+          {% if not foerderstrecke_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5FA;&#xFE0F; Lageführung (Lagekarte)</h3>
+      {% set _lagefuehrung_org_on = (org_settings.lagefuehrung_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not lagefuehrung_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="lagefuehrung_modul_aktiv_raw" value="1"
+                 {% if _lagefuehrung_org_on %}checked{% endif %}
+                 {% if not lagefuehrung_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Lageführung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet die einsatzbezogene Lagekarte (Auto-Layer Fahrzeuge/Objekt/Einsatzort,
+          Zeichenwerkzeuge, Ereignisprotokoll) für diese Org ein.
+          {% if not lagefuehrung_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">{{ modul_icon("kontakte", size="md") }} Kontaktverwaltung</h3>
+      {% set _kontakte_org_on = (org_settings.kontakte_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not kontakte_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="kontakte_module_enabled_raw" value="1"
+                 {% if _kontakte_org_on %}checked{% endif %}
+                 {% if not kontakte_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Kontaktverwaltung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Schaltet zentrale Kontakte, Import/Export, Dublettenprüfung und Objektzuordnungen frei. Pflege über "Kontaktverwalter", "Objektverwalter" oder Org-Admin.
+          {% if not kontakte_sys_enabled %}<strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>{% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F3E2; Objektverwaltung</h3>
+      {% set _objekt_org_on = (org_settings.objekt_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not objekt_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="objekt_module_enabled_raw" value="1"
+                 {% if _objekt_org_on %}checked{% endif %}
+                 {% if not objekt_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Objektverwaltung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet das Objektmodul (BMA-Daten, Gefahren, Kontakte, Dokumente mit PDF-Zerlegung,
+          Objekt-Lagekarte, Alarm-Matching, Einsatzansicht, Alarm-Infoscreen, Objektblatt-Druck)
+          für diese Org ein. Pflege über die Rolle "Objektverwalter" oder Org-Admin.
+          {% if not objekt_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4DA; Nachschlagewerke</h3>
+      {% set _nw_org_on = (org_settings.nachschlagewerke_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not nachschlagewerke_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="nachschlagewerke_module_enabled_raw" value="1"
+                 {% if _nw_org_on %}checked{% endif %}
+                 {% if not nachschlagewerke_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Nachschlagewerke für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet das Nachschlagewerk (Gefahrgut-Suche, Rettungsdatenblätter, Karten-Overlays)
+          für diese Org ein. Lesend für alle Nutzer.
+          {% if not nachschlagewerke_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5A8; Print &amp; Alarm Gateway</h3>
+      {% set _gateway_org_on = (org_settings.gateway_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not gateway_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="gateway_module_enabled_raw" value="1"
+                 {% if _gateway_org_on %}checked{% endif %}
+                 {% if not gateway_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Print &amp; Alarm Gateway für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet die Gateway-/Drucker-/Druckregel-Verwaltung ("Gateway / Druck") ein.
+          Der lokale Container wird per Einmal-Code gekoppelt (siehe Wiki).
+          {% if not gateway_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4E7; Mailing</h3>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not mailing_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="mailing_module_enabled_raw" value="1"
+                 {% if org_settings and org_settings.mailing_module_enabled %}checked{% endif %}
+                 {% if not mailing_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Mailing für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Vorlagen, Empfängerlisten und Kampagnenversand über Resend.
+          {% if not mailing_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F697; Fahrtenbuch</h3>
+      {% set _fb_on = (org_settings.fahrtenbuch_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="checkbox" name="fahrtenbuch_modul_aktiv_raw" value="1"
+                 {% if _fb_on %}checked{% endif %}>
+          Fahrtenbuch-Modul für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet das digitale Fahrten- &amp; Betriebsbuch (Fahrterfassung, QR-Token, km/BH-Zähler, Statistik) für diese Org ein.
+          Admins sehen dann den Bereich "Fahrtenbuch" im Verwaltungsmenü.
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1FAA6; Atemschutz-Geräteprüfung</h3>
+      {% set _as_pruefung_on = (org_settings.atemschutz_pruefung_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="checkbox" name="atemschutz_pruefung_modul_aktiv_raw" value="1"
+                 {% if _as_pruefung_on %}checked{% endif %}>
+          Atemschutzgeräteprüfung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet das Prüfprotokoll für Pressluftatmer (login-freier Tablet-Link, Geräte-Stammdaten,
+          Wart-Benachrichtigung bei Defekt) für diese Org ein. Admins sehen dann den Bereich
+          "Atemschutz-Geräteprüfung" im Verwaltungsmenü.
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4F1; SMS</h3>
+      {% set _sms_on = (org_settings.einsatzinfo_sms_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="checkbox" name="einsatzinfo_sms_enabled_raw" value="1"
+                 {% if _sms_on %}checked{% endif %}>
+          SMS-Einsatzinfo aktivieren
+        </label>
+        <small class="form-hint">
+          Bei Alarmeingang automatisch SMS versenden (Gateway-Verbindung erforderlich).
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Hydranten / L&ouml;schwasser</h3>
+      {% set _hyd_on = (org_settings.hydrant_layer_enabled) if org_settings else true %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="hidden" name="hydrant_layer_enabled_raw" value="">
+          <input type="checkbox" name="hydrant_layer_enabled_raw" value="1"
+                 {% if _hyd_on %}checked{% endif %}>
+          Hydranten-Layer auf den Lagekarten anzeigen
+        </label>
+        <small class="form-hint">
+          L&ouml;schwasser-Entnahmestellen aus OpenStreetMap/OSMHydrant auf Einsatz- und
+          Objekt-Lagekarten sowie in der Einsatzinformation.
+        </small>
+      </div>
+
+      </div>
+      <div data-settings-panel="allgemein" {% if settings_tab != 'allgemein' %}hidden{% endif %}>
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Atemschutz-Parameter</h3>
       <div class="form-grid">
         <div class="form-group">
@@ -456,24 +774,6 @@
           <small class="form-hint">Fester Pufferdruckwert, der zum berechneten Rückzugsdruck addiert wird</small>
         </div>
       </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Karte / Lagekarte.info</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Fallback-Breitengrad (lat)</label>
-          <input type="number" name="fallback_lat" id="settingsFallbackLat" step="0.000001"
-                 value="{{ org.fallback_lat if org.fallback_lat is not none else '' }}"
-                 class="form-control" style="max-width:200px" placeholder="47.466400">
-          <small class="form-hint">Startposition des Karten-Pickers bei neuen Einsätzen, wenn Geocoding keinen Treffer liefert.</small>
-        </div>
-        <div class="form-group">
-          <label>Fallback-Längengrad (lng)</label>
-          <input type="number" name="fallback_lng" id="settingsFallbackLng" step="0.000001"
-                 value="{{ org.fallback_lng if org.fallback_lng is not none else '' }}"
-                 class="form-control" style="max-width:200px" placeholder="9.741600">
-        </div>
-      </div>
-      <div id="settingsMapPicker" style="height:240px;border-radius:6px;border:1px solid var(--border);margin-bottom:1rem"></div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Board-Zugang</h3>
       <div class="form-grid">
@@ -530,65 +830,21 @@
           <small class="form-hint">Wie oft je laufender Einsatzstelle eine Lagemeldung erwartet wird. Leer lassen schaltet die automatische Lagemeldungs-Erinnerung komplett ab.</small>
         </div>
         <div class="form-group">
-          <label>Intervall bei Priorität „Sofort“ (Minuten)</label>
+          <label>Intervall bei Priorität "Sofort" (Minuten)</label>
           <input type="number" name="gsl_lagemeldung_sofort_raw" min="1" max="1440"
                  value="{{ org_settings.gsl_lagemeldung_interval_sofort_minutes if org_settings and org_settings.gsl_lagemeldung_interval_sofort_minutes is not none else (30 if not org_settings else '') }}"
                  class="form-control" style="max-width:120px" placeholder="30">
-          <small class="form-hint">Kürzeres Intervall für Einsatzstellen mit Priorität „Sofort“. Leer = Standard-Intervall verwenden.</small>
+          <small class="form-hint">Kürzeres Intervall für Einsatzstellen mit Priorität "Sofort". Leer = Standard-Intervall verwenden.</small>
         </div>
         <div class="form-group">
           <label>Auto-Auftrag im Funkjournal</label>
           <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
             <input type="checkbox" name="gsl_lagemeldung_auto_auftrag_raw" value="1"
                    {% if not org_settings or org_settings.gsl_lagemeldung_auto_auftrag %}checked{% endif %}>
-            Bei Überfälligkeit automatisch einen Auftrag „Lagemeldung anfordern“ erstellen
+            Bei Überfälligkeit automatisch einen Auftrag "Lagemeldung anfordern" erstellen
           </label>
           <small class="form-hint">Ist die Option aus, wird die überfällige Einsatzstelle nur am Board markiert (kein Journaleintrag).</small>
         </div>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F681; UAS-Modul (Drohne)</h3>
-      {% set _uas_org_on = (org_settings.uas_module_enabled) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not uas_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="uas_module_enabled_raw" value="1"
-                 {% if _uas_org_on %}checked{% endif %}
-                 {% if not uas_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          UAS-Modul für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet das Drohnenmodul (Geräteregister, Piloten, Flugbuch, Karten-Integration) für diese Org ein.
-          {% if not uas_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Verbundene KI-Anwendungen</h3>
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem{% if not mcp_sys_enabled %};opacity:.5{% endif %}">
-          <input type="checkbox" name="mcp_modul_aktiv_raw" value="1" {% if org_settings and org_settings.mcp_modul_aktiv %}checked{% endif %} {% if not mcp_sys_enabled %}disabled{% endif %}>
-          MCP für diese Organisation aktivieren
-        </label>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">{{ modul_icon("atemschutz", size="md") }} Atemschutzüberwachung</h3>
-      {% set _breathing_org_on = (org_settings.atemschutz_ueberwachung_modul_aktiv if org_settings.atemschutz_ueberwachung_modul_aktiv is not none else true) if org_settings else true %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not breathing_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="atemschutz_ueberwachung_modul_aktiv_raw" value="1"
-                 {% if _breathing_org_on %}checked{% endif %}
-                 {% if not breathing_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
-          Atemschutzüberwachung für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet die einsatzbezogene Trupp-, Druck- und Zeitüberwachung für diese Organisation ein.
-          {% if not breathing_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Keine Alarmierung bei Begriffen</h3>
@@ -615,52 +871,7 @@
       </div>
       {% endfor %}
 
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">{{ modul_icon("probenplan", size="md") }} Probenplanung</h3>
-      {% set _probenplanung_org_on = (org_settings.probenplanung_modul_aktiv) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;{% if not probenplanung_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="probenplanung_modul_aktiv_raw" value="1" {% if _probenplanung_org_on %}checked{% endif %} {% if not probenplanung_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
-          Probenplanung für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">Schaltet Probearten und die Probenplanung für diese Organisation frei.</small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Straßensperren &amp; Anfahrtsrouting</h3>
-      {% set _strassensperren_org_on = (org_settings.strassensperren_modul_aktiv) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;{% if not strassensperren_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="strassensperren_modul_aktiv_raw" value="1" {% if _strassensperren_org_on %}checked{% endif %} {% if not strassensperren_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
-          Straßensperren &amp; Anfahrtsrouting für diese Organisation aktivieren
-        </label>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Planspiele &amp; Simulation</h3>
-      {% set _planspiel_org_on = (org_settings.planspiel_modul_aktiv) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;{% if not planspiel_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="planspiel_modul_aktiv_raw" value="1" {% if _planspiel_org_on %}checked{% endif %} {% if not planspiel_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
-          Planspiele &amp; Simulation fuer diese Organisation aktivieren
-        </label>
-        <small class="form-hint">Uebungseinsaetze und Uebungs-GSLs generieren und steuern; loest keine echten Alarmierungen aus.</small>
-      </div>
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Zentrale Suche</h3>
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem">
-          <input type="checkbox" name="suche_aktiv_raw" value="1" {% if org_settings and org_settings.suche_aktiv %}checked{% endif %} {% if not suche_sys_enabled %}disabled{% endif %}>
-          Zentrale Suche für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">Durchsucht Objekte, Objektdokumente und freigegebene Einsatz- und Katastrophenpläne über einen Index, dazu live Einsätze, Sperren, Wasserstellen und GSL. Kontakte sind nicht enthalten.</small>
-        {% if suche_sys_enabled %}<a href="/einstellungen/suche">Indexstatus und Neuaufbau</a>{% else %}<p class="form-hint">Systemweit deaktiviert - bitte System-Admin kontaktieren.</p>{% endif %}
-      </div>
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Einsatzwissen</h3>
-      {% set _katplan_org_on = (org_settings.katplan_modul_aktiv) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;{% if not katplan_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="katplan_modul_aktiv_raw" value="1" {% if _katplan_org_on %}checked{% endif %} {% if not katplan_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
-          Einsatzwissen für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">Pläne, Führungswissen und Lehrbehelfe erfassen, freigeben und durchsuchen. Das Nachschlagewerk wird separat aktiviert.</small>
-      </div>
+      <h3>Einsatzwissen: KI-Import</h3>
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;">
           <input type="checkbox" name="katplan_ki_import_raw" value="1"
@@ -673,85 +884,7 @@
           Setzt den aktivierten KI-Assistenten voraus (zentral oder BYOK).
         </small>
       </div>
-      <div class="form-grid">
-        <div class="form-group"><label>Start-Breitengrad (lat)</label><input type="number" id="settingsRoutingStartLat" name="routing_start_lat" step="0.000001" min="-90" max="90" value="{{ org_settings.routing_start_lat if org_settings and org_settings.routing_start_lat is not none else '' }}" class="form-control"></div>
-        <div class="form-group"><label>Start-Längengrad (lng)</label><input type="number" id="settingsRoutingStartLng" name="routing_start_lng" step="0.000001" min="-180" max="180" value="{{ org_settings.routing_start_lng if org_settings and org_settings.routing_start_lng is not none else '' }}" class="form-control"></div>
-        <div class="form-group"><label>Bezeichnung Startpunkt</label><input type="text" name="routing_start_label" maxlength="200" value="{{ org_settings.routing_start_label if org_settings and org_settings.routing_start_label else '' }}" class="form-control"></div>
-      </div>
-      <small class="form-hint">Koordinate der Fahrzeugausfahrt; Start für die automatische Anfahrtsroute</small>
-      <div id="settingsRoutingStartPicker" style="height:260px;margin-top:.75rem;border-radius:var(--radius-lg);overflow:hidden"></div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Förderstrecken-Planer</h3>
-      {% set _foerderstrecke_org_on = (org_settings.foerderstrecke_module_enabled) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not foerderstrecke_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="foerderstrecke_module_enabled_raw" value="1"
-                 {% if _foerderstrecke_org_on %}checked{% endif %}
-                 {% if not foerderstrecke_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          Förderstrecken-Planer für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet den Förderstrecken-Planer (Pumpen-/Schlauchkatalog mit Kennlinien,
-          Hydraulik-Berechnung, Einsatzplan) für diese Org ein. Gerätepflege über Org-Admin.
-          {% if not foerderstrecke_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5FA;&#xFE0F; Lageführung (Lagekarte)</h3>
-      {% set _lagefuehrung_org_on = (org_settings.lagefuehrung_modul_aktiv) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not lagefuehrung_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="lagefuehrung_modul_aktiv_raw" value="1"
-                 {% if _lagefuehrung_org_on %}checked{% endif %}
-                 {% if not lagefuehrung_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          Lageführung für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet die einsatzbezogene Lagekarte (Auto-Layer Fahrzeuge/Objekt/Einsatzort,
-          Zeichenwerkzeuge, Ereignisprotokoll) für diese Org ein.
-          {% if not lagefuehrung_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">{{ modul_icon("kontakte", size="md") }} Kontaktverwaltung</h3>
-      {% set _kontakte_org_on = (org_settings.kontakte_module_enabled) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;{% if not kontakte_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="kontakte_module_enabled_raw" value="1"
-                 {% if _kontakte_org_on %}checked{% endif %}
-                 {% if not kontakte_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          Kontaktverwaltung für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">Schaltet zentrale Kontakte, Import/Export, Dublettenprüfung und Objektzuordnungen frei. Pflege über „Kontaktverwalter“, „Objektverwalter“ oder Org-Admin.
-          {% if not kontakte_sys_enabled %}<strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>{% endif %}
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F3E2; Objektverwaltung</h3>
-      {% set _objekt_org_on = (org_settings.objekt_module_enabled) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not objekt_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="objekt_module_enabled_raw" value="1"
-                 {% if _objekt_org_on %}checked{% endif %}
-                 {% if not objekt_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          Objektverwaltung für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet das Objektmodul (BMA-Daten, Gefahren, Kontakte, Dokumente mit PDF-Zerlegung,
-          Objekt-Lagekarte, Alarm-Matching, Einsatzansicht, Alarm-Infoscreen, Objektblatt-Druck)
-          für diese Org ein. Pflege über die Rolle „Objektverwalter" oder Org-Admin.
-          {% if not objekt_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
-      </div>
+      <h3>Objektverwaltung: Parameter und Vorlagen</h3>
       {% if objekt_sys_enabled %}
       <div class="form-grid">
         <div class="form-group">
@@ -794,124 +927,23 @@
       </div>
       {% endif %}
 
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4DA; Nachschlagewerke</h3>
-      {% set _nw_org_on = (org_settings.nachschlagewerke_module_enabled) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not nachschlagewerke_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="nachschlagewerke_module_enabled_raw" value="1"
-                 {% if _nw_org_on %}checked{% endif %}
-                 {% if not nachschlagewerke_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          Nachschlagewerke für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet das Nachschlagewerk (Gefahrgut-Suche, Rettungsdatenblätter, Karten-Overlays)
-          für diese Org ein. Lesend für alle Nutzer.
-          {% if not nachschlagewerke_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
+      <h3>Anfahrtsrouting: Startpunkt</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>Start-Breitengrad (lat)</label><input type="number" id="settingsRoutingStartLat" name="routing_start_lat" step="0.000001" min="-90" max="90" value="{{ org_settings.routing_start_lat if org_settings and org_settings.routing_start_lat is not none else '' }}" class="form-control"></div>
+        <div class="form-group"><label>Start-Längengrad (lng)</label><input type="number" id="settingsRoutingStartLng" name="routing_start_lng" step="0.000001" min="-180" max="180" value="{{ org_settings.routing_start_lng if org_settings and org_settings.routing_start_lng is not none else '' }}" class="form-control"></div>
+        <div class="form-group"><label>Bezeichnung Startpunkt</label><input type="text" name="routing_start_label" maxlength="200" value="{{ org_settings.routing_start_label if org_settings and org_settings.routing_start_label else '' }}" class="form-control"></div>
       </div>
+      <small class="form-hint">Koordinate der Fahrzeugausfahrt; Start für die automatische Anfahrtsroute</small>
+      <div id="settingsRoutingStartPicker" style="height:260px;margin-top:.75rem;border-radius:var(--radius-lg);overflow:hidden"></div>
 
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5A8; Print &amp; Alarm Gateway</h3>
-      {% set _gateway_org_on = (org_settings.gateway_module_enabled) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not gateway_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="gateway_module_enabled_raw" value="1"
-                 {% if _gateway_org_on %}checked{% endif %}
-                 {% if not gateway_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          Print &amp; Alarm Gateway für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet die Gateway-/Drucker-/Druckregel-Verwaltung („Gateway / Druck") ein.
-          Der lokale Container wird per Einmal-Code gekoppelt (siehe Wiki).
-          {% if not gateway_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
       </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4E7; Mailing</h3>
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not mailing_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
-          <input type="checkbox" name="mailing_module_enabled_raw" value="1"
-                 {% if org_settings and org_settings.mailing_module_enabled %}checked{% endif %}
-                 {% if not mailing_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
-          Mailing für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Vorlagen, Empfängerlisten und Kampagnenversand über Resend.
-          {% if not mailing_sys_enabled %}
-          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
-          {% endif %}
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F697; Fahrtenbuch</h3>
-      {% set _fb_on = (org_settings.fahrtenbuch_modul_aktiv) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;">
-          <input type="checkbox" name="fahrtenbuch_modul_aktiv_raw" value="1"
-                 {% if _fb_on %}checked{% endif %}>
-          Fahrtenbuch-Modul für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet das digitale Fahrten- &amp; Betriebsbuch (Fahrterfassung, QR-Token, km/BH-Zähler, Statistik) für diese Org ein.
-          Admins sehen dann den Bereich „Fahrtenbuch" im Verwaltungsmenü.
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1FAA6; Atemschutz-Geräteprüfung</h3>
-      {% set _as_pruefung_on = (org_settings.atemschutz_pruefung_modul_aktiv) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;">
-          <input type="checkbox" name="atemschutz_pruefung_modul_aktiv_raw" value="1"
-                 {% if _as_pruefung_on %}checked{% endif %}>
-          Atemschutzgeräteprüfung für diese Organisation aktivieren
-        </label>
-        <small class="form-hint">
-          Schaltet das Prüfprotokoll für Pressluftatmer (login-freier Tablet-Link, Geräte-Stammdaten,
-          Wart-Benachrichtigung bei Defekt) für diese Org ein. Admins sehen dann den Bereich
-          „Atemschutz-Geräteprüfung" im Verwaltungsmenü.
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4F1; SMS</h3>
-      {% set _sms_on = (org_settings.einsatzinfo_sms_enabled) if org_settings else false %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;">
-          <input type="checkbox" name="einsatzinfo_sms_enabled_raw" value="1"
-                 {% if _sms_on %}checked{% endif %}>
-          SMS-Einsatzinfo aktivieren
-        </label>
-        <small class="form-hint">
-          Bei Alarmeingang automatisch SMS versenden (Gateway-Verbindung erforderlich).
-        </small>
-      </div>
-
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Hydranten / L&ouml;schwasser</h3>
-      {% set _hyd_on = (org_settings.hydrant_layer_enabled) if org_settings else true %}
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:.5rem;">
-          <input type="hidden" name="hydrant_layer_enabled_raw" value="">
-          <input type="checkbox" name="hydrant_layer_enabled_raw" value="1"
-                 {% if _hyd_on %}checked{% endif %}>
-          Hydranten-Layer auf den Lagekarten anzeigen
-        </label>
-        <small class="form-hint">
-          L&ouml;schwasser-Entnahmestellen aus OpenStreetMap/OSMHydrant auf Einsatz- und
-          Objekt-Lagekarten sowie in der Einsatzinformation.
-        </small>
-      </div>
-
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
     {% if org.logo_path %}
     <form id="logoResetForm" method="post" action="/admin/settings/org/logo/reset" style="display:none">
+      <input type="hidden" name="tab" value="{{ settings_tab }}">
       {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
     </form>
     {% endif %}
@@ -958,7 +990,7 @@ function previewLogo(input) {
 }
 
 // Karten-Picker für den Fallback-Standort
-if (document.getElementById('settingsMapPicker')) {
+if (document.getElementById('settingsMapPicker') && !document.getElementById('settingsMapPicker').closest('[hidden]')) {
   initMapPicker({
     containerId: 'settingsMapPicker',
     latInputId: 'settingsFallbackLat',
@@ -968,7 +1000,7 @@ if (document.getElementById('settingsMapPicker')) {
   });
 }
 
-if (document.getElementById('settingsRoutingStartPicker')) {
+if (document.getElementById('settingsRoutingStartPicker') && !document.getElementById('settingsRoutingStartPicker').closest('[hidden]')) {
   initMapPicker({
     containerId: 'settingsRoutingStartPicker',
     latInputId: 'settingsRoutingStartLat',

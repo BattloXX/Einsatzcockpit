@@ -9,16 +9,24 @@
 </style>
 {% endblock %}
 {% block content %}
-<div class="page-content">
+<div class="page-content georef-editor-page">
   <div class="page-header">
     <h1>Georeferenzierung · {{ seite.dokument.dateiname_original }} · Seite {{ seiten_nr }}</h1>
     <a href="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ seite.id }}" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück zur Dokumentenseite</a>
   </div>
+  <div class="section">
   <div id="georef-editor" data-objekt-id="{{ objekt.id }}" data-dokument-id="{{ dokument_id }}"
        data-seite="{{ seiten_nr }}" data-basis-url="{{ basis_url }}"
+       data-seite-id="{{ seite.id }}"
        data-lat="{{ startpunkt.lat if startpunkt else '' }}" data-lng="{{ startpunkt.lng if startpunkt else '' }}"
        data-zurueck-url="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ seite.id }}"
        data-csrf="{{ csrf }}"></div>
+  </div>
+  <section id="bsp-overlay" class="section" aria-label="BSP-Overlay">
+    <h2>Plan auf der Karte anzeigen (BSP-Overlay)</h2>
+    <p class="form-hint">Der Plan wird im Einsatz lagegenau auf der Karte eingeblendet; nur freigegebene Overlays erscheinen im Einsatz.</p>
+    <p class="form-hint">Voraussetzung ist eine gültige, gespeicherte Georeferenzierung im Editor oben.</p>
+  </section>
 </div>
 {% endblock %}
 {% block scripts %}

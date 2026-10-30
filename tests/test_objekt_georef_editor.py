@@ -164,6 +164,22 @@ def test_editor_css_und_sichere_texte():
     assert verwendet <= definiert
 
 
+def test_editor_seite_dock_abstand_und_sticky_aktionen():
+    import re
+
+    template = Path("app/templates/objekt/georef_editor.html").read_text()
+    css = Path("app/static/css/objekt_georef_editor.css").read_text()
+    assert 'class="page-content georef-editor-page"' in template
+    assert "padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px))" in css
+    aktionen = re.search(r"\.georef-editor-page #georef-editor \.ogx__aktionen\s*\{([^}]+)\}", css)[1]
+    for regel in ("position:sticky", "bottom:0", "z-index:1001", "background:var(--surface)",
+                  "border-top:1px solid var(--border)"):
+        assert regel in aktionen
+    # Die gemeinsame Dialog-Aktionsleiste bleibt im normalen Layoutfluss.
+    gemeinsam = re.search(r"^\.ogx__aktionen\s*\{([^}]+)\}", css, re.MULTILINE)[1]
+    assert "position:" not in gemeinsam
+
+
 def test_bestehende_georef_dry_run_bleibt_unveraendert_und_rotation_konflikt(client, plan):
     with SessionLocal() as db:
         set_tenant_context(db, plan["org_id"])

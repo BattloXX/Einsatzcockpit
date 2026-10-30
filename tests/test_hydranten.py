@@ -122,6 +122,11 @@ def test_neue_routen_registriert():
 def hydranten_umgebung(monkeypatch):
     hs._cache.clear()
     hs._flights.clear()
+    monkeypatch.setattr(settings, "OVERPASS_FALLBACK_URLS", "")
+    # Diese Bestandstests isolieren den globalen Hydranten-Breaker und dessen Backoff.
+    from app.services import overpass_endpunkte
+
+    monkeypatch.setattr(overpass_endpunkte, "_fehler", AsyncMock())
     monkeypatch.setattr(settings, "REDIS_URL", "")
     monkeypatch.setattr(hs.random, "uniform", lambda *args: 1)
     uhr = [time.time()]
@@ -457,3 +462,16 @@ def test_retry_after_http_datum_und_jitter(hydranten_umgebung, monkeypatch):
     assert hs._wartezeit(httpx.ReadTimeout("Zeitlimit"), 1) == 48
     monkeypatch.setattr(hs.random, "uniform", lambda *args: 1.2)
     assert hs._wartezeit(httpx.ReadTimeout("Zeitlimit"), 1) == 72
+
+
+async def test_primaer_502_fallback_frische_hydranten(hydranten_umgebung, monkeypatch):
+    fallback = "https://fallback.test/api/interpreter"
+    monkeypatch.setattr(settings, "OVERPASS_FALLBACK_URLS", fallback)
+    post = AsyncMock(side_effect=[_antwort(502), _antwort()])
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    ergebnis = await hs.fetch_osm_hydranten_ergebnis(47.465, 9.75)
+    assert ergebnis.quelle == "frisch" and not ergebnis.veraltet
+    assert ergebnis.items[0]["id"] == "osm-1"
+    assert [aufruf.args[0] for aufruf in post.call_args_list] == [settings.HYDRANT_OVERPASS_URL, fallback]
+    breaker = next(wert for key, (wert, _) in hs._cache.items() if key.startswith("hydranten-breaker:"))
+    assert breaker["fehler"] == []

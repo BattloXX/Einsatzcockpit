@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -1372,6 +1372,22 @@ def incident_info(incident_id: int, request: Request, db: Session = Depends(get_
         "gmaps_url": gmaps_url,
         "route_neu_allowed": has_role(user, "objekt_verwalter", "incident_leader", "org_admin", "admin"),
     })
+
+
+@router.get("/einsatz/{incident_id}/info/bsp-overlays.json")
+def incident_info_bsp_overlays(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    from app.services.objekt_bsp_overlay_service import einsatz_overlays_json
+
+    user = getattr(request.state, "user", None)
+    if (not user or getattr(request.state, "qr_incident_id", None) is not None
+            or getattr(request.state, "qr_lage_id", None) is not None):
+        raise HTTPException(401, "Anmeldung erforderlich")
+    incident = _incident_or_404(incident_id, db)
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+    return JSONResponse(einsatz_overlays_json(db, incident.id, user)
+                        if getattr(request.state, "objekt_enabled", False) else [],
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/einsatz/{incident_id}/ausrueckordnung", response_class=HTMLResponse)

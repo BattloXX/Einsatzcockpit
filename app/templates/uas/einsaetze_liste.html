@@ -65,7 +65,7 @@
 
 <div x-data="{search: '', status: ''}">
   <div class="uas-filter">
-    <input type="text" x-model="search" placeholder="Suche (Stichwort, Adresse, Pilot…)">
+    <input data-no-dirty type="text" x-model="search" placeholder="Suche (Stichwort, Adresse, Pilot…)">
     <select x-model="status">
       <option value="">Alle Status</option>
       <option value="alarmiert">Alarmiert</option>

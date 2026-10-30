@@ -579,6 +579,12 @@ function registriere() {
         this.uebersichtKarte = new EinheitKarte(element, { onSelect: (auftrag) => {
           this.markerAusgewaehlt(auftrag.dispatch_id);
         } });
+        if (window.EcpBspOverlay) {
+          const parameter = this.simulation ? "sim=" + this.simEinheitId : "einheit=" + this.einheitId;
+          this.uebersichtKarte.bsp = window.EcpBspOverlay.init(this.uebersichtKarte.map, {
+            listUrl: "/einheit/bsp-overlays.json?" + parameter, nurLokal: true,
+          });
+        }
         element.addEventListener("click", (event) => {
           const button = event.target.closest("button[data-dispatch-id]");
           if (button) void this.oeffne(button.dataset.dispatchId);
@@ -587,6 +593,7 @@ function registriere() {
       this.uebersichtKarte.aktualisieren([this.aktuell, ...this.weitere, ...this.abgeschlossen].filter(Boolean), {
         fertige: this.fertigeAufKarte, standort: this.standort, ausgewaehlt: this.kartenZiel?.dispatch_id,
       });
+      this.uebersichtKarte.bsp?.reload();
       this.uebersichtKarte.hinweise(this.kartenHinweise);
       void this.kartenZielLaden();
     },

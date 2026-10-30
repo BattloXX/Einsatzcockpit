@@ -27,7 +27,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
@@ -2745,6 +2745,35 @@ def karte_editor(
     return templates.TemplateResponse(request, "objekt/karte.html", ctx)
 
 
+@router.get("/{objekt_id}/bsp-overlays.json")
+def bsp_overlays_json(
+    objekt_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.services.objekt_bsp_overlay_service import objekt_overlays_json
+
+    objekt = _objekt_or_404(db, objekt_id, user)
+    daten = objekt_overlays_json(db, objekt, user)
+    headers = {"Cache-Control": "private, no-store"}
+    if is_objekt_verwalter(user):
+        from app.models.objekt import ObjektBspOverlay
+
+        # Keine Entwurfsdaten oder Raster-URLs ausliefern; Listenformat bleibt stabil.
+        auslieferbar = {overlay["id"] for overlay in daten}
+        anzahl = sum(
+            overlay.id not in auslieferbar
+            for overlay in db.query(ObjektBspOverlay).filter(
+                ObjektBspOverlay.objekt_id == objekt.id,
+                ObjektBspOverlay.org_id == objekt.org_id,
+                ObjektBspOverlay.status.in_(("entwurf", "freigegeben")),
+            ).all()
+        )
+        headers["X-BSP-Pruefen"] = str(anzahl)
+    return JSONResponse(daten, headers=headers)
+
+
 @router.get("/{objekt_id}/karte/einbettung", response_class=HTMLResponse)
 def karte_readonly_partial(
     objekt_id: int,
@@ -2933,6 +2962,7 @@ def karten_gebaeude_json(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
 ):
+    from app.mcp.fehler import ExternerDienstFehler
     from app.services.objekt_gebaeude_service import gebaeude_umrisse
 
     objekt = _objekt_or_404(db, objekt_id, user)
@@ -2940,6 +2970,8 @@ def karten_gebaeude_json(
         raise HTTPException(status_code=422, detail="Objekt hat keine Kartenposition fuer die Gebaeudeabfrage")
     try:
         return run_async(gebaeude_umrisse, objekt.lat, objekt.lng)
+    except ExternerDienstFehler as exc:
+        raise HTTPException(status_code=422, detail={"meldung": exc.meldung, "code": exc.code}) from None
     except objekt_karte_service.ObjektKartenFehler as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
@@ -2978,6 +3010,9 @@ def _karten_review_mutation(db, objekt, user, daten, aktion, vorschlag_id=None):
         else:
             antwort = service.vorschlag_korrigieren(db, objekt, vorschlag_id, daten.get("lat"), daten.get("lng"),
                                                    daten.get("rotation", 0), daten.get("label"), user, "ui")
+            if daten.get("freigeben") is True:
+                antwort = service.freigeben(db, objekt, [vorschlag_id], user,
+                                            daten.get("bestaetigte_warnungen", {}), "ui")
         db.commit()
         return antwort
     except objekt_karte_service.ObjektKartenFehler as exc:

@@ -512,6 +512,15 @@
       }).catch(function (err) { showToast(fehlerText(err, "Objekte konnten nicht geladen werden."), "warn"); });
     }
 
+    var bspLayer = opts.objektEnabled && window.EcpBspOverlay ? window.EcpBspOverlay.init(karte, {
+      listUrl: apiBase + "/bsp-overlays.json",
+      postUrlTemplate: apiBase + "/bsp-overlays/{overlay_id}/einstellung",
+      csrfToken: opts.csrfToken, kannEinstellen: opts.editierbar
+    }) : null;
+    // Objektzuordnungen haben nicht in jedem Schreibweg einen eigenen WS-Event.
+    // Polling entfernt auch ohne Event inzwischen ungueltige Freigaben.
+    if (bspLayer) { setInterval(function () { bspLayer.reload(); }, 30000); }
+
     // ── Auto-Layer: Wasserstellen (Löschwasser-Stammdaten, statisch je Ladung) ──
     var WASSERSTELLE_ICON_TEXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
     function wasserstelleIcon(kat) {
@@ -911,6 +920,9 @@
     // Basiskarte und die zuletzt gedruckten Layer je Browser/Nutzer merken, damit
     // beim naechsten Einsatz nicht wieder alles auf den Standard zurueckgesetzt ist.
     var DRUCK_SETTINGS_KEY = "lft_druck_settings";
+    var druckBspModus = document.getElementById("lft-druck-bsp-modus");
+    var druckBspIds = document.getElementById("lft-druck-bsp-ids");
+    var druckBspDeckkraft = document.getElementById("lft-druck-bsp-deckkraft");
     function speichereDruckEinstellungen() {
       try {
         var fmtSel = document.getElementById("lft-druck-format");
@@ -919,6 +931,9 @@
           return cb && cb.checked;
         });
         localStorage.setItem(DRUCK_SETTINGS_KEY, JSON.stringify({
+          bsp_modus: druckBspModus.value,
+          bsp_ids: druckBspIds.value || druckBspIds.dataset.gespeichert || "",
+          bsp_deckkraft: Number(druckBspDeckkraft.value),
           fmt: fmtSel ? fmtSel.value : null,
           layers: layers,
           baselayer: baselayerSelect ? baselayerSelect.value : null
@@ -932,6 +947,14 @@
         gespeichert = raw ? JSON.parse(raw) : null;
       } catch (e) { gespeichert = null; }
       if (!gespeichert) { return; }
+      // Bildschirmzustand beeinflusst gespeicherte Druckentscheidungen nie.
+      if (["MAP_ONLY", "MAP_WITH_BSP", "BSP_EXCERPT_ONLY", "MAP_AND_BSP_SEPARATE"].indexOf(gespeichert.bsp_modus) !== -1) {
+        druckBspModus.value = gespeichert.bsp_modus;
+      }
+      druckBspIds.dataset.gespeichert = gespeichert.bsp_ids || "";
+      if (gespeichert.bsp_deckkraft >= 0.1 && gespeichert.bsp_deckkraft <= 1) {
+        druckBspDeckkraft.value = gespeichert.bsp_deckkraft;
+      }
       var fmtSel = document.getElementById("lft-druck-format");
       if (fmtSel && gespeichert.fmt) { fmtSel.value = gespeichert.fmt; }
       if (gespeichert.baselayer && baselayerSelect && baselayerSelect.value !== gespeichert.baselayer) {
@@ -951,9 +974,55 @@
       }
     })();
 
+    // BSP-Druckdialog: eigene Parameter, bewusst ohne Bindung an lft-layer-bsp.
+    var druckDialog = document.getElementById("lft-druck-dialog");
+    function druckBspStatus() {
+      document.getElementById("lft-druck-bsp-status").textContent =
+        "BSP-Overlay wird gedruckt: " + (druckBspModus.value === "MAP_ONLY" ? "nein" : "ja");
+    }
+    druckBspModus.addEventListener("change", druckBspStatus);
+    document.getElementById("lft-druck-abbrechen").addEventListener("click", function () { druckDialog.close(); });
     var btnDruck = document.getElementById("lft-tool-druck");
     if (btnDruck) {
       btnDruck.addEventListener("click", function () {
+        druckBspStatus();
+        druckDialog.showModal();
+        var behalten = druckBspIds.value || druckBspIds.dataset.gespeichert || "";
+        fetchJson(apiBase + "/bsp-overlays.json").then(function (liste) {
+          druckBspIds.dataset.alleIds = liste.map(function (o) { return o.id; }).join(",");
+          druckBspIds.textContent = "";
+          var alle = document.createElement("option");
+          alle.value = ""; alle.textContent = "Alle freigegebenen";
+          druckBspIds.appendChild(alle);
+          liste.forEach(function (o) {
+            var option = document.createElement("option");
+            option.value = String(o.id);
+            option.textContent = [o.objekt_name, o.name, o.plan_art, o.geschoss].filter(Boolean).join(" · ");
+            druckBspIds.appendChild(option);
+          });
+          if (behalten && !liste.some(function (o) { return String(o.id) === behalten; })) {
+            var fehlt = document.createElement("option");
+            fehlt.value = behalten; fehlt.textContent = "Nicht verfügbar: ID " + behalten;
+            druckBspIds.appendChild(fehlt);
+          }
+          druckBspIds.value = behalten;
+          delete druckBspIds.dataset.gespeichert;
+          document.getElementById("lft-druck-bsp-hinweis").textContent =
+            liste.length ? "" : "Keine freigegebenen Pläne verfügbar.";
+        }).catch(function () {
+          document.getElementById("lft-druck-bsp-hinweis").textContent = "Planliste nicht verfügbar.";
+          // Gespeicherte konkrete Auswahl auch bei Ladefehler beibehalten.
+          if (behalten && druckBspIds.value !== behalten) {
+            var fehlt = document.createElement("option");
+            fehlt.value = behalten; fehlt.textContent = "Nicht verfügbar: ID " + behalten;
+            druckBspIds.appendChild(fehlt); druckBspIds.value = behalten;
+          }
+        });
+      });
+    }
+    var btnVorschau = document.getElementById("lft-druck-vorschau");
+    if (btnVorschau) {
+      btnVorschau.addEventListener("click", function () {
         speichereDruckEinstellungen();
         var b = karte.getBounds();
         var aktiveLayer = [];
@@ -975,7 +1044,11 @@
           "&max_lat=" + b.getNorth().toFixed(6) + "&max_lng=" + b.getEast().toFixed(6) +
           "&fmt=" + encodeURIComponent(fmt) + "&layers=" + encodeURIComponent(aktiveLayer.join(",")) +
           "&baselayer=" + (baselayerSelect ? baselayerSelect.value : "osm");
+        qs += "&bsp_modus=" + encodeURIComponent(druckBspModus.value) +
+          "&bsp_ids=" + encodeURIComponent(druckBspIds.value || druckBspIds.dataset.gespeichert || druckBspIds.dataset.alleIds || "") +
+          "&bsp_deckkraft=" + encodeURIComponent(druckBspDeckkraft.value);
         window.open(apiBase + "/karte/druck?" + qs, "_blank");
+        druckDialog.close();
       });
     }
 
@@ -1040,7 +1113,7 @@
             a.innerHTML = '<img src="' + bildUrl + '" alt="" loading="lazy"><span>' + escapeHtml(titel) + "</span>";
             li.appendChild(a);
           } else {
-            li.textContent = zeit + " · " + e.event_typ;
+            li.textContent = zeit + " · " + (e.event_typ === "bsp.einstellung" ? "Brandschutzplan-Einstellung geändert" : e.event_typ);
           }
           el.appendChild(li);
         });
@@ -1699,6 +1772,8 @@
         try { data = JSON.parse(ev.data); } catch (e) { return; }
         if (!data || typeof data.type !== "string") { return; }
 
+        if (bspLayer) { bspLayer.handleEvent(data); }
+
         if (data.type === "lagefuehrung.feature.created" || data.type === "lagefuehrung.feature.updated") {
           if (data.feature) {
             if (editingFeatureId !== data.feature.id) { renderFeature(data.feature); }
@@ -1714,6 +1789,8 @@
           } else {
             ladeFeatures();
           }
+          ladeChronologie();
+        } else if (data.type === "lagefuehrung.bsp.changed") {
           ladeChronologie();
         } else if (data.type === "lagefuehrung.chronologie_changed") {
           ladeChronologie();
@@ -1740,6 +1817,7 @@
             // (siehe can_edit_via_rolle in ui_lagefuehrung.py) -- ein Entzug wirkt sich auf
             // solche Nutzer also nicht aus.
             applyEditierbarChange(opts.editierbarViaRolle || !!data.granted);
+            if (bspLayer) { bspLayer.reload(); }
           }
         }
       };

@@ -1,10 +1,104 @@
 /* Gemeinsamer Georeferenzeditor fuer Dialog und eigenstaendige Seite. */
-.ogx { min-width:0; }
+.ogx { min-width:0; display:flex;flex-direction:column;gap:10px; }
+.ogx > * { margin:0; }
+.ogx__status { padding:8px 12px;border-radius:var(--radius-sm,6px);background:var(--surface-high);border:1px solid var(--border);font-weight:600; }
+.ogx__hinweise { list-style:none;padding:0;display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--text-muted); }
+.ogx__hinweise:empty { display:none; }
+.ogx__meta { font-size:.82rem;color:var(--text-muted); }
+.ogx__meta:empty { display:none; }
+.ogx__hilfe { font-size:.85rem;color:var(--text-muted); }
+.ogx__anweisung { font-weight:700;font-size:1rem;color:var(--text); }
+.ogx__leiste { display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:8px 12px;background:var(--surface-high);border:1px solid var(--border);border-radius:var(--radius-sm,6px); }
+.ogx__feld { display:flex;align-items:center;gap:8px;font-size:.85rem; }
+.ogx__feld .form-select { width:auto; }
+.ogx__feld input[type=checkbox] { width:16px;height:16px;accent-color:var(--red-light); }
+.ogx__feld input[type=range] { width:140px;accent-color:var(--red-light); }
+.ogx__paare { display:flex;flex-direction:column;gap:4px; }
+.ogx__paare:empty { display:none; }
+.ogx__paar { display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:.85rem; }
+.ogx__karte { border:1px solid var(--border);border-radius:var(--radius-sm,6px); }
 .ogx__layout { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
 .ogx__karte { height:52vh;min-height:280px;min-width:0;outline:3px solid transparent; }
 .ogx__aktiv { outline-color:var(--red-light); }
 .ogx__gut { color:var(--green); }
 .ogx__fehler { color:var(--red-light); }
 .ogx__nummer { background:var(--surface-high);color:var(--text);border:2px solid var(--red-light);border-radius:50%;text-align:center;font-weight:bold; }
-.ogx__aktionen { display:flex;flex-wrap:wrap;gap:8px;margin:12px 0; }
+.ogx__aktionen { display:flex;flex-wrap:wrap;gap:8px; }
+/* Platz zum Hochschieben ueber das Android-Dock; Dialoge behalten ihr Layout. */
+.georef-editor-page { padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px)); }
+.georef-editor-page #georef-editor { isolation:isolate; }
+.georef-editor-page #georef-editor .ogx__aktionen {
+  position:sticky;bottom:0;z-index:1001;
+  padding:12px 0;background:var(--surface);border-top:1px solid var(--border);
+}
 @media(max-width:760px) { .ogx__layout { grid-template-columns:1fr; } .ogx__karte { height:36vh; } }
+/* Ebenen-Umschalter: leaflet.min.css verweist auf ein nicht ausgeliefertes Sprite. */
+.ogx .leaflet-control-layers-toggle,
+.ogx .leaflet-retina .leaflet-control-layers-toggle {
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 2 8l10 5 10-5z'/%3E%3Cpath d='m2 13 10 5 10-5'/%3E%3Cpath d='m2 17.5 10 5 10-5' opacity='.5'/%3E%3C/svg%3E");
+  background-size:22px 22px;
+}
+.ogx__feld--check { cursor:pointer; }
+
+/* BSP-Verwaltung: gefuehrte Schritte mit denselben Flaechen und Badges wie Objektkarten. */
+#bsp-overlay { display:flex; flex-direction:column; gap:16px; min-width:0; }
+#bsp-overlay > h2, #bsp-overlay > p { margin:0; }
+#bsp-overlay > h2 { font-size:1.25rem; font-weight:700; }
+#bsp-overlay .bsp__formular[hidden], #bsp-overlay [hidden] { display:none; }
+#bsp-overlay .bsp__kopf { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+#bsp-overlay .bsp__kopf h3 { margin:0; }
+#bsp-overlay .bsp__liste { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:12px; }
+#bsp-overlay .bsp__overlay { display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding:16px; color:var(--text); text-align:left; cursor:pointer; border:1px solid var(--border); background:var(--surface); }
+#bsp-overlay .bsp__overlay[aria-pressed=true] { border-color:var(--red-light); box-shadow:inset 3px 0 var(--red-light); background:var(--surface-high); }
+#bsp-overlay .badge { gap:6px; width:fit-content; }
+#bsp-overlay [data-bsp-status=veraltet] { color:var(--orange,#ed9a36); background:rgba(237,154,54,.15); }
+#bsp-overlay [data-bsp-status=zurueckgezogen] { text-decoration:line-through; }
+#bsp-overlay .bsp__formular { display:flex; flex-direction:column; gap:16px; border:0; padding:0; margin:0; min-width:0; }
+#bsp-overlay legend { font-weight:700; margin-bottom:12px; }
+#bsp-overlay .bsp__schritt, #bsp-overlay .bsp__leer, #bsp-overlay .bsp__voraussetzung { padding:20px; min-width:0; }
+#bsp-overlay .bsp__schritt { display:flex; flex-direction:column; gap:12px; }
+#bsp-overlay .bsp__schritt > h3, #bsp-overlay .bsp__schritt > h4, #bsp-overlay .bsp__schritt > p { margin:0; }
+#bsp-overlay .bsp__schritt > h4 { margin-top:8px; }
+#bsp-overlay .bsp__schritt > button { align-self:flex-start; }
+#bsp-overlay .bsp__felder { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+#bsp-overlay .bsp__feld { display:flex; flex-direction:column; gap:6px; min-width:0; }
+#bsp-overlay .bsp__label { font-weight:600; }
+#bsp-overlay input:not([type=checkbox]), #bsp-overlay select { width:100%; max-width:100%; min-width:0; min-height:44px; }
+#bsp-overlay input[type=range] { accent-color:var(--red-light); }
+#bsp-overlay .bsp__check { display:grid; grid-template-columns:24px 1fr; gap:6px 10px; align-items:center; padding:8px 0; min-height:44px; cursor:pointer; }
+#bsp-overlay .bsp__check input { grid-column:1; grid-row:1; width:22px; height:22px; accent-color:var(--red-light); }
+#bsp-overlay .bsp__check .bsp__label, #bsp-overlay .bsp__check .form-hint { grid-column:2; }
+#bsp-overlay button, #bsp-overlay summary, .bsp__freigabe button { min-height:44px; white-space:normal; overflow-wrap:anywhere; }
+#bsp-overlay .bsp__segment { display:flex; flex-wrap:wrap; width:fit-content; border:1px solid var(--border); border-radius:var(--radius-sm,6px); padding:4px; gap:4px; background:var(--surface-high); }
+#bsp-overlay .bsp__segment [aria-pressed=true] { background:var(--surface); color:var(--red-light); box-shadow:0 0 0 1px var(--red-light); }
+#bsp-overlay summary { display:flex; align-items:center; cursor:pointer; font-weight:600; list-style:disclosure-closed; }
+#bsp-overlay summary::before { content:"+"; margin-right:10px; }
+#bsp-overlay details[open] > summary::before { content:"−"; }
+#bsp-overlay .bsp__druck { border-top:1px solid var(--border); padding-top:8px; }
+#bsp-overlay .bsp__aktionen { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding-top:12px; border-top:1px solid var(--border); }
+#bsp-overlay .bsp__loeschen { color:var(--text-muted); text-decoration:underline; margin-left:auto; }
+#bsp-overlay .bsp__meldung, #bsp-overlay .bsp__warnung { padding:12px; border:1px solid var(--border); border-radius:var(--radius-sm,6px); background:var(--surface-high); }
+#bsp-overlay .bsp__meldung--fehler { border-color:var(--red-light); color:var(--red-light); }
+#bsp-overlay .bsp__warnung { border-left:3px solid var(--orange,#ed9a36); }
+#bsp-overlay .bsp__meldung:empty, #bsp-overlay .bsp__warnung:empty, #bsp-overlay .bsp__ungespeichert:empty { display:none; }
+#bsp-overlay button:focus-visible, #bsp-overlay summary:focus-visible { outline:3px solid var(--red-light); outline-offset:3px; }
+.bsp__markieren { outline:4px solid var(--red-light); outline-offset:3px; }
+.bsp__planhinweis { position:absolute; top:0; left:48px; right:0; z-index:1000; padding:10px; background:var(--surface-high); color:var(--text); border-bottom:2px solid var(--red-light); pointer-events:none; font-weight:600; }
+.bsp__freigabe { width:560px; max-width:calc(100vw - 24px); max-height:85vh; overflow:auto; padding:24px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:var(--radius-sm,6px); }
+.bsp__freigabe::backdrop { background:rgba(0,0,0,.6); }
+.bsp__freigabe label { display:flex; align-items:center; gap:12px; padding:12px 0; }
+.bsp__freigabe input { min-width:22px; height:22px; }
+.bsp__freigabe button { margin:8px 8px 0 0; }
+@media(max-width:760px) {
+  #bsp-overlay .bsp__felder { grid-template-columns:1fr; }
+  #bsp-overlay .bsp__schritt { padding:16px; }
+  #bsp-overlay .bsp__aktionen > button { flex:1 1 100%; }
+  #bsp-overlay .bsp__loeschen { margin-left:0; }
+  #bsp-overlay .bsp__segment { width:100%; }
+  #bsp-overlay .bsp__segment button { flex:1 1 120px; }
+  .bsp__freigabe { padding:16px; }
+}
+
+.bsp__polygon-griff { background:transparent; cursor:grab; touch-action:none; }
+.bsp__polygon-griff::after { content:""; position:absolute; inset:14px; background:var(--surface,#fff); border:3px solid var(--red-light,#b91c1c); border-radius:50%; box-shadow:0 0 2px #333; }
+.bsp__polygon-griff:first-child::after { background:var(--red-light,#b91c1c); }

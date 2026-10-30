@@ -34,6 +34,14 @@ class Element {
   set innerHTML(_) { throw new Error("Rohdaten-innerHTML im Editor"); }
   replaceChildren() { this.childNodes = []; this.text = ""; }
   setAttribute(k, v) { this[k] = v; }
+  get classList() {
+    const el = this;
+    return { toggle(name, an) {
+      const namen = (el.className || "").split(/\s+/).filter((n) => n && n !== name);
+      if (an) { namen.push(name); }
+      el.className = namen.join(" ");
+    } };
+  }
   addEventListener(k, fn) { this.events[k] = fn; }
   showModal() { this.open = true; }
   close() { this.open = false; this.events.close(); }
@@ -325,4 +333,47 @@ test("Seite verwirft mit Revision und ignoriert laufende alte Pruefung", async (
   assert.ok(e.root.textContent.includes("Georeferenz verworfen"));
   assert.equal(knopf(e.root, "Georeferenz verwerfen").disabled, true);
   assert.equal(e.root.alle("button").filter((b) => b.textContent === "Paar löschen").length, 0);
+});
+
+const { bspLagegenauigkeit, bspStatus } = context.window.objektGeorefEditor;
+
+test("BSP-Lagegenauigkeit: Klartext und Schwellen dienen nur der Darstellung", () => {
+  for (const [rmse_m, wort] of [[0, "gut"], [0.4, "gut"], [0.5, "gut"], [0.51, "prüfen"], [2, "prüfen"], [2.01, "ungenau"], [null, "unbekannt"]]) {
+    const text = bspLagegenauigkeit({ status: "gueltig", rmse_m, punktzahl: 5 });
+    assert.match(text, new RegExp("Lagegenauigkeit: " + wort));
+    assert.match(text, /5 Referenzpunkte/);
+  }
+  assert.match(bspLagegenauigkeit({ status: "gueltig", rmse_m: 0.4, punktzahl: 5 }), /Abweichung 0,4 m/);
+  assert.match(bspLagegenauigkeit({ status: "gueltig", rmse_m: 0.002, punktzahl: 3 }), /Abweichung unter 1 cm/);
+  assert.match(bspLagegenauigkeit({ status: "ungueltig", rmse_m: 0.1, punktzahl: 3 }), /neu prüfen/);
+  assert.match(bspLagegenauigkeit(null), /nach dem Speichern/);
+});
+
+test("BSP-Statuschips: jeder Zustand hat Text, App-Badge und Systemicon", () => {
+  for (const [status, text, badge, icon] of [
+    ["entwurf", "Entwurf", "muted", "file-text"], ["freigegeben", "Freigegeben", "success", "circle-check"],
+    ["veraltet", "Veraltet", "exercise", "alert-triangle"], ["zurueckgezogen", "Zurückgezogen", "muted", "archive"],
+  ]) { assert.deepEqual(Array.from(bspStatus(status)), [text, badge, icon]); }
+});
+
+
+const polygon = context.window.objektGeorefEditor;
+const dreieck = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+test("Polygon: Flaeche in Prozent und beide Orientierungen", () => {
+  assert.equal(polygon.polygonFlaeche(dreieck) * 100, 50);
+  assert.equal(polygon.polygonFehler(dreieck), "");
+  assert.equal(polygon.polygonFehler([...dreieck].reverse()), "");
+});
+test("Polygon: Selbstueberschneidung, Beruehrung, Duplikate und Mindestgroesse", () => {
+  const p = (paare) => paare.map(([x, y]) => ({ x, y }));
+  assert.match(polygon.polygonFehler(p([[0, 0], [1, 1], [0, 1], [1, 0]])), /überschneiden/);
+  assert.match(polygon.polygonFehler(p([[0, 0], [1, 0], [0.5, 0], [0, 1]])), /überschneiden/);
+  assert.match(polygon.polygonFehler([...dreieck, dreieck[0]]), /gleich/);
+  assert.match(polygon.polygonFehler(p([[0, 0], [0.0001, 0], [0, 1]])), /zu klein/);
+});
+test("Polygon: Letzten Punkt entfernen veraendert Eingabe nicht", () => {
+  const weniger = polygon.polygonEntfernen(dreieck);
+  assert.equal(weniger.length, 2);
+  assert.equal(dreieck.length, 3);
+  assert.match(polygon.polygonFehler(weniger), /3 bis 100/);
 });

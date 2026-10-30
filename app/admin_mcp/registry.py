@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from app import log_buffer
 from app.admin_mcp.masking import mask_text
+from app.admin_mcp.osm_tools import collect_osm
 from app.config import settings
 from app.services import github_token
 from app.services import system_diagnose as diagnose
@@ -30,6 +31,7 @@ ADMIN_TOOLS = {
 
 
 READ_TOOLS = tuple(ADMIN_TOOLS)
+ADMIN_TOOLS["admin_osm_pruefen"] = AdminTool("Lokalen OSM-Bestand, Statistik und optionale Live-Proben lesen.", "osm")
 DIAG_TOOLS = {
     "admin_diagnose_starten": AdminTool("Lesende Diagnose als begrenzten Hintergrundlauf anfordern.", "diagnose"),
     "admin_diagnose_status": AdminTool("Status, Fortschritt und uebersprungene Checks eines Laufs lesen.", "diagnose"),
@@ -51,11 +53,11 @@ ADMIN_TOOLS.update(CODE_TOOLS)
 def collect(db, name: str, **arguments) -> dict:
     if name == "admin_system_uebersicht":
         parts = {}
-        for key in READ_TOOLS:
+        for key in (*READ_TOOLS, "admin_osm_pruefen"):
             if key in ("admin_system_uebersicht", "admin_logs_analysieren"):
                 continue
             try:
-                parts[key] = collect(db, key)
+                parts[key] = collect(db, key, **({"live": False} if key == "admin_osm_pruefen" else {}))
             except Exception:
                 db.rollback()
                 parts[key] = {"status": "fail", "evidence": {"fehler": "Teilcheck nicht verfuegbar"}}
@@ -69,6 +71,8 @@ def collect(db, name: str, **arguments) -> dict:
             status = "warn"
         return {"status": status, "github_zugang": access, "evidence": {"version": version["evidence"],
                 "teilchecks": {k: v["status"] for k, v in parts.items()}}}
+    if name == "admin_osm_pruefen":
+        return collect_osm(live=arguments.get("live", True))
     if name == "admin_dienste_pruefen":
         return diagnose.service_summary(db)
     if name == "admin_gateway_pruefen":

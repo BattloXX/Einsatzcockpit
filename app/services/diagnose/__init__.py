@@ -7,6 +7,7 @@ from app.services.diagnose import (  # noqa: F401
     katplan,
     kontakte,
     objekte,
+    osm,
     redis,
     suche,
     worker,

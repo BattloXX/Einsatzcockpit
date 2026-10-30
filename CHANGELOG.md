@@ -4,6 +4,41 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- BSP-Overlay: Freie Polygon-Ausschnitte im Georef-Editor mit Touch-Griffen, Geometrieprüfung
+  und MCP-Entwürfen; transparente Kartenraster und weiß maskierte, unverzerrte Druckausschnitte.
+
+- **BSP-Verwaltung:** Geführter Ablauf mit drei Schritten, Overlay-Karten mit Statuschips, verständlicher Lagegenauigkeit und Freigabezusammenfassung. Ausschnitt-Markierung hebt den Plan hervor; Anzeige und eingeklappte Druck-Einstellungen sind getrennt. Ungespeicherte Änderungen, fehlende Georeferenz und Fehler sind sichtbar; Bedienung auch am Handy.
+
+- **Objektkarte:** BSP-Overlays im Karten-Tab und Vollbild-Editor lokal ein-/ausblenden und Deckkraft einstellen; einklappbare Bedienung unter der Karte auch mobil. Verwalter erhalten einen Hinweis auf nicht freigegebene/veraltete Overlays, ohne Entwurfsraster auszuliefern. Marker und Geoman bleiben bedienbar.
+
+- **Objekt-Einsatzansicht:** Freigegebene, aktuelle BSP-Overlays erscheinen auch in der Lagekarte der Objekt-Einsatzansicht unter den Objektsymbolen, mit lokalem Schalter und Deckkraft; geschuetzte Objekt-JSON-Route ohne Offlinecache.
+
+- **Objektkarte / BSP-Overlay:** Freigegebene Planausschnitte erscheinen lagegenau als Raster-Ebene in der Einsatzkarte. Verwaltung im Georef-Editor (Ausschnitt, Vorschau, Freigabe mit einzeln bestätigten Warnungen); Ebene in Lageführung mit Opt-out (für alle bzw. nur für mich) und Deckkraft, lesend in Einsatzinfo-, GSL- und Einheitenkarte. Veraltete oder zurückgezogene Overlays werden nie ausgeliefert. Druck getrennt vom Bildschirm: vier Modi im Lageführung-Druckdialog, regelbasierter Ausdruck des BSP-Ausschnitts über die Druckregel (nur mit `autodruck`, idempotent je Freigabe). MCP: `objekt_bsp_overlay_entwurf` (nur Entwurf) und Lesefelder `bsp_overlays`. Migration 0336. Doku: [BSP-Overlay](docs/architecture/bsp-overlay.md).
+
+- **Objektkarte / BSP-Arbeitsliste:** Nur Lageplan-Seiten werden zur Georeferenzierung vorgeschlagen; Deckblatt-, Geschoss-, Kanal- und Legendenseiten nur, wenn sie bereits eine Georef haben. Dokumente ohne Lageplan-Seite erhalten einen Eintrag `lageplan_klassifizieren` (Befund Pilot Objekt 404: 13 Seiten statt 1).
+
+- **OSM / Systemdiagnose:** Persistente Geodienst-Zaehler mit Redis und lokalem TTL-Fallback, lesendes Admin-MCP-Tool `admin_osm_pruefen` mit parallelen optionalen Status-/PBF-Proben und OSM-Teilstatus ohne HTTP in der Systemuebersicht. Neuer leichter Check `osm.gebaeude_bestand` fuer fehlende/veraltete Bestaende, Prueflaeufe und Importfehler. BSP-Pflichtregeln dokumentiert; keine neue Verwaltungsseite, keine Migration.
+
+- **Objektkarte / OSM:** Gebaeudeumrisse aus konfigurierbaren lokalen PBF-Extrakten, standardmaessig Vorarlberg; Overpass als Rueckfall ausserhalb der importierten Huellen. Begrenzter Download, Aenderungsvergleich mit manueller Pruefung, CLI und Leader-Import (03:30 Europe/Vienna). Veraltete Daten bleiben analysierbar, sperren aber die Georef-Speicherung. Globale OSM-Tabellen, Migration 0335; neue Abhaengigkeit osmium. Betrieb: [lokaler OSM-Bestand](docs/architecture/osm-gebaeude.md).
+
+- **Objektkarte / Betrieb:** Strukturierte externe Overpass-Fehler mit Codes, Wiederholbarkeit, Korrelations-ID und Endpunktversuchen; UI antwortet weiter mit 422. Cache-Antworten weisen hit/miss aus. Identische offene Planvorschlaege erzeugen keine Aenderung und keinen Audit-Eintrag; reine batch_id-Wechsel bleiben still. GIT_SHA wird bei systemd/venv-Deploys ohne gesetzte Build-Revision aus dem lokalen Repository gelesen. Nur private.coffee bleibt Standard-Fallback, da kumi.systems derselbe Host ist. Keine Migration.
+
+- **Overpass:** Konfigurierbare Ausweichendpunkte bei Ueberlastung und Timeout, mit eigenem Fehlerschutz je Endpunkt. Gebaeudeumrisse haben 25 s je Versuch und 45 s Gesamtbudget und sind vom Hydranten-Breaker entkoppelt. Hydranten-Zeitlimits im Alarmpfad bleiben unveraendert; Strassenabfragen und Planspiel-Import wechseln bei Wiederholungen den Endpunkt. Keine Migration.
+
+- **Objektkarte:** Lesende MCP-BSP-Arbeitsliste fuer fertige aktuelle Lageplan-/Brandschutzplan-Seiten mit priorisiertem naechstem Schritt, Vorversions-Georef und Vorschlags-/Markerzahlen. Symbolkatalog mit Legenden-Aliassen und Richtungsfeldern fuer System- und eigene Symbole. Keine Migration; Upload-Benachrichtigung und vorbelegter Editor-Link bleiben offen.
+
+- **Objektkarte:** Bugfix: MCP-Seitenbilder werden wie im Editor gedreht ausgeliefert, auch im Einsatz und beim Thumbnail-Fallback. Optionaler Seitenausschnitt mit Koordinatenhinweis, Rotation und Bildgroesse. Neues Tool `objekt_karte_georef_uebernehmen` uebertraegt gespeicherte Referenzpunkte innerhalb derselben Dokumentgruppe auf eine neue Planversion; Paarfehler, Leave-one-out und Georef-Pruefung sichern die Uebernahme. Analyse bleibt lesend, Speicherung nur durch die Objektverwaltung bei Klasse A. Keine Migration.
+
+- **Objektkarte:** MCP-Vorschlaege uebernehmen Bildrichtungen und berechnen Kartenrotationen aus der Georeferenz (Pfeil-Nullrichtung Osten). Wiederholte Planlaeufe aktualisieren offene Vorschlaege per Bildtoleranz oder erkennen bereits freigegebene Marker. Laufkennung `batch_id`, Listenfilter und Ergebniszaehler; kompatible Georef-Revisionen berechnen Richtungen neu. Migration 0334.
+
+- **Objektkarte:** Neues MCP-Tool `objekt_karte_georef_zuordnen` ordnet markierte Bildkonturen deterministisch OSM-Gebaeudeecken zu. Leave-one-out und Mehrdeutigkeitspruefung erlauben nur eindeutige Klasse A zur Speicherung durch die Objektverwaltung; Klasse C verweist zur menschlichen Pruefung auf den Georeferenzierungseditor. Keine Migration.
+
+- **Android-Aktualisierung:** Pull-to-Refresh auch auf Login-, Public- und Infoscreen-Seiten; innere Scrollbereiche und echte Formulareingaben werden berücksichtigt, Such-/Filterwerte sperren nicht. Sperrgründe werden bei einer Ziehgeste angezeigt; fehlgeschlagene Resync-Aufträge werden gemeldet.
+- **Straßensperren-Infoscreen:** Wetter-Monitorrahmen mit gemeinsamen Farben und Schriftarten; höhenabhängige Listenseiten mit Seitenanzeige statt Scrollleisten. Alle Seiten laufen vor Karte und Einzelansichten durch, Datenaktualisierungen behalten den Fortschritt. Mobil bleibt die vollständige Liste scrollbar. Keine Migration.
+- **Objektkarte:** Offene KI-Vorschläge automatisch anzeigen, direkt prüfen und alle unkritischen Vorschläge mit einem Klick in Blöcken zu 30 freigeben. Eine gemeinsame Warnungsbestätigung, atomar Speichern & freigeben nach Positionskorrektur und direkter Link zur offenen Arbeitskopie. Sicherheitsregeln und MCP unverändert; keine Migration.
+
+- **Verwaltungsmenue:** Pro Fachgebiet ein Hauptpunkt, Unterseiten als URL-basierte Tabs aus einem zentralen Katalog (`admin_navigation.py`). Neue Gruppe Systemverwaltung (nur Sysadmin), Organisations-Einstellungen in vier Tabs, Systemstatus mit Tabs. Admin-Sidebar 42 -> 23, Sysadmin 54 -> 34 Eintraege; alle URLs und Rechte unveraendert. Waechter-Test ordnet jede Admin-Seite einem Hauptpunkt zu; Regel in CLAUDE.md und docs/architecture/admin-navigation.md. Keine Migration.
+
 - **Alarm-Link:** Gast-Anmeldung mit Einsatz-PIN und Namen direkt über Teams-/SMS-Link; IP-Limit und einsatzweite Fehlversuchssperre. QR-/Gastzugänge gelten ausschließlich für ihren Einsatz; Alarm-Link-Gastzugänge enden auch bei Ablauf oder Widerruf des Links. Keine Migration.
 
 - **Alarmierung und Druck:** MariaDB-Snapshot-Konflikte (1020) beim Alarm-Claim begrenzt wiederholen; Druck-Deduplizierung liest den konkurrierenden Gewinner unter bestehender Zeilensperre, ohne Fachaenderungen der aufrufenden Transaktion zu verwerfen.

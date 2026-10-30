@@ -37,6 +37,9 @@
     </aside>
     <div id="objekt-karte" class="objekt-karte-canvas card"></div>
   </div>
+  {% if request.state.objekt_enabled %}
+  {% with bsp_einklappbar=true %}{% include "incident/_bsp_lokal.html" %}{% endwith %}
+  {% endif %}
 </div>
 {% endblock %}
 {% block scripts %}
@@ -44,12 +47,25 @@
 <script src="/static/js/leaflet-geoman.min.js"></script>
 <script src="/static/js/objekt_georef_editor.js"></script>
 <script src="/static/js/objekt_karte.js"></script>
+{% if request.state.objekt_enabled %}
+<script src="/static/js/bsp_overlay_layer.js"></script>
+{% endif %}
 <script>
-  initObjektKarte({
+(function () {
+  var el = document.getElementById("objekt-karte");
+  if (!el || el.dataset.initialisiert) { return; }
+  el.dataset.initialisiert = "1";
+  var karte = initObjektKarte({
     elementId: "objekt-karte",
     objektId: {{ objekt.id }},
     csrfToken: "{{ request.state.csrf_token }}",
     editierbar: true
   });
+  {% if request.state.objekt_enabled %}
+  window.EcpBspOverlay.init(karte, {
+    listUrl: "/objekte/{{ objekt.id }}/bsp-overlays.json", nurLokal: true
+  });
+  {% endif %}
+})();
 </script>
 {% endblock %}

@@ -12,6 +12,7 @@ import httpx
 from app.config import settings
 from app.models.master import OrgSettings
 from app.services.geocoding import geocode_address
+from app.services.overpass_endpunkte import endpunkte
 
 logger = logging.getLogger(__name__)
 _CACHE: dict[tuple[str, str, float, float, int], tuple[float, OsmNetwork]] = {}
@@ -85,10 +86,12 @@ async def fetch_street_network(
     # Exakter Gebietsname: eine Regex auf Gebietsnamen ist bei Overpass zu langsam (Timeout).
     city_safe = (city or "").strip().replace('"', "").replace("\\", "")
 
+    urls = endpunkte(settings.STRASSEN_OVERPASS_URL)
+
     async def request(client, query: str):
         for attempt in range(2):
             try:
-                response = await client.post(settings.STRASSEN_OVERPASS_URL, data={"data": query})
+                response = await client.post(urls[attempt % len(urls)], data={"data": query})
                 if response.status_code in {429, 502, 503, 504}:
                     if attempt == 0:
                         await asyncio.sleep(RETRY_DELAY_SECONDS)

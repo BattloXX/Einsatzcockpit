@@ -6,6 +6,8 @@
  * sodass die Web-App weiterhin voll funktionsfähig bleibt.
  *
  * Verfügbare Funktionen:
+ *   ELNative.downloadFile(url, filename?) – Datei nativ nach Downloads laden
+ *   ELNative.openFile(url)               – Datei mit externer App öffnen
  *   ELNative.keepAwake(on)              – Bildschirm aktiv halten (oder freigeben)
  *   ELNative.startLocation()            – Hintergrund-GPS starten
  *   ELNative.stopLocation()             – Hintergrund-GPS stoppen
@@ -88,101 +90,7 @@
     return h;
   }
 
-  // ─── Pull-to-Refresh (APP-01) ───────────────────────────────────────────────
-  // Die Android-App legt ein SwipeRefreshLayout um die WebView. Die Seite entscheidet, ob die
-  // Geste gerade erlaubt ist (window.ECPtr = native Schnittstelle, nur in der App vorhanden) und
-  // fuehrt die Aktualisierung ueber die vorhandenen Resync-Funktionen aus (Event "ec:resync"),
-  // statt die Seite hart neu zu laden. Seiten ohne Resync-Handler werden neu geladen, sofern kein
-  // Formular ungespeicherte Eingaben enthaelt.
-  // Blockiert, wenn die Beruehrung innerhalb dieser Elemente beginnt (Karte, Editor, Drag-Zone)
-  const _PTR_TARGET_SELECTOR = '.leaflet-container, [data-no-ptr], .cm-editor, .ql-editor, .sortable-chosen, .sortable-ghost';
-  // Blockiert, sobald eines dieser Elemente sichtbar ist (Dialog, Overlay, laufendes Ziehen)
-  const _PTR_OVERLAY_SELECTOR = 'dialog[open], .modal--open, .person-flyout-backdrop, .sortable-chosen';
-
-  function _visible(el) {
-    return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length > 0)));
-  }
-
-  function _formDirty() {
-    const fields = document.querySelectorAll('input, textarea, select');
-    for (let i = 0; i < fields.length; i++) {
-      const f = fields[i];
-      if (f.type === 'hidden' || f.type === 'submit' || f.type === 'button' || f.disabled) continue;
-      if (f.type === 'checkbox' || f.type === 'radio') {
-        if (f.checked !== f.defaultChecked) return true;
-      } else if (f.tagName === 'SELECT') {
-        for (let j = 0; j < f.options.length; j++) {
-          if (f.options[j].selected !== f.options[j].defaultSelected) return true;
-        }
-      } else if (f.value !== f.defaultValue && f.value !== '') {
-        return true;
-      }
-    }
-    const editable = document.querySelectorAll('[contenteditable="true"]');
-    for (let i = 0; i < editable.length; i++) {
-      if ((editable[i].textContent || '').trim() !== '') return true;
-    }
-    return false;
-  }
-
-  /** true, wenn Pull-to-Refresh jetzt nicht ausgeloest werden darf (Karte, Drag, Dialog, Eingaben, gescrollt). */
-  function ptrBlocked(target) {
-    try {
-      if ((window.scrollY || 0) > 0 || (document.scrollingElement && document.scrollingElement.scrollTop > 0)) return true;
-      const overlays = document.querySelectorAll(_PTR_OVERLAY_SELECTOR);
-      for (let i = 0; i < overlays.length; i++) {
-        if (_visible(overlays[i])) return true;
-      }
-      for (let el = target; el && el !== document.documentElement; el = el.parentElement) {
-        if (el.matches && el.matches(_PTR_TARGET_SELECTOR)) return true;
-        if (el.scrollTop > 0) return true;
-      }
-      return _formDirty();
-    } catch (_) {
-      return true; // im Zweifel nie eine Eingabe gefaehrden
-    }
-  }
-
-  function _pushPtrState(event) {
-    if (window.ECPtr && typeof window.ECPtr.setBlocked === 'function') {
-      window.ECPtr.setBlocked(ptrBlocked(event && event.target));
-    }
-  }
-  document.addEventListener('touchstart', _pushPtrState, { passive: true, capture: true });
-  document.addEventListener('focusin', _pushPtrState, { passive: true });
-
-  /** Aktualisiert die Seite; meldet das Ende an die App (ECPtr.done/failed). */
-  async function refresh() {
-    const ptr = window.ECPtr;
-    const done = () => { if (ptr && ptr.done) ptr.done(); };
-    const failed = (msg) => { if (ptr && ptr.failed) ptr.failed(msg); };
-    if (navigator.onLine === false) {
-      failed('Keine Internetverbindung – Aktualisierung nicht möglich.');
-      return false;
-    }
-    try {
-      const detail = { source: 'pull', handled: false, promises: [] };
-      window.dispatchEvent(new CustomEvent('ec:resync', { detail }));
-      if (detail.handled) {
-        await Promise.race([
-          Promise.allSettled(detail.promises),
-          new Promise((resolve) => setTimeout(resolve, 1500)),
-        ]);
-        done();
-        return true;
-      }
-      if (_formDirty()) {
-        failed('Ungespeicherte Eingaben – bitte zuerst speichern.');
-        return false;
-      }
-      done();
-      window.location.reload();
-      return true;
-    } catch (e) {
-      failed('Aktualisierung fehlgeschlagen.');
-      return false;
-    }
-  }
+  const { refresh, ptrBlocked } = window.ECPullToRefresh;
 
   // ─── GPS-Intervalle & Energiesparmodus ──────────────────────────────────────
   // Energiesparmodus reduziert nur die Frequenz – Tracking bleibt IMMER aktiv,
@@ -325,47 +233,125 @@
     return _registerFcmToken();
   }
 
-  // ─── URLs oeffnen (PDFs etc.) ────────────────────────────────────────────────
-  // Android-WebView hat KEINEN eingebauten PDF-Viewer (anders als Chrome) - PDFs
-  // (Objektblatt, Brandschutzplaene, Dokumentseiten...) muessen daher an einen
-  // Custom Tab (@capacitor/browser) uebergeben werden. Custom Tabs teilen sich
-  // aber NICHT den Cookie-Jar der App-WebView, weshalb die URL zuerst gegen
-  // /api/v1/device/native-link getauscht wird (kurzlebiges, pfadgebundenes Token,
-  // siehe app/core/security.py::sign_native_link_token).
-  async function openUrl(url) {
-    if (!_isNative()) { window.open(url, '_blank', 'noopener'); return; }
-    try {
-      const { Browser } = window.Capacitor.Plugins;
-      if (!Browser) { window.open(url, '_blank', 'noopener'); return; }
-      let target = url;
-      // Nur fuer Same-Origin-Pfade (relative URLs) ein Handoff-Token anfordern -
-      // externe/absolute URLs (z.B. fremde Teams-Webhook-Test-Links) unveraendert weiterreichen.
-      if (url.startsWith('/')) {
-        try {
-          const r = await fetch('/api/v1/device/native-link', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ path: url }),
-          });
-          if (r.ok) { const d = await r.json(); target = d.url; }
-        } catch (e) { console.warn('[ELNative] native-link Fehler:', e); }
-      }
-      await Browser.open({ url: target });
-    } catch (e) {
-      console.warn('[ELNative] openUrl Fehler:', e);
-      window.open(url, '_blank', 'noopener');
+  // ─── Dateien und URLs öffnen ──────────────────────────────────────────────
+  function _fileUrl(url) {
+    const parsed = new URL(url, window.location.href);
+    if (parsed.origin !== window.location.origin || !/^https?:$/.test(parsed.protocol)) {
+      throw new Error('Dateien können nur vom eigenen Server geöffnet werden.');
+    }
+    // NativeFiles übernimmt die WebView-Cookies; alte Handoff-Tokens nie weitergeben.
+    parsed.searchParams.delete('nt');
+    return parsed;
+  }
+
+  function _isDocumentUrl(parsed) {
+    return parsed.origin === window.location.origin &&
+      /(?:\.pdf$|\/pdf(?:\/|$)|\/original$|\/sammel-pdf$)/i.test(parsed.pathname);
+  }
+
+  function _fileNotice(message) {
+    const appEl = document.querySelector('[x-data="appState()"]');
+    if (appEl && window.Alpine) {
+      window.Alpine.$data(appEl).addToast(message, 'warn');
+    } else {
+      window.alert(message);
     }
   }
 
-  // Bestehende "target=_blank"-Links (z.B. Objekt-Dokumente-Liste) faenden im
-  // WebView sonst still ins Leere - global abfangen statt jede Stelle einzeln
-  // umzubauen.
+  // Nur diese Serverrouten garantieren mit download=1 Content-Disposition: attachment.
+  function _attachmentDownload(parsed) {
+    return /^\/objekt-medien\/(?:seite\/\d+\/pdf|dokument\/\d+\/original)$/.test(parsed.pathname) ||
+      /^\/objekte\/\d+\/dokumente\/sammel-pdf$/.test(parsed.pathname) ||
+      parsed.pathname === '/druck/viewer/pdf' ||
+      /^\/medien\/(?:(?:meldung|person)\/)?datei\/\d+$/.test(parsed.pathname);
+  }
+
+  async function _openBrowser(parsed) {
+    const Browser = window.Capacitor?.Plugins?.Browser;
+    if (!Browser) return false;
+    let target = parsed.href;
+    // Custom Tabs teilen die WebView-Cookies nicht: nur hier ein Handoff anfordern.
+    if (parsed.origin === window.location.origin && /^https?:$/.test(parsed.protocol)) {
+      try {
+        const r = await fetch('/api/v1/device/native-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify({ path: parsed.pathname + parsed.search }),
+        });
+        if (r.ok) { const d = await r.json(); target = d.url + parsed.hash; }
+      } catch (e) { console.warn('[ELNative] native-link Fehler:', e); }
+    }
+    await Browser.open({ url: target });
+    return true;
+  }
+
+  async function _fileAction(url, filename, download) {
+    try {
+      const parsed = _fileUrl(url);
+      if (!_isNative()) {
+        if (download) {
+          const a = document.createElement('a');
+          a.href = parsed.href; a.download = filename || '';
+          document.body.appendChild(a); a.click(); a.remove();
+        } else { window.open(parsed.href, '_blank', 'noopener'); }
+        return;
+      }
+      const plugin = window.Capacitor?.Plugins?.NativeFiles;
+      if (plugin) {
+        if (download) {
+          return await plugin.download({ url: parsed.href, ...(filename ? { filename } : {}) });
+        }
+        try { return await plugin.openFile({ url: parsed.href }); }
+        catch (e) {
+          if (/keine app/i.test(e?.message || String(e))) {
+            return await plugin.download({ url: parsed.href });
+          }
+          throw e;
+        }
+      }
+      if (download) parsed.searchParams.set('download', '1');
+      if (await _openBrowser(parsed)) return;
+      _fileNotice('Bitte die App aktualisieren, um Dateien herunterzuladen.');
+      if (download && _attachmentDownload(parsed)) window.location.assign(parsed.href);
+    } catch (e) {
+      console.warn('[ELNative] Dateiaktion fehlgeschlagen:', e);
+      _fileNotice('Die Datei konnte nicht geöffnet oder heruntergeladen werden. ' + (e?.message || 'Bitte erneut versuchen.'));
+    }
+  }
+
+  function downloadFile(url, filename) { return _fileAction(url, filename, true); }
+  function openFile(url) { return _fileAction(url, undefined, false); }
+
+  async function openUrl(url) {
+    if (!_isNative()) { window.open(url, '_blank', 'noopener'); return; }
+    try {
+      const parsed = new URL(url, window.location.href);
+      if (parsed.origin === window.location.origin && parsed.searchParams.get('download') === '1') {
+        return await downloadFile(url);
+      }
+      if (_isDocumentUrl(parsed)) return await openFile(url);
+      if (await _openBrowser(parsed)) return;
+      _fileNotice('Bitte die App aktualisieren, um Links zu öffnen.');
+    } catch (e) {
+      console.warn('[ELNative] openUrl Fehler:', e);
+      _fileNotice('Der Link konnte nicht geöffnet werden. Bitte erneut versuchen.');
+    }
+  }
+
+  // Capture vor dem Viewer: dessen defaultPrevented-Prüfung verhindert Doppelaktionen.
   document.addEventListener('click', async function (ev) {
-    if (!_isNative()) return;
-    const a = ev.target.closest && ev.target.closest('a[target="_blank"]');
+    if (!_isNative() || ev.defaultPrevented) return;
+    const a = ev.target.closest && ev.target.closest('a[target="_blank"], a[download], a[data-dv-download]');
     if (!a || !a.href) return;
     ev.preventDefault();
-    openUrl(a.href);
+    const parsed = new URL(a.href, window.location.href);
+    // Fremde Links bleiben Browser-Links und erhalten niemals WebView-Cookies.
+    if (parsed.origin !== window.location.origin) { await openUrl(a.href); return; }
+    if (a.hasAttribute('download') || a.hasAttribute('data-dv-download') || parsed.searchParams.get('download') === '1') {
+      await downloadFile(a.href, a.getAttribute('download') || undefined);
+    } else if (a.hasAttribute('data-dv-original') || a.hasAttribute('data-dv-excerpt') || _isDocumentUrl(parsed)) {
+      await openFile(a.href);
+    } else { await openUrl(a.href); }
   }, true);
 
   // Die native Kontaktansicht verwendet die synchronisierte Room-Datenbank.
@@ -721,6 +707,8 @@
     stopLocation,
     scanQr,
     openUrl,
+    downloadFile,
+    openFile,
     registerPush,
     setBatterySaver(on) { _setBatterySaver(on); },
     get batterySaverActive() { return _batterySaver; },

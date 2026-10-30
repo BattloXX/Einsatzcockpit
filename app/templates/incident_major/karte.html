@@ -20,6 +20,8 @@
   width: 1px; background: var(--border); align-self: stretch; margin: 0 2px;
 }
 #ctrl-toggle-btn { display: none; }
+.karte-controls { max-width:calc(100vw - 16px); max-height:70vh; overflow-y:auto; }
+#lft-bsp { width:260px; box-sizing:border-box; }
 .karte-controls-body { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 @media (max-width: 760px) {
   .karte-controls { left: 8px; transform: none; flex-direction: column; align-items: flex-start; }
@@ -271,6 +273,7 @@
     <span x-html="ecpIcon(open ? 'x' : 'menu-2', {size: 'sm'})">{{ icon("menu-2", size="sm") }}</span> Filter
   </button>
   <div class="karte-controls-body" x-show="open" x-cloak>
+    {% include "incident/_bsp_lokal.html" %}
     <button class="karte-mode-btn active" id="btn-prio" onclick="setMode('priority')">
       Priorität
     </button>
@@ -282,14 +285,14 @@
     <div class="karte-controls__sep"></div>
     {% for phase in ['eingegangen','erkundung','bewertet','disponiert','in_arbeit','fertig_gemeldet','erledigt'] %}
     <label>
-      <input type="checkbox" class="phase-filter" checked value="{{ phase }}" onchange="applyFilter()">
+      <input data-no-dirty type="checkbox" class="phase-filter" checked value="{{ phase }}" onchange="applyFilter()">
       {{ {'eingegangen':'Eingegangen','erkundung':'Erkundung','bewertet':'Bewertet',
           'disponiert':'Disponiert','in_arbeit':'In Arbeit','fertig_gemeldet':'Fertig gemeldet','erledigt':'Abgeschlossen'}[phase] }}
     </label>
     {% endfor %}
     <div class="karte-controls__sep"></div>
     <label style="color:var(--red);">
-      <input type="checkbox" id="attention-filter" onchange="applyFilter()">
+      <input data-no-dirty type="checkbox" id="attention-filter" onchange="applyFilter()">
       {{ icon("alert-triangle", size="sm") }} Nur Aufmerksamkeit
     </label>
     <a class="karte-mode-btn" href="/lage/{{ lage.id }}">Board</a>
@@ -531,6 +534,7 @@
 <script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/leaflet-geoman.min.js"></script>
 <script src="/static/js/leaflet.markercluster.js"></script>
+<script src="/static/js/bsp_overlay_layer.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/weather_radar.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/weather_layer.js?v={{ ASSET_VERSION }}"></script>
 <script>
@@ -613,6 +617,10 @@
   }
 
   var map = L.map('karte-map', { preferCanvas: true, zoomControl: true });
+  var bspLayer = window.EcpBspOverlay.init(map, {
+    listUrl: '/lage/{{ lage.id }}/bsp-overlays.json', nurLokal: true
+  });
+  setInterval(function () { bspLayer.reload(); }, 30000);
   window._karteMap = map;  // expose for geolocation
   window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
 

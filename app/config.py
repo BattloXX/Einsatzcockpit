@@ -1,5 +1,10 @@
-from pydantic import AliasChoices, Field
+from pathlib import Path
+from typing import Self
+
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.git_sha import lese_git_sha
 
 SECRET_KEY_PLACEHOLDER = "change-me-in-production"
 BOOTSTRAP_PASSWORD_PLACEHOLDER = "admin"
@@ -35,7 +40,7 @@ class Settings(BaseSettings):
     ALARM_MAP_TTL_DAYS: int = 365
     # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
     ALARM_LINK_TTL_DAYS: int = 30
-    APP_VERSION: str = "2026.10.26"
+    APP_VERSION: str = "2026.10.28"
     GIT_SHA: str = ""
     BUILD_TIME: str = ""
     GITHUB_READ_TOKEN: str = Field(default="", repr=False)
@@ -265,6 +270,25 @@ class Settings(BaseSettings):
     # Hydranten / Löschwasser (OpenStreetMap / OSMHydrant, via Overpass server-seitig geproxyt)
     HYDRANT_ENABLED: bool = True
     HYDRANT_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
+    # Oeffentliche Instanzen laut OSM-Wiki; per Env ueberschreibbar, leer = kein Fallback.
+    # kumi.systems ist derselbe Host wie private.coffee.
+    OVERPASS_FALLBACK_URLS: str = "https://overpass.private.coffee/api/interpreter"
+    OSM_GEBAEUDE_IMPORT_ENABLED: bool = True
+    # Geofabrik bietet fuer Oesterreich nur das Gesamtland (deutlich mehr RAM):
+    # oesterreich=https://download.geofabrik.de/europe/austria-latest.osm.pbf
+    OSM_GEBAEUDE_QUELLEN: str = "vorarlberg=https://download.openstreetmap.fr/extracts/europe/austria/vorarlberg-latest.osm.pbf"
+    OSM_GEBAEUDE_AKTUALISIERUNG_TAGE: int = 7
+    GEODIENST_STATISTIK_TAGE: int = 30
+    OSM_GEBAEUDE_MAX_ALTER_TAGE: int = 30
+    OSM_GEBAEUDE_MAX_DOWNLOAD_MB: int = 1200
+    OSM_GEBAEUDE_MAX_AENDERUNG_ANTEIL: float = 0.2
+    OSM_GEBAEUDE_DATA_DIR: str = "app_storage/osm"
+
+    OVERPASS_ENDPUNKT_FEHLER: int = 2
+    OVERPASS_ENDPUNKT_FENSTER_SECONDS: int = 300
+    OVERPASS_ENDPUNKT_PAUSE_SECONDS: int = 300
+    OBJEKT_GEBAEUDE_TIMEOUT_SECONDS: float = 25.0
+    OBJEKT_GEBAEUDE_TOTAL_TIMEOUT_SECONDS: float = 45.0
     HYDRANT_RADIUS_M: int = 300  # Suchradius um den Einsatzort (Standard)
     HYDRANT_RADIUS_EINSATZINFO_M: int = 2000  # Erweiterter Radius für die Einsatzinfo-Karte
     HYDRANT_RADIUS_INFOSCREEN_M: int = 800  # OSM-Umkreis für den Wandmonitor
@@ -520,6 +544,12 @@ class Settings(BaseSettings):
     EUS_SMS_HTTP_TIMEOUT: int = 15
     EUS_SMS_TOKEN_MARGIN_S: int = 60
     EUS_SMS_CONCURRENCY: int = 10
+
+    @model_validator(mode="after")
+    def git_revision_ergaenzen(self) -> Self:
+        if not self.GIT_SHA or self.GIT_SHA == "unknown":
+            self.GIT_SHA = lese_git_sha(Path(__file__).resolve().parent.parent)
+        return self
 
     @property
     def effective_public_base_url(self) -> str:

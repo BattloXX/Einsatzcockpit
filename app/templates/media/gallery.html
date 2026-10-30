@@ -179,7 +179,7 @@
       {% elif m.kind == 'video' %}
         @click="show({{ lb.i }})" {% set lb.i = lb.i + 1 %}
       {% elif m.kind == 'pdf' %}
-        onclick="window.open('/medien/datei/{{ m.id }}','_blank')"
+        onclick="if(window.ELNative && window.ELNative.isNative){ window.ELNative.openFile('/medien/datei/{{ m.id }}'); }else{ window.open('/medien/datei/{{ m.id }}','_blank'); }"
       {% endif %}
     >
       {% if m.kind == 'image' %}

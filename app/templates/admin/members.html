@@ -1,6 +1,8 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Mitglieder – Admin{% endblock %}
 {% block admin_content %}
+{% with section_id='personal' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 {% set user_role_codes = user.roles|map(attribute='code')|list %}
 {% set can_manage_members = 'system_admin' in user_role_codes or 'admin' in user_role_codes or 'org_admin' in user_role_codes %}
 <div class="page-content">
@@ -61,7 +63,7 @@
            placeholder="Suchen: Name, Telefon, E-Mail, syBOS-ID oder Qualifikation (z. B. AGT)"
            class="form-input" style="flex:1; min-width:260px; max-width:520px;"
            oninput="applyMemberFilter()">
-    <select id="memberStatusFilter" class="form-select" style="width:160px;" onchange="applyMemberFilter()">
+    <select data-no-dirty id="memberStatusFilter" class="form-select" style="width:160px;" onchange="applyMemberFilter()">
       <option value="all">Alle Status</option>
       <option value="active" selected>Nur aktive</option>
       <option value="inactive">Nur inaktive</option>

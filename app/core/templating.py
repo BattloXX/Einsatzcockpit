@@ -30,6 +30,7 @@ from app.core.timezones import (
     format_local_time,
     to_org_tz,
 )
+from app.services.admin_navigation import admin_navigation
 from app.services.einheit_service import einheit_status_label
 from app.services.modul_navigation import modul_aktiv, modul_gruppen
 from app.services.site_log_service import meldung_hervorhebung
@@ -393,3 +394,5 @@ except OSError:
 templates.env.globals["can_view_katplan"] = can_view_katplan_request
 templates.env.globals["modul_gruppen"] = modul_gruppen
 templates.env.globals["modul_aktiv"] = modul_aktiv
+
+templates.env.globals["admin_navigation"] = admin_navigation

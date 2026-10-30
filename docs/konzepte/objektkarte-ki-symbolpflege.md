@@ -21,6 +21,62 @@ Referenzen setzen/verwerfen, Vorschläge schreiben und Freigaben benötigt.
 `veraltete_markieren=true` ist auch beim Auflisten eine Schreibaktion.
 Ein Lesetoken darf keine dieser Änderungen ausführen.
 
+## BSP-Arbeitsliste und Ablauf
+
+`objekt_karte_bsp_arbeitsliste(objekt_id=null, nur_offen=true, limit=50)` liest
+aktuelle, fertig verarbeitete Seiten mit Dokumentart `lageplan` oder
+`brandschutzplan` der eigenen Organisation. Arbeitskopien sind ausgeschlossen.
+Georeferenziert werden nur Lageplaene: Seiten mit `brandschutzplan` (Deckblatt,
+Geschoss-, Kanal-, Legendenseiten) erscheinen nur, wenn sie selbst oder ihre
+Vorversion bereits eine Georef haben. Hat ein Dokument keine solche Seite, gibt es
+einen einzigen Eintrag ohne Seite mit `lageplan_klassifizieren`.
+Einsatz-Leserollen duerfen die Liste lesen; sie schreibt nichts. `objekt_id`
+grenzt optional auf ein Basisobjekt ein, `limit` liegt zwischen 1 und 200.
+
+Jeder Eintrag nennt Objekt-ID und -Name, Dokument-ID und Versionsnummer, Seite,
+Dokumentart, Titel, Rotation, Georef mit ID/Revision/geprueftem Status/RMSE,
+offene Vorschlaege der Seite, Marker aus dem Planhash sowie gegebenenfalls die
+juengste aeltere Version derselben Dokumentgruppe mit Georef derselben Seite.
+Der Vorversionsstatus ist der gespeicherte Status (`gueltig` oder `veraltet`).
+Markerzahlen gelten pro Objekt und Planhash, auch bei mehrseitigen Dokumenten.
+
+`naechster_schritt` und `hinweis` folgen dieser Prioritaet:
+
+1. `georef_uebernehmen`: keine gueltige Georef, aber Vorversion mit Georef.
+2. `georef_zuordnen`: keine gueltige Georef und keine passende Vorversion.
+3. `vorschlaege_pruefen`: gueltige Georef und offene Vorschlaege.
+4. `symbole_erfassen`: gueltige Georef, keine offenen Vorschlaege und keine Marker
+   aus dieser Planversion.
+5. `aktuell`: gueltige Georef und bereits Marker aus dieser Planversion.
+6. `lageplan_klassifizieren`: Dokument ohne Lageplan-Seite; Seite mit
+   `objekt_dokument_seiten_klassifizieren` als `lageplan` markieren.
+
+`nur_offen=true` blendet `aktuell` aus. Die Liste sortiert nach Schrittprioritaet,
+dann Objekt-ID, Dokument-ID und Seite. `anzahl_gesamt` zaehlt die gefilterte Liste
+vor dem Limit; `abgeschnitten` zeigt weitere Eintraege an. `ablauf` nennt die
+kurzen Arbeitsschritte, die auch in der Tool-Beschreibung enthalten sind:
+
+1. `objekt_dokument_seite_ansehen`: Rotation merken, fuer Details Ausschnitt nutzen.
+2. `objekt_karte_georef_uebernehmen` oder `objekt_karte_georef_zuordnen` erst ohne
+   Speichern pruefen. Klasse A durch die Objektverwaltung speichern; bei Klasse C
+   `editor_link` an Menschen geben.
+3. `objekt_karte_symbolkatalog` ueber Aliase abgleichen und
+   `objekt_karte_vorschlaege` mit `georef_id`, `bild_x/bild_y`, `bild_richtung`
+   und `batch_id` erfassen.
+4. `objekt_karte_pruefen` und `objekt_karte_vorschau` aufrufen.
+5. Freigabe nur nach ausdruecklicher Bestaetigung des Menschen. Koordinaten nie erfinden.
+
+Der Symbolkatalog ergaenzt die bisherigen Felder um `aliase` (eindeutige
+Legendenbegriffe fuer Systemcodes, sonst leere Liste), `traegt_richtung` und
+`basisrichtung_grad`. Die aktiven Stile `pfeil-voll`/`pfeil-leer` tragen Richtung
+mit Basis 90 Grad (Osten), alle anderen Stile haben Basis 0. Dies gilt auch fuer
+eigene Symbole. Bei `traegt_richtung=true` die sichtbare Richtung als
+`bild_richtung` angeben. Aliase unterstuetzen den Abgleich; die konkrete
+Planlegende und menschliche Bedeutungspruefung bleiben massgeblich.
+
+Upload-Benachrichtigungen und mit Kandidaten vorbelegte Editor-Links sind offen
+und nicht Teil dieser Erweiterung.
+
 ## Ablauf für den KI-Agenten
 
 1. Objekt eindeutig auswählen, etwa mit `objekt_suchen` und `objekt_lesen`.
@@ -66,6 +122,175 @@ Ein Lesetoken darf keine dieser Änderungen ausführen.
     (`pruefen=true`) benötigt diese Bestätigungen. Er speichert weder Marker noch
     Freigabestatus oder Änderungsaudit. Danach produktive Karte erneut lesen.
 
+## Automatische Eckenzuordnung
+
+`objekt_karte_georef_zuordnen` ersetzt fuer geeignete Gebaeudekonturen die manuelle
+Wahl der OSM-Eckennummern in den Schritten 4 und 5. Der KI-Client liefert ausschliesslich
+`bild_ecken` als Liste `{x, y}` (normiert 0..1, Ursprung oben links), keine `lat/lng`
+und keine geschaetzten Koordinaten. Alle Aussenecken **eines** Gebaeudes entlang seiner
+Kontur markieren; Startpunkt und Umlaufrichtung sind beliebig. Zulaessig sind 4 bis
+30 Punkte mit mindestens 0.005 Abstand zwischen jedem Punktepaar.
+
+1. Aktuelle Seite mit `objekt_dokument_seite_ansehen` ansehen. `objekt_id`,
+   `dokument_id`, `seite` und deren `expected_rotation` verwenden. Bei gedrehter
+   Seite zuerst das neue Bild ansehen und die Punkte neu erfassen.
+2. Mit `objekt_karte_gebaeude_umrisse` Kandidaten lesen. Bei gleichartigen
+   Nachbargebaeuden deren belegte `osm_id` angeben, um genau dieses Gebaeude zu pruefen.
+   Standardradius: 150 m; OSM-/Overpass-Freigabe und Objektkoordinate sind erforderlich.
+3. `objekt_karte_georef_zuordnen(..., speichern=false)` aufrufen (Standardmodell:
+   `aehnlichkeit`). Einsatz-Leserollen duerfen analysieren; dies speichert nichts.
+4. **Klasse A:** Eindeutige, tragfaehige Zuordnung. Mit denselben Eingaben und
+   `speichern=true` kann die Objektverwaltung ueber den bestehenden Referenzpunktpfad
+   speichern. Erst die persistierte `georeferenz.id` fuer Symbolvorschlaege verwenden.
+5. **Klasse C:** Fehlende passende Eckenzahl, unzureichende Fehlerwerte, zu wenige
+   Ecken fuer die Gegenpruefung oder Mehrdeutigkeit. Es wird auch bei `speichern=true`
+   nichts gespeichert. Keine der bis zu drei Hypothesen selbst auswaehlen: `editor_link`
+   an den Menschen zur Pruefung geben. Symmetrische Gebaeude und identische Nachbarn
+   koennen geometrisch nicht eindeutig unterschieden werden.
+
+Der Server entfernt OSM-Zwischenecken mit Richtungsaenderung unter
+`KOLLINEAR_WINKEL_GRAD = 10.0` in lokalen Metern; Original-Eckennummern bleiben
+bestehen. Nur vereinfachte Ringe mit gleicher Eckenzahl werden beruecksichtigt.
+Er prueft alle zyklischen Verschiebungen und beide Umlaufrichtungen, hoechstens
+`MAX_HYPOTHESEN = 2000`; bei mehr Kandidaten `osm_id` angeben oder Radius verkleinern.
+
+Die vorhandene Transformationspruefung prueft Spiegelung, Verzerrung und Restfehler
+(RMSE maximal 2 m, Einzelfehler maximal 4 m). Nur gueltige Hypothesen erhalten eine
+Leave-one-out-Gegenpruefung: jeden Punkt auslassen, erneut rechnen und den Fehler am
+ausgelassenen Punkt in Metern messen. Tragfaehig ist eine gueltige Hypothese mit
+`loo_max_m <= MAX_FEHLER_M = 4.0`. Bleiben nach dem Auslassen weniger als
+`MIN_PUNKTE[modell]` (3/4/6) Punkte, ist Klasse A ausgeschlossen.
+
+Tragfaehige Hypothesen werden nach `loo_max_m`, dann `rmse_m` sortiert. Eine zweite
+tragfaehige Hypothese muss mindestens
+`max(beste_loo * EINDEUTIG_FAKTOR, beste_loo + EINDEUTIG_ABSTAND_M)` erreichen.
+Die Konstanten `EINDEUTIG_FAKTOR = 2.0` und `EINDEUTIG_ABSTAND_M = 1.0` sind im Pilot
+zu kalibrieren. Die Antwort nennt Begruendung, gepruefte Hypothesenzahl, vereinfachte
+`eckenzahlen_osm`, bis zu drei Hypothesen, Bildgroesse, Rotation und Editor-Link.
+Referenzpunkte werden nur bei Klasse A ausgegeben; Koordinaten stammen aus OSM.
+
+## Seitenausschnitt und Drehung
+
+`objekt_dokument_seite_ansehen` liefert das Bild wie der Editor um `rotation` Grad
+im Uhrzeigersinn gedreht, auch beim Thumbnail-Fallback. `bildgroesse` nennt die
+Pixelmasse der gedrehten Gesamtseite vor dem Verkleinern (beim Fallback des
+verfuegbaren Thumbnails). `rotation` als `expected_rotation` fuer Georef-Tools verwenden.
+Alternativ: `ausschnitt={"art":"polygon","punkte":[{"x":0.1,"y":0.1},{"x":0.9,"y":0.1},{"x":0.1,"y":0.9}]}`.
+3 bis 100 Punkte, normiert 0..1 auf der gedrehten Seite, ohne wiederholten Schlusspunkt.
+Kanten dürfen sich nicht selbst überschneiden oder berühren. Mindestboxgröße 0.001 je Achse,
+Mindestfläche 0.001² der Seite. Orientierung beliebig. Der Server berechnet und speichert
+`x0,y0,x1,y1`; mitgesendete Boxwerte werden ignoriert. Polygon bleibt ausschließlich Entwurf,
+`expected_rotation` und menschliche Freigabe gelten unverändert.
+
+Fuer kleine Symbole optional `ausschnitt=[x0,y0,x1,y1]` angeben: vier endliche Zahlen
+in 0..1, x0 < x1 und y0 < y1, Breite und Hoehe jeweils mindestens 0.02.
+Der Ausschnitt bezieht sich auf die gedrehte Gesamtseite und wird vor dem
+Verkleinern ausgeschnitten. Aus einer Ausschnittposition u,v (jeweils 0..1) immer
+auf Gesamtseitenkoordinaten zurueckrechnen:
+`bild_x = x0 + u*(x1-x0)`, `bild_y = y0 + v*(y1-y0)`.
+Ohne Ausschnitt sind die gelieferten Bildpositionen bereits auf die gedrehte
+Gesamtseite normiert. Das Einsatz-Seitentool liefert dieselbe gedrehte Darstellung.
+
+## Uebernahme auf neue Planversion
+
+`objekt_karte_georef_uebernehmen` uebertraegt die Georeferenz bei Neuscan oder
+anderem Zuschnitt innerhalb derselben Dokumentgruppe auf die aktuelle Version.
+Beide Seiten vorher ansehen. Mindestens vier identische, gut ueber den Plan
+verteilte Merkmale (Gebaeudeecken oder Achsen-Schnittpunkte) auf beiden Seiten
+markieren. `punktpaare` enthaelt 4 bis 30 Eintraege
+`{von_x, von_y, nach_x, nach_y}`, jeweils normiert auf die gedrehte Gesamtseite.
+Quell- und Zieldokument mit Seitennummer sowie `expected_rotation` der neuen
+Seite angeben. Zuerst mit `speichern=false` pruefen; Einsatz-Leserollen duerfen
+analysieren, nur die Objektverwaltung darf speichern.
+
+Die Quelle ist die juengste als `gueltig` gespeicherte Revision mit Parametern.
+Sie darf durch den Versionswechsel als veraltet gelten, ihre gespeicherte Rotation
+und Bildgroesse muessen aber weiterhin zur alten Seite passen. Die Planabbildung
+ist eine Aehnlichkeit mit eigener Seitengeometrie fuer beide Seiten; Spiegelung
+wird abgelehnt. Maximaler Paarfehler: 0.01, Leave-one-out je Paar: 0.02, jeweils
+in Einheiten der neuen Seitenhoehe. Diese Grenzen sind im Pilot zu kalibrieren.
+
+Nur gespeicherte alte Referenzpunkte werden abgebildet; Weltkoordinaten und Quelle
+bleiben erhalten, die Beschreibung nennt die Herkunftsrevision. Punkte ausserhalb
+der neuen Seite werden verworfen und gezaehlt. Es entstehen keine synthetischen
+Referenzen. Danach prueft der bestehende Georef-Pfad mit dem alten Modell die
+uebernommenen Punkte. Nur bestandene Paarpruefung und Status `gueltig` ergeben
+Klasse A. Analyseaufrufe schreiben nichts. Klasse C speichert auch bei
+`speichern=true` nichts; `editor_link` fuer die neue Seite an den Menschen geben.
+
+## BSP-Overlay
+
+`objekt_karte_lesen` und `objekt_karte_vorschau` liefern rein lesend `bsp_overlays`:
+ID, Name, Status, Planart, Geschoss, Bereich, Dokument/Seite, Freigabenummer,
+gespeicherte Georef-ID/-Revision, Ausschnitt, Auslieferbarkeit und `editor_link`
+zum BSP-Bereich des Georef-Editors. Nicht auslieferbare Eintraege nennen
+`auslieferbar_grund`; `raster_bounds` gibt es nur bei auslieferbaren Overlays.
+Einsatz-Leserollen duerfen diese Liste lesen. Lesen aendert weder Status noch Audit.
+
+`objekt_bsp_overlay_entwurf` ist ausschliesslich fuer `objekt_verwalter` und
+berechtigte Admin-Rollen sichtbar und erlaubt. Es hat genau drei Aktionen:
+
+- `anlegen`: `objekt_id`, `dokument_id`, `seite`, `name`, optional `plan_art`
+  (`lageplan`, `hallenbereich`, `gefahrenzone`, `geschoss`, `sonstig`), `bereich`,
+  `geschoss` und `ausschnitt` angeben.
+- `aendern`: `objekt_id`, `overlay_id` und die zu aendernden Felder angeben.
+  Dokument und Seite bleiben fest. Auch ein zuvor freigegebenes Overlay wird
+  wieder `entwurf`; sein Raster wird invalidiert.
+- `status`: `objekt_id` und `overlay_id` lesen, ohne Schreibwirkung.
+
+Vor anlegen/aendern die Seite mit `objekt_dokument_seite_ansehen` ansehen und deren
+`rotation` als `expected_rotation` senden. `ausschnitt={"art": "seite"}` meint die
+ganze Seite (Standard). Ein Rechteck verwendet
+`{"art": "rechteck", "x0": 0.1, "y0": 0.2, "x1": 0.8, "y1": 0.9}`:
+normierte Werte 0..1 auf der **gedrehten Gesamtseite**, Ursprung oben links,
+x0 < x1 und y0 < y1, Mindestbreite/-hoehe 0.001. Keine Weltkoordinaten liefern.
+
+`pruefen=true` ist der Standard: Trockenlauf mit Rollback, ohne Overlay, Rasterdatei
+oder Aenderungsaudit zu speichern. Mit denselben geprueften Eingaben und
+`pruefen=false` wird ausschliesslich ein Entwurf (Klasse A) gespeichert.
+IDs eines Trockenlaufs sind nicht dauerhaft gueltig. `vorschau` enthaelt serverseitig
+aus der aktuell gueltigen, gespeicherten Georef berechnete Bounds, Rastergroesse
+und die dafuer verwendete Georef-ID/-Revision. Dies erzeugt kein Raster.
+`qualitaet` nennt RMSE, Punktzahl, Modell und `freigabe_warnungen` (etwa
+`wenige_punkte`, `nur_freie_klicks`). Die gespeicherte Rasterbindung im
+Overlay-Eintrag kann bis zur Rastererzeugung fehlen oder einen Altstand nennen.
+
+Ohne aktuelle gueltige Georef und freigegebenes aktuelles Dokument liefert das
+Tool `gespeichert=false`, Klasse C und `code="BSP_GEOREF_UNGUELTIG"`.
+`objekt_karte_georef_zuordnen` oder `objekt_karte_georef_uebernehmen` nutzen;
+keine Koordinaten raten. Bei Klasse C den `editor_link` an den Menschen geben.
+Auch Klasse A ist keine Freigabe: Overlays erscheinen nie ohne menschliche
+Pruefung/Freigabe im Einsatz. Es gibt per MCP keine Overlay-Freigabe, kein
+Zurueckziehen und kein Loeschen. Nur freigegeben plus aktuelle gueltige Georef,
+passender Dokumentstand und gueltiges Raster ergeben `auslieferbar=true`.
+
+## Richtung und Wiederholung
+
+Fuer Pfeile und Zugaenge `bild_richtung={"dx": 1, "dy": 0}` zusammen mit `georef_id`
+und `bild_x/bild_y` senden. Der Vektor beschreibt die sichtbare Richtung im Bild
+(Pixelverhaeltnis, also wie angezeigt; `{"dx": 1, "dy": -1}` ist 45 Grad nach rechts oben):
+rechts ist +x, unten +y; Komponenten jeweils -1..1, Laenge groesser als 1e-6. `rotation`
+darf nicht gleichzeitig angegeben werden. Der Server nutzt die lokale
+Transformationsableitung und berechnet die Peilung im Uhrzeigersinn ab Nord.
+Die nordorientierte Karte dreht ebenfalls im Uhrzeigersinn. Pfeilstile `pfeil-voll` und
+`pfeil-leer` (etwa `hauptzugang`/`nebenzugang`) zeigen bei Rotation 0 nach **Osten**:
+Rotation = round(Peilung - 90) modulo 360. Andere Symbole verwenden Basis 0 (Norden).
+Ohne gueltige Georef bleibt Rotation 0 mit `richtung_ohne_georef`. Eine kompatible neue
+Georef-Revision berechnet Position und Rotation offener Vorschlaege erneut.
+
+`batch_id` ist eine optionale Laufkennung (1-64 Zeichen aus `A-Za-z0-9_.:-`) fuer
+`anlegen` und `aendern`, auch bei Wiederholung. `auflisten` kann danach filtern.
+Bei Neuanlage mit Georef prueft der Server zuerst produktive Marker: gleicher
+Dokument-Hash, gleiche Seite und gleicher Code bei Abstand unter 3 m ergeben
+`ergebnis="unveraendert"` mit Marker-ID, ohne neuen Vorschlag oder Audit-Eintrag.
+Sonst wird ein offener Vorschlag mit gleichem Hash, Seite, Code und Operation bei
+Bildabstand unter 0.01 aktualisiert (`aktualisiert`), auch bei leicht verschobenen
+Erkennungen oder geaenderter Laufkennung. Andernfalls entsteht ein Vorschlag (`neu`).
+Andere Eingaben behalten den exakten Vergleich (`unveraendert_offen`); explizite
+Aenderungen ergeben `aktualisiert`. Die Antwort von `anlegen` zaehlt diese Ergebnisse
+in `zusammenfassung`. Der Abgleich gilt innerhalb des eigenen Objekts und der Organisation.
+Das Fehlen eines Symbols im neuen Plan ist kein Grund fuer `entfernen`.
+
 ## Status und Warnungen
 
 `position_status` beschreibt die Position, unabhängig von `freigabe_status`:
@@ -92,6 +317,7 @@ Vollständige Warnungscodes aus Vorschlags-, Georeferenz- und Freigabeservice
 | `moegliche_dublette` | Gleicher Symbolcode und gleiches nichtleeres Label oder Abstand unter 3 m zu Marker/Vorschlag; Referenz-ID beachten |
 | `einsatzkritisch_freigabe_erforderlich` | Einsatzkritisches Ziel- oder Basissymbol ausdrücklich prüfen und bestätigen |
 | `position_manuell` | Position wurde im Review manuell korrigiert; ausdrücklich bestätigen |
+| `richtung_ohne_georef` | Bildrichtung gespeichert, aber ohne gueltige Georef keine belastbare Kartenrotation |
 | `georef_ungenau` | Berechnete Positionsunsicherheit über 4 m; Position muss geprüft werden |
 | `georef_ungueltig` | Georeferenz nicht nutzbar; alte Position wird gegebenenfalls nur als `altposition` ausgegeben |
 | `georef_veraltet` | Dokument, Rendering oder Rotation passen nicht mehr zur Referenz |
@@ -161,7 +387,7 @@ in der produktiven Karte und im Objektblatt/PDF; das Änderungsaudit hält die
   abgleichen, Auswahl neu bilden. Es wurde nichts aus der Auswahl übernommen.
 - **422 bei Freigabe:** Position/Quelle ungültig oder Warnung nicht bestätigt.
   Details stehen pro ID in `ergebnisse`; pauschales Bestätigen repariert keine Quelle.
-- **Wiederholung:** Identische offene Vorschläge werden wiedererkannt; ein bereits
+- **Wiederholung:** Planvorschlaege werden ueber den Toleranzabgleich oben wiedererkannt; ein bereits
   angenommener Vorschlag wird beim zweiten Freigeben mit 409 abgewiesen.
 
 Die tatsächliche Genauigkeit bleibt durch die Referenzquelle begrenzt. Kleine
@@ -200,3 +426,78 @@ nach Bestätigung gespeichert.
 KI-Georeferenz nicht aus, gibt sie den Link an den Menschen weiter, statt Punkte zu raten.
 Die Objektliste zeigt pro Planseite den Georef-Status (Badge) und den Button
 „Georeferenzieren“.
+
+## Overpass-Verfuegbarkeit und Zeitbudget
+
+Gebaeudeumrisse nutzen zuerst `HYDRANT_OVERPASS_URL`, bei Ueberlastung oder Timeout
+anschliessend die kommagetrennten `OVERPASS_FALLBACK_URLS`. Standard ist
+private.coffee; kumi.systems ist derselbe Host (193.219.97.30);
+ein leerer Wert schaltet Fallback ab. Die URLs muessen HTTPS verwenden.
+
+`OBJEKT_GEBAEUDE_TIMEOUT_SECONDS` begrenzt jeden Versuch auf 25 s,
+`OBJEKT_GEBAEUDE_TOTAL_TIMEOUT_SECONDS` die gesamte Abfrage samt Sperren und Cache
+auf 45 s (davon 2 s Reserve fuer Aufbereitung und Cache). Gebaeudeumrisse lesen
+und schreiben den globalen Hydranten-Breaker nicht. Bei Ausfall aller Endpunkte
+gilt ein eigener Negativcache von 60 s; Hydranten-Zeitlimits bleiben 8 s je Versuch
+und 10 s insgesamt.
+
+Der gemeinsame Fehlerschutz je Endpunkt verwendet `OVERPASS_ENDPUNKT_FEHLER`
+(Standard 2 Fehler), `OVERPASS_ENDPUNKT_FENSTER_SECONDS` (300 s) und
+`OVERPASS_ENDPUNKT_PAUSE_SECONDS` (300 s). HTTP 429 mit `Retry-After` pausiert
+mindestens fuer die angegebene Dauer. Alle Einstellungen sind per Env ueberschreibbar;
+Schluessel enthalten nur den URL-Hash, Fallback-Logs nur den Hostnamen.
+
+### Fehlercodes
+
+Externe Fehler werden im MCP als JSON-Fehlertext mit `fehlerart="extern"`,
+`code`, `meldung`, `retryable` und `correlation_id` ausgegeben. Das vom Client
+angezeigte Label (etwa INVALID_ARGUMENT) bestimmt der Client.
+`endpunkte` enthaelt nur Hostnamen, Fehlercodes, HTTP-Status, Dauer in ms und
+`uebersprungen`; `attempted_endpoints_count` zaehlt tatsaechliche Versuche.
+Bei Gesamtausfall stehen die Einzelcodes in diesen Versuchsdaten.
+
+| Code | Bedeutung | retryable |
+|---|---|---|
+| OVERPASS_ALL_ENDPOINTS_FAILED | Alle verfuegbaren Endpunkte fehlgeschlagen oder gesperrt | true |
+| OVERPASS_TIMEOUT | Verbindungs-, Lese- oder Gesamtzeitlimit erreicht | true |
+| OVERPASS_RATE_LIMIT | HTTP 429; Retry-After wird beim Fehlerschutz beachtet | true |
+| OVERPASS_HTTP_5XX | HTTP 500 bis 599; naechster Endpunkt wird versucht | true |
+| OVERPASS_DNS_ERROR | Namensaufloesung fehlgeschlagen | true |
+| OVERPASS_TLS_ERROR | TLS-Verbindung fehlgeschlagen | true |
+| OVERPASS_CONNECTION_ERROR | Sonstiger Transportfehler | true |
+| OVERPASS_INVALID_RESPONSE | Kein JSON/Objekt oder Overpass-timeout/runtime error | true |
+| OVERPASS_HTTP_4XX | Abfrage abgelehnt (ausser 429); kein Fallback | false |
+
+Erfolgreiche Gebaeudeantworten enthalten `cache_status="miss"` bei frischer
+Abfrage und `"hit"` beim Cache-Treffer; `gebaeude=[]` ist ein Erfolg.
+Ein Negativcache-Treffer liefert `cache_status="negativ_cache"` und `retry_after_s`.
+Ungueltige Eingaben wie `radius_m` bleiben Validierungsfehler.
+
+### Deploy-Revision bei systemd/venv
+
+Bei Deploys mit `git pull` liest die Anwendung `GIT_SHA` beim Start aus `.git`,
+wenn die Einstellung leer oder `unknown` ist. Unterstuetzt werden lose und
+gepackte Branch-Referenzen, detached HEAD und Worktrees mit `.git`-Datei.
+Nur volle 40-stellige Hex-SHAs werden als Fallback akzeptiert. Ein gesetzter
+Build-Wert bleibt erhalten. Fehlende oder unlesbare Git-Daten lassen den Wert
+leer; der Start scheitert deshalb nicht. Nach `git pull` den Dienst neu starten.
+
+
+## Lokale OSM-Gebaeude als Referenz
+
+Gebaeudeumrisse stammen bevorzugt aus dem lokal importierten OSM-Bestand.
+Innerhalb der Huelle eines aktiven Imports ist auch eine leere Trefferliste ein
+verbindliches Ergebnis. Ausserhalb der Huellen bleibt Overpass der Rueckfall und
+liefert `quelle_hinweis: "kein lokaler Bestand fuer diesen Ort"`.
+
+Lokale Antworten enthalten `cache_status: "lokal"`, `datenstand` (UTC mit Z-Suffix),
+`alter_tage` und `veraltet`, bei veralteten oder unbekannten Daten zusaetzlich
+`warnung`. `osm_id`, `quelle: "osm_gebaeude"` und die ab 1 nummerierten `ecken`
+bleiben unveraendert. Die Quellenangabe nennt den lokalen Bestand.
+`objekt_karte_georef_zuordnen` gibt Datenstand, Alter und Veraltet-Flag weiter:
+Analyse bleibt erlaubt, `speichern=True` wird bei veralteten Daten gesperrt.
+Klasse A, Rollen und `expected_rotation` sind weiterhin erforderlich.
+Es werden dabei keine produktiven Kartenmarker freigegeben oder veraendert.
+
+Konfiguration, Aktualisierung und Freigabe auffaelliger Importe:
+[Lokaler OSM-Gebaeudebestand](../architecture/osm-gebaeude.md).

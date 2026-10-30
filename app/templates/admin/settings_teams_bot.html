@@ -4,6 +4,8 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Teams-Einsatzinfo'}]) }}{% endblock %}
 
 {% block admin_content %}
+{% with section_id='alarmierung' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-header">
   <div>
     <h1>Teams-Einsatzinfo</h1>

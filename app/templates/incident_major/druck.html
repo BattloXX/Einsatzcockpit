@@ -118,6 +118,7 @@
   @media print { body { display: none; } }
 </style>
 <script src="/static/js/icons.js"></script>
+  <script src="/static/js/native-ptr.js?v={{ ASSET_VERSION }}"></script>
 </head>
 <body x-data="printCenter()">
 
@@ -151,7 +152,7 @@
     </div>
     <div class="filter-group">
       <label>Phase</label>
-      <select x-model="filterPhase">
+      <select data-no-dirty x-model="filterPhase">
         <option value="">Alle</option>
         <option value="aktiv">Aktiv (nicht erledigt)</option>
         <option value="erledigt">Abgeschlossen</option>
@@ -164,7 +165,7 @@
     {% if sectors %}
     <div class="filter-group">
       <label>Abschnitt</label>
-      <select x-model="filterSector">
+      <select data-no-dirty x-model="filterSector">
         <option value="">Alle</option>
         {% for s in sectors %}
         <option value="{{ s.id }}">{{ s.name }}</option>
@@ -174,7 +175,7 @@
     {% endif %}
     <div class="filter-group">
       <label>Straße / Leitstellennr.</label>
-      <input type="text" x-model="filterStreet" placeholder="Suche…" style="width:140px;">
+      <input data-no-dirty type="text" x-model="filterStreet" placeholder="Suche…" style="width:140px;">
     </div>
   </div>
 
@@ -226,13 +227,13 @@
   </div>
   <div class="cross-filter-bar">
     <label>Status:</label>
-    <select x-model="filterCrossStatus">
+    <select data-no-dirty x-model="filterCrossStatus">
       <option value="">Alle</option>
       <option value="aktiv">Aktiv</option>
       <option value="erledigt">Abgeschlossen</option>
     </select>
     <label>Typ:</label>
-    <select x-model="filterCrossType">
+    <select data-no-dirty x-model="filterCrossType">
       <option value="">Alle</option>
       {% for type_key, type_label in cross_type_label.items() %}
       <option value="{{ type_key }}">{{ type_label }}</option>

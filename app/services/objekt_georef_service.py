@@ -240,6 +240,23 @@ def bild_zu_geo(georef: ObjektDokumentGeoref, x: float, y: float) -> tuple[float
     return p["lat0"] + nord / faktor, p["lng0"] + ost / (faktor * math.cos(math.radians(p["lat0"]))), genauigkeit
 
 
+def bild_richtung_zu_peilung(georef: ObjektDokumentGeoref, x: float, y: float,
+                            dx: float, dy: float) -> float:
+    """Sichtbare Bildrichtung (Pixelverhaeltnis, dy nach unten) als Grad im Uhrzeigersinn ab Norden."""
+    x, y = _zahl(x, "bild_x", 0, 1), _zahl(y, "bild_y", 0, 1)
+    dx, dy = _zahl(dx, "dx", -1, 1), _zahl(dy, "dy", -1, 1)
+    if math.hypot(dx, dy) <= 1e-6:
+        raise ObjektKartenFehler("bild_richtung: Vektor zu kurz")
+    if georef.status != "gueltig" or not georef.parameter_json:
+        raise ObjektKartenFehler("Georeferenz ist nicht gueltig")
+    p = json.loads(georef.parameter_json)
+    du, dv = dx, -dy
+    laenge = math.hypot(du, dv)
+    ost, nord = _abbilden(p, x, y)
+    ost2, nord2 = _abbilden(p, x + 1e-3 * du / laenge / p["seitenverhaeltnis"], y - 1e-3 * dv / laenge)
+    return math.degrees(math.atan2(ost2 - ost, nord2 - nord)) % 360
+
+
 def _seite(db: Session, objekt: Objekt, dokument_id: int, seite: int) -> ObjektDokumentSeite:
     s = (
         db.query(ObjektDokumentSeite)
@@ -269,12 +286,15 @@ def _bildgroesse(seite: ObjektDokumentSeite) -> tuple[int, int]:
 
 
 def georef_pruefen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref, *,
-                   dokument: ObjektDokument | None = None, seite: ObjektDokumentSeite | None = None) -> str:
+                   dokument: ObjektDokument | None = None, seite: ObjektDokumentSeite | None = None,
+                   dokument_hash: str | None = "") -> str:
     """Veraltet nur melden, ohne Schreibwirkung fuer lesende MCP-Tools."""
     from app.services.objekt_karte_vorschlag_service import _dokument, _hash
 
     dokument = dokument if dokument is not None else _dokument(db, objekt, g.dokument_id)
-    if not dokument.ist_aktuelle_version or _hash(dokument) != g.dokument_hash:
+    # Leerer String: noch nicht gelesen; None: Datei bereits erfolglos gelesen.
+    hashwert = _hash(dokument) if dokument_hash == "" else dokument_hash
+    if not dokument.ist_aktuelle_version or hashwert != g.dokument_hash:
         return "veraltet"
     s = seite if seite is not None else _seite(db, objekt, g.dokument_id, g.seite)
     try:
@@ -437,6 +457,7 @@ def neu_berechnen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref,
                   *, ersatz: ObjektDokumentGeoref | None = None) -> None:
     """Offene Planpositionen aktualisieren; ungueltige Positionen als Altwerte behalten."""
     from app.models.objekt import ObjektKartenVorschlag
+    from app.services.objekt_karte_vorschlag_service import symbol_basisrichtung
 
     ziel = ersatz or g
     gueltig = georef_pruefen(db, objekt, ziel) == "gueltig"
@@ -445,10 +466,14 @@ def neu_berechnen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref,
     ).all():
         if v.position_methode == "manuell_korrigiert":
             continue
-        warnungen = [w for w in json.loads(v.warnungen_json or "[]") if not w["code"].startswith("georef_")]
+        warnungen = [w for w in json.loads(v.warnungen_json or "[]") if not w["code"].startswith("georef_")
+                     and w["code"] != "richtung_ohne_georef"]
         if gueltig and v.bild_x is not None and v.bild_y is not None:
             v.georef_id = ziel.id
             v.lat, v.lng, v.genauigkeit_m = bild_zu_geo(ziel, v.bild_x, v.bild_y)
+            if v.bild_richtung_x is not None and v.bild_richtung_y is not None:
+                peilung = bild_richtung_zu_peilung(ziel, v.bild_x, v.bild_y, v.bild_richtung_x, v.bild_richtung_y)
+                v.rotation = round(peilung - symbol_basisrichtung(db, objekt.org_id, v.symbol_code)) % 360
             v.position_status = "vorgeschlagen"
             if v.genauigkeit_m > MAX_POSITIONSUNSICHERHEIT_M:
                 v.position_status = "pruefung_erforderlich"
@@ -456,6 +481,9 @@ def neu_berechnen(db: Session, objekt: Objekt, g: ObjektDokumentGeoref,
         else:
             v.position_status = "pruefung_erforderlich"
             warnungen.append({"code": "georef_ungueltig"})
+            if v.bild_richtung_x is not None and v.bild_richtung_y is not None:
+                v.rotation = 0
+                warnungen.append({"code": "richtung_ohne_georef"})
         v.warnungen_json = json.dumps(warnungen)
     db.flush()
 

@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.async_bridge import run_async
@@ -229,6 +231,7 @@ def lagefuehrung_seite(
 # Karte, Legende der verwendeten Zeichen und Zeitstempel (Nutzer-Vorgabe).
 
 _LFT_DRUCK_VALID_FMTS = {"A4 portrait", "A4 landscape", "A3 portrait", "A3 landscape"}
+_LFT_DRUCK_BSP_MODI = {"MAP_ONLY", "MAP_WITH_BSP", "BSP_EXCERPT_ONLY", "MAP_AND_BSP_SEPARATE"}
 _LFT_DRUCK_VALID_LAYERS = {
     "einsatzort", "fahrzeuge", "objekt", "wasserstellen", "foerderstrecke", "zeichnung", "beschriftung",
 }
@@ -245,6 +248,9 @@ def lagefuehrung_karte_druck(
     fmt: str = "A4 landscape",
     layers: str = "",
     baselayer: str = "osm",
+    bsp_modus: str = "MAP_ONLY",
+    bsp_ids: str = "",
+    bsp_deckkraft: float = Query(default=0.6, ge=0.1, le=1, allow_inf_nan=False),
     db: Session = Depends(get_db),
     _guard: None = Depends(require_lagefuehrung_enabled),
 ):
@@ -258,8 +264,60 @@ def lagefuehrung_karte_druck(
     if not active_layers:
         active_layers = sorted(_LFT_DRUCK_VALID_LAYERS)
 
+    from app.models.objekt import Objekt, ObjektBspOverlay, ObjektDokument
+
+    if bsp_modus not in _LFT_DRUCK_BSP_MODI:
+        bsp_modus = "MAP_ONLY"
+    if bsp_ids and any(
+        not t.isascii() or not t.isdecimal() or len(t) > 19 or not 1 <= int(t) <= 9223372036854775807
+        for t in bsp_ids.split(",")
+    ):
+        raise HTTPException(422, "BSP-IDs müssen positive Ganzzahlen sein")
+    angefordert = list(dict.fromkeys(int(t) for t in bsp_ids.split(",") if t))
+    verfuegbar = {o["id"]: o for o in _bsp_liste(db, incident, user)} if (
+        bsp_modus != "MAP_ONLY" and getattr(request.state, "objekt_enabled", False)
+    ) else {}
+    fehlend = []
+    druck_overlays = []
+    if bsp_modus != "MAP_ONLY":
+        for overlay_id in angefordert or list(verfuegbar):
+            if overlay_id not in verfuegbar:
+                # Namen nur innerhalb der eigenen Org und der Objekt-Leseschranke zeigen.
+                overlay = db.query(ObjektBspOverlay).filter_by(
+                    id=overlay_id, org_id=incident.primary_org_id).first()
+                objekt = db.get(Objekt, overlay.objekt_id) if overlay else None
+                darf_name = objekt and (objekt.status != "entwurf" or has_role(user, "objekt_verwalter"))
+                fehlend.append(overlay.name if overlay and darf_name else f"ID {overlay_id}")
+                continue
+            daten = verfuegbar[overlay_id]
+            overlay = db.get(ObjektBspOverlay, overlay_id)
+            if overlay is None:
+                fehlend.append(f"ID {overlay_id}")
+                continue
+            dokument = db.get(ObjektDokument, overlay.dokument_id)
+            if dokument is None:
+                fehlend.append(overlay.name)
+                continue
+            druck_overlays.append({
+                **daten, "freigegeben_am": overlay.freigegeben_am,
+                "quelle": f"{dokument.dateiname_original}, Seite {overlay.seite}, Version {dokument.versionsnummer}",
+                "ausschnitt_url": f"/objekt-medien/bsp-overlay/{overlay_id}/ausschnitt",
+            })
+        if not angefordert and not verfuegbar:
+            fehlend.append("Alle freigegebenen")
+    # Kein teilweise erfolgreicher Druck, der den fehlenden Plan verschleiert.
+    if fehlend:
+        druck_overlays = []
+
     return templates.TemplateResponse(request, "incident/lagefuehrung_druck.html", {
-        "incident": incident,
+        "incident": incident, "user": user,
+        "bsp_modus": bsp_modus, "bsp_overlays": druck_overlays,
+        "bsp_fehlend": fehlend, "bsp_deckkraft": bsp_deckkraft,
+        "druck_stand": datetime.now(UTC),
+        "bsp_map": [
+            {k: o[k] for k in ("id", "name", "bounds", "raster_url")}
+            for o in druck_overlays
+        ] if bsp_modus == "MAP_WITH_BSP" else [],
         "min_lat": min_lat, "min_lng": min_lng, "max_lat": max_lat, "max_lng": max_lng,
         "fmt": fmt,
         "active_layers_json": json.dumps(active_layers),
@@ -485,6 +543,75 @@ def lagefuehrung_objekte(
             "kartenobjekte": kartenobjekte,
         })
     return JSONResponse(out)
+
+
+# Gemeinsame BSP-Einstellungen bleiben getrennt von der lokalen Kartenanzeige.
+class BspEinstellung(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sichtbarkeit: Literal["INHERIT", "ON", "OFF"]
+    deckkraft: float | None = Field(default=None, ge=0.1, le=1, strict=True)
+
+
+def _bsp_liste(db: Session, incident: Incident, user: User) -> list[dict]:
+    from app.services.objekt_bsp_overlay_service import einsatz_overlays_json
+
+    try:
+        _check_edit_access(user, incident, db)
+        kann_einstellen = True
+    except HTTPException:
+        kann_einstellen = False
+    return einsatz_overlays_json(db, incident.id, user, kann_einstellen=kann_einstellen)
+
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/bsp-overlays.json")
+def lagefuehrung_bsp_overlays(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+    return JSONResponse(_bsp_liste(db, incident, user)
+                        if getattr(request.state, "objekt_enabled", False) else [])
+
+
+@router.post("/einsatz/{incident_id}/lagefuehrung/bsp-overlays/{overlay_id}/einstellung")
+def lagefuehrung_bsp_einstellung(
+    incident_id: int, overlay_id: int, request: Request, daten: BspEinstellung,
+    db: Session = Depends(get_db), _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    from app.models.objekt import BspOverlayEinsatz, ObjektBspOverlay
+    from app.services.objekt_bsp_overlay_service import overlays_fuer_einsatz
+
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_edit_access(user, incident, db)
+    if not getattr(request.state, "objekt_enabled", False) or not any(
+        o["id"] == overlay_id for o in overlays_fuer_einsatz(db, incident_id)
+    ):
+        raise HTTPException(404, "Overlay nicht gefunden")
+    overlay = db.get(ObjektBspOverlay, overlay_id)
+    if overlay is None:
+        raise HTTPException(404, "Overlay nicht gefunden")
+    einstellung = db.query(BspOverlayEinsatz).filter_by(
+        incident_id=incident_id, overlay_id=overlay_id, org_id=overlay.org_id,
+    ).first()
+    if einstellung is None:
+        einstellung = BspOverlayEinsatz(
+            org_id=overlay.org_id, incident_id=incident_id, overlay_id=overlay_id,
+        )
+        db.add(einstellung)
+    einstellung.sichtbarkeit = daten.sichtbarkeit
+    einstellung.deckkraft = daten.deckkraft
+    einstellung.geaendert_von = user.id
+    einstellung.geaendert_am = datetime.now(UTC).replace(tzinfo=None)
+    _log_event(db, incident, user, "bsp.einstellung", "bsp_overlay", overlay_id, daten.model_dump())
+    db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "lagefuehrung.bsp.changed", "overlay_id": overlay_id,
+    })
+    return JSONResponse({"ok": True})
 
 
 # ── Auto-Layer: Wasserstellen ────────────────────────────────────────────────────

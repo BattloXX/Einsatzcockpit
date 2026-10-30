@@ -33,23 +33,23 @@
           <fieldset class="kp-chips">
             <legend class="sr-only">Typ</legend>
             {% for code, typ in typen.items() %}
-              <label><input type="checkbox" data-kp-filter-typ value="{{ code }}" checked> {{ icon(typ.icon_name, size="md") }} {{ typ.label }}</label>
+              <label><input data-no-dirty type="checkbox" data-kp-filter-typ value="{{ code }}" checked> {{ icon(typ.icon_name, size="md") }} {{ typ.label }}</label>
             {% endfor %}
           </fieldset>
         </details>
         <label class="kp-field">Phase
-          <select class="form-control" data-kp-filter-phase>
+          <select data-no-dirty class="form-control" data-kp-filter-phase>
             <option value="">Alle</option>
             {% for phase in karten_phasen %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
           </select>
         </label>
         <label class="kp-field">Priorität
-          <select class="form-control" data-kp-filter-prio>
+          <select data-no-dirty class="form-control" data-kp-filter-prio>
             <option value="">Alle</option>
             <option value="1">1 – Hoch</option><option value="2">2 – Mittel</option><option value="3">3 – Niedrig</option>
           </select>
         </label>
-        <label><input type="checkbox" data-kp-filter-geprueft> Nur geprüfte Orte</label>
+        <label><input data-no-dirty type="checkbox" data-kp-filter-geprueft> Nur geprüfte Orte</label>
       </div>
       {% include "katplan/_plankarte.html" %}
       <p class="kp-chips" aria-label="Legende">

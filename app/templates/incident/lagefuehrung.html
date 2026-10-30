@@ -4,6 +4,25 @@
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
 <link rel="stylesheet" href="/static/css/MarkerCluster.Default.css">
+<style>
+  #lft-druck-dialog { margin:auto; width:min(540px, calc(100% - 24px)); max-height:90vh; overflow:auto; padding:20px; border:1px solid var(--border); border-radius:8px; background:var(--bg-card); color:var(--text); }
+  #lft-druck-dialog::backdrop { background:rgba(0,0,0,.4); }
+  #lft-druck-dialog label { display:block; margin-top:12px; }
+  #lft-druck-dialog select, #lft-druck-dialog input { width:100%; min-width:0; }
+  #lft-druck-dialog .druck-aktionen { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  @media (max-width:760px) {
+    #lft-druck-dialog select, #lft-druck-dialog button { min-height:44px; }
+    #lft-druck-dialog input { min-height:36px; }
+  }
+  #lft-bsp { min-width:0; max-width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; }
+  #lft-bsp select, #lft-bsp input[type="range"] { width:100%; max-width:100%; min-width:0; }
+  #lft-bsp small { display:block; color:var(--text-muted); }
+  @media (max-width:760px) {
+    #lft-bsp select, #lft-bsp button { min-height:44px; }
+    #lft-bsp input[type="range"] { min-height:36px; }
+    #lft-bsp button { white-space:normal; }
+  }
+</style>
 {% endblock %}
 {% block content %}
 {% if incident.is_exercise %}
@@ -26,6 +45,32 @@
       {% with active="lagefuehrung" %}{% include "incident/_subnav.html" %}{% endwith %}
     </div>
   </div>
+
+  <dialog id="lft-druck-dialog" aria-labelledby="lft-druck-titel">
+    <h2 id="lft-druck-titel">Kartendruck</h2>
+    <fieldset>
+      <legend>Brandschutzplan</legend>
+      <label for="lft-druck-bsp-modus">Modus</label>
+      <select id="lft-druck-bsp-modus" class="form-input">
+        <option value="MAP_ONLY">Nur Karte</option>
+        <option value="MAP_WITH_BSP">Karte mit Plan</option>
+        <option value="BSP_EXCERPT_ONLY">Nur Plan-Ausschnitt</option>
+        <option value="MAP_AND_BSP_SEPARATE">Karte und Plan getrennt, 2 Seiten</option>
+      </select>
+      <label for="lft-druck-bsp-ids">Overlay-Auswahl</label>
+      <select id="lft-druck-bsp-ids" class="form-input">
+        <option value="">Alle freigegebenen</option>
+      </select>
+      <label for="lft-druck-bsp-deckkraft">Deckkraft</label>
+      <input id="lft-druck-bsp-deckkraft" type="range" min="0.1" max="1" step="0.05" value="0.6">
+      <p id="lft-druck-bsp-status" role="status">BSP-Overlay wird gedruckt: nein</p>
+      <p id="lft-druck-bsp-hinweis" role="status"></p>
+    </fieldset>
+    <div class="druck-aktionen">
+      <button type="button" id="lft-druck-vorschau" class="btn">{{ icon("printer", size="sm") }} Druckvorschau öffnen</button>
+      <button type="button" id="lft-druck-abbrechen" class="btn btn--ghost">Abbrechen</button>
+    </div>
+  </dialog>
 
   <div id="lft-banner" class="lft-banner">
     <span id="lft-banner-text">
@@ -58,6 +103,22 @@
           <label><input type="checkbox" id="lft-layer-einsatzort" checked> {{ icon("map-pin", size="sm") }} Einsatzort</label>
           <label><input type="checkbox" id="lft-layer-fahrzeuge" checked> {{ icon("firetruck", size="sm") }} Fahrzeuge</label>
           {% if objekt_enabled %}
+          <div id="lft-bsp" hidden>
+            <label><input type="checkbox" id="lft-layer-bsp"> {{ icon("map", size="sm") }} Brandschutzplan</label>
+            <button type="button" id="lft-bsp-aus" class="btn btn-sm">Alle Pläne nur für mich ausblenden</button>
+            <label for="lft-bsp-auswahl">Plan / Stand</label>
+            <select id="lft-bsp-auswahl"></select>
+            <label for="lft-bsp-scope">Einstellung gilt</label>
+            <select id="lft-bsp-scope">
+              <option value="alle" id="lft-bsp-alle">Für alle im Einsatz</option>
+              <option value="lokal">Nur für mich</option>
+            </select>
+            <label for="lft-bsp-deckkraft">Deckkraft <span id="lft-bsp-prozent"></span></label>
+            <input type="range" id="lft-bsp-deckkraft" min="0.1" max="1" step="0.05">
+            <button type="button" id="lft-bsp-reset" class="btn btn-sm">Vorgabe verwenden</button>
+            <small id="lft-bsp-lokal"></small>
+            <small id="lft-bsp-hinweis" role="status"></small>
+          </div>
           <label><input type="checkbox" id="lft-layer-objekt" checked> {{ modul_icon("objekte", size="sm") }} Objekt</label>
           {% endif %}
           <label><input type="checkbox" id="lft-layer-wasserstellen" checked> {{ icon("droplet", size="sm") }} Wasserstellen</label>
@@ -235,6 +296,7 @@
 <script src="/static/js/leaflet-geoman.min.js"></script>
 <script src="/static/js/leaflet.markercluster.js"></script>
 <script src="/static/js/objekt_karte.js?v={{ ASSET_VERSION }}"></script>
+{% if objekt_enabled %}<script src="/static/js/bsp_overlay_layer.js?v={{ ASSET_VERSION }}"></script>{% endif %}
 <script src="/static/js/lagefuehrung.js?v={{ ASSET_VERSION }}"></script>
 <script>
   initLagefuehrungKarte({

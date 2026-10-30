@@ -172,6 +172,31 @@ def _validate_logo_bytes(data: bytes, ext: str) -> tuple[bool, str]:
 # ── Organisations-Einstellungen ──────────────────────────────────────────────
 
 
+SETTINGS_TAB_PATHS = {
+    "stammdaten": "/admin/settings",
+    "erscheinungsbild": "/admin/settings/erscheinungsbild",
+    "module": "/admin/settings/module",
+    "allgemein": "/admin/settings/allgemein",
+}
+
+
+def _settings_return_path(request: Request) -> str:
+    """Nur feste lokale Tab-Ziele erlauben; keine vom Client gelieferten URLs."""
+    form = run_async(request.form)
+    return SETTINGS_TAB_PATHS.get(str(form.get("tab", "")), "/admin/settings")
+
+
+def _settings_toggle_redirect(request: Request) -> RedirectResponse:
+    from urllib.parse import urlencode
+
+    form = run_async(request.form)
+    params = {"saved": "1"}
+    org_id = str(form.get("org_id") or request.query_params.get("org_id") or "")
+    if org_id.isascii() and org_id.isdecimal() and int(org_id) > 0:
+        params["org_id"] = str(int(org_id))
+    return RedirectResponse(f"{_settings_return_path(request)}?{urlencode(params)}", status_code=303)
+
+
 def _settings_context(request, db, user, org_id, **extra) -> dict:
     """Baut den Template-Kontext für admin/settings.html (GET + Wetter-POST teilen sich ihn)."""
     is_sysadmin = has_role(user, "system_admin")
@@ -210,6 +235,9 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     )
     ctx = {
         "user": user,
+        "settings_tab": next(
+            (tab for tab, path in SETTINGS_TAB_PATHS.items() if path == request.url.path), "stammdaten"
+        ),
         "org": org,
         "org_settings": org_settings,
         "version": get_current_version(),
@@ -242,6 +270,9 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     return ctx
 
 
+@router.get("/settings/erscheinungsbild", response_class=HTMLResponse)
+@router.get("/settings/module", response_class=HTMLResponse)
+@router.get("/settings/allgemein", response_class=HTMLResponse)
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(
     request: Request,
@@ -812,7 +843,7 @@ def save_org_settings(
     db.commit()
     suffix = "&logo_error=" + upload_error.replace(" ", "%20") if upload_error else ""
     org_suffix = f"&org_id={effective_org_id}" if is_sysadmin and effective_org_id else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}{suffix}", status_code=303)
+    return RedirectResponse(f"{_settings_return_path(request)}?saved=1{org_suffix}{suffix}", status_code=303)
 
 
 @router.post("/settings/org/logo/reset")
@@ -839,7 +870,7 @@ def reset_org_logo(
     if org_s:
         org_s.logo_path = None
     db.commit()
-    return RedirectResponse("/admin/settings?saved=1&logo=reset", status_code=303)
+    return RedirectResponse(f"{_settings_return_path(request)}?saved=1&logo=reset", status_code=303)
 
 
 # ── Pegelmessstationen ───────────────────────────────────────────────────────
@@ -1960,8 +1991,7 @@ def toggle_uas_system(
     )
     db.commit()
 
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/mcp-toggle")
@@ -1980,7 +2010,7 @@ def toggle_mcp_system(
     row.updated_at = datetime.now(UTC)
     row.updated_by_user_id = user.id
     db.commit()
-    return RedirectResponse("/admin/settings?saved=1", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/foerderstrecke-toggle")
@@ -2027,8 +2057,7 @@ def toggle_foerderstrecke_system(
     )
     db.commit()
 
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/probenplanung-toggle")
@@ -2062,8 +2091,7 @@ def toggle_probenplanung_system(
         ip=request.client.host if request.client else None,
     )
     db.commit()
-    org_suffix = f"&org_id={org_id}" if org_id else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/strassensperren-toggle")
@@ -2095,8 +2123,7 @@ def toggle_strassensperren_system(
         ip=request.client.host if request.client else None,
     )
     db.commit()
-    org_suffix = f"&org_id={org_id}" if org_id else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/planspiel-toggle")
@@ -2126,8 +2153,7 @@ def toggle_planspiel_system(
         ip=request.client.host if request.client else None,
     )
     db.commit()
-    org_suffix = f"&org_id={org_id}" if org_id else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/katplan-toggle")
@@ -2157,8 +2183,7 @@ def toggle_katplan_system(
         ip=request.client.host if request.client else None,
     )
     db.commit()
-    org_suffix = f"&org_id={org_id}" if org_id else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/lagefuehrung-toggle")
@@ -2208,8 +2233,7 @@ def toggle_lagefuehrung_system(
     )
     db.commit()
 
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/breathing-toggle")
@@ -2261,8 +2285,7 @@ def toggle_breathing_system(
     )
     db.commit()
 
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/kontakte-toggle")
@@ -2301,8 +2324,7 @@ def toggle_kontakte_system(
         ip=request.client.host if request.client else None,
     )
     db.commit()
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/objekt-toggle")
@@ -2350,8 +2372,7 @@ def toggle_objekt_system(
     )
     db.commit()
 
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/gateway-toggle")
@@ -2398,8 +2419,7 @@ def toggle_gateway_system(
     )
     db.commit()
 
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/mailing-toggle")
@@ -2420,7 +2440,7 @@ def toggle_mailing_system(
         row.updated_at = datetime.now(UTC)
         row.updated_by_user_id = user.id
     db.commit()
-    return RedirectResponse("/admin/settings?saved=1", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 @router.post("/settings/system/nachschlagewerke-toggle")
@@ -2467,8 +2487,7 @@ def toggle_nachschlagewerke_system(
     )
     db.commit()
 
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+    return _settings_toggle_redirect(request)
 
 
 # ── System-Update (system_admin only) ────────────────────────────────────────

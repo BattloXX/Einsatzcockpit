@@ -61,6 +61,7 @@ def objekt_element_optionen(db: Session, org_id: int) -> dict[str, str]:
     return {
         "bei_einsatz_drucken": OBJEKT_ELEMENT_LABELS["bei_einsatz_drucken"],
         **lade_auswahl(db, org_id, AUSWAHL_DOKUMENTART),
+        "bsp_overlay": OBJEKT_ELEMENT_LABELS["bsp_overlay"],
     }
 
 
@@ -1040,7 +1041,7 @@ def _seiten_for_elements(db: Session, objekt_id: int, elements: list[str]):
 
     from app.models.objekt import ObjektDokument, ObjektDokumentSeite
 
-    dokumentarten = [e for e in elements if e != "bei_einsatz_drucken"]
+    dokumentarten = [e for e in elements if e not in {"bei_einsatz_drucken", "bsp_overlay"}]
     bedingungen = []
     if "bei_einsatz_drucken" in elements:
         bedingungen.append(ObjektDokumentSeite.bei_einsatz_drucken.is_(True))
@@ -1071,6 +1072,7 @@ def _jobs_for_rule(
     Objekt – je Objekt-Element-Seite × Zieldrucker (idempotent, außer bei source=manual)."""
     from app.models.gateway import (
         DOC_ALARM_ROHTEXT,
+        DOC_BSP_OVERLAY,
         DOC_GSL_EINHEIT_QR,
         DOC_MAIL_EINGANG,
         DOC_OBJEKT_DOKUMENT,
@@ -1105,13 +1107,15 @@ def _jobs_for_rule(
             jobs.append(job)
 
     erlaubte_typen = (
-        frozenset(documents) | {DOC_OBJEKT_DOKUMENT}
+        frozenset(documents) | {DOC_OBJEKT_DOKUMENT, DOC_BSP_OVERLAY}
         if source == JOB_SOURCE_MANUAL
         else TRIGGER_DOCUMENT_TYPES.get(rule.trigger, frozenset())
     )
 
     # 1) Dokumenttypen (Einsatzinfo, GSL-Lageblatt, Objektblatt …)
     for document_type in documents:
+        if document_type == DOC_BSP_OVERLAY:
+            continue  # Nur als Objekt-Element mit konkretem freigegebenem Overlay.
         if document_type not in erlaubte_typen:
             logger.warning(
                 "Dokumenttyp %s für Druckregel %s mit Auslöser %s übersprungen",
@@ -1191,6 +1195,24 @@ def _jobs_for_rule(
                 for printer_id in printer_ids:
                     _add(printer_id=printer_id, document_type=DOC_OBJEKT_DOKUMENT,
                          objekt_id=objekt_id, artifact_ref=str(seite.id))
+    if "bsp_overlay" in objekt_elements and DOC_BSP_OVERLAY in erlaubte_typen:
+        from app.models.objekt import ObjektBspOverlay
+        from app.services.objekt_bsp_overlay_service import overlay_ist_auslieferbar
+
+        for objekt_id in _resolve_objekt_ids(db, context):
+            overlays = db.query(ObjektBspOverlay).filter_by(
+                org_id=rule.org_id, objekt_id=objekt_id, autodruck=True,
+            ).order_by(ObjektBspOverlay.id).all()
+            for overlay in overlays:
+                if not overlay_ist_auslieferbar(db, overlay):
+                    logger.warning(
+                        "BSP-Overlay %s für Druckregel %s nicht auslieferbar (%s), übersprungen",
+                        overlay.id, rule.id, overlay.status,
+                    )
+                    continue
+                for printer_id in printer_ids:
+                    _add(printer_id=printer_id, document_type=DOC_BSP_OVERLAY,
+                         objekt_id=objekt_id, artifact_ref=f"{overlay.id}:{overlay.freigabe_nr}")
     return jobs
 
 

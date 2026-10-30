@@ -120,8 +120,8 @@
 
   // Lokaler Druck: bestehende Seiten-Aktion bevorzugen (localFn/localUrl), sonst
   // die gemeinsame Server-PDF öffnen. So bleibt der lokale Druck exakt wie bisher.
-  // In der nativen App über ELNative.openUrl() (Custom Tab statt window.open,
-  // da Android-WebView keinen PDF-Viewer hat - siehe native-bridge.js).
+  // ELNative.openUrl() leitet PDF-URLs an NativeFiles weiter; HTML-Druckseiten
+  // bleiben Browser-Links (siehe native-bridge.js).
   function doLocal(c){
     if(c.localFn && typeof window[c.localFn] === 'function'){ window[c.localFn](); return; }
     const url = c.localUrl || localUrlFor(c);

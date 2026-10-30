@@ -4821,6 +4821,32 @@ def vehicle_manual_pin(
 
 # ── Lagekarte ────────────────────────────────────────────────────────────────
 
+@router.get("/lage/{lage_id}/bsp-overlays.json")
+def lage_bsp_overlays(
+    request: Request, lage_id: int, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    from app.services.objekt_bsp_overlay_service import einsatz_overlays_json
+
+    user = request.state.user
+    if (getattr(request.state, "qr_incident_id", None) is not None
+            or getattr(request.state, "qr_lage_id", None) is not None):
+        raise HTTPException(401, "Anmeldung erforderlich")
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    overlays = {}
+    if getattr(request.state, "objekt_enabled", False):
+        for site in lage.sites:
+            if site.phase == SitePhase.abgebrochen or not site.incident_id:
+                continue
+            incident = db.query(Incident).filter_by(id=site.incident_id, primary_org_id=lage.org_id).first()
+            if incident:
+                for overlay in einsatz_overlays_json(db, incident.id, user, einsatzvorgabe=False):
+                    overlays[overlay["id"]] = overlay
+    from fastapi.responses import JSONResponse
+    return JSONResponse(list(overlays.values()), headers={"Cache-Control": "private, no-store"})
+
+
 @router.get("/lage/{lage_id}/karte", response_class=HTMLResponse)
 def lage_karte(
     request: Request,

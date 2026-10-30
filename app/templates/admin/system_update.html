@@ -2,6 +2,8 @@
 {% block title %}System-Update{% endblock %}
 
 {% block admin_content %}
+{% with section_id='updates_backups' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="system-update-page">
 <div class="page-header">
   <h1>System-Update</h1>

@@ -22,6 +22,7 @@ from app.models.objekt import Objekt, ObjektBMA, ObjektZusatzadresse
 from app.models.planspiel import PlanspielAdresse, PlanspielOrtTypZuordnung, PlanspielSzenario, PlanspielSzenarioVersion
 from app.services.geo_service import validate_geojson_polygon
 from app.services.hoehen_service import haversine_m
+from app.services.overpass_endpunkte import endpunkte
 
 logger = logging.getLogger(__name__)
 
@@ -279,11 +280,12 @@ _OSM_WIEDERHOLEN = {429, 502, 503, 504}
 
 
 async def _overpass_abrufen(query: str) -> list[dict[str, Any]]:
+    urls = endpunkte(settings.STRASSEN_OVERPASS_URL)
     timeout = settings.PLANSPIEL_OVERPASS_TIMEOUT_SECONDS + 15
     async with httpx.AsyncClient(headers={"User-Agent": settings.HYDRANT_USER_AGENT}, timeout=timeout) as client:
         for versuch in range(len(_OSM_WARTEN_S) + 1):
             try:
-                response = await client.post(settings.STRASSEN_OVERPASS_URL, data={"data": query})
+                response = await client.post(urls[versuch % len(urls)], data={"data": query})
                 if response.status_code in _OSM_WIEDERHOLEN and versuch < len(_OSM_WARTEN_S):
                     logger.info("Overpass HTTP %s, Versuch %s", response.status_code, versuch + 1)
                     await asyncio.sleep(_OSM_WARTEN_S[versuch])

@@ -22,7 +22,13 @@ def test_dry_run_batch_atomar_idempotenz_und_verwerfen(client, karte):
         vorher = [(m.id, m.revision) for m in db.query(ObjektKartenObjekt).all()]
     echt = _rufe(client, token, "objekt_karte_vorschlaege", **argumente)
     nochmal = _rufe(client, token, "objekt_karte_vorschlaege", **argumente)
-    assert echt == nochmal
+    assert echt["zusammenfassung"]["neu"] == 2
+    assert nochmal["zusammenfassung"]["unveraendert_offen"] == 2
+    assert all(v["ergebnis"] == "neu" for v in echt["vorschlaege"])
+    assert all(v["ergebnis"] == "unveraendert_offen" for v in nochmal["vorschlaege"])
+    assert [{k: w for k, w in v.items() if k != "ergebnis"} for v in echt["vorschlaege"]] == [
+        {k: w for k, w in v.items() if k != "ergebnis"} for v in nochmal["vorschlaege"]
+    ]
     gelistet = _rufe(client, token, "objekt_karte_vorschlaege", 
                                   objekt_id=karte["objekt_id"], aktion="auflisten")
     assert len(gelistet["vorschlaege"]) == 2

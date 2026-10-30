@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v22';
+const CACHE = 'ec-v25';
 const BOARD_CACHE = 'ec-board-v4';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; Version 2 entfernt alte Kontaktseiten mit zu weiten Rechten)
@@ -15,6 +15,7 @@ const CORE_PRECACHE = [
   '/',
   '/static/css/app.css',
   '/static/js/app.js',
+  '/static/js/native-ptr.js',
   '/static/js/icons.js',
   '/static/js/alpine.min.js',
   '/static/js/htmx.min.js',
@@ -104,6 +105,11 @@ self.addEventListener('message', e => {
 // muesste anders (z.B. expliziter Vorab-Download) geloest werden.
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
+  // Explizite Downloads/Handoffs brauchen die aktuelle Attachment-Antwort
+  // samt Authentifizierung; niemals aus dem Objekt-Offlinecache bedienen.
+  if (url.searchParams.get('download') === '1' || url.searchParams.has('nt')) return;
+  // BSP immer mit aktueller Freigabe und privatem HTTP-Cache pruefen.
+  if (url.pathname.startsWith('/objekt-medien/bsp-overlay/') || /\/bsp-overlays(?:\.json|\/)/.test(url.pathname)) return;
   // Never intercept WebSocket or API calls
   if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/api/')) return;
   // Aktuelle Freigabe bei JEDEM Abruf; keine Offlinekopie von Einsatzunterlagen.

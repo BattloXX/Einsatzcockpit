@@ -84,6 +84,7 @@ def test_arbeitskopie_sperrt_freigabe_in_template_und_json(client, karte):
         assert 'data-gesperrt="1"' in response.text
         assert 'data-review-freigeben disabled' in response.text
         assert "Offene Arbeitskopie: Freigabe" in response.text
+        assert f'href="/objekte/{karte["objekt_id"]}">Zur Arbeitskopie: Übernehmen oder Verwerfen</a>' in response.text
     assert client.get(basis + "/vorschlaege.json").json()["freigabe_gesperrt"] is True
 
 

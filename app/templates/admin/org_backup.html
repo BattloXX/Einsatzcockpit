@@ -4,6 +4,8 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Datensicherung'}]) }}{% endblock %}
 
 {% block admin_content %}
+{% with section_id='org_backup' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-header">
   <div>
     <h1>Datensicherung</h1>

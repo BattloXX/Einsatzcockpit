@@ -16,10 +16,10 @@ from limits.storage import storage_from_string
 from limits.strategies import FixedWindowRateLimiter
 
 from app.config import settings
+from app.core.git_sha import valid_sha
 from app.db import SessionLocal
 from app.services import github_token
 
-SHA = re.compile(r"[0-9a-f]{7,40}")
 REPOSITORY = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}")
 MAX_BYTES = 512 * 1024
 
@@ -55,10 +55,6 @@ class ResponseCache:
 
 _CACHE = ResponseCache()
 _LIMITER = FixedWindowRateLimiter(storage_from_string(settings.REDIS_URL or "memory://"))
-
-
-def valid_sha(value: str) -> bool:
-    return isinstance(value, str) and SHA.fullmatch(value) is not None
 
 
 def unavailable(code: str) -> dict:

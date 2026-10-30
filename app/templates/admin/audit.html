@@ -1,6 +1,8 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Audit-Log – Admin{% endblock %}
 {% block admin_content %}
+{% with section_id='benutzer' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-header">
   <h2>System-Audit-Log</h2>
 </div>

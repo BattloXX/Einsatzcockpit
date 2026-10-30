@@ -1,6 +1,8 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Backup & Export – Admin{% endblock %}
 {% block admin_content %}
+{% with section_id='updates_backups' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <div class="page-content">
   <div class="page-header">
     <div><h1>Backup & Export</h1><p class="page-header__sub">Stammdaten-Backup für Migration und Restore</p></div>

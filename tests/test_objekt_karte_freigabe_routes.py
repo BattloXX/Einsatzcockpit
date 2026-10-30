@@ -85,3 +85,57 @@ def test_review_get_persistiert_veraltet(client, karte, tmp_path, monkeypatch):
     with SessionLocal() as db:
         set_tenant_context(db, karte["org_id"])
         assert db.get(ObjektKartenVorschlag, v["id"]).position_status == "veraltet"
+
+
+@pytest.mark.parametrize("kritisch,bestaetigt,status", [(False, True, 200), (True, False, 422), (True, True, 200)])
+def test_korrektur_und_freigabe_atomare_aktion(client, karte, kritisch, bestaetigt, status):
+    from app.models.objekt import ObjektChange, ObjektKartenVorschlag
+
+    with SessionLocal() as db:
+        set_tenant_context(db, karte["org_id"])
+        v = _neu(db, karte, symbol_code="bmz" if kritisch else "tor", lat=47.11, lng=9.21)
+        db.commit()
+        vorher_audit = db.query(ObjektChange).filter_by(objekt_id=karte["objekt_id"]).count()
+    _login(client, karte)
+    codes = ["position_manuell"]
+    if kritisch and bestaetigt:
+        codes.append("einsatzkritisch_freigabe_erforderlich")
+    antwort = _post(client, f'/objekte/{karte["objekt_id"]}/karte/vorschlaege/{v["id"]}/korrigieren', {
+        "lat": 47.102, "lng": 9.202, "rotation": 90, "label": "Geprüft",
+        "freigeben": True, "bestaetigte_warnungen": {str(v["id"]): codes},
+    })
+    assert antwort.status_code == status, antwort.json()
+    with SessionLocal() as db:
+        set_tenant_context(db, karte["org_id"])
+        aktuell = db.get(ObjektKartenVorschlag, v["id"])
+        if status == 200:
+            assert aktuell.freigabe_status == "angenommen"
+            marker = db.get(ObjektKartenObjekt, antwort.json()["ergebnisse"][0]["marker_id"])
+            assert (marker.lat, marker.lng, marker.rotation, marker.label) == (47.102, 9.202, 90, "Geprüft")
+            assert marker.position_status == "bestaetigt"
+        else:
+            assert aktuell.freigabe_status == "offen"
+            assert (aktuell.lat, aktuell.lng) == (47.11, 9.21)
+            assert aktuell.position_methode == v["position_methode"]
+            assert db.query(ObjektChange).filter_by(objekt_id=karte["objekt_id"]).count() == vorher_audit
+
+
+def test_korrektur_freigabe_arbeitskopie_rollt_zurueck(client, karte):
+    from app.models.objekt import Objekt, ObjektKartenVorschlag
+    from app.services.objekt_service import erstelle_arbeitskopie
+
+    with SessionLocal() as db:
+        set_tenant_context(db, karte["org_id"])
+        v = _neu(db, karte, lat=47.11, lng=9.21)
+        erstelle_arbeitskopie(db, db.get(Objekt, karte["objekt_id"]), karte["users"]["u"])
+        db.commit()
+    _login(client, karte)
+    antwort = _post(client, f'/objekte/{karte["objekt_id"]}/karte/vorschlaege/{v["id"]}/korrigieren', {
+        "lat": 47.102, "lng": 9.202, "freigeben": True,
+        "bestaetigte_warnungen": {str(v["id"]): ["position_manuell"]},
+    })
+    assert antwort.status_code == 409
+    with SessionLocal() as db:
+        set_tenant_context(db, karte["org_id"])
+        aktuell = db.get(ObjektKartenVorschlag, v["id"])
+        assert (aktuell.lat, aktuell.lng, aktuell.freigabe_status) == (47.11, 9.21, "offen")

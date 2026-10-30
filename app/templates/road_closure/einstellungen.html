@@ -17,6 +17,8 @@
 {% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Straßensperren'}, {'label': 'Teams'}]) }}{% endblock %}
 {% block admin_content %}
+{% with section_id='strassensperren' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+
 <section class="sperren-teams">
 <div class="page-header"><div><h1>Microsoft Teams</h1><p class="page-header__sub">Neue und geänderte Straßensperren als Karte in einen Teams-Kanal melden</p></div></div>
 {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import math
 from pathlib import Path
 from typing import Any
 
@@ -32,9 +33,45 @@ def seite_ergebnis(dokument: Any, seite: Any) -> dict[str, object]:
     }
 
 
-def bild_anhaengen(ergebnis: dict[str, object], seite: Any, max_kante_px: int) -> None:
-    """Haengt das verkleinerte Seitenbild (JPEG, Base64) an das Ergebnis an."""
-    daten, vorhanden = seiten_bild(seite, max_kante_px)
+def _ausschnitt_pruefen(ausschnitt: list[float] | None) -> None:
+    if ausschnitt is None:
+        return
+    if (not isinstance(ausschnitt, list) or len(ausschnitt) != 4
+            or any(isinstance(w, bool) or not isinstance(w, (int, float))
+                   or not math.isfinite(w) or not 0 <= w <= 1 for w in ausschnitt)):
+        raise ValueError("Ausschnitt: vier endliche Zahlen in 0..1 erforderlich")
+    x0, y0, x1, y1 = ausschnitt
+    if x1 - x0 < 0.02 - 1e-12 or y1 - y0 < 0.02 - 1e-12:
+        raise ValueError("Ausschnitt: x0 < x1 und y0 < y1; Breite und Hoehe mindestens 0.02")
+
+
+def _bildpfad(seite: Any) -> Path | None:
+    for relativ in (seite.bild_pfad, seite.thumb_pfad):
+        if relativ:
+            pfad = absolute_pfad(relativ)
+            if pfad.is_file():
+                return pfad
+    return None
+
+
+def bild_anhaengen(ergebnis: dict[str, object], seite: Any, max_kante_px: int,
+                   ausschnitt: list[float] | None = None) -> None:
+    """Haengt das gedrehte, gegebenenfalls zugeschnittene Seitenbild an."""
+    daten, vorhanden = seiten_bild(seite, max_kante_px, ausschnitt)
+    rotation = getattr(seite, "rotation", 0) or 0
+    ergebnis["rotation"] = rotation
+    ergebnis["bildgroesse"] = None
+    pfad = _bildpfad(seite)
+    if pfad:
+        with Image.open(pfad) as bild:
+            breite, hoehe = bild.size
+        ergebnis["bildgroesse"] = [hoehe, breite] if rotation % 180 else [breite, hoehe]
+    ergebnis["koordinaten_hinweis"] = "Koordinaten normiert auf die gelieferte (gedrehte) Gesamtseite."
+    if ausschnitt is not None:
+        ergebnis["ausschnitt"] = list(ausschnitt)
+        ergebnis["koordinaten_hinweis"] = (
+            "bild_x = x0 + u*(x1-x0), bild_y = y0 + v*(y1-y0); u,v normiert im Ausschnitt"
+        )
     ergebnis["hat_bild"] = vorhanden
     if daten:
         ergebnis["bild_base64"] = daten
@@ -43,22 +80,28 @@ def bild_anhaengen(ergebnis: dict[str, object], seite: Any, max_kante_px: int) -
         ergebnis["hinweis"] = SEITE_ANSEHEN_HINWEIS
 
 
-def seiten_bild(seite: Any, max_kante_px: int) -> tuple[str | None, bool]:
-    """Return a bounded JPEG data payload and whether an image was available."""
+def seiten_bild(seite: Any, max_kante_px: int,
+                ausschnitt: list[float] | None = None) -> tuple[str | None, bool]:
+    """Dreht und schneidet vor dem Verkleinern zu, auch beim Thumbnail-Fallback."""
+    _ausschnitt_pruefen(ausschnitt)
     max_kante_px = max(400, min(2400, max_kante_px))
-    for relativ in (seite.bild_pfad, seite.thumb_pfad):
-        if not relativ:
-            continue
-        pfad: Path = absolute_pfad(relativ)
-        if not pfad.is_file():
-            continue
-        with Image.open(pfad) as bild:
-            rgb = bild.convert("RGB")
-            rgb.thumbnail((max_kante_px, max_kante_px))
-            ausgabe = io.BytesIO()
-            rgb.save(ausgabe, format="JPEG", quality=80)
-        return base64.b64encode(ausgabe.getvalue()).decode("ascii"), True
-    return None, False
+    pfad = _bildpfad(seite)
+    if pfad is None:
+        return None, False
+    with Image.open(pfad) as bild:
+        rgb = bild.convert("RGB")
+        rotation = (getattr(seite, "rotation", 0) or 0) % 360
+        if rotation:
+            rgb = rgb.rotate(-rotation, expand=True)
+        if ausschnitt is not None:
+            x0, y0, x1, y1 = ausschnitt
+            breite, hoehe = rgb.size
+            rgb = rgb.crop((math.floor(x0 * breite), math.floor(y0 * hoehe),
+                            math.ceil(x1 * breite), math.ceil(y1 * hoehe)))
+        rgb.thumbnail((max_kante_px, max_kante_px))
+        ausgabe = io.BytesIO()
+        rgb.save(ausgabe, format="JPEG", quality=80)
+    return base64.b64encode(ausgabe.getvalue()).decode("ascii"), True
 
 
 def seiten_text(seiten: list[Any], max_zeichen: int) -> dict[str, object]:

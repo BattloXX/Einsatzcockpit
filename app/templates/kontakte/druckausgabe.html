@@ -8,7 +8,8 @@
 * {box-sizing:border-box} body {font:10pt Arial,sans-serif;color:#111;background:white;margin:0} h1 {font-size:17pt;margin:0 0 3mm} .meta {font-size:9pt;color:#444;margin-bottom:5mm}
 .druckkopf{display:table;width:100%;margin-bottom:5mm;break-inside:avoid}.druckkopf__text{display:table-cell;vertical-align:middle}.druckkopf .meta{margin-bottom:0}.druckkopf__logo{display:table-cell;width:30mm;text-align:right;vertical-align:middle}.druckkopf__logo img{max-width:26mm;max-height:22mm;width:auto;height:auto}
 table {width:100%;border-collapse:collapse;table-layout:fixed} th,td {text-align:left;vertical-align:top;padding:2mm;border-bottom:1px solid #bbb;overflow-wrap:anywhere} th {background:#eee;font-size:9pt} thead {display:table-header-group} tr {break-inside:avoid} .category td {background:#ddd;font-weight:bold;padding-top:3mm} .category {break-after:avoid} .phone {font-weight:bold;font-size:11pt;white-space:nowrap} small {font-size:8pt} .detail {border-bottom:1px solid #999;padding:3mm 0;break-inside:avoid} .detail h3 {margin:0 0 2mm;font-size:12pt} .detail p {margin:1mm 0} h2 {font-size:12pt;background:#eee;padding:2mm;break-after:avoid}.toolbar {margin:10px 0} @media print {.toolbar {display:none}} @media screen {body{padding:20px;max-width:1200px;margin:auto}}
-</style></head><body>
+</style>  <script src="/static/js/native-ptr.js?v={{ ASSET_VERSION }}"></script>
+</head><body>
 <div class="toolbar"><button type="button" onclick="window.print()">Drucken</button></div>
 <header class="druckkopf"><div class="druckkopf__text">
 <h1>{{ 'Einsatztelefonliste' if opts.layout == 'kompakt' else 'Kontaktverzeichnis' }}</h1><div class="meta">{{ org.name }} · Erstellt am {{ jetzt.strftime('%d.%m.%Y, %H:%M') }} · {{ anzahl }} Kontakte</div>
