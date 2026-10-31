@@ -26,14 +26,14 @@ def test_delivery_count_is_only_shown_for_alarm_sources():
         Path(__file__).resolve().parent.parent
         / "app" / "templates" / "admin" / "push_notifications.html"
     ).read_text(encoding="utf-8")
-    condition = "{% if entry.source == 'einsatz_alarm' %}"
+    condition = "{% if entry.source in ('einsatz_alarm', 'fcm_alarm_test', 'fcm_push_test') %}"
     assert condition in template
     alarm_branch = template[template.index(condition):template.index("{% endif %}", template.index(condition))]
     assert "Zugestellt: {{ fcm.delivered }}" in alarm_branch
-    assert "Zustellbestätigung nur für Einsatzalarme" in template
+    assert "Zustellbestätigung nur für Einsatzalarme und Server-Tests" in template
     # tip() liefert Attribute (data-tip=... aria-label=...) und muss daher IM Tag
     # stehen - als Elementinhalt wuerde der Nutzer den Attribut-Text sehen.
-    assert "<div {{ tip('Zustellbestätigung nur für Einsatzalarme') }}>" in template
+    assert "<div {{ tip('Zustellbestätigung nur für Einsatzalarme und Server-Tests') }}>" in template
 
 
 def _login(client, username, password):
