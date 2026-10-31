@@ -252,6 +252,50 @@ def test_fcm_alarm(request: Request, db: Session = Depends(get_db)):
     return JSONResponse({"ok": ok, "native_alarm": native_alarm, "error": error})
 
 
+_FCM_PUSH_TEST_SPERRE = timedelta(seconds=20)
+
+
+@router.post("/fcm-test-push")
+def test_fcm_push(request: Request, db: Session = Depends(get_db)):
+    """Sendet hoechstens alle 20 Sekunden eine normale Test-Push-Nachricht je eigenem FCM-Token."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+    if not user:
+        raise _unauthorized(request)
+    data = run_async(request.json)
+    token = data.get("token") if isinstance(data, dict) else None
+    row = db.query(FcmToken).filter(FcmToken.token == token, FcmToken.user_id == user.id).first()
+    if row is None:
+        return JSONResponse({"detail": "Token nicht gefunden"}, status_code=404)
+    # Sperre ueber das Push-Protokoll, damit sie fuer alle Worker gilt.
+    letzter = (
+        db.query(PushLog.sent_at)
+        .filter(PushLog.source == "fcm_push_test", PushLog.target_user_id == user.id)
+        .order_by(PushLog.sent_at.desc())
+        .first()
+    )
+    jetzt = datetime.now(UTC).replace(tzinfo=None)
+    if letzter and letzter[0] is not None:
+        letzter_at = letzter[0].astimezone(UTC).replace(tzinfo=None) if letzter[0].tzinfo else letzter[0]
+        if jetzt - letzter_at < _FCM_PUSH_TEST_SPERRE:
+            return JSONResponse({"detail": "Bitte 20 Sekunden warten"}, status_code=429)
+    title = "Test-Push"
+    body = "Wenn du das siehst, kommen Push-Benachrichtigungen an."
+    push_log = push_service._log_push(
+        db, title, body, "/", "fcm_push_test", user.id, org_id=user.org_id,
+    )
+    ok, error = push_service.send_fcm(
+        row, title, body, url="/", channel_id=None,
+        extra_data={"test": "1"},
+        cfg=push_service._push_cfg(db), db=db, push_log_id=push_log.id,
+    )
+    push_log.sent_count = int(ok)
+    push_log.total_count = 1
+    db.commit()
+    return JSONResponse({"ok": ok, "error": error})
+
+
 @router.get("/fcm-token/status")
 def get_fcm_token_status(
     request: Request, token: str | None = None, db: Session = Depends(get_db)

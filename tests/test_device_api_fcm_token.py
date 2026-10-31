@@ -1,9 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import pytest
 
 from app.core.security import hash_api_key, hash_password, sign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, PushLog, User
+from app.services import push_service
 
 
 def _make_device_user(username: str) -> tuple[int, int]:
@@ -353,3 +356,107 @@ def test_fcm_capabilities_migration_roundtrip():
         module.upgrade()
         assert connection.exec_driver_sql("SELECT capabilities FROM fcm_token").scalar_one() is None
     engine.dispose()
+
+
+@pytest.mark.parametrize("bearer", [False, True])
+@pytest.mark.parametrize("result", [(True, None), (False, "quota_exceeded")])
+def test_fcm_push_response_and_log(client, setup_db, monkeypatch, bearer, result):
+    username = f"push_ok_{bearer}_{result[0]}"
+    user_id, device_id = _make_device_user(username)
+    token = f"test-push-token-{user_id}"
+    _create_fcm_token(user_id, token, datetime.now(), capabilities="native_alarm")
+    headers = {"Authorization": f"Bearer raw-{username}"} if bearer else {}
+    if not bearer:
+        _authenticate(client, user_id, device_id)
+    calls = []
+
+    def fake_send(row, title, body, **kwargs):
+        assert row.user_id == user_id
+        assert row.token == token
+        assert title == "Test-Push"
+        assert body == "Wenn du das siehst, kommen Push-Benachrichtigungen an."
+        assert kwargs["url"] == "/"
+        assert kwargs["channel_id"] is None
+        assert kwargs["extra_data"] == {"test": "1"}
+        assert kwargs["cfg"] is not None
+        assert kwargs["db"].get(PushLog, kwargs["push_log_id"]).source == "fcm_push_test"
+        calls.append(kwargs["push_log_id"])
+        return result
+
+    monkeypatch.setattr(push_service, "send_fcm", fake_send)
+    response = client.post("/api/v1/device/fcm-test-push", json={"token": token}, headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"ok": result[0], "error": result[1]}
+    assert len(calls) == 1
+    with SessionLocal() as db:
+        entry = db.get(PushLog, calls[0])
+        assert entry.source == "fcm_push_test"
+        assert entry.target_user_id == user_id
+        assert entry.sent_count == int(result[0])
+        assert entry.total_count == 1
+
+    response = client.post("/api/v1/device/fcm-test-push", json={"token": token}, headers=headers)
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Bitte 20 Sekunden warten"}
+    assert len(calls) == 1
+    with SessionLocal() as db:
+        entry = db.get(PushLog, calls[0])
+        entry.sent_at = entry.sent_at - timedelta(seconds=21)
+        db.commit()
+    assert client.post(
+        "/api/v1/device/fcm-test-push", json={"token": token}, headers=headers,
+    ).status_code == 200
+    assert len(calls) == 2
+
+
+def test_fcm_push_rejects_foreign_and_missing_token(client, setup_db, monkeypatch):
+    owner_id, _ = _make_device_user("push_owner")
+    user_id, device_id = _make_device_user("push_other")
+    _create_fcm_token(owner_id, "foreign-push-token", datetime.now())
+    _authenticate(client, user_id, device_id)
+
+    def unexpected_send(*args, **kwargs):
+        pytest.fail("Fremde oder fehlende Token duerfen keinen Push ausloesen")
+
+    monkeypatch.setattr(push_service, "send_fcm", unexpected_send)
+    for token in ("foreign-push-token", "missing"):
+        response = client.post("/api/v1/device/fcm-test-push", json={"token": token})
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Token nicht gefunden"}
+
+
+def test_fcm_push_requires_auth(client, setup_db):
+    response = client.post("/api/v1/device/fcm-test-push", json={"token": "test-push-token"})
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Nicht eingeloggt"}
+
+
+def test_fcm_alarm_lock_does_not_block_push_test(client, setup_db, monkeypatch):
+    user_id, device_id = _make_device_user("push_alarm_lock")
+    token = "push-alarm-lock-token"
+    _create_fcm_token(user_id, token, datetime.now(), capabilities="native_alarm")
+    _authenticate(client, user_id, device_id)
+    calls = []
+
+    def fake_send(row, title, body, **kwargs):
+        calls.append(kwargs["channel_id"])
+        return True, None
+
+    monkeypatch.setattr(push_service, "send_fcm", fake_send)
+    assert client.post(
+        "/api/v1/device/fcm-test-alarm", json={"token": token},
+    ).status_code == 200
+    assert client.post(
+        "/api/v1/device/fcm-test-alarm", json={"token": token},
+    ).status_code == 429
+    response = client.post("/api/v1/device/fcm-test-push", json={"token": token})
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "error": None}
+    assert calls == ["einsatz_alarm", None]
+    with SessionLocal() as db:
+        assert db.query(PushLog).filter_by(
+            target_user_id=user_id, source="fcm_alarm_test",
+        ).count() == 1
+        assert db.query(PushLog).filter_by(
+            target_user_id=user_id, source="fcm_push_test",
+        ).count() == 1
