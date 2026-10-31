@@ -40,6 +40,8 @@ Unter **Admin → Einsatzinfo-SMS** (`/admin/einsatzinfo-sms`):
 | `{link}` | Öffentlicher Link zur Einsatzinformation ohne Anmeldung |
 | `{leitstellennummer}` | Leitstellen-Einsatznummer, falls vorhanden (nicht Teil der Standard-Vorlage) |
 
+**Kurzlink:** `{link}` und `{anmeldelink}` sind in neuen SMS Kurzlinks der Form `/a/<10 Zeichen>`. Ältere Einsätze und alle langen `/alarm/…`-Links funktionieren weiter. Mit der Umgebungsvariable `SHORT_BASE_URL` (z. B. `https://ec.at`) kann eine zusätzliche Kurz-Domain gepflegt werden; sie muss auf dieselbe App zeigen (Reverse-Proxy) und ersetzt in SMS die `PUBLIC_BASE_URL`. Leer = `PUBLIC_BASE_URL`.
+
 Standard-Vorlage: `Einsatz {stichwort}: {adresse}. {meldung} {link}`. Unbekannte Platzhalter werden stillschweigend durch einen leeren String ersetzt (kein Fehler bei Tippfehlern).
 
 Der Versand läuft als Hintergrund-Task nach Einsatzanlage (egal ob über die API/Alarmierungssystem oder LIS) und protokolliert jeden Versand im SMS-Log (sichtbar unter **SMS senden**).

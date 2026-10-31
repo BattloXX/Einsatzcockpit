@@ -44,9 +44,11 @@ def _resolve_alarm_token(
 ) -> tuple[AlarmToken, Incident]:
     """Loest Alarm-Tokens fuer die kuerzere Seite oder das langlebige Bild auf."""
     from app.config import settings
+    from app.services.alarm_link import kurzcode_hash
 
-    token_hash = _hash_token(plain)
-    token = db.query(AlarmToken).filter(AlarmToken.token_hash == token_hash).first()
+    token = db.query(AlarmToken).filter(AlarmToken.token_hash == _hash_token(plain)).first()
+    if token is None:
+        token = db.query(AlarmToken).filter(AlarmToken.kurzcode_hash == kurzcode_hash(plain)).first()
     jetzt = datetime.now(UTC).replace(tzinfo=None)
     if token is None or not token.gueltig(jetzt=jetzt):
         raise HTTPException(status_code=404, detail="Link ungültig oder abgelaufen")
@@ -63,7 +65,9 @@ def _resolve_alarm_token(
 
 # ── Öffentliche Alarmübersicht (No-Login, z.B. via QR-Code/Teams-Link) ──────────
 
+@router.get("/a/{token}", response_class=HTMLResponse)
 @router.get("/alarm/{token}", response_class=HTMLResponse)
+@(limiter.limit("60/minute") if limiter else lambda f: f)
 def alarm_summary(token: str, request: Request, db: Session = Depends(get_db)):
     _tok, incident = _resolve_alarm_token(db, token)
 
@@ -102,6 +106,7 @@ def _login_form(request: Request, token: str, incident: Incident, *, error: str 
     }, status_code=status_code)
 
 
+@router.get("/a/{token}/anmelden", response_class=HTMLResponse)
 @router.get("/alarm/{token}/anmelden", response_class=HTMLResponse)
 def alarm_login_page(token: str, request: Request, db: Session = Depends(get_db)):
     _alarm, incident = _login_incident(db, token)
@@ -109,6 +114,7 @@ def alarm_login_page(token: str, request: Request, db: Session = Depends(get_db)
     return _login_form(request, token, incident, error=error)
 
 
+@router.post("/a/{token}/anmelden")
 @router.post("/alarm/{token}/anmelden")
 @(limiter.limit("5/15minutes") if limiter else lambda f: f)
 def alarm_login_submit(

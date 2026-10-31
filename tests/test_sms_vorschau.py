@@ -56,13 +56,28 @@ def test_org_vorlage_alle_felder_und_zusatzcodes(daten):
     assert vorschau.nachalarm.herkunft == "Beispiel mit aktueller Vorlage"
 
 
-def test_alarmtyp_override_und_uebung(daten):
+def test_alarmtyp_override(daten):
     db, org, _, _, alarmtyp, einsatz = daten
     alarmtyp.einsatzinfo_sms_template = "Eigene Vorlage {stichwort} {meldung}"
-    einsatz.is_exercise = True
     db.flush()
     vorschau, = lade_sms_vorschau(db, org.id)
-    assert vorschau.nachalarm.text == "NACHALARMIERUNG r2, _drehleiter [UEBUNG] Eigene Vorlage T9 Meldung"
+    assert vorschau.nachalarm.text == "NACHALARMIERUNG r2, _drehleiter Eigene Vorlage T9 Meldung"
+
+
+def test_uebungen_fehlen_in_der_vorschau(daten):
+    db, org, _, _, _, einsatz = daten
+    einsatz.is_exercise = True
+    db.flush()
+    assert lade_sms_vorschau(db, org.id) == []
+
+
+def test_elemente_zeigen_platzhalter_inhalte(daten):
+    db, org, _, _, _, _ = daten
+    vorschau, = lade_sms_vorschau(db, org.id)
+    elemente = {name: (wert, verwendet) for name, wert, verwendet in vorschau.elemente}
+    assert elemente["stichwort"] == ("T9", True)
+    assert elemente["meldung"][0] == "Meldung"
+    assert elemente["leitstellennummer"][0] == "f26012345"
 
 
 def test_echte_sms_werden_unveraendert_gezeigt_und_fremde_logs_ignoriert(daten):
@@ -131,7 +146,7 @@ def test_sms_segmentgrenzen(text, segmente, zeichensatz):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("override,uebung", [(None, False), ("Override " + VORLAGE, True)])
+@pytest.mark.parametrize("override,uebung", [(None, False), ("Override " + VORLAGE, False)])
 async def test_refactor_versandtext_entspricht_vorschau(daten, monkeypatch, override, uebung):
     db, org, _, einstellungen, alarmtyp, einsatz = daten
     alarmtyp.einsatzinfo_sms_template = override

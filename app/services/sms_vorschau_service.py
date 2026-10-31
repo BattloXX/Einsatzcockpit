@@ -10,13 +10,13 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.incident import Incident, IncidentOrg
 from app.models.incident_alarm_field import IncidentAlarmField
 from app.models.master import AlarmType, FireDept, OrgSettings
 from app.models.sms import SmsLog
+from app.services.alarm_link import alarm_link
 from app.services.alarm_outbox import _address
-from app.services.sms_dispatch_service import baue_einsatzinfo_text, einsatzinfo_vorlage
+from app.services.sms_dispatch_service import baue_einsatzinfo_text, einsatzinfo_platzhalter, einsatzinfo_vorlage
 
 # Erweiterungszeichen belegen zwei Septette (Escape + Zeichen).
 _GSM7 = frozenset(
@@ -51,11 +51,12 @@ class EinsatzSmsVorschau:
     stichwort: str
     erstalarm: SmsTextVorschau
     nachalarm: SmsTextVorschau
+    elemente: tuple[tuple[str, str, bool], ...]
 
 
 def lade_sms_vorschau(db: Session, org_id: int) -> list[EinsatzSmsVorschau]:
-    """Liest nur eigene oder gemeinsam gefuehrte Einsaetze und eigene SMS-Protokolle."""
-    incidents = db.query(Incident).filter(or_(
+    """Liest nur echte (keine Uebungs-)Einsaetze der Org und eigene SMS-Protokolle."""
+    incidents = db.query(Incident).filter(Incident.is_exercise.is_(False), or_(
         Incident.primary_org_id == org_id,
         Incident.collaborating_orgs.any(IncidentOrg.org_id == org_id),
     )).order_by(Incident.started_at.desc(), Incident.id.desc()).limit(5).all()
@@ -71,10 +72,7 @@ def lade_sms_vorschau(db: Session, org_id: int) -> list[EinsatzSmsVorschau]:
             local_now = now.astimezone(ZoneInfo((dept.timezone if dept else None) or "Europe/Vienna"))
         except Exception:
             local_now = now
-        link = (
-            f"{settings.effective_public_base_url.rstrip('/')}/alarm/{incident.alarm_token}"
-            if incident.alarm_token else ""
-        )
+        link = alarm_link(incident)
         template = einsatzinfo_vorlage(alarm_types.get(incident.alarm_type_code), org_settings)
 
         render = partial(
@@ -111,9 +109,17 @@ def lade_sms_vorschau(db: Session, org_id: int) -> list[EinsatzSmsVorschau]:
             except (ValueError, TypeError):
                 codes = []
         prefix = "NACHALARMIERUNG " + (", ".join(codes) if codes else "Beispiel-Code") + " "
+        werte = einsatzinfo_platzhalter(
+            alarm_type_code=incident.alarm_type_code, address=_address(incident), ort=incident.address_city,
+            meldung=incident.report_text, einsatzgrund=incident.reason, local_now=local_now, link=link,
+            anmeldelink=f"{link}/anmelden" if link and incident.access_pin_hash else "",
+            leitstellennummer=incident.lis_operation_number,
+        )
+        elemente = tuple((name, wert, f"{{{name}}}" in template) for name, wert in werte.items())
         result.append(EinsatzSmsVorschau(
             nummer=incident.nummer or incident.id, zeit=incident.started_at, stichwort=incident.alarm_type_code,
             erstalarm=aus_log(first) if first else sms_text_vorschau(render()),
             nachalarm=aus_log(changed) if changed else sms_text_vorschau(render(text_prefix=prefix)),
+            elemente=elemente,
         ))
     return result

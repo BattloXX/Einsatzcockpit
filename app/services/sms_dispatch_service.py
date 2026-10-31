@@ -81,7 +81,7 @@ def render_template(template: str, ctx: dict) -> str:
       {einsatzgrund} Einsatzgrund
       {datum}       Datum der Alarmierung (TT.MM.JJJJ)
       {zeit}        Uhrzeit der Alarmierung (HH:MM)
-      {link}        Öffentliche Einsatzinformation (No-Login-Link /alarm/{token})
+      {link}        Öffentliche Einsatzinformation (No-Login-Kurzlink /a/{code})
       {anmeldelink}  Gast-Anmeldung mit PIN (nur mit Einsatz-PIN und Alarm-Token)
       {leitstellennummer} Leitstellen-Einsatznummer (falls vorhanden)
     """
@@ -102,16 +102,13 @@ def einsatzinfo_vorlage(alarm_type: AlarmType | None, org_settings: OrgSettings 
     )
 
 
-def baue_einsatzinfo_text(
-    *, template: str, alarm_type_code: str, address: str, ort: str | None,
+def einsatzinfo_platzhalter(
+    *, alarm_type_code: str, address: str, ort: str | None,
     meldung: str | None, einsatzgrund: str | None, local_now: datetime,
-    is_exercise: bool = False, text_prefix: str = "", link: str = "",
-    anmeldelink: str = "", leitstellennummer: str | None = None,
-) -> str:
-    """Rendert Versand und Vorschau ohne Seiteneffekte mit identischen Platzhaltern."""
-    # Platzhalter befuellen
-    exercise_prefix = "[UEBUNG] " if is_exercise else ""
-    ctx = {
+    link: str = "", anmeldelink: str = "", leitstellennummer: str | None = None,
+) -> dict[str, str]:
+    """Werte aller Platzhalter der Einsatzinfo-SMS (Versand und Vorschau)."""
+    return {
         "stichwort": alarm_type_code,
         "adresse": address or "",
         "ort": ort or "",
@@ -123,6 +120,21 @@ def baue_einsatzinfo_text(
         "anmeldelink": anmeldelink,
         "leitstellennummer": leitstellennummer or "",
     }
+
+
+def baue_einsatzinfo_text(
+    *, template: str, alarm_type_code: str, address: str, ort: str | None,
+    meldung: str | None, einsatzgrund: str | None, local_now: datetime,
+    is_exercise: bool = False, text_prefix: str = "", link: str = "",
+    anmeldelink: str = "", leitstellennummer: str | None = None,
+) -> str:
+    """Rendert Versand und Vorschau ohne Seiteneffekte mit identischen Platzhaltern."""
+    exercise_prefix = "[UEBUNG] " if is_exercise else ""
+    ctx = einsatzinfo_platzhalter(
+        alarm_type_code=alarm_type_code, address=address, ort=ort, meldung=meldung,
+        einsatzgrund=einsatzgrund, local_now=local_now, link=link, anmeldelink=anmeldelink,
+        leitstellennummer=leitstellennummer,
+    )
     # .strip(): entfernt trailing Space, falls {link} leer ist (Altdaten ohne AlarmToken)
     return (text_prefix + exercise_prefix + render_template(template, ctx)).strip()
 
@@ -644,11 +656,9 @@ async def dispatch_einsatzinfo(
 
         anmeldelink = ""
         if incident_id is not None and allowed is not None and allowed.access_pin_hash and allowed.alarm_token:
-            from app.config import settings
+            from app.services.alarm_link import alarm_link
 
-            anmeldelink = (
-                f"{settings.effective_public_base_url.rstrip('/')}/alarm/{allowed.alarm_token}/anmelden"
-            )
+            anmeldelink = alarm_link(allowed, "/anmelden")
 
         text = baue_einsatzinfo_text(
             template=template, alarm_type_code=alarm_type_code, address=address, ort=ort,
