@@ -199,3 +199,104 @@ def gateway_summary(db: Session) -> dict:
     warn = warn or bool(serial["down"] or serial["teilweise"])
     warn = warn or any(evidence[k]["ueberfaellig"] for k in ("druck_jobs", "sms_jobs"))
     return {"status": "warn" if warn else "ok", "checked_at": now, "evidence": evidence}
+
+
+def deploy_summary(db: Session) -> dict:
+    """Deploy-Abstand ohne Statusverschlechterung bei fehlendem GitHub-Abgleich."""
+    from app.services.github_readonly import GitHubReadonly, valid_sha
+
+    evidence: dict = {"deploy_sha": settings.GIT_SHA if valid_sha(settings.GIT_SHA) else None,
+                      "main_sha": None, "commits_hinter_main": None, "commits_vor_main": None,
+                      "aktuell": None, "hinweis": "GitHub-Abgleich nicht verfuegbar"}
+    if evidence["deploy_sha"] is None:
+        return evidence
+    try:
+        github = GitHubReadonly(db=db, persist=False)
+        head = github.head_of_main()
+        evidence["main_sha"] = (head.get("daten") or {}).get("sha")
+        comparison = github.compare(settings.GIT_SHA)
+        data = comparison.get("daten") or {}
+        behind = data.get("commits_hinter_main")
+        if comparison.get("status") == "ok" and type(behind) is int and behind >= 0:
+            evidence.update(commits_hinter_main=behind, commits_vor_main=data.get("commits_vor_main"),
+                            aktuell=behind == 0, hinweis="Deploy entspricht main oder liegt davor"
+                            if behind == 0 else "Deploy liegt hinter main")
+    except Exception:
+        evidence["hinweis"] = "GitHub-Abgleich nicht verfuegbar"
+    return evidence
+
+
+def push_summary(db: Session, org_id: int | None = None, limit: int = 20, quelle: str | None = None) -> dict:
+    """FCM-Konfiguration und begrenzte Zustellnachweise ohne Nachrichten oder Personen lesen."""
+    import importlib.util
+    import os
+
+    from sqlalchemy import case, func
+
+    from app.models.user import FcmDeliveryLog, FcmToken, PushLog, User
+    from app.services import push_service
+
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError("Ungueltiges Push-Limit")
+    now = presence.utc()
+    cfg = push_service._push_cfg(db)
+    fcm = {"enabled": bool(cfg.get("fcm_enabled")),
+           "project_id_gesetzt": bool(cfg.get("fcm_project_id")),
+           "credentials_datei_vorhanden": os.path.isfile(cfg.get("fcm_credentials_path") or ""),
+           "firebase_admin_installiert": importlib.util.find_spec("firebase_admin") is not None,
+           "initialisiert": push_service._fcm_app is not None,
+           "nicht_verfuegbar_markiert": push_service._fcm_unavailable}
+    # Kommagetrennte Faehigkeiten wie im Versandpfad, keine Teilworttreffer.
+    native = func.instr("," + func.coalesce(FcmToken.capabilities, "") + ",", ",native_alarm,") > 0
+    token_query = db.query(User.org_id, func.count(FcmToken.id),
+        func.sum(case((native, 1), else_=0)),
+        func.sum(case((FcmToken.last_used_at >= now - timedelta(days=7), 1), else_=0)),
+    ).join(User, User.id == FcmToken.user_id).execution_options(include_all_tenants=True)
+    if org_id is not None:
+        token_query = token_query.filter(User.org_id == org_id)
+    tokens = [{"org_id": org, "anzahl": count, "native_alarm": int(native_count), "aktiv_7_tage": int(active)}
+              for org, count, native_count, active in token_query.group_by(User.org_id).order_by(User.org_id).all()]
+    configured = all(fcm[key] for key in ("enabled", "project_id_gesetzt", "credentials_datei_vorhanden",
+                                         "firebase_admin_installiert"))
+    ready = False
+    if tokens and configured and not fcm["nicht_verfuegbar_markiert"]:
+        try:
+            ready = push_service._get_fcm_app(cfg) is not None
+        except Exception:
+            ready = False
+        fcm["initialisiert"] = push_service._fcm_app is not None
+        fcm["nicht_verfuegbar_markiert"] = push_service._fcm_unavailable
+    query = db.query(PushLog.id, PushLog.sent_at, PushLog.source, PushLog.org_id,
+                     PushLog.sent_count, PushLog.total_count).execution_options(include_all_tenants=True)
+    if org_id is not None:
+        query = query.filter(PushLog.org_id == org_id)
+    if quelle is not None:
+        query = query.filter(PushLog.source == quelle)
+    pushes = []
+    summary = {"angenommen_ohne_ack": 0, "fehlgeschlagen": 0, "bestaetigt": 0}
+
+    def iso(value):
+        return presence.utc(value).isoformat() + "Z" if value is not None else None
+
+    for push in query.order_by(PushLog.sent_at.desc(), PushLog.id.desc()).limit(limit).all():
+        deliveries = db.query(FcmDeliveryLog.success, FcmDeliveryLog.error_code, FcmToken.id,
+            FcmToken.capabilities, FcmDeliveryLog.sent_at, FcmDeliveryLog.delivered_at,
+        ).outerjoin(FcmToken, FcmToken.id == FcmDeliveryLog.fcm_token_id).filter(
+            FcmDeliveryLog.push_log_id == push.id).execution_options(include_all_tenants=True)
+        # Die Zusammenfassung umfasst alle Zustellversuche der ausgewaehlten Pushes.
+        summary["angenommen_ohne_ack"] += deliveries.filter(FcmDeliveryLog.success.is_(True),
+            FcmDeliveryLog.delivered_at.is_(None), FcmDeliveryLog.sent_at < now - timedelta(seconds=60)).count()
+        summary["fehlgeschlagen"] += deliveries.filter(FcmDeliveryLog.success.is_(False)).count()
+        summary["bestaetigt"] += deliveries.filter(FcmDeliveryLog.delivered_at.isnot(None)).count()
+        rows = deliveries.order_by(FcmDeliveryLog.sent_at.desc(), FcmDeliveryLog.id.desc()).limit(20).all()
+        pushes.append({"id": push.id, "sent_at": iso(push.sent_at), "quelle": push.source,
+            "org_id": push.org_id, "sent_count": push.sent_count, "total_count": push.total_count,
+            "zustellungen": [{"success": row.success, "error_code": row.error_code,
+                "native_alarm": "native_alarm" in (row.capabilities or "").split(",") if row.id is not None else None,
+                "delivered_at": iso(row.delivered_at),
+                "ack_sekunden": (presence.utc(row.delivered_at) - presence.utc(row.sent_at)).total_seconds()
+                    if row.delivered_at is not None else None} for row in rows]})
+    state = "fail" if tokens and not ready else "warn" if (
+        summary["angenommen_ohne_ack"] or summary["fehlgeschlagen"]) else "ok"
+    return {"status": state, "checked_at": now,
+            "evidence": {"fcm": fcm, "tokens_je_org": tokens, "pushes": pushes, "zusammenfassung": summary}}

@@ -4,6 +4,10 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Admin-MCP / Deploy:** Die Systemuebersicht vergleicht den Deploy-Commit mit main und warnt bei Rueckstand. Ein bestaetigt aktueller Stand schliesst alte Versionsbefunde; GitHub-Tokenbefunde bleiben offen. Ein nicht verfuegbarer GitHub-Abgleich verschlechtert den Status nicht.
+
+- **Admin-MCP / Push:** Neues lesendes Tool `admin_push_pruefen` fuer FCM-Konfiguration, Token-Faehigkeiten je Organisation und letzte Zustellversuche samt Empfangsbestaetigungen und ACK-Zeiten, ohne Tokenwerte, Namen oder Nachrichteninhalte. Keine Migration.
+
 - **Android-Push-Test:** Neuer Endpunkt `POST /api/v1/device/fcm-test-push` testet normale Push-Benachrichtigungen ohne Einsatzalarm, mit eigener 20-Sekunden-Sperre. Keine Migration.
 
 - **Admin-MCP:** Anmeldungen inklusive 2FA-Bestaetigung gelten absolut 365 Tage statt acht Stunden; Access-Tokens bleiben 15 Minuten gueltig und werden per Refresh erneuert. Erneute Anmeldung mit bestehender Client-Registrierung nach Ablauf oder Widerruf durch OAuth-Regressionstests abgesichert. Keine Migration.

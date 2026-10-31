@@ -198,6 +198,11 @@ async def admin_logs_analysieren(level: str = "WARNING", limit: int = 100, sucht
     return await call_tool("admin_logs_analysieren", level=level, limit=limit, suchtext=suchtext)
 
 
+@server.tool(description=ADMIN_TOOLS["admin_push_pruefen"].description)
+async def admin_push_pruefen(org_id: int | None = None, limit: int = 20, quelle: str | None = None) -> dict:
+    return await call_tool("admin_push_pruefen", org_id=org_id, limit=limit, quelle=quelle)
+
+
 @server.tool(description=ADMIN_TOOLS["admin_diagnose_starten"].description)
 async def admin_diagnose_starten(checks: list[str] | None = None, umfang: str = "schnell") -> dict:
     return await call_tool("admin_diagnose_starten", checks=checks, umfang=umfang)

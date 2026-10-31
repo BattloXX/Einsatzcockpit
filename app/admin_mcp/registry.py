@@ -11,6 +11,7 @@ from app.admin_mcp.osm_tools import collect_osm
 from app.config import settings
 from app.services import github_token
 from app.services import system_diagnose as diagnose
+from app.services.diagnose.runner import resolve_deploy_findings
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,8 @@ ADMIN_TOOLS = {
 
 
 READ_TOOLS = tuple(ADMIN_TOOLS)
+ADMIN_TOOLS["admin_push_pruefen"] = AdminTool(
+    "FCM-Konfiguration, Token-Faehigkeiten je Org und letzte Push-Zustellungen mit Empfangsbestaetigung lesen.", "push")
 ADMIN_TOOLS["admin_osm_pruefen"] = AdminTool("Lokalen OSM-Bestand, Statistik und optionale Live-Proben lesen.", "osm")
 DIAG_TOOLS = {
     "admin_diagnose_starten": AdminTool("Lesende Diagnose als begrenzten Hintergrundlauf anfordern.", "diagnose"),
@@ -62,7 +65,12 @@ def collect(db, name: str, **arguments) -> dict:
                 db.rollback()
                 parts[key] = {"status": "fail", "evidence": {"fehler": "Teilcheck nicht verfuegbar"}}
         version = diagnose.version_info()
+        deploy = diagnose.deploy_summary(db)
+        if deploy["aktuell"] is True:
+            resolve_deploy_findings(db)
         states = [p["status"] for p in parts.values()] + [version["status"]]
+        if deploy["aktuell"] is False:
+            states.append("warn")
         status = next((s for s in ("fail", "warn", "unbekannt") if s in states), "ok")
         access = github_token.status(db)
         if access["status"] == "nicht_getestet":
@@ -70,7 +78,10 @@ def collect(db, name: str, **arguments) -> dict:
         if access["status"] != "ok" and status == "ok":
             status = "warn"
         return {"status": status, "github_zugang": access, "evidence": {"version": version["evidence"],
+                "deploy": deploy,
                 "teilchecks": {k: v["status"] for k, v in parts.items()}}}
+    if name == "admin_push_pruefen":
+        return diagnose.push_summary(db, arguments.get("org_id"), arguments.get("limit", 20), arguments.get("quelle"))
     if name == "admin_osm_pruefen":
         return collect_osm(live=arguments.get("live", True))
     if name == "admin_dienste_pruefen":
