@@ -198,7 +198,13 @@ def register_fcm_token(request: Request, db: Session = Depends(get_db)):
         capabilities_provided="capabilities" in data,
     )
     db.commit()
-    return JSONResponse({"ok": True})
+    # upsert_fcm_token kuerzt auf 512 Zeichen, daher mit demselben Wert suchen.
+    fcm_token = db.query(FcmToken).filter(FcmToken.token == token[:512]).first()
+    gespeichert = fcm_token.capabilities if fcm_token else None
+    return JSONResponse({
+        "ok": True,
+        "capabilities": gespeichert.split(",") if gespeichert else [],
+    })
 
 
 _FCM_ALARM_TEST_SPERRE = timedelta(seconds=20)
@@ -265,7 +271,7 @@ def get_fcm_token_status(
         FcmToken.user_id == user.id, FcmToken.token == token
     ).first()
     if not fcm_token:
-        return JSONResponse({"registered": False})
+        return JSONResponse({"registered": False, "native_alarm": False})
 
     letzte_zustellung = (
         db.query(FcmDeliveryLog)
@@ -275,6 +281,8 @@ def get_fcm_token_status(
     )
     return JSONResponse({
         "registered": True,
+        "capabilities": fcm_token.capabilities.split(",") if fcm_token.capabilities else [],
+        "native_alarm": push_service.fcm_token_has_capability(fcm_token, "native_alarm"),
         "registered_at": fcm_token.created_at.isoformat() + "Z",
         "last_delivery_success": (
             letzte_zustellung.success if letzte_zustellung else None

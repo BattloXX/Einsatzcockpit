@@ -46,7 +46,7 @@ def test_fcm_token_post_upsert_mit_device_verknuepfung(client, setup_db):
         json={"token": "fcm-api-token", "platform": "android"},
     )
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert response.json() == {"ok": True, "capabilities": []}
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -67,7 +67,7 @@ def test_fcm_token_post_upsert_per_bearer_token(client, setup_db):
         headers={"Authorization": "Bearer raw-fcm_api_bearer"},
     )
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert response.json() == {"ok": True, "capabilities": []}
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -121,7 +121,7 @@ def test_fcm_token_api_ohne_session_antwortet_401(client, setup_db):
 
 
 def _create_fcm_token(
-    user_id: int, token: str, created_at: datetime
+    user_id: int, token: str, created_at: datetime, capabilities: str | None = None
 ) -> int:
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -131,6 +131,7 @@ def _create_fcm_token(
             token=token,
             platform="android",
             created_at=created_at,
+            capabilities=capabilities,
         )
         db.add(fcm_token)
         db.commit()
@@ -153,6 +154,8 @@ def test_fcm_token_status_registriert_ohne_zustellung(client, setup_db):
     assert response.status_code == 200
     assert response.json() == {
         "registered": True,
+        "capabilities": [],
+        "native_alarm": False,
         "registered_at": created_at.isoformat() + "Z",
         "last_delivery_success": None,
         "last_delivery_at": None,
@@ -172,7 +175,7 @@ def test_fcm_token_status_verraet_fremden_token_nicht(client, setup_db):
             "/api/v1/device/fcm-token/status", params={"token": token}
         )
         assert response.status_code == 200
-        assert response.json() == {"registered": False}
+        assert response.json() == {"registered": False, "native_alarm": False}
 
 
 def test_fcm_token_status_mit_letzter_zustellung(client, setup_db):
@@ -208,6 +211,8 @@ def test_fcm_token_status_mit_letzter_zustellung(client, setup_db):
     assert response.status_code == 200
     assert response.json() == {
         "registered": True,
+        "capabilities": [],
+        "native_alarm": False,
         "registered_at": created_at.isoformat() + "Z",
         "last_delivery_success": False,
         "last_delivery_at": sent_at.isoformat() + "Z",
@@ -246,6 +251,39 @@ def test_fcm_token_status_funktioniert_per_bearer_token(client, setup_db):
     assert response.status_code == 200
     assert response.json()["registered"] is True
     assert response.json()["registered_at"] == created_at.isoformat() + "Z"
+
+
+def test_fcm_token_post_confirms_stored_native_alarm_capability(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_capability_confirmation")
+    _authenticate(client, user_id, device_id)
+    endpoint = "/api/v1/device/fcm-token"
+    payload = {"token": "confirmation-token", "capabilities": ["native_alarm"]}
+
+    response = client.post(endpoint, json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "capabilities": ["native_alarm"]}
+
+    response = client.post(endpoint, json={"token": payload["token"]})
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "capabilities": ["native_alarm"]}
+
+
+def test_fcm_token_status_with_native_alarm_capability(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_status_native_alarm")
+    _create_fcm_token(
+        user_id, "fcm-status-native-alarm", datetime(2026, 8, 24, 14, 15, 16),
+        capabilities="live_refresh,native_alarm",
+    )
+    _authenticate(client, user_id, device_id)
+
+    response = client.get(
+        "/api/v1/device/fcm-token/status", params={"token": "fcm-status-native-alarm"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["registered"] is True
+    assert response.json()["capabilities"] == ["live_refresh", "native_alarm"]
+    assert response.json()["native_alarm"] is True
 
 
 def test_fcm_capabilities_normalized_preserved_and_cleared(client, setup_db):
