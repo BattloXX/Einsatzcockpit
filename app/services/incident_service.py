@@ -402,9 +402,13 @@ def create_incident(
     from app.models.teams_bot import AlarmToken as _AlarmToken
     _alarm_raw_token = "alm_" + _secrets.token_urlsafe(32)
     incident.alarm_token = _alarm_raw_token
+    from app.services.alarm_link import kurzcode_hash as _kurzcode_hash
+    from app.services.alarm_link import neuer_kurzcode as _neuer_kurzcode
+    incident.alarm_kurzcode = _neuer_kurzcode()
     db.add(_AlarmToken(
         incident_id=incident.id,
         token_hash=hashlib.sha256(_alarm_raw_token.encode()).hexdigest(),
+        kurzcode_hash=_kurzcode_hash(incident.alarm_kurzcode),
         created_at=_now(),
         expires_at=_now() + timedelta(days=settings.ALARM_MAP_TTL_DAYS),
     ))

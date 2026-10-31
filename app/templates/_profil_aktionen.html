@@ -1,7 +1,7 @@
 <a href="/profil" class="{{ link_class }} {% if request.url.path.startswith('/profil') %}active{% endif %}">{{ modul_icon("profil", size="sm") }} Profil bearbeiten</a>
 <a href="https://github.com/BattloXX/Einsatzcockpit/wiki" target="_blank" rel="noopener" class="{{ link_class }}">{{ modul_icon("hilfe", size="sm") }} Hilfe</a>
 {% if request.state.is_native_app %}
-<a href="https://localhost/about.html" class="{{ link_class }}">{{ modul_icon("ueber", size="sm") }} Über die App</a>
+<a href="https://localhost/about.html" class="{{ link_class }}">{{ modul_icon("ueber", size="sm") }} App-Einstellungen</a>
 {% endif %}
 {% if not request.state.is_device and not request.state.qr_incident_id and not request.state.qr_lage_id %}
 <div class="mobile-menu__group-hdr">Benutzer wechseln</div>

@@ -70,7 +70,7 @@
 
   <div class="admin-section-title">Vorschau: SMS bei einer Änderung (Nachalarmierung)</div>
   <div class="chart-box" style="margin-bottom:24px;min-width:0;">
-    <p class="text-muted">Die letzten fünf Einsätze: Erstalarm und letzte Nachalarmierung im Vergleich.
+    <p class="text-muted">Die letzten fünf echten Einsätze (ohne Übungen): Erstalarm und letzte Nachalarmierung im Vergleich.
       Beispiele verwenden die aktuelle Vorlage und den Einsatzbeginn als Zeitpunkt.
       Ohne Zusatzcodes wird "Beispiel-Code" eingesetzt. Die Anzeige löst keinen Versand aus.</p>
     {% for einsatz in sms_vorschau %}
@@ -88,6 +88,19 @@
         </div>
         {% endfor %}
       </div>
+      <h3 style="font-size:.95rem;margin:12px 0 4px;">Elemente der Vorlage</h3>
+      <table class="sms-vorschau-elemente">
+        <thead><tr><th>Platzhalter</th><th>Inhalt</th><th>In Vorlage</th></tr></thead>
+        <tbody>
+          {% for name, wert, verwendet in einsatz.elemente %}
+          <tr>
+            <td><code>{{ '{' ~ name ~ '}' }}</code></td>
+            <td>{% if wert %}{{ wert }}{% else %}<span class="text-muted">(leer)</span>{% endif %}</td>
+            <td>{% if verwendet %}ja{% else %}<span class="text-muted">nein</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </details>
     {% else %}
     <p class="text-muted">Noch keine Einsätze für diese Organisation vorhanden.</p>
@@ -96,6 +109,8 @@
   <style>
     .sms-vorschau-texte { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
     .sms-vorschau-text { white-space:pre-wrap; overflow-wrap:anywhere; font-family:monospace; font-size:.88rem; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:4px; }
+    .sms-vorschau-elemente { width:100%; border-collapse:collapse; font-size:.88rem; }
+    .sms-vorschau-elemente th, .sms-vorschau-elemente td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); overflow-wrap:anywhere; vertical-align:top; }
     @media (max-width:760px) { .sms-vorschau-texte { grid-template-columns:minmax(0,1fr); gap:12px; } }
   </style>
 

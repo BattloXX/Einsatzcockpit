@@ -786,7 +786,7 @@ async def _session_mit_kontext(request: Request, call_next):
         and guest.username == f"alarmlink-gast@org{guest.org_id}"
         and request.method not in {"GET", "HEAD", "OPTIONS"}
         and _path not in {"/logout", "/login"}
-        and not (_path.startswith("/alarm/") and _path.endswith("/anmelden"))
+        and not (_path.startswith(("/alarm/", "/a/")) and _path.endswith("/anmelden"))
     ):
         reset_request_client_id(client_token)
         return JSONResponse({"detail": "Gastzugang erlaubt nur Lesen"}, status_code=403)

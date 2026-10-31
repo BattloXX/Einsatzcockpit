@@ -1570,3 +1570,37 @@ def test_alarmlink_anmeldung_scopt_principal_und_session_ueber_token(client):
         assert principal.role_codes == {"readonly"}
     assert client.get(f"/einsatz/{inc_b}", follow_redirects=False).status_code == 200
     assert client.get(f"/einsatz/{inc_a}", follow_redirects=False).status_code == 403
+
+
+def test_alarm_kurzlink_sieht_keine_kartenobjekte_fremder_org(client):
+    from app.services.alarm_link import kurzcode_hash
+
+    org_b_id = _setup_zwei_orgs()
+    code = "KurzIso123"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident_a = Incident(
+            primary_org_id=ORG_A, alarm_type_code="B3", status="active",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        objekt_b = Objekt(org_id=org_b_id, nummer=9877, name="Geheimobjekt B2")
+        db.add_all([incident_a, objekt_b])
+        db.flush()
+        db.add_all([
+            AlarmToken(incident_id=incident_a.id, token_hash="x" * 64, kurzcode_hash=kurzcode_hash(code)),
+            ObjektEinsatz(org_id=org_b_id, incident_id=incident_a.id, objekt_id=objekt_b.id,
+                          quelle="manuell", status="bestaetigt"),
+            ObjektKartenObjekt(org_id=org_b_id, objekt_id=objekt_b.id, typ="bmz", lat=48.1, lng=10.4,
+                               label="GEHEIM-KURZ-B"),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/alarm/{code}/objekt.json")
+    assert response.status_code == 200
+    assert response.json() == {"karten_objekte": [], "symbole": []}
+    assert "GEHEIM-KURZ-B" not in response.text
+    assert client.get("/a/FalscherCode").status_code == 404
+    assert client.get("/a/alm_falsch").status_code == 404

@@ -115,6 +115,8 @@ class Incident(Base):
     # (Teams-Alarmkarte, QR-Link) — Plain-Text hier für Wiederverwendung beim Kartenaufbau,
     # Hash liegt zusätzlich in AlarmToken (app/models/teams_bot.py) für den Auth-Lookup.
     alarm_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Kurzcode fuer den SMS-Link /a/<code>; gehasht in AlarmToken.kurzcode_hash
+    alarm_kurzcode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # KI-generierter Verlaufsberichtsentwurf (Phase 1)
     ai_report_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
     wp_report_post_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -4,6 +4,10 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **SMS-Kurzlink:** `{link}` und `{anmeldelink}` in der SMS-Einsatzinfo sind für neue Einsätze Kurzlinks `/a/<10 Zeichen>` (Base58, nur als Hash gespeichert, gleiche Gültigkeit und Limits wie `/alarm/…`). Optionale Kurz-Domain über `SHORT_BASE_URL`; bestehende Einsätze und Langlinks funktionieren weiter. Migration 0338.
+
+- **SMS-Vorschau:** zeigt nur echte Einsätze (keine Übungen) und je Einsatz eine Tabelle, welcher Platzhalter welchen Inhalt hatte. Profilmenü: „Über die App“ heißt „App-Einstellungen“; Übersichts-Button wieder „+ Neuer Einsatz“.
+
 - **Nativer Einsatzalarm (Android):** App-Versionen mit der Fähigkeit `native_alarm` erhalten den Einsatzalarm als eine hochpriorisierte FCM-Datennachricht (Einsatz-ID, Übungskennzeichen) und spielen den Alarmton selbst über den Wecker-Kanal mit Vollbildanzeige ab. Ältere App-Versionen erhalten weiter Weck- und Anzeige-Nachricht. Neuer Test-Endpunkt `POST /api/v1/device/fcm-test-alarm` (höchstens alle 20 s). Migration 0337.
 
 - **SMS-Einsatzinfo:** Vorschau von Erstalarm und Nachalarmierung für die letzten fünf Einsätze, mit tatsächlichen Versandtexten oder aktueller Vorlage sowie Zeichen- und SMS-Segmentanzahl.

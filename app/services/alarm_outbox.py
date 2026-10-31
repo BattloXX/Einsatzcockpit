@@ -17,6 +17,7 @@ from app.core.fehlerlog import log_fehler
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
+from app.services.alarm_link import alarm_link
 from app.services.background_runtime import create_leader_task
 from app.services.db_transactions import commit_db_operation, retry_claim
 from app.services.loop_utils import iteration_watch
@@ -272,10 +273,7 @@ async def _send_sms(db: Session, incident: Incident, job: IncidentAlarmJob) -> t
         logger.info("Einsatzinfo-SMS uebersprungen: Uebung unterdrueckt (Einsatz %s)", incident.id)
         return "suppressed", "Uebung unterdrueckt"
     address = _address(incident)
-    info_link = (
-        f"{settings.effective_public_base_url.rstrip('/')}/alarm/{incident.alarm_token}"
-        if incident.alarm_token else ""
-    )
+    info_link = alarm_link(incident)
     result = await dispatch_einsatzinfo(
         org_id, incident.alarm_type_code, address, incident.address_city, incident.report_text,
         incident.reason, incident.is_exercise, job.context.get("triggered_by_user_id"), info_link,

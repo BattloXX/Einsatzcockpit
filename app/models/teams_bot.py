@@ -149,6 +149,7 @@ class AlarmToken(Base):
         BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), unique=True, nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    kurzcode_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
