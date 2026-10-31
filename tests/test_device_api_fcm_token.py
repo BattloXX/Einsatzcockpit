@@ -246,3 +246,72 @@ def test_fcm_token_status_funktioniert_per_bearer_token(client, setup_db):
     assert response.status_code == 200
     assert response.json()["registered"] is True
     assert response.json()["registered_at"] == created_at.isoformat() + "Z"
+
+
+def test_fcm_capabilities_normalized_preserved_and_cleared(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_capabilities")
+    _authenticate(client, user_id, device_id)
+    endpoint = "/api/v1/device/fcm-token"
+    payload = {
+        "token": "capabilities-token",
+        "capabilities": [" Native_Alarm ", "NATIVE_ALARM", " live_refresh", "bad-name", "", "x" * 41],
+    }
+    assert client.post(endpoint, json=payload).status_code == 200
+    for update, expected in (
+        ({"token": payload["token"]}, "live_refresh,native_alarm"),
+        ({"token": payload["token"], "capabilities": []}, None),
+    ):
+        with SessionLocal() as db:
+            assert db.query(FcmToken).filter_by(token=payload["token"]).one().capabilities == (
+                "live_refresh,native_alarm"
+            )
+        assert client.post(endpoint, json=update).status_code == 200
+        with SessionLocal() as db:
+            assert db.query(FcmToken).filter_by(token=payload["token"]).one().capabilities == expected
+
+
+def test_fcm_capabilities_length_limit(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_capabilities_limit")
+    _authenticate(client, user_id, device_id)
+    values = [f"capability_{index:03d}" for index in range(40)]
+    assert client.post(
+        "/api/v1/device/fcm-token", json={"token": "limit-token", "capabilities": values},
+    ).status_code == 200
+    with SessionLocal() as db:
+        stored = db.query(FcmToken).filter_by(token="limit-token").one().capabilities
+        assert 0 < len(stored) <= 200
+        assert stored.split(",") == sorted(set(stored.split(",")))
+        assert set(stored.split(",")) <= set(values)
+
+
+def test_fcm_capabilities_migration_roundtrip():
+    import importlib.util
+    from pathlib import Path
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    path = Path("alembic/versions/0337_fcm_token_capabilities.py")
+    spec = importlib.util.spec_from_file_location("fcm_capabilities_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "0337"
+    assert module.down_revision == "0336"
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE fcm_token (id INTEGER PRIMARY KEY)")
+        connection.exec_driver_sql("INSERT INTO fcm_token (id) VALUES (1)")
+        module.op = Operations(MigrationContext.configure(connection))
+        module.upgrade()
+        columns = {column["name"]: column for column in sa.inspect(connection).get_columns("fcm_token")}
+        assert columns["capabilities"]["type"].length == 200
+        assert columns["capabilities"]["nullable"]
+        assert connection.exec_driver_sql("SELECT capabilities FROM fcm_token").scalar_one() is None
+        connection.exec_driver_sql("UPDATE fcm_token SET capabilities = 'native_alarm'")
+        module.downgrade()
+        assert {column["name"] for column in sa.inspect(connection).get_columns("fcm_token")} == {"id"}
+        assert connection.exec_driver_sql("SELECT id FROM fcm_token").scalar_one() == 1
+        module.upgrade()
+        assert connection.exec_driver_sql("SELECT capabilities FROM fcm_token").scalar_one() is None
+    engine.dispose()

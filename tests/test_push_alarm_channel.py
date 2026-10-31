@@ -205,6 +205,7 @@ async def test_new_incident_uses_alarm_channel(setup_db, monkeypatch):
     await notify_incident_created(db, incident, org_id=1, background_tasks=None)
 
     assert sent["channel_id"] == "einsatz_alarm"
+    assert sent["fcm_data"] == {"incident_id": str(incident.id), "is_exercise": "0"}
     db.close()
 
 
@@ -396,3 +397,89 @@ async def test_f30_wird_nie_alarmiert(setup_db, monkeypatch):
     assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text == "Keine Alarmierung (SMS/Push/Teams/Mail): Stichwort F30"
     assert incident_notify.incident_needs_alarm_backfill(db, incident) is False
     db.close()
+
+
+@pytest.mark.parametrize("wake_only", [False, True])
+def test_native_alarm_single_data_message(monkeypatch, wake_only):
+    from datetime import timedelta
+
+    sent = []
+    _fake_messaging(monkeypatch, sent.append)
+    db, user, token, push_log = _fcm_rows(f"native-{wake_only}")
+    token.capabilities = "live_refresh,native_alarm"
+    db.commit()
+    try:
+        count = push_service._notify_fcm_users(
+            db, {user.id}, "Alarm", "Test", "/einsatz/42", {},
+            channel_id="einsatz_alarm", push_log_id=push_log.id, wake_only=wake_only,
+            extra_data={"incident_id": "42", "is_exercise": "0"},
+        )
+        db.commit()
+        assert count == 1
+        assert len(sent) == 1
+        message = sent[0]
+        assert not hasattr(message, "notification")
+        assert not hasattr(message.android, "notification")
+        assert message.android.priority == "high"
+        assert message.data["incident_id"] == "42"
+        assert message.data["is_exercise"] == "0"
+        if wake_only:
+            assert message.data["silent"] == "1"
+            assert "alarm" not in message.data
+        else:
+            assert message.data["alarm"] == "1"
+            assert "silent" not in message.data
+            assert message.android.ttl == timedelta(minutes=10)
+        delivery = db.query(FcmDeliveryLog).filter_by(push_log_id=push_log.id).one()
+        assert delivery.success is True
+        assert delivery.error_code is None
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("error_name, expected, pruned", [
+    ("UnregisteredError", "unregistered_pruned", True),
+    ("SenderIdMismatchError", "unregistered_pruned", True),
+    ("QuotaExceededError", "quota_exceeded", False),
+    ("ThirdPartyAuthError", "sender_id_mismatch", False),
+    ("RuntimeError", "unknown", False),
+])
+def test_native_alarm_failure_logged_without_second_message(monkeypatch, error_name, expected, pruned):
+    sent = []
+
+    def fail(message):
+        sent.append(message)
+        error_class = getattr(sys.modules["firebase_admin.messaging"], error_name, RuntimeError)
+        raise error_class("Testfehler")
+
+    _fake_messaging(monkeypatch, fail)
+    db, _user, token, push_log = _fcm_rows(f"native-error-{error_name}")
+    token.capabilities = "native_alarm"
+    db.commit()
+    token_id = token.id
+    try:
+        ok, error = push_service.send_fcm(
+            token, "Alarm", "Test", channel_id="einsatz_alarm", db=db, push_log_id=push_log.id,
+        )
+        db.commit()
+        assert (ok, error) == (False, expected)
+        assert len(sent) == 1
+        delivery = db.query(FcmDeliveryLog).filter_by(push_log_id=push_log.id).one()
+        assert delivery.success is False
+        assert delivery.error_code == expected
+        assert expected in delivery.error_detail
+        assert (db.get(FcmToken, token_id) is None) == pruned
+        assert delivery.fcm_token_id == (None if pruned else token_id)
+    finally:
+        db.close()
+
+
+def test_native_capability_keeps_non_alarm_channel_behavior(monkeypatch):
+    sent = []
+    _fake_messaging(monkeypatch, sent.append)
+    token = FcmToken(token="ordinary-push", capabilities="native_alarm")
+    assert push_service.send_fcm(token, "Info", "Test", channel_id="info") == (True, None)
+    assert len(sent) == 2
+    assert sent[0].data["silent"] == "1"
+    assert sent[1].notification.title == "Info"
+    assert all("alarm" not in message.data for message in sent)
