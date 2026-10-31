@@ -247,10 +247,10 @@
             {% set fcm = fcm_stats[entry.id] %}
             <div>Web-Push: {{ entry.sent_count }}<span class="text-muted">/{{ entry.total_count }}</span></div>
             <div>FCM: {{ fcm.success }}<span class="text-muted">/{{ fcm.total }}</span></div>
-            {% if entry.source == 'einsatz_alarm' %}
+            {% if entry.source in ('einsatz_alarm', 'fcm_alarm_test', 'fcm_push_test') %}
             <div>Zugestellt: {{ fcm.delivered }}<span class="text-muted">/{{ fcm.total }}</span></div>
             {% else %}
-            <div {{ tip('Zustellbestätigung nur für Einsatzalarme') }}>Zugestellt: <span class="text-muted">–</span></div>
+            <div {{ tip('Zustellbestätigung nur für Einsatzalarme und Server-Tests') }}>Zugestellt: <span class="text-muted">–</span></div>
             {% endif %}
             {% if fcm.failures %}
             <details style="margin-top:6px;text-align:left;">
