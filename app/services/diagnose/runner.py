@@ -25,6 +25,19 @@ RUN_TIMEOUT = 120.0
 _next_retention = 0.0
 
 
+def resolve_deploy_findings(db: Session) -> None:
+    """Nur bestaetigt ueberholte Versionsbefunde schliessen; Tokenbefunde bleiben offen."""
+    keys = [Finding(kern, "").key("deploy.version") for kern in ("hinter_main", "sha_unbekannt")]
+    rows = db.scalars(select(DiagFinding).where(
+        DiagFinding.check_id == "deploy.version", DiagFinding.status == "offen",
+        DiagFinding.finding_key.in_(keys))).all()
+    for row in rows:
+        row.status = "behoben"
+        row.behoben_am = utcnow()
+    if rows:
+        db.commit()
+
+
 def recover_stale(db: Session) -> int:
     result = db.execute(update(DiagRun).where(DiagRun.status == "running",
         DiagRun.fortschritt_am < utcnow() - timedelta(minutes=10)).values(

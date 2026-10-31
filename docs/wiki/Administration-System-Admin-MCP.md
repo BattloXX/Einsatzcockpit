@@ -38,7 +38,7 @@ beruecksichtigt. Die Login-Seite erklaert diese Grenze, Fehler verraten keine Ko
 
 | Werkzeug | Ausgabe |
 | --- | --- |
-| `admin_system_uebersicht` | Version, Commit, Build und Gesamtstatus der Teilchecks |
+| `admin_system_uebersicht` | Version, Commit, Build, Deploy-Abstand zu main und Gesamtstatus der Teilchecks |
 | `admin_dienste_pruefen` | Aggregierte gespeicherte Dienstmonitor-Zustaende aller Organisationen |
 | `admin_worker_pruefen` | Anzahl aktiver/abgelaufener Worker, Leader und fehlerhafter Loops |
 | `admin_osm_pruefen` | Lokaler OSM-Bestand, persistente Statistik und optionale Live-Proben (`live=true`) |
@@ -46,6 +46,7 @@ beruecksichtigt. Die Login-Seite erklaert diese Grenze, Fehler verraten keine Ko
 | `admin_datenbank_pruefen` | Verbindung, Pool-Zaehler und Alembic-Stand |
 | `admin_gateway_pruefen` | Gateway-/SMS-Presence, W&T-Dienstmonitor und offene/ueberfaellige Druck-/SMS-Jobs |
 | `admin_logs_analysieren` | Lokale, gefilterte und deduplizierte Log-Gruppen mit Level, Signatur und Anzahl |
+| `admin_push_pruefen` | FCM-Konfiguration, Token-Faehigkeiten je Org und letzte Push-Zustellungen mit Empfangsbestaetigung; optional `org_id`, `quelle` (Push-Quelle) und `limit` (1 bis 50, Standard 20) |
 
 Logs: `level` ist DEBUG, INFO, WARNING (Default), ERROR oder CRITICAL;
 `limit` liegt zwischen 1 und 200 (Default 100); `suchtext` ist optional und
@@ -60,6 +61,33 @@ Modul, Schweregrad, Evidenz, ausdruecklich gekennzeichnete Ursachenhypothese,
 Empfehlung und eine Korrelations-ID. Fehlende Dienstmonitor-Daten werden als
 `nicht verfuegbar` ausgewiesen. Dienstmonitorwerte sind gespeicherte Zustaende,
 keine neu gestarteten Pruefungen. W&T wird nur anhand dieser Datenbasis beurteilt.
+
+Die Systemuebersicht enthaelt zusaetzlich `evidenz.deploy` mit `deploy_sha`,
+`main_sha`, `commits_hinter_main`, `commits_vor_main`, `aktuell` und `hinweis`.
+Bei erfolgreichem Vergleich ist `aktuell=true`, wenn kein Commit hinter main fehlt
+(auch bei eigenen Commits vor main). Ein Rueckstand setzt `aktuell=false` und den
+Gesamtstatus mindestens auf `warn`. Fehlende SHA oder GitHub-Daten ergeben
+`aktuell=null` und den Hinweis `GitHub-Abgleich nicht verfuegbar`, ohne den
+Gesamtstatus zusaetzlich zu verschlechtern. Nur bei `aktuell=true` werden offene
+Versionsbefunde `hinter_main` und `sha_unbekannt` als behoben gespeichert;
+`github.token`-Befunde bleiben unveraendert.
+
+`admin_push_pruefen` wird separat aufgerufen und ist kein Teilcheck der Uebersicht.
+Die Evidenz enthaelt `fcm` (Aktivierung, Projekt-/Datei-/Paket-Verfuegbarkeit und
+lokaler Initialisierungszustand), `tokens_je_org` (Anzahl, `native_alarm`, Aktivitaet
+der letzten sieben Tage), `pushes` und `zusammenfassung`. Bei vorhandenen Tokens
+und vollstaendiger Konfiguration wird die lokale FCM-Initialisierung geprueft;
+das Werkzeug sendet keine Nachricht und schreibt keine Datenbankeintraege ausser
+dem ueblichen MCP-Audit. Je Push werden hoechstens 20 Zustellversuche ausgegeben,
+mit UTC-Zeitpunkten, Fehlercodes, Token-Faehigkeit und `ack_sekunden` seit dem
+Zustellversuch. Geloeschte Tokens ergeben `native_alarm=null`. Namen, Tokenwerte,
+Benutzer-IDs und Nachrichtentexte werden nicht ausgegeben.
+Die Zusammenfassung zaehlt alle Zustellversuche der ausgewaehlten Pushes:
+`angenommen_ohne_ack` bezeichnet erfolgreiche FCM-Annahmen ohne Empfangsbestaetigung
+nach mehr als 60 Sekunden, `fehlgeschlagen` fehlgeschlagene Versuche und
+`bestaetigt` Versuche mit ACK. Bei vorhandenen Tokens und fehlender Konfiguration
+oder gescheiterter Initialisierung ist der Status `fail`, bei fehlenden ACKs oder
+Fehlern `warn`, sonst `ok`. Eine FCM-Annahme allein bestaetigt keinen Empfang am Handy.
 
 ## admin_osm_pruefen
 
