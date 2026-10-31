@@ -318,7 +318,10 @@ async def _send_push(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
         live_extra = _live_extra(build_incident_live_payload(db, incident), alert=True, kind="einsatz_live")
     except Exception:
         logger.exception("Live-Push-Payload fehlgeschlagen (Einsatz %s)", incident.id)
-    await _send_incident_push(incident.id, org_id, title, body, url, live_extra, user_id)
+    await _send_incident_push(
+        incident.id, org_id, title, body, url, live_extra, user_id,
+        fcm_data={"incident_id": str(incident.id), "is_exercise": "1" if incident.is_exercise else "0"},
+    )
     return "sent", None
 
 

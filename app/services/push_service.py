@@ -10,7 +10,7 @@ Pfad konfiguriert ist. PWA-Nutzer erhalten weiterhin Web-Push über VAPID.
 """
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -85,6 +85,10 @@ def _get_fcm_app(cfg: dict | None = None):
         return None
 
 
+def fcm_token_has_capability(row: FcmToken, name: str) -> bool:
+    return name in (row.capabilities or "").split(",")
+
+
 def send_fcm(
     fcm_token_row: FcmToken,
     title: str,
@@ -96,8 +100,10 @@ def send_fcm(
     push_log_id: int | None = None,
     delivery: FcmDeliveryLog | None = None,
     wake_only: bool = False,
+    *,
+    extra_data: dict[str, str] | None = None,
 ) -> tuple[bool, str | None]:
-    """Sendet eine Wake- und optional eine Display-Nachricht an ein FCM-Geraet."""
+    """Sendet einen nativen Alarm oder eine Wake- und optional eine Display-Nachricht."""
     app = _get_fcm_app(cfg)
     if app is None:
         return False, "fcm_not_configured"
@@ -120,6 +126,8 @@ def send_fcm(
         "body": body,
         "channel_id": channel_id or "",
     }
+    if extra_data:
+        data.update({key: value for key, value in extra_data.items() if isinstance(value, str)})
     if delivery is not None:
         data["delivery_id"] = str(delivery.id)
 
@@ -143,6 +151,19 @@ def send_fcm(
         except Exception as exc:
             log.warning("FCM fehlgeschlagen fuer Token %s (%s): %s", fcm_token_row.id, kind, exc)
             return False, "unknown", False
+
+    if channel_id == "einsatz_alarm" and not wake_only and fcm_token_has_capability(fcm_token_row, "native_alarm"):
+        alarm_message = messaging.Message(
+            data=dict(data, alarm="1"),
+            android=messaging.AndroidConfig(priority="high", ttl=timedelta(minutes=10)),
+            token=fcm_token_row.token,
+        )
+        ok, error, _token_invalid = _send(alarm_message, "alarm")
+        if delivery is not None:
+            delivery.success = ok
+            delivery.error_code = error
+            delivery.error_detail = f"Alarm-Nachricht fehlgeschlagen ({error})" if not ok else None
+        return ok, error
 
     wake_data = dict(data, silent="1")
     wake_message = messaging.Message(
@@ -200,8 +221,14 @@ def upsert_fcm_token(
     token: str,
     platform: str = "android",
     device_token_id: int | None = None,
+    capabilities: str | None = None,
+    capabilities_provided: bool = False,
 ) -> bool:
-    """Legt einen FCM-Token an oder aktualisiert ihn, ohne selbst zu committen."""
+    """Legt einen FCM-Token an oder aktualisiert ihn, ohne selbst zu committen.
+
+    ``capabilities_provided`` erlaubt das explizite Loeschen mit None; ohne Angabe
+    bleiben bestehende Capabilities bei der Registrierung alter Apps erhalten.
+    """
     token = (token or "").strip()[:512]
     if not token:
         return False
@@ -211,12 +238,15 @@ def upsert_fcm_token(
         existing.user_id = user_id
         existing.device_token_id = device_token_id
         existing.last_used_at = now
+        if capabilities_provided or capabilities is not None:
+            existing.capabilities = capabilities
     else:
         db.add(FcmToken(
             user_id=user_id,
             device_token_id=device_token_id,
             token=token,
             platform=platform[:20],
+            capabilities=capabilities,
             created_at=now,
             last_used_at=now,
         ))
@@ -342,7 +372,8 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
                       channel_id: str | None = None,
                       push_log_id: int | None = None,
                       commit_delivery_log: bool = True,
-                      wake_only: bool = False) -> int:
+                      wake_only: bool = False,
+                      extra_data: dict[str, str] | None = None) -> int:
     """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs.
 
     ``commit_delivery_log`` committet die Delivery-Zeilen VOR dem Versand, damit die
@@ -417,6 +448,7 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
             push_log_id=push_log_id,
             delivery=delivery,
             wake_only=wake_only,
+            extra_data=extra_data,
         )
         success_count += int(ok)
     db.flush()
@@ -434,6 +466,7 @@ def _notify_fcm_logged(
     push_log_id: int,
     commit_delivery_log: bool = True,
     wake_only: bool = False,
+    extra_data: dict[str, str] | None = None,
 ) -> int:
     """Ruft den FCM-Fan-out mit PushLog-Verknuepfung auf."""
     try:
@@ -448,17 +481,18 @@ def _notify_fcm_logged(
             push_log_id=push_log_id,
             commit_delivery_log=commit_delivery_log,
             wake_only=wake_only,
+            extra_data=extra_data,
         )
     except TypeError as exc:
         # Bestehende Erweiterungs-/Test-Doubles ohne das neue optionale Argument.
-        if "push_log_id" not in str(exc) and "wake_only" not in str(exc):
+        if not any(name in str(exc) for name in ("push_log_id", "wake_only", "extra_data")):
             raise
         return _notify_fcm_users(db, user_ids, title, body, url, cfg, channel_id)
 
 
 def notify_all(db: Session, title: str, body: str, url: str | None = None,
                source: str = "system", channel_id: str | None = None, *,
-               extra: dict | None = None) -> int:
+               extra: dict | None = None, fcm_data: dict[str, str] | None = None) -> int:
     cfg = _push_cfg(db)
     push_log = _log_push(db, title, body, url, source, None)
     # Web-Push (VAPID)
@@ -475,14 +509,15 @@ def notify_all(db: Session, title: str, body: str, url: str | None = None,
     from app.models.user import User as _User
     all_user_ids = {row[0] for row in db.query(_User.id).all()}
     fcm_extra = _notify_fcm_logged(
-        db, all_user_ids, title, body, url, cfg, channel_id, push_log.id
+        db, all_user_ids, title, body, url, cfg, channel_id, push_log.id, extra_data=fcm_data
     )
     return wp_count + fcm_extra
 
 
 def notify_org(db: Session, org_id: int, title: str, body: str,
                url: str | None = None, source: str = "system",
-               channel_id: str | None = None, *, extra: dict | None = None) -> int:
+               channel_id: str | None = None, *, extra: dict | None = None,
+               fcm_data: dict[str, str] | None = None) -> int:
     """Push nur an User der angegebenen Org (statt an alle)."""
     from app.models.user import User as _User
     cfg = _push_cfg(db)
@@ -503,7 +538,7 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
         wp_count = 0
     org_user_ids = {r[0] for r in db.query(_User.id).filter(_User.org_id == org_id).all()}
     fcm_extra = _notify_fcm_logged(
-        db, org_user_ids, title, body, url, cfg, channel_id, push_log.id
+        db, org_user_ids, title, body, url, cfg, channel_id, push_log.id, extra_data=fcm_data
     )
     return wp_count + fcm_extra
 

@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Nativer Einsatzalarm (Android):** App-Versionen mit der Fähigkeit `native_alarm` erhalten den Einsatzalarm als eine hochpriorisierte FCM-Datennachricht (Einsatz-ID, Übungskennzeichen) und spielen den Alarmton selbst über den Wecker-Kanal mit Vollbildanzeige ab. Ältere App-Versionen erhalten weiter Weck- und Anzeige-Nachricht. Neuer Test-Endpunkt `POST /api/v1/device/fcm-test-alarm` (höchstens alle 20 s). Migration 0337.
+
 - **SMS-Einsatzinfo:** Vorschau von Erstalarm und Nachalarmierung für die letzten fünf Einsätze, mit tatsächlichen Versandtexten oder aktueller Vorlage sowie Zeichen- und SMS-Segmentanzahl.
 
 - **Brandschutzplan-Overlay:** Die Einstellungen stehen auf der Einsatzinfo-Seite unter der Karte statt darüber und sind im Dunkelmodus lesbar gestaltet (Auswahlfeld, Schieber, Aktionsbuttons, Hinweise).

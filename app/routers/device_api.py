@@ -4,7 +4,8 @@ Diese Endpoints werden von der nativen Android-App (Capacitor) aufgerufen.
 Auth über bestehende Session-Cookies (Device-Login via /geraet-login).
 """
 import logging
-from datetime import UTC, datetime
+import re
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -17,7 +18,7 @@ from app.core.permissions import can_view_kontakt_directory, can_view_kontakt_di
 from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
 from app.models.master import VehicleMaster
-from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
+from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, PushLog, User
 from app.services import device_auth_failure_service as dat
 from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
@@ -168,6 +169,21 @@ def register_fcm_token(request: Request, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=400, detail="token fehlt")
 
+    capabilities = None
+    if "capabilities" in data:
+        raw_capabilities = data["capabilities"]
+        if not isinstance(raw_capabilities, list) or not all(isinstance(item, str) for item in raw_capabilities):
+            raise HTTPException(status_code=400, detail="capabilities muss eine Liste von Strings sein")
+        normalized = sorted({
+            item.strip().lower() for item in raw_capabilities
+            if re.fullmatch(r"[a-z0-9_]{1,40}", item.strip().lower())
+        })
+        selected: list[str] = []
+        for item in normalized:
+            if len(",".join([*selected, item])) <= 200:
+                selected.append(item)
+        capabilities = ",".join(selected) or None
+
     device_token = _get_device_token(user.id, db, request)
     app_version = data.get("app_version")
     if device_token and isinstance(app_version, str) and (app_version := app_version.strip()):
@@ -178,9 +194,56 @@ def register_fcm_token(request: Request, db: Session = Depends(get_db)):
         token=token,
         platform=platform,
         device_token_id=device_token.id if device_token else None,
+        capabilities=capabilities,
+        capabilities_provided="capabilities" in data,
     )
     db.commit()
     return JSONResponse({"ok": True})
+
+
+_FCM_ALARM_TEST_SPERRE = timedelta(seconds=20)
+
+
+@router.post("/fcm-test-alarm")
+def test_fcm_alarm(request: Request, db: Session = Depends(get_db)):
+    """Sendet hoechstens alle 20 Sekunden einen Probealarm je eigenem FCM-Token."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+    if not user:
+        raise _unauthorized(request)
+    data = run_async(request.json)
+    token = data.get("token") if isinstance(data, dict) else None
+    row = db.query(FcmToken).filter(FcmToken.token == token, FcmToken.user_id == user.id).first()
+    if row is None:
+        return JSONResponse({"detail": "Token nicht gefunden"}, status_code=404)
+    # Sperre ueber das Push-Protokoll, damit sie fuer alle Worker gilt.
+    letzter = (
+        db.query(PushLog.sent_at)
+        .filter(PushLog.source == "fcm_alarm_test", PushLog.target_user_id == user.id)
+        .order_by(PushLog.sent_at.desc())
+        .first()
+    )
+    jetzt = datetime.now(UTC).replace(tzinfo=None)
+    if letzter and letzter[0] is not None:
+        letzter_at = letzter[0].astimezone(UTC).replace(tzinfo=None) if letzter[0].tzinfo else letzter[0]
+        if jetzt - letzter_at < _FCM_ALARM_TEST_SPERRE:
+            return JSONResponse({"detail": "Bitte 20 Sekunden warten"}, status_code=429)
+    native_alarm = push_service.fcm_token_has_capability(row, "native_alarm")
+    title = "Testalarm"
+    body = "Probealarm – so klingt ein Einsatzalarm"
+    push_log = push_service._log_push(
+        db, title, body, "/", "fcm_alarm_test", user.id, org_id=user.org_id,
+    )
+    ok, error = push_service.send_fcm(
+        row, title, body, url="/", channel_id="einsatz_alarm",
+        extra_data={"test": "1", "incident_id": "0", "is_exercise": "0"},
+        cfg=push_service._push_cfg(db), db=db, push_log_id=push_log.id,
+    )
+    push_log.sent_count = int(ok)
+    push_log.total_count = 1
+    db.commit()
+    return JSONResponse({"ok": ok, "native_alarm": native_alarm, "error": error})
 
 
 @router.get("/fcm-token/status")

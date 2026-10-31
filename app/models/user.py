@@ -251,6 +251,7 @@ class FcmToken(Base):
     )
     token: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
     platform: Mapped[str] = mapped_column(String(20), nullable=False, default="android")
+    capabilities: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

@@ -93,6 +93,7 @@ def incident_needs_alarm_backfill(db: Session, incident: Incident) -> bool:
 async def _send_incident_push(
     incident_id: int, org_id: int | None, title: str, body: str, url: str,
     extra: dict | None, triggered_by_user_id: int | None,
+    *, fcm_data: dict[str, str] | None = None,
 ) -> None:
     from app.core.audit import write_audit
     from app.core.tenant import set_tenant_context
@@ -112,13 +113,13 @@ async def _send_incident_push(
                 )
                 sent_count = notify_org(
                     push_db, org_id, title, body, url, source="einsatz_alarm",
-                    channel_id="einsatz_alarm", extra=extra,
+                    channel_id="einsatz_alarm", extra=extra, fcm_data=fcm_data,
                 )
             else:
                 recipient_count = push_db.query(PushSubscription).count() + push_db.query(FcmToken).count()
                 sent_count = notify_all(
                     push_db, title, body, url, source="einsatz_alarm",
-                    channel_id="einsatz_alarm", extra=extra,
+                    channel_id="einsatz_alarm", extra=extra, fcm_data=fcm_data,
                 )
             write_audit(
                 push_db, "push.einsatz_alarm_sent", org_id=org_id, user_id=triggered_by_user_id,
