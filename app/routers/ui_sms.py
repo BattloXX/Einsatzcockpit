@@ -537,6 +537,7 @@ def einsatzinfo_sms_page(
         }
 
     from app.services.sms_dispatch_service import default_einsatzinfo_template
+    from app.services.sms_vorschau_service import lade_sms_vorschau
     return templates.TemplateResponse(request, "admin/einsatzinfo_sms.html", {
         "user": user,
         "org_settings": org_settings,
@@ -547,6 +548,7 @@ def einsatzinfo_sms_page(
         "basis_member_ids": basis_member_ids,
         "stichwort_recipients": stichwort_recipients,
         "default_template": default_einsatzinfo_template(),
+        "sms_vorschau": lade_sms_vorschau(db, org_id),
         "saved": request.query_params.get("saved"),
     })
 

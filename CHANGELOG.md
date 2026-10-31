@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **SMS-Einsatzinfo:** Vorschau von Erstalarm und Nachalarmierung für die letzten fünf Einsätze, mit tatsächlichen Versandtexten oder aktueller Vorlage sowie Zeichen- und SMS-Segmentanzahl.
+
 - **Brandschutzplan-Overlay:** Die Einstellungen stehen auf der Einsatzinfo-Seite unter der Karte statt darüber und sind im Dunkelmodus lesbar gestaltet (Auswahlfeld, Schieber, Aktionsbuttons, Hinweise).
 
 - **Teams-Alarmkarte:** Gemeinsame Alarmdaten mit der Einsatz-Mail einschließlich Objekt/Gefahren, farbiges Stichwort-Badge, Übungsbanner und übersichtliche Detailfelder. Adaptive Card 1.4 in voller Breite; Navigation auch über die Adresse, Inhalts-Schalter und PIN-Anmeldung bleiben erhalten.
