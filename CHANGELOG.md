@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Admin-MCP:** Anmeldungen inklusive 2FA-Bestaetigung gelten absolut 365 Tage statt acht Stunden; Access-Tokens bleiben 15 Minuten gueltig und werden per Refresh erneuert. Erneute Anmeldung mit bestehender Client-Registrierung nach Ablauf oder Widerruf durch OAuth-Regressionstests abgesichert. Keine Migration.
+
 - **SMS-Kurzlink:** `{link}` und `{anmeldelink}` in der SMS-Einsatzinfo sind für neue Einsätze Kurzlinks `/a/<10 Zeichen>` (Base58, nur als Hash gespeichert, gleiche Gültigkeit und Limits wie `/alarm/…`). Optionale Kurz-Domain über `SHORT_BASE_URL`; bestehende Einsätze und Langlinks funktionieren weiter. Migration 0338.
 
 - **SMS-Vorschau:** zeigt nur echte Einsätze (keine Übungen) und je Einsatz eine Tabelle, welcher Platzhalter welchen Inhalt hatte. Profilmenü: „Über die App“ heißt „App-Einstellungen“; Übersichts-Button wieder „+ Neuer Einsatz“.

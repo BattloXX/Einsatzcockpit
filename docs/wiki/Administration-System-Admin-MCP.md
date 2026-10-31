@@ -116,11 +116,16 @@ zeigt denselben lokalen Bestand zusaetzlich als Check `osm.gebaeude_bestand`.
 - Oeffentliche PKCE-S256-Clients; Codes und Tokens werden ausschliesslich gehasht
   gespeichert. Die Registrierung erzeugt kein Client-Geheimnis.
 - Access-Tokens gelten hoechstens 15 Minuten, eine Refresh-Familie absolut
-  hoechstens acht Stunden. Rotation widerruft vorherige Tokens dieser Familie.
+  365 Tage inklusive 2FA-Bestaetigung. Danach ist eine neue Anmeldung erforderlich.
+  Rotation widerruft vorherige Tokens dieser Familie.
 - Jeder Refresh, jedes Auflisten und jeder Tool-Aufruf prueft live Aktivitaet,
   Systemadministratorrolle, persoenliche Freigabe, globalen Schalter und
   `session_epoch`. Bei aktiver 2FA ist zusaetzlich ein MFA-Zeitpunkt innerhalb
-  der letzten acht Stunden erforderlich. Rechteentzug und Epochenwechsel wirken sofort.
+  der letzten 365 Tage erforderlich. Rechteentzug und Epochenwechsel wirken sofort.
+- Nach Ablauf oder Widerruf antwortet die Resource mit HTTP 401 und
+  `WWW-Authenticate` inklusive `resource_metadata`. Der Client kann OAuth mit
+  derselben Registrierung erneut starten und sich unter `/mcp/admin/anmelden`
+  erneut anmelden. Refresh verlaengert die absolute Sitzungsdauer nicht.
 - Login: CSRF-Schutz, fuenf Versuche je Minute/IP sowie bestehender Passwort-
   und MFA-Lockout. Keine spezifischen Ablehnungsgruende fuer einzelne Konten.
 - Tools: 30 Aufrufe je Minute/Benutzer, 20 Sekunden Antwortzeitlimit, maximal

@@ -12,7 +12,8 @@ from app.models.master import SystemSettings
 from app.models.user import User
 from app.services import totp_service
 
-REFRESH_LIFETIME = timedelta(hours=8)
+# Absolute Lebensdauer einer Admin-MCP-Anmeldung inkl. 2FA-Bestaetigung; danach neue Anmeldung.
+SITZUNG_LIFETIME = timedelta(days=365)
 DENIED = "Anmeldung oder Zugriff nicht moeglich."
 
 
@@ -35,7 +36,7 @@ def load_live_context(db: Session, row) -> AdminContext:
     if (not allowed(db, user) or user is None or user.session_epoch != row.session_epoch
             or row.scopes.split() != ["mcp-admin"]
             or (totp_service.enabled(db) and (row.mfa_at is None
-                or not timedelta(0) <= utcnow() - row.mfa_at <= REFRESH_LIFETIME))):
+                or not timedelta(0) <= utcnow() - row.mfa_at <= SITZUNG_LIFETIME))):
         raise PermissionError(DENIED)
     return AdminContext(db, user, row.client_id)
 

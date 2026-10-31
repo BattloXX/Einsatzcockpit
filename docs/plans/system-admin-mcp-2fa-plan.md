@@ -9,6 +9,7 @@ Quelle: Konzept "ECP System-Admin-MCP 2FA Umsetzungskonzept" (2026-10-27).
 2. Schreibende Admin-Tools werden nur registriert, wenn `admin_2fa_enabled` aktiv ist (einzige Step-up-Variante).
 3. Verlust aller Faktoren: CLI-Reset am Server (`app/cli.py`), kein Mail-Bypass.
 4. GitHub-Token für Phase 5 noch offen; Phase 5 startet notfalls nur mit SHA und Version.
+5. Admin-MCP-Anmeldungen inklusive 2FA-Bestaetigung gelten absolut 365 Tage; Access-Tokens bleiben auf 15 Minuten begrenzt und werden per Refresh erneuert. Rotation verlaengert die Sitzung nicht. Nach Ablauf oder Widerruf signalisiert HTTP 401 mit `resource_metadata` die erneute OAuth-Anmeldung mit demselben registrierten Client.
 
 ## Prüfbefunde (Konzept gegen Code)
 

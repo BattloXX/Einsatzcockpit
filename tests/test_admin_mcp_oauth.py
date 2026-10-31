@@ -53,16 +53,18 @@ def admin_env():
         db.commit()
 
 
-def start_flow(client):
-    registration = client.post("/mcp/admin/register", json={
-        "client_name": "admin pytest", "redirect_uris": ["http://localhost/callback"],
-    })
-    assert registration.status_code == 201, registration.text
-    info = registration.json()
-    assert info["token_endpoint_auth_method"] == "none" and not info.get("client_secret")
+def start_flow(client, client_id=None):
+    if client_id is None:
+        registration = client.post("/mcp/admin/register", json={
+            "client_name": "admin pytest", "redirect_uris": ["http://localhost/callback"],
+        })
+        assert registration.status_code == 201, registration.text
+        info = registration.json()
+        assert info["token_endpoint_auth_method"] == "none" and not info.get("client_secret")
+        client_id = info["client_id"]
     verifier, challenge = _pkce()
     authorization = client.get("/mcp/admin/authorize", params={
-        "client_id": info["client_id"], "response_type": "code", "redirect_uri": "http://localhost/callback",
+        "client_id": client_id, "response_type": "code", "redirect_uri": "http://localhost/callback",
         "code_challenge": challenge, "code_challenge_method": "S256", "scope": "mcp-admin", "resource": RESOURCE,
     }, follow_redirects=False)
     assert authorization.status_code == 302, authorization.text
@@ -71,7 +73,7 @@ def start_flow(client):
     page = client.get(url)
     assert page.status_code == 200
     assert "form-action 'self' http://localhost" in page.headers["content-security-policy"]
-    return {"flow": flow, "verifier": verifier, "client_id": info["client_id"]}
+    return {"flow": flow, "verifier": verifier, "client_id": client_id}
 
 
 def login(client, user, flow, **extra):
@@ -81,8 +83,8 @@ def login(client, user, flow, **extra):
     }, follow_redirects=False)
 
 
-def tokens(client, user, **extra):
-    flow = start_flow(client)
+def tokens(client, user, client_id=None, **extra):
+    flow = start_flow(client, client_id)
     logged_in = login(client, user, flow, **extra)
     assert logged_in.status_code == 302, logged_in.text
     code = parse_qs(urlsplit(logged_in.headers["location"]).query)["code"][0]
@@ -220,6 +222,76 @@ def test_rotation_absolute_limit_and_revoke(client, admin_env):
     assert admin_call(client, expired["access_token"]).status_code == 401
 
 
+@pytest.mark.parametrize("reason", ["family_expired", "access_expired", "revoked"])
+def test_relogin_same_client_after_expiry_or_revocation(client, admin_env, reason):
+    values = tokens(client, admin_env)
+    if reason == "revoked":
+        result = client.post("/mcp/admin/revoke", data={
+            "client_id": values["client_id"], "token": values["refresh_token"]})
+        assert result.status_code == 200
+    else:
+        with SessionLocal() as db:
+            for row in db.query(AdminMCPOAuthToken).filter(AdminMCPOAuthToken.user_id == admin_env["id"]):
+                if reason == "family_expired":
+                    row.family_expires_at = utcnow() - timedelta(seconds=1)
+                elif row.token_type == "access":
+                    row.expires_at = utcnow() - timedelta(seconds=1)
+            db.commit()
+    if reason != "access_expired":
+        rejected = refresh(client, values)
+        assert rejected.status_code == 400, rejected.text
+        assert rejected.json()["error"] == "invalid_grant"
+    denied = admin_call(client, values["access_token"])
+    assert denied.status_code == 401, denied.text
+    assert "resource_metadata" in denied.headers["www-authenticate"]
+    assert "/.well-known/oauth-protected-resource/mcp/admin" in denied.headers["www-authenticate"]
+    renewed = tokens(client, admin_env, client_id=values["client_id"])
+    assert renewed["access_token"] != values["access_token"]
+    assert admin_call(client, renewed["access_token"]).status_code == 200
+    assert refresh(client, renewed).status_code == 200
+
+
+@pytest.mark.parametrize("mfa_enabled", [False, True])
+def test_year_session_refresh_after_30_days(client, admin_env, mfa_enabled):
+    extra = {}
+    if mfa_enabled:
+        with SessionLocal() as db:
+            user = db.get(User, admin_env["id"])
+            factor = totp.start_setup(db, user)
+            factor.confirmed_at = utcnow()
+            extra["code"] = totp.create_recovery_codes(db, user.id)[0]
+            db.get(SystemSettings, "admin_2fa_enabled").value = "true"
+            db.commit()
+    before = utcnow()
+    values = tokens(client, admin_env, **extra)
+    with SessionLocal() as db:
+        rows = db.query(AdminMCPOAuthToken).filter(AdminMCPOAuthToken.user_id == admin_env["id"]).all()
+        assert len(rows) == 2
+        family = rows[0].family_id
+        for row in rows:
+            assert before + timedelta(days=365) <= row.family_expires_at <= utcnow() + timedelta(days=365)
+            # Dreissig vergangene Tage simulieren, auch fuer die 2FA-Bestaetigung.
+            row.expires_at -= timedelta(days=30)
+            row.family_expires_at -= timedelta(days=30)
+            if row.mfa_at is not None:
+                row.mfa_at -= timedelta(days=30)
+        expiry = rows[0].family_expires_at
+        mfa_at = rows[0].mfa_at
+        if mfa_enabled:
+            assert timedelta(days=30) <= utcnow() - mfa_at < timedelta(days=30, seconds=10)
+        db.commit()
+    rotated = refresh(client, values)
+    assert rotated.status_code == 200, rotated.text
+    assert 895 <= rotated.json()["expires_in"] <= 900
+    assert admin_call(client, rotated.json()["access_token"]).status_code == 200
+    with SessionLocal() as db:
+        current = db.query(AdminMCPOAuthToken).filter(
+            AdminMCPOAuthToken.token_hash == hash_api_key(rotated.json()["refresh_token"])).one()
+        assert current.family_id == family
+        assert current.family_expires_at == expiry
+        assert current.mfa_at == mfa_at
+
+
 def test_mfa_totp_recovery_replay_and_audit(client, admin_env):
     from app.core.crypto import decrypt_secret
     with SessionLocal() as db:
@@ -240,7 +312,7 @@ def test_mfa_totp_recovery_replay_and_audit(client, admin_env):
     assert login(client, admin_env, flow, code=recovery[0]).status_code == 401
     with SessionLocal() as db:
         for row in db.query(AdminMCPOAuthToken).filter(AdminMCPOAuthToken.user_id == admin_env["id"]):
-            row.mfa_at = utcnow() - timedelta(hours=8, seconds=1)
+            row.mfa_at = utcnow() - timedelta(days=365, seconds=1)
         db.commit()
     assert refresh(client, other).status_code == 400
     with SessionLocal() as db:

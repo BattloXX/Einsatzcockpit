@@ -16,7 +16,7 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl
 
-from app.admin_mcp.context import REFRESH_LIFETIME, load_live_context
+from app.admin_mcp.context import SITZUNG_LIFETIME, load_live_context
 from app.admin_mcp.context import admin_session as SessionLocal
 from app.config import settings
 from app.core.security import hash_api_key
@@ -109,7 +109,7 @@ class AdminOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Ref
             except PermissionError as exc:
                 raise TokenError("invalid_grant", "Ungueltiger Code") from exc
             row.consumed_at = utcnow()
-            result = self._issue(db, row, raw(), utcnow() + REFRESH_LIFETIME)
+            result = self._issue(db, row, raw(), utcnow() + SITZUNG_LIFETIME)
             db.commit()
             return result
 
