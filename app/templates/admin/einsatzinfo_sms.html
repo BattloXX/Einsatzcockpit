@@ -68,6 +68,37 @@
     </form>
   </div>
 
+  <div class="admin-section-title">Vorschau: SMS bei einer Änderung (Nachalarmierung)</div>
+  <div class="chart-box" style="margin-bottom:24px;min-width:0;">
+    <p class="text-muted">Die letzten fünf Einsätze: Erstalarm und letzte Nachalarmierung im Vergleich.
+      Beispiele verwenden die aktuelle Vorlage und den Einsatzbeginn als Zeitpunkt.
+      Ohne Zusatzcodes wird "Beispiel-Code" eingesetzt. Die Anzeige löst keinen Versand aus.</p>
+    {% for einsatz in sms_vorschau %}
+    <details style="margin-top:16px;min-width:0;"{% if loop.first %} open{% endif %}>
+      <summary style="cursor:pointer;overflow-wrap:anywhere;">
+        Einsatz {{ einsatz.nummer }} | {{ einsatz.zeit|local_datetime }} | {{ einsatz.stichwort }}
+      </summary>
+      <div class="sms-vorschau-texte">
+        {% for titel, sms in [('Erste Alarm-SMS', einsatz.erstalarm), ('Änderungs-SMS (Nachalarmierung)', einsatz.nachalarm)] %}
+        <div style="min-width:0;">
+          <h3 style="font-size:.95rem;margin-bottom:4px;">{{ titel }}</h3>
+          <small class="text-muted">{{ sms.herkunft }}</small>
+          <pre class="sms-vorschau-text">{{ sms.text }}</pre>
+          <small class="text-muted">{{ sms.zeichen }} Zeichen | {{ sms.segmente }} SMS-Segmente | {{ sms.zeichensatz }}</small>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% else %}
+    <p class="text-muted">Noch keine Einsätze für diese Organisation vorhanden.</p>
+    {% endfor %}
+  </div>
+  <style>
+    .sms-vorschau-texte { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+    .sms-vorschau-text { white-space:pre-wrap; overflow-wrap:anywhere; font-family:monospace; font-size:.88rem; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:4px; }
+    @media (max-width:760px) { .sms-vorschau-texte { grid-template-columns:minmax(0,1fr); gap:12px; } }
+  </style>
+
   <!-- ── Basis-Verteiler ──────────────────────────────────────────────────── -->
   <div class="admin-section-title" style="margin-top:24px;">
     Basis-Verteiler

@@ -93,6 +93,40 @@ def render_template(template: str, ctx: dict) -> str:
     return template.format_map(_Safe(ctx))
 
 
+def einsatzinfo_vorlage(alarm_type: AlarmType | None, org_settings: OrgSettings | None) -> str:
+    """Vorlage: Stichwort-Override > Org-Standard > Systemdefault."""
+    return (
+        (alarm_type.einsatzinfo_sms_template if alarm_type else None)
+        or (org_settings.einsatzinfo_sms_template if org_settings else None)
+        or default_einsatzinfo_template()
+    )
+
+
+def baue_einsatzinfo_text(
+    *, template: str, alarm_type_code: str, address: str, ort: str | None,
+    meldung: str | None, einsatzgrund: str | None, local_now: datetime,
+    is_exercise: bool = False, text_prefix: str = "", link: str = "",
+    anmeldelink: str = "", leitstellennummer: str | None = None,
+) -> str:
+    """Rendert Versand und Vorschau ohne Seiteneffekte mit identischen Platzhaltern."""
+    # Platzhalter befuellen
+    exercise_prefix = "[UEBUNG] " if is_exercise else ""
+    ctx = {
+        "stichwort": alarm_type_code,
+        "adresse": address or "",
+        "ort": ort or "",
+        "meldung": meldung or "",
+        "einsatzgrund": einsatzgrund or "",
+        "datum": local_now.strftime("%d.%m.%Y"),
+        "zeit": local_now.strftime("%H:%M"),
+        "link": link or "",
+        "anmeldelink": anmeldelink,
+        "leitstellennummer": leitstellennummer or "",
+    }
+    # .strip(): entfernt trailing Space, falls {link} leer ist (Altdaten ohne AlarmToken)
+    return (text_prefix + exercise_prefix + render_template(template, ctx)).strip()
+
+
 def collect_einsatzinfo_recipients(
     db: Session,
     org_id: int,
@@ -594,11 +628,7 @@ async def dispatch_einsatzinfo(
         alarm_type_id = alarm_type.id if alarm_type else None
 
         # Vorlage: Stichwort-Override > Org-Standard > systemweiter Default
-        template = (
-            (alarm_type.einsatzinfo_sms_template if alarm_type else None)
-            or org_settings.einsatzinfo_sms_template
-            or default_einsatzinfo_template()
-        )
+        template = einsatzinfo_vorlage(alarm_type, org_settings)
 
         # Zeitstempel
         now = datetime.now(UTC)
@@ -620,22 +650,12 @@ async def dispatch_einsatzinfo(
                 f"{settings.effective_public_base_url.rstrip('/')}/alarm/{allowed.alarm_token}/anmelden"
             )
 
-        # Platzhalter befuellen
-        exercise_prefix = "[UEBUNG] " if is_exercise else ""
-        ctx = {
-            "stichwort": alarm_type_code,
-            "adresse": address or "",
-            "ort": ort or "",
-            "meldung": meldung or "",
-            "einsatzgrund": einsatzgrund or "",
-            "datum": local_now.strftime("%d.%m.%Y"),
-            "zeit": local_now.strftime("%H:%M"),
-            "link": link or "",
-            "anmeldelink": anmeldelink,
-            "leitstellennummer": leitstellennummer or "",
-        }
-        # .strip(): entfernt trailing Space, falls {link} leer ist (Altdaten ohne AlarmToken)
-        text = (text_prefix + exercise_prefix + render_template(template, ctx)).strip()
+        text = baue_einsatzinfo_text(
+            template=template, alarm_type_code=alarm_type_code, address=address, ort=ort,
+            meldung=meldung, einsatzgrund=einsatzgrund, local_now=local_now,
+            is_exercise=is_exercise, text_prefix=text_prefix, link=link,
+            anmeldelink=anmeldelink, leitstellennummer=leitstellennummer,
+        )
 
         # Empfaenger sammeln (inkl. Gruppen-Expansion, Dedup, Telefonnummer-Filter)
         recipients = collect_einsatzinfo_recipients(db, org_id, alarm_type_id)
