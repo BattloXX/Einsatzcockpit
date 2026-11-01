@@ -39,6 +39,24 @@
       : 'android';
   }
 
+  // ─── iOS Universal Links und Widget-/Live-Activity-Links ────────────────────
+  let _deepLinkRegistered = false;
+
+  function _registerDeepLinks() {
+    if (_deepLinkRegistered || !_isNative() || _platform() !== 'ios') return;
+    const app = window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if (!app || typeof app.addListener !== 'function') return;
+    _deepLinkRegistered = true;
+    app.addListener('appUrlOpen', ev => {
+      const path = window.ECPDeepLink ? window.ECPDeepLink._resolveDeepLink(ev && ev.url, window.location.origin) : null;
+      if (path === null) return;
+      const target = window.location.origin + path;
+      if (new URL(target).href !== window.location.href) window.location.assign(target);
+    });
+  }
+
+  _registerDeepLinks();
+
   // ─── Ungültiger Gerätezugang (SEC-02) ───────────────────────────────────────
   // Der Server antwortet mit 401 und Header X-ECP-Auth-Error, wenn der Gerätezugang
   // endgültig ungültig ist (widerrufen, unbekannt/ersetzt, Benutzer gesperrt). Dann

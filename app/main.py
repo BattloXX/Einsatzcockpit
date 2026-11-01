@@ -56,6 +56,7 @@ from app.routers import (
     api_messaging,
     api_v1,
     api_weather,
+    apple_app_site,
     auth,
     csp_report,
     device_api,
@@ -538,6 +539,8 @@ app.router.routes.extend(_admin_mcp_routes)
 app.state.admin_mcp_streamable_route = next(
     route for route in _admin_mcp_routes if getattr(route, "path", None) == "/mcp/admin"
 )
+# Wie MCP direkt registrieren: ohne globale App-Abhaengigkeiten, vor StaticFiles.
+app.router.routes.extend(apple_app_site.router.routes)
 app.mount("/.well-known", StaticFiles(directory="app/static/.well-known"), name="well-known")
 
 

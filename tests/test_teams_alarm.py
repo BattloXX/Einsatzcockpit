@@ -650,8 +650,12 @@ def test_teams_und_mail_zeigen_dieselben_daten_inkl_objekt_gefahren(monkeypatch)
         incident = _incident(alarm_type_code="FTEST", report_text="Rauch im Keller", access_pin_hash="hash",
                              dibos_bma_no="42", dibos_diagnose="Melder 1", lis_operation_number="F123")
         objekt = Objekt(org_id=ORG_ID, nummer=987654321, name="Wohnanlage")
-        gefahr = GefahrenKatalog(org_id=ORG_ID, name="Gasanschluss", piktogramm_typ="gas")
-        db.add_all([alarm, incident, objekt, gefahr])
+        # Die Testdatenbank ist workerweit; andere Tests legen denselben Katalogeintrag an.
+        gefahr = db.query(GefahrenKatalog).filter_by(org_id=ORG_ID, name="Gasanschluss").first()
+        if gefahr is None:
+            gefahr = GefahrenKatalog(org_id=ORG_ID, name="Gasanschluss", piktogramm_typ="gas")
+            db.add(gefahr)
+        db.add_all([alarm, incident, objekt])
         db.flush()
         db.add_all([
             ObjektEinsatz(org_id=ORG_ID, incident_id=incident.id, objekt_id=objekt.id,
