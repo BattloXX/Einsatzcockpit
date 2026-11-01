@@ -106,3 +106,32 @@
   .sys-form-grid { grid-template-columns: 1fr; }
   .sys-actions > :is(form, .btn), .sys-actions form > .btn { width: 100%; }
 }
+/* Sprungnavigation der System-Einstellungen: Chips, ab 1100px linke Spalte. */
+.sys-settings { display: flow-root; }
+.sys-subnav { display: flex; gap: 1rem; overflow-x: auto; padding: .75rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface-low); }
+.sys-subnav__group { display: flex; align-items: center; gap: .4rem; flex: 0 0 auto; }
+.sys-subnav__label { color: var(--text-muted); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.sys-subnav a { display: inline-flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--on-surface); text-decoration: none; white-space: nowrap; }
+.sys-subnav a:hover { background: var(--surface-high); }
+.sys-settings section[id] { scroll-margin-top: calc(var(--topnav-h, 4rem) + 1rem); }
+.sys-security-card .card-body { padding: 0; }
+.sys-security-card .card-body > * + * { margin-top: .75rem; }
+.sys-security-card .sys-inline-form { display: inline; }
+.sys-security-card .form-input { max-width: 100%; box-sizing: border-box; }
+.sys-security-card .sys-switch-row input[type="checkbox"] { appearance: none; position: relative; flex: 0 0 3rem; width: 3rem; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; cursor: pointer; }
+.sys-security-card .sys-switch-row input[type="checkbox"]::before { content: ""; position: absolute; inset: .6rem 0; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-high); }
+.sys-security-card .sys-switch-row input[type="checkbox"]::after { content: ""; position: absolute; top: 50%; left: .25rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--on-surface); transform: translateY(-50%); }
+.sys-security-card .sys-switch-row input:checked::before { background: var(--green); }
+.sys-security-card .sys-switch-row input:checked::after { left: 1.75rem; background: var(--surface); }
+@media (min-width: 1100px) {
+  .sys-subnav { position: sticky; top: calc(var(--topnav-h, 4rem) + 1rem); float: left; display: block; width: 12rem; box-sizing: border-box; max-height: calc(100dvh - var(--topnav-h, 4rem) - 2rem); overflow-y: auto; }
+  .sys-subnav__group { display: grid; gap: .25rem; margin-bottom: .75rem; }
+  .sys-subnav__group:last-child { margin-bottom: 0; }
+  .sys-subnav a { border-radius: .5rem; white-space: normal; }
+  .sys-settings > :is(section, form) { margin-left: 13.5rem; }
+}
+/* Das Grid-Elternelement darf sich trotz breiter Bestandsformulare verkleinern. */
+.admin-main:has(.sys-settings) { min-width: 0; }
+@media (max-width: 1100px) {
+  .sys-settings section[id] { scroll-margin-top: calc(var(--topnav-h, 4rem) + 4rem); }
+}

@@ -7,129 +7,147 @@
 {% block admin_content %}
 {% with section_id='systemkonfiguration' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>System-Einstellungen</h1>
-      <p class="page-header__sub">Systemweite Konfiguration. Werte in der Datenbank überschreiben gleichnamige Umgebungsvariablen.</p>
-    </div>
-  </div>
+{% macro flash(typ, text) %}
+<div class="alert alert--{{ typ }}" role="status">{{ text }}</div>
+{% endmacro %}
+<div class="page-content sys-page sys-settings">
+  <header class="sys-hero">
+    <h1>{{ icon("settings") }} System-Einstellungen</h1>
+    <p class="sys-muted">Systemweite Konfiguration. Werte in der Datenbank überschreiben gleichnamige Umgebungsvariablen.</p>
+    <dl class="sys-kpis">
+      <div class="sys-kpi"><dt>Version</dt><dd>{{ version.APP_VERSION }}</dd></div>
+      <div class="sys-kpi"><dt>Commit</dt><dd>{{ version.GIT_SHA[:12] or 'unbekannt' }}</dd></div>
+      <div class="sys-kpi"><dt>Build</dt><dd>{{ version.BUILD_TIME or 'unbekannt' }}</dd></div>
+    </dl>
+  </header>
 
-  <p class="text-muted" style="overflow-wrap:anywhere;">
-    <strong>Version / Commit / Build:</strong>
-    {{ version.APP_VERSION }} / {{ version.GIT_SHA[:12] or 'unbekannt' }} / {{ version.BUILD_TIME or 'unbekannt' }}
-  </p>
-
-  {% if saved %}
-  <div class="alert alert--success">Einstellungen wurden gespeichert.</div>
-  {% endif %}
+  {% if saved %}{{ flash('success', 'Einstellungen wurden gespeichert.') }}{% endif %}
   {% if request.query_params.get('mail_ok') %}
-  <div class="alert alert--success">
-    Test-Mail erfolgreich an <strong>{{ request.query_params.get('mail_ok') }}</strong> versendet.
-  </div>
+    {% set text %}Test-Mail erfolgreich an <strong>{{ request.query_params.get('mail_ok') }}</strong> versendet.{% endset %}
+    {{ flash('success', text) }}
   {% endif %}
-  {% if request.query_params.get('mail_error') %}
-  <div class="alert alert--error">
-    Test-Mail fehlgeschlagen: {{ request.query_params.get('mail_error') }}
-  </div>
+  {% if request.query_params.get('mail_error') %}{{ flash('error', 'Test-Mail fehlgeschlagen: ' ~ request.query_params.get('mail_error')) }}{% endif %}
+  {% if request.query_params.get('resend_ok') %}
+    {% set text %}Resend-Test-Mail erfolgreich an <strong>{{ request.query_params.get('resend_ok') }}</strong> versendet.{% endset %}
+    {{ flash('success', text) }}
   {% endif %}
-  {% if request.query_params.get('resend_ok') %}<div class="alert alert--success">Resend-Test-Mail erfolgreich an <strong>{{ request.query_params.get('resend_ok') }}</strong> versendet.</div>{% endif %}
-  {% if request.query_params.get('resend_error') %}<div class="alert alert--error">Resend-Test fehlgeschlagen: {{ request.query_params.get('resend_error') }}</div>{% endif %}
-  {% if request.query_params.get('settings_error') %}<div class="alert alert--warn">{{ request.query_params.get('settings_error') }}</div>{% endif %}
-  {% if request.query_params.get('kachelmann_ok') %}
-  <div class="alert alert--success">
-    Kachelmann-Verbindung: {{ request.query_params.get('kachelmann_ok') }}
-  </div>
-  {% endif %}
-  {% if request.query_params.get('kachelmann_error') %}
-  <div class="alert alert--error">
-    Kachelmann-Test fehlgeschlagen: {{ request.query_params.get('kachelmann_error') }}
-  </div>
-  {% endif %}
+  {% if request.query_params.get('resend_error') %}{{ flash('error', 'Resend-Test fehlgeschlagen: ' ~ request.query_params.get('resend_error')) }}{% endif %}
+  {% if request.query_params.get('settings_error') %}{{ flash('warn', request.query_params.get('settings_error')) }}{% endif %}
+  {% if request.query_params.get('kachelmann_ok') %}{{ flash('success', 'Kachelmann-Verbindung: ' ~ request.query_params.get('kachelmann_ok')) }}{% endif %}
+  {% if request.query_params.get('kachelmann_error') %}{{ flash('error', 'Kachelmann-Test fehlgeschlagen: ' ~ request.query_params.get('kachelmann_error')) }}{% endif %}
+
+  <nav class="sys-subnav" aria-label="Einstellungsbereiche">
+    {% for gruppe, links in [
+      ('Sicherheit', [('sicherheit-2fa', '2FA'), ('admin-mcp', 'Admin-MCP'), ('github-zugang', 'GitHub-Zugang')]),
+      ('Diagnose', [('diag-settings', 'Systemdiagnose')]),
+      ('E-Mail', [('smtp', 'SMTP'), ('resend', 'Resend')]),
+      ('Push', [('web-push', 'Web Push'), ('fcm', 'FCM')]),
+      ('Betrieb', [('auto-schliessen', 'Auto-Schließen'), ('allgemein', 'Allgemein')]),
+      ('KI', [('ki', 'KI-Konfiguration')]),
+      ('Großschadenslage', [('gsl', 'Funktionen')]),
+      ('Benutzerdefiniert', [('benutzerdefiniert', 'Einstellungen')]),
+      ('Verbindungstests', [('test-smtp', 'SMTP-Test'), ('test-resend', 'Resend-Test')])
+    ] %}
+    <div class="sys-subnav__group"{% if gruppe == 'Benutzerdefiniert' %} x-data x-cloak x-show="document.getElementById('benutzerdefiniert') !== null"{% endif %}><span class="sys-subnav__label">{{ gruppe }}</span>
+      {% for ziel, text in links %}<a href="#{{ ziel }}">{{ text }}</a>{% endfor %}
+    </div>
+    {% endfor %}
+  </nav>
 
   {% include "admin/systemdiagnose/_settings.html" %}
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Zwei-Faktor-Authentifizierung</h2></div>
+  <section id="sicherheit-2fa" class="sys-card sys-security-card">
+    <header class="sys-card__head"><h2>{{ icon("shield") }} Zwei-Faktor-Authentifizierung</h2>
+      <span class="sys-pill {{ 'sys-status--ok' if settings.get('admin_2fa_enabled') == 'true' else '' }}">{{ 'aktiv' if settings.get('admin_2fa_enabled') == 'true' else 'inaktiv' }}</span>
+    </header>
+    <p class="sys-muted">Zusätzliche Absicherung persönlicher Systemadministratoren.</p>
     <div class="card-body">
       <p>Standard: AUS. Status: <strong>{{ 'Aktiv' if settings.get('admin_2fa_enabled') == 'true' else 'Inaktiv' }}</strong>.</p>
-      <p>Vor dem Aktivieren muessen alle aktiven Systemadministratoren die Einrichtung bestaetigen.</p>
-      <p><a href="/mfa/einrichten">Eigene 2FA einrichten</a> | <a href="/mfa/verify">2FA frisch bestaetigen</a></p>
+      <p>Vor dem Aktivieren müssen alle aktiven Systemadministratoren die Einrichtung bestätigen.</p>
+      <p><a href="/mfa/einrichten">Eigene 2FA einrichten</a> | <a href="/mfa/verify">2FA frisch bestätigen</a></p>
       <p>Reparaturen: zuerst 2FA aktivieren, dann Admin-MCP, dann Reparaturen. Standard: AUS.</p>
       <form method="post" action="/admin/system-einstellungen/admin-mcp/reparatur">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <label for="repair-enabled">Kontrollierte Reparaturen</label>
-        <select id="repair-enabled" name="enabled" class="form-input">
-          <option value="false">Inaktiv</option>
-          <option value="true" {% if settings.get('admin_repair_enabled') == 'true' %}selected{% endif %}>Aktiv</option>
-        </select>
-        <label for="repair-auto">LOW-Aktions-IDs ohne zusaetzliche Bestaetigung (kommagetrennt, Standard leer)</label>
+        <input type="hidden" name="enabled" value="false">
+        <label class="sys-switch-row" for="repair-enabled">
+          <span>Kontrollierte Reparaturen</span>
+          <input id="repair-enabled" type="checkbox" role="switch" name="enabled" value="true" {% if settings.get('admin_repair_enabled') == 'true' %}checked{% endif %}>
+        </label>
+        <label for="repair-auto">LOW-Aktions-IDs ohne zusätzliche Bestätigung (kommagetrennt, Standard leer)</label>
         <input id="repair-auto" name="low_auto" class="form-input" value="{{ settings.get('admin_repair_low_auto', '') }}">
         <button class="btn btn--primary" type="submit">Reparaturschalter speichern</button>
       </form>
       <ul>{% for admin, confirmed in mfa_admins %}<li>{{ admin.display_name }}{% if not admin.active %} (inaktiv){% endif %}: {{ 'Eingerichtet' if confirmed else 'Nicht eingerichtet' }}
         {% if admin.id != user.id %}
-        <form method="post" action="/mfa/zuruecksetzen" style="display:inline">
+        <form method="post" action="/mfa/zuruecksetzen" class="sys-inline-form">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="user_id" value="{{ admin.id }}">
-          <button class="btn btn--secondary" type="submit">2FA zuruecksetzen</button>
+          <button class="btn btn--secondary" type="submit">2FA zurücksetzen</button>
         </form>
         {% endif %}
       </li>{% endfor %}</ul>
-      <form method="post" action="/mfa/global" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <form method="post" action="/mfa/global">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <select name="enabled" class="form-input" aria-label="2FA systemweit">
-          <option value="false">Inaktiv</option>
-          <option value="true" {% if settings.get('admin_2fa_enabled') == 'true' %}selected{% endif %}>Aktiv</option>
-        </select>
+        <input type="hidden" name="enabled" value="false">
+        <label class="sys-switch-row" for="mfa-enabled">
+          <span>2FA systemweit</span>
+          <input id="mfa-enabled" type="checkbox" role="switch" name="enabled" value="true" {% if settings.get('admin_2fa_enabled') == 'true' %}checked{% endif %}>
+        </label>
         <button class="btn btn--primary" type="submit">2FA-Schalter speichern</button>
       </form>
-      <p>Deaktivieren braucht eine hoechstens 5 Minuten alte MFA-Pruefung und meldet alle Systemadministratoren ab.</p>
+      <p>Deaktivieren braucht eine höchstens 5 Minuten alte MFA-Prüfung und meldet alle Systemadministratoren ab.</p>
     </div>
   </section>
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>System-Admin-MCP</h2></div>
+  <section id="admin-mcp" class="sys-card sys-security-card">
+    <header class="sys-card__head"><h2>{{ icon("plug") }} System-Admin-MCP</h2>
+      <span class="sys-pill {{ 'sys-status--ok' if settings.get('admin_mcp_enabled') == 'true' else '' }}">{{ 'aktiv' if settings.get('admin_mcp_enabled') == 'true' else 'inaktiv' }}</span>
+    </header>
+    <p class="sys-muted">Persönliche Zugänge für die Systemadministration über MCP.</p>
     <div class="card-body">
       <p>Standard: AUS. Verbindungs-URL: <code>{{ admin_mcp_url }}</code></p>
-      <p>Nur persoenliche Systemadministratoren mit expliziter Freigabe. Aktivieren eines Zugangs verlangt bei aktiver 2FA eine hoechstens 5 Minuten alte MFA-Pruefung.</p>
+      <p>Nur persönliche Systemadministratoren mit expliziter Freigabe. Aktivieren eines Zugangs verlangt bei aktiver 2FA eine höchstens 5 Minuten alte MFA-Prüfung.</p>
       <form method="post" action="/admin/system-einstellungen/admin-mcp">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <select name="enabled" class="form-input" aria-label="Admin-MCP systemweit">
-          <option value="false">Inaktiv</option>
-          <option value="true" {% if settings.get('admin_mcp_enabled') == 'true' %}selected{% endif %}>Aktiv</option>
-        </select>
+        <input type="hidden" name="enabled" value="false">
+        <label class="sys-switch-row" for="mcp-enabled">
+          <span>Admin-MCP systemweit</span>
+          <input id="mcp-enabled" type="checkbox" role="switch" name="enabled" value="true" {% if settings.get('admin_mcp_enabled') == 'true' %}checked{% endif %}>
+        </label>
         <button class="btn btn--primary" type="submit">Admin-MCP-Schalter speichern</button>
       </form>
       <ul>{% for admin, confirmed in mfa_admins %}{% if not admin.is_device %}<li>
         {{ admin.display_name }}: {{ 'Freigegeben' if admin.admin_mcp_access else 'Gesperrt' }}
-        <form method="post" action="/admin/system-einstellungen/admin-mcp/zugang" style="display:inline">
+        <form method="post" action="/admin/system-einstellungen/admin-mcp/zugang" class="sys-inline-form">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="user_id" value="{{ admin.id }}">
           <input type="hidden" name="enabled" value="{{ 'false' if admin.admin_mcp_access else 'true' }}">
           <button class="btn btn--secondary" type="submit">{{ 'Sperren' if admin.admin_mcp_access else 'Freigeben' }}</button>
         </form>
       </li>{% endif %}{% endfor %}</ul>
-      <p>Jede Zugangsaenderung widerruft die Admin-MCP-Tokens dieses Benutzers. Danach erneut verbinden.</p>
+      <p>Jede Zugangsänderung widerruft die Admin-MCP-Tokens dieses Benutzers. Danach erneut verbinden.</p>
     </div>
   </section>
 
-  <section id="github-zugang" class="card mb-4">
-    <div class="card-header"><h2>GitHub-Zugang (Codeanalyse und CI)</h2></div>
+  <section id="github-zugang" class="sys-card sys-security-card">
+    <header class="sys-card__head"><h2>{{ icon("brand-github") }} GitHub-Zugang (Codeanalyse und CI)</h2>
+      <span class="sys-pill {{ 'sys-status--ok' if github_access.quelle != 'keine' else '' }}">{{ 'konfiguriert' if github_access.quelle != 'keine' else 'nicht konfiguriert' }}</span>
+    </header>
+    <p class="sys-muted">Token für lesenden Zugriff auf Codeanalyse und CI.</p>
     <div class="card-body">
-      {% if request.query_params.get('github_mfa') %}<div class="alert alert--warn">Frische MFA erforderlich. <a href="/mfa/verify">2FA jetzt bestaetigen</a>, danach erneut speichern oder loeschen.</div>{% endif %}
-      {% if request.query_params.get('github_error') %}<div class="alert alert--error">Token oder Ablaufdatum ungueltig. Datum muss in der Zukunft liegen, maximal 400 Tage entfernt.</div>{% endif %}
+      {% if request.query_params.get('github_mfa') %}<div class="alert alert--warn">Frische MFA erforderlich. <a href="/mfa/verify">2FA jetzt bestätigen</a>, danach erneut speichern oder löschen.</div>{% endif %}
+      {% if request.query_params.get('github_error') %}<div class="alert alert--error">Token oder Ablaufdatum ungültig. Datum muss in der Zukunft liegen, maximal 400 Tage entfernt.</div>{% endif %}
       {% if request.query_params.get('github_message') %}<p role="status">{{ request.query_params.get('github_message') }}</p>{% endif %}
       {% set days = github_access.restlaufzeit_tage %}
       <div class="alert alert--{{ 'error' if github_access.status in ['abgelaufen', 'ungueltig', 'keine_berechtigung'] else 'warn' if days is not none and days <= 7 else 'info' if github_access.status != 'ok' or (days is not none and days <= 30) else 'success' }}">
         <p>Quelle: <strong>{{ github_access.quelle }}</strong> | <span class="badge">{{ github_access.status }}</span> | {{ 'gesetzt' if github_access.quelle != 'keine' else 'nicht gesetzt' }}</p>
         <p>{{ github_access.meldung }}</p>
         {% if github_access.hinterlegt_am %}<p>Hinterlegt am {{ github_date(github_access.hinterlegt_am)|local_datetime }}</p>{% endif %}
-        {% if github_access.ablauf_am %}<p>Laeuft ab am {{ github_date(github_access.ablauf_am)|local_datetime }} ({{ github_access.expiry_source }}), noch ca. {{ days }} Tage</p>{% else %}<p>Ablaufdatum unbekannt; bei Bedarf manuell hinterlegen.</p>{% endif %}
+        {% if github_access.ablauf_am %}<p>Läuft ab am {{ github_date(github_access.ablauf_am)|local_datetime }} ({{ github_access.expiry_source }}), noch ca. {{ days }} Tage</p>{% else %}<p>Ablaufdatum unbekannt; bei Bedarf manuell hinterlegen.</p>{% endif %}
         <p>Letzter Test: {% if github_access.letzter_test %}{{ github_date(github_access.letzter_test)|local_datetime }}{% else %}noch nicht getestet{% endif %}</p>
       </div>
       {% if github_access.quelle == 'Umgebungsvariable' %}<p>Nur GITHUB_READ_TOKEN aus der Umgebungsvariable aktiv. Ein hier gespeichertes Token hat Vorrang.</p>{% endif %}
-      <form method="post" action="/admin/system-einstellungen/github/speichern" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+      <form method="post" action="/admin/system-einstellungen/github/speichern" class="sys-toolbar">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <label>Token speichern/ersetzen<input name="token" type="password" autocomplete="off" class="form-input" required></label>
         <label>Manuelles Ablaufdatum (optional, UTC)<input name="expires_at" type="date" class="form-input"></label>
@@ -141,20 +159,20 @@
       </form>
       <form method="post" action="/admin/system-einstellungen/github/loeschen" class="mt-4">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <label><input type="checkbox" name="confirm" value="ja" required> Loeschen des DB-Tokens bestaetigen</label>
-        <button class="btn btn--secondary" type="submit">Token loeschen</button>
+        <label><input type="checkbox" name="confirm" value="ja" required> Löschen des DB-Tokens bestätigen</label>
+        <button class="btn btn--secondary" type="submit">Token löschen</button>
       </form>
-      <p>Bei aktiver Admin-2FA verlangen Speichern, Ersetzen und Loeschen eine frische <a href="/mfa/verify">MFA-Bestaetigung</a>.</p>
-      <details class="mt-4"><summary>GitHub-Token Schritt fuer Schritt einrichten</summary>
+      <p>Bei aktiver Admin-2FA verlangen Speichern, Ersetzen und Löschen eine frische <a href="/mfa/verify">MFA-Bestätigung</a>.</p>
+      <details class="mt-4"><summary>GitHub-Token Schritt für Schritt einrichten</summary>
         <ol>
           <li>GitHub: Settings &gt; Developer settings &gt; Personal access tokens &gt; Fine-grained tokens &gt; Generate new token.</li>
           <li>Name: <code>ecp-admin-mcp-readonly</code>; Ablauf: 90 Tage.</li>
           <li>Resource owner: <code>{{ github_repository.split('/')[0] }}</code>.</li>
-          <li>Repository access: Only select repositories; nur <code>{{ github_repository }}</code> auswaehlen.</li>
+          <li>Repository access: Only select repositories; nur <code>{{ github_repository }}</code> auswählen.</li>
           <li>Repository permissions: Contents Read-only, Actions Read-only, Pull requests Read-only, Metadata Read-only (automatisch). Alles andere: No access.</li>
-          <li>Token kopieren (nur einmal sichtbar), hier einfuegen und speichern. Danach Verbindung testen.</li>
+          <li>Token kopieren (nur einmal sichtbar), hier einfügen und speichern. Danach Verbindung testen.</li>
         </ol>
-        <p>Organisationen muessen fine-grained Tokens eventuell erst freigeben (Status pending). Vor Ablauf rotieren. Token nie in Chats oder im Repository teilen.</p>
+        <p>Organisationen müssen fine-grained Tokens eventuell erst freigeben (Status pending). Vor Ablauf rotieren. Token nie in Chats oder im Repository teilen.</p>
         <p><a href="https://github.com/{{ github_repository }}/wiki/Administration-System-Admin-MCP">Wiki: Administration System-Admin-MCP</a></p>
       </details>
     </div>
@@ -164,7 +182,7 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
     {# ── E-Mail (SMTP) ──────────────────────────────────────────────────── #}
-    <section class="card mb-4">
+    <section id="smtp" class="card mb-4">
       <div class="card-header">
         <h2>E-Mail-Versand (SMTP)</h2>
       </div>
@@ -228,7 +246,7 @@
     </section>
 
     {# E-Mail (Resend) #}
-    <section class="card mb-4">
+    <section id="resend" class="card mb-4">
       <div class="card-header"><h2>E-Mail-Versand (Resend)</h2></div>
       <div class="card-body">
         <p class="text-muted" style="font-size:.85rem;margin-bottom:12px">Die Versanddomain muss bei Resend verifiziert sein. Ohne eigene Org-Konfiguration wird als Absender automatisch <code>&lt;typ&gt;.&lt;org-slug&gt;@&lt;domain&gt;</code> verwendet, zum Beispiel <code>feuerwehr.wolfurt@einsatzcockpit.com</code>.</p>
@@ -248,7 +266,7 @@
     </section>
 
     {# ── Web Push-Benachrichtigungen ─────────────────────────────────────── #}
-    <section class="card mb-4">
+    <section id="web-push" class="card mb-4">
       <div class="card-header">
         <h2>Web Push-Benachrichtigungen</h2>
       </div>
@@ -295,7 +313,7 @@
     </section>
 
     {# ── FCM – Native Android Push ───────────────────────────────────────── #}
-    <section class="card mb-4">
+    <section id="fcm" class="card mb-4">
       <div class="card-header">
         <h2>FCM – Native Android Push</h2>
       </div>
@@ -337,7 +355,7 @@
     </section>
 
     {# ── Einsatz-Auto-Schließen ──────────────────────────────────────────── #}
-    <section class="card mb-4">
+    <section id="auto-schliessen" class="card mb-4">
       <div class="card-header">
         <h2>Einsatz-Auto-Schließen</h2>
       </div>
@@ -378,7 +396,7 @@
     </section>
 
     {# ── Allgemein ──────────────────────────────────────────────────────── #}
-    <section class="card mb-4">
+    <section id="allgemein" class="card mb-4">
       <div class="card-header">
         <h2>Allgemein</h2>
       </div>
@@ -408,7 +426,7 @@
     </section>
 
     {# ── KI-Konfiguration (Anthropic Claude) ────────────────────────────── #}
-    <section class="card mb-4">
+    <section id="ki" class="card mb-4">
       <div class="card-header">
         <h2>{{ icon("sparkles", size="md") }} KI-Konfiguration (Anthropic Claude)</h2>
       </div>
@@ -475,7 +493,7 @@
     </section>
 
     {# ── Großschadenslage – Funktionen ──────────────────────────────────── #}
-    <section class="card mb-4">
+    <section id="gsl" class="card mb-4">
       <div class="card-header">
         <h2>Großschadenslage – Funktionen</h2>
       </div>
@@ -581,7 +599,7 @@
       {% if k not in known_keys_list and not k.lower().startswith('diag_schedule_') %}{% set ns.has_custom = true %}{% endif %}
     {% endfor %}
     {% if ns.has_custom %}
-    <section class="card mb-4">
+    <section id="benutzerdefiniert" class="card mb-4">
       <div class="card-header">
         <h2>Benutzerdefinierte Einstellungen</h2>
       </div>
@@ -613,7 +631,7 @@
   </form>
 
   {# ── SMTP-Verbindung testen ───────────────────────────────────────────── #}
-  <section class="card mb-4" style="margin-top:24px;">
+  <section id="test-smtp" class="card mb-4" style="margin-top:24px;">
     <div class="card-header">
       <h2>SMTP-Verbindung testen</h2>
     </div>
@@ -635,7 +653,7 @@
     </div>
   </section>
 
-  <section class="card mb-4">
+  <section id="test-resend" class="card mb-4">
     <div class="card-header"><h2>Resend-Verbindung testen</h2></div>
     <div class="card-body">
       <p class="text-muted" style="font-size:.85rem;margin-bottom:12px">Verwendet die aktuell gespeicherte globale Resend-Konfiguration. Zuerst speichern, dann testen.</p>
