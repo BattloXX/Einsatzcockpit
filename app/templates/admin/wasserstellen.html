@@ -1,25 +1,31 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Wasserstellen – Admin{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-content">
+<div class="sys-page">
 
   {# ── Kopf ── #}
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
-      <h1>Wasserstellen</h1>
-      <p class="page-header__sub">
+      <h1>{{ icon("droplet") }} Wasserstellen</h1>
+      <p class="sys-muted">
         {{ gesamt }} Löschwasser-Stellen
         {% if kapazitaet_l_min %}· {{ '{:,}'.format(kapazitaet_l_min).replace(',', '.') }} l/min verfügbar{% endif %}
       </p>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div class="sys-row">
       <button type="button" class="btn btn--secondary" onclick="wsExportCsv()">{{ icon("download", size="sm") }} CSV</button>
       <button type="button" class="btn btn--secondary"
               data-ec-action="open-dialog" data-ec-dialog="importModal">{{ icon("upload", size="sm") }} Import</button>
       <button type="button" class="btn btn--primary" onclick="wsBeginNew()">{{ icon("plus", size="sm") }} Neue Wasserstelle</button>
     </div>
-  </div>
+   </div>
+  </header>
 
   {# ── Import-Rückmeldung ── #}
   {% if request.query_params.get('import_neu') is not none %}
@@ -36,14 +42,14 @@
 
   {# ── Statistik-Pills ── #}
   <div class="ws-stats">
-    <span class="badge-pill badge-pill--gray">Gesamt {{ gesamt }}</span>
-    <span class="badge-pill badge-pill--green">Bereit {{ aktiv_count - wartung_count }}</span>
-    {% if wartung_count %}<span class="badge-pill badge-pill--amber">Wartung {{ wartung_count }}</span>{% endif %}
-    {% if defekt_count %}<span class="badge-pill badge-pill--red">Defekt {{ defekt_count }}</span>{% endif %}
+    <span class="sys-pill">Gesamt {{ gesamt }}</span>
+    <span class="sys-pill sys-ok">Bereit {{ aktiv_count - wartung_count }}</span>
+    {% if wartung_count %}<span class="sys-pill sys-pill--warn">Wartung {{ wartung_count }}</span>{% endif %}
+    {% if defekt_count %}<span class="sys-pill sys-danger">Defekt {{ defekt_count }}</span>{% endif %}
   </div>
 
   {# ── Karte ── #}
-  <div class="card ws-map-card">
+  <div class="sys-card ws-map-card">
     <div id="ws-map" class="ws-map"></div>
     <div class="ws-legend">
       <div class="ws-legend__h">Legende</div>
@@ -61,36 +67,38 @@
   </div>
 
   {# ── Filter ── #}
-  <div class="ws-filterbar">
-    <input type="search" id="wsSearch" class="form-input" style="flex:1;min-width:220px;max-width:420px;"
+  <div class="ws-filterbar sys-toolbar">
+    <input type="search" id="wsSearch" class="form-input sys-toolbar-search"
            placeholder="Suchen: Bezeichnung, Hinweis …" oninput="wsApplyFilter()">
-    <select data-no-dirty id="wsFilterTyp" class="form-select" style="width:170px;" onchange="wsApplyFilter()">
+    <select data-no-dirty id="wsFilterTyp" class="form-select sys-select-narrow sys-select-w170" onchange="wsApplyFilter()">
       <option value="">Alle Typen</option>
       {% for code, label in typen.items() %}
       <option value="{{ code }}">{{ label }}</option>
       {% endfor %}
     </select>
-    <select data-no-dirty id="wsFilterStatus" class="form-select" style="width:160px;" onchange="wsApplyFilter()">
+    <select data-no-dirty id="wsFilterStatus" class="form-select sys-select-narrow sys-select-w160" onchange="wsApplyFilter()">
       <option value="">Alle Zustände</option>
       {% for code, label in status_labels.items() %}
       <option value="{{ code }}">{{ label }}</option>
       {% endfor %}
     </select>
-    <span class="text-muted" id="wsFilterCount" style="font-size:.85rem;"></span>
+    <span class="sys-muted sys-small" id="wsFilterCount"></span>
   </div>
 
   {# ── Tabelle ── #}
   {% if not wasserstellen %}
-  <div class="card" style="padding:28px;text-align:center;color:var(--text-muted);">
+  <div class="sys-card sys-empty-box sys-muted">
     Noch keine Wasserstellen. Lege eine an oder importiere ein CSV.
   </div>
   {% else %}
-  <table class="table-admin table-admin--cards" id="wsTable">
+  <div class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive" id="wsTable">
     <thead>
       <tr>
         <th class="sortable" data-sort="typ" onclick="wsSort('typ')">Typ <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th class="sortable" data-sort="bez" onclick="wsSort('bez')">Bezeichnung <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
-        <th class="sortable" data-sort="flow" data-num="1" onclick="wsSort('flow')" style="text-align:right;">Ergiebigkeit <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
+        <th data-sort="flow" data-num="1" onclick="wsSort('flow')" class="sortable sys-right">Ergiebigkeit <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th>Koordinaten</th>
         <th class="sortable" data-sort="status" onclick="wsSort('status')">Zustand <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th>Quelle</th>
@@ -114,12 +122,12 @@
         </td>
         <td data-label="Bezeichnung">
           <strong>{{ w.bezeichnung }}</strong>
-          {% if w.hinweis %}<div class="text-muted" style="font-size:.8rem;">{{ w.hinweis }}</div>{% endif %}
+          {% if w.hinweis %}<div class="sys-muted sys-text-xs">{{ w.hinweis }}</div>{% endif %}
         </td>
-        <td data-label="Ergiebigkeit" style="text-align:right;font-variant-numeric:tabular-nums;">
+        <td data-label="Ergiebigkeit" class="sys-number">
           {% if w.ergiebigkeit_l_min %}{{ '{:,}'.format(w.ergiebigkeit_l_min).replace(',', '.') }} l/min{% else %}<span class="text-muted">–</span>{% endif %}
         </td>
-        <td data-label="Koordinaten" style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;">
+        <td data-label="Koordinaten" class="sys-coords">
           {% if w.lat is not none and w.lng is not none %}
           <button type="button" class="ws-coordbtn" onclick="wsFocus({{ w.id }})" title="Auf Karte zeigen">
             {{ icon("map-pin", size="sm") }} {{ '%.5f'|format(w.lat) }}, {{ '%.5f'|format(w.lng) }}
@@ -128,28 +136,30 @@
         </td>
         <td data-label="Zustand">
           {% if w.status == 'defekt' %}
-          <span class="badge-pill badge-pill--red">Defekt</span>
+          <span class="sys-pill sys-danger">Defekt</span>
           {% elif w.status == 'wartung' %}
-          <span class="badge-pill badge-pill--amber">Wartung</span>
+          <span class="sys-pill sys-pill--warn">Wartung</span>
           {% else %}
-          <span class="badge-pill badge-pill--green">Bereit</span>
+          <span class="sys-pill sys-ok">Bereit</span>
           {% endif %}
         </td>
         <td data-label="Quelle">
-          <span class="badge-pill badge-pill--gray">{{ 'Import' if w.quelle == 'import' else 'Manuell' }}</span>
+          <span class="sys-pill">{{ 'Import' if w.quelle == 'import' else 'Manuell' }}</span>
         </td>
-        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
+        <td data-label="Aktionen"><div class="sys-row sys-gap-sm">
           <button type="button" class="btn btn--ghost btn--xs" onclick="wsOpenEdit({{ w.id }})">Bearbeiten</button>
-          <form method="post" action="/admin/wasserstellen/{{ w.id }}/loeschen" style="display:inline;"
+          <form method="post" action="/admin/wasserstellen/{{ w.id }}/loeschen" class="sys-inline-form"
                 onsubmit="return confirm('Diese Wasserstelle wirklich löschen?');">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="btn btn--ghost btn--xs">Löschen</button>
           </form>
-        </td>
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </div>
   {% endif %}
 </div>
 
@@ -190,7 +200,7 @@
           <input type="text" name="lng" id="ws-neu-lng" class="form-input" placeholder="9.7503">
         </div>
       </div>
-      <p class="text-muted" style="font-size:.8rem;margin:-4px 0 0;">Tipp: In die Karte klicken oder den Pin ziehen setzt die Koordinaten.</p>
+      <p class="sys-muted sys-text-xs">Tipp: In die Karte klicken oder den Pin ziehen setzt die Koordinaten.</p>
       <div class="form-group">
         <label class="form-label">Ergiebigkeit (l/min, optional)</label>
         <input type="text" name="ergiebigkeit_l_min" class="form-input" placeholder="z. B. 1200">
@@ -269,7 +279,7 @@
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <p class="text-muted" style="font-size:.85rem;">
+      <p class="sys-muted sys-small">
         GIS-Export (MGI/EPSG:31281). Koordinaten werden automatisch nach WGS84 umgerechnet.
         Wiederholte Importe aktualisieren bestehende Einträge.
       </p>
@@ -277,7 +287,7 @@
         <label class="form-label">CSV-Datei</label>
         <input type="file" name="datei" accept=".csv,text/csv" required class="form-input">
       </div>
-      <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;">
+      <label class="checkbox-label sys-check-row">
         <input type="checkbox" name="ersetzen" value="1"> Bisherige Import-Datensätze vorher ersetzen
       </label>
     </div>
@@ -290,7 +300,6 @@
 
 <style>
   .ws-stats { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
-  .badge-pill--amber { background: rgba(242,176,46,.2); color: var(--yellow); }
 
   .ws-map-card { position:relative; padding:0; overflow:hidden; margin-bottom:16px; }
   .ws-map { height: 460px; width:100%; border-radius:inherit; }
@@ -317,16 +326,11 @@
   }
   @media (max-width:760px){ .ws-maphint { display:none; } }
 
-  .ws-filterbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 12px; }
-
   .ws-type { display:inline-flex; align-items:center; gap:9px; white-space:nowrap; }
   .ws-type .hydrant-icon { width:20px; height:20px; font-size:9px; }
 
   .ws-coordbtn { background:none; border:none; color:var(--text-muted); cursor:pointer; font:inherit; padding:0; }
   .ws-coordbtn:hover { color: var(--red-light, #ff5252); }
-
-  #wsTable th.sortable { cursor:pointer; user-select:none; }
-  #wsTable th.sortable:hover { color: var(--red-light, #ff5252); }
 
   /* Marker-Status-Modifikatoren (auf .hydrant-icon des Karten-Markers) */
   .hydrant-icon--st-wartung { box-shadow: 0 0 0 3px var(--yellow), 0 1px 2px rgba(0,0,0,.5); }

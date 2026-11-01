@@ -1,39 +1,47 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Seed-Vorlagen{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-header">
-  <h1>Seed-Vorlagen</h1>
-  <a href="/admin/organisations" class="btn btn-outline">{{ icon("chevron-left", size="sm") }} Organisationen</a>
-</div>
-
-<p class="text-muted">
-  Seed-Profile werden beim Anlegen neuer Organisationen kopiert.
-  Änderungen hier wirken sich nur auf künftige Orgs aus – bestehende Orgs bleiben unberührt.
-</p>
+<div class="sys-page">
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div>
+      <h1>{{ icon("list-details") }} Seed-Vorlagen</h1>
+      <p class="sys-muted">
+        Seed-Profile werden beim Anlegen neuer Organisationen kopiert.
+        Änderungen hier wirken sich nur auf künftige Orgs aus – bestehende Orgs bleiben unberührt.
+      </p>
+    </div>
+    <a href="/admin/organisations" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Organisationen</a>
+  </div>
+</header>
 
 {% for profile_key, profile in by_profile.items() %}
-<section class="card mt-4">
-  <div class="card-header">
-    <h2>{{ profile.label }} <code style="font-size:.75em">({{ profile_key }})</code></h2>
+<section class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ profile.label }} <code class="sys-code sys-small">({{ profile_key }})</code></h2>
   </div>
-  <div class="card-body">
+  <div>
 
     {% if profile.types.alarm_type %}
     <h3>Alarmtypen ({{ profile.types.alarm_type | length }})</h3>
-    <div class="table-responsive mb-3">
-      <table class="table table-sm">
+    <div class="sys-table-wrap sys-mb-2">
+      <table class="sys-table sys-table--responsive">
         <thead><tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>Flags</th></tr></thead>
         <tbody>
         {% for item in profile.types.alarm_type %}
         <tr>
-          <td><code>{{ item.data.code }}</code></td>
-          <td>{{ item.data.category }}</td>
-          <td>{{ item.data.label }}</td>
-          <td>
-            {% if item.data.triggers_major_incident %}<span class="badge badge-danger">GSL</span>{% endif %}
-            {% if item.data.notify_neighbors %}<span class="badge badge-warning">Nachbarn</span>{% endif %}
-            {% if item.data.default_first_train_only %}<span class="badge badge-info">1. Zug</span>{% endif %}
+          <td data-label="Code"><code>{{ item.data.code }}</code></td>
+          <td data-label="Kategorie">{{ item.data.category }}</td>
+          <td data-label="Bezeichnung">{{ item.data.label }}</td>
+          <td data-label="Flags">
+            {% if item.data.triggers_major_incident %}<span class="sys-pill sys-danger">GSL</span>{% endif %}
+            {% if item.data.notify_neighbors %}<span class="sys-pill sys-pill--warn">Nachbarn</span>{% endif %}
+            {% if item.data.default_first_train_only %}<span class="sys-pill">1. Zug</span>{% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -44,11 +52,11 @@
 
     {% if profile.types.task_suggestion %}
     <h3>Auftragsvorlagen ({{ profile.types.task_suggestion | length }})</h3>
-    <ul class="mb-3">
+    <ul class="sys-list sys-mb-2">
       {% for item in profile.types.task_suggestion %}
       <li>{{ item.data.text }}
         {% if item.data.alarm_codes %}
-        <small class="text-muted">[{{ item.data.alarm_codes | join(', ') }}]</small>
+        <small class="sys-muted">[{{ item.data.alarm_codes | join(', ') }}]</small>
         {% endif %}
       </li>
       {% endfor %}
@@ -57,12 +65,12 @@
 
     {% if profile.types.default_message %}
     <h3>Default-Meldungen ({{ profile.types.default_message | length }})</h3>
-    <ul class="mb-3">
+    <ul class="sys-list sys-mb-2">
       {% for item in profile.types.default_message %}
       <li>{{ item.data.text }}
-        <small class="text-muted">({{ (item.data.due_after_sec or 300) // 60 }} min)</small>
+        <small class="sys-muted">({{ (item.data.due_after_sec or 300) // 60 }} min)</small>
         {% if item.data.alarm_codes %}
-        <small class="text-muted">[{{ item.data.alarm_codes | join(', ') }}]</small>
+        <small class="sys-muted">[{{ item.data.alarm_codes | join(', ') }}]</small>
         {% endif %}
       </li>
       {% endfor %}
@@ -71,7 +79,7 @@
 
     {% if profile.types.lage_hint %}
     <h3>Lage-Hinweise ({{ profile.types.lage_hint | length }})</h3>
-    <ul class="mb-3">
+    <ul class="sys-list sys-mb-2">
       {% for item in profile.types.lage_hint %}
       <li>{{ item.data.text }}</li>
       {% endfor %}
@@ -81,7 +89,7 @@
   </div>
 </section>
 {% else %}
-<div class="alert alert-warning mt-3">Keine Seed-Vorlagen vorhanden. Führe <code>python -m app.seed_data</code> aus.</div>
+<div class="sys-notice sys-notice--warn">Keine Seed-Vorlagen vorhanden. Führe <code>python -m app.seed_data</code> aus.</div>
 {% endfor %}
-
+</div>
 {% endblock %}

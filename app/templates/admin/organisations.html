@@ -1,13 +1,20 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Organisationen{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='organisationen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <h1>Organisationen</h1>
-  <a href="#new-org" class="btn btn-primary">{{ icon("plus", size="sm") }} Neue Organisation</a>
-</div>
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div><h1>{{ icon("building") }} Organisationen</h1><p class="sys-muted">Alle Organisationen der Installation</p></div>
+    <a href="#new-org" class="btn btn--primary">{{ icon("plus", size="sm") }} Neue Organisation</a>
+  </div>
+</header>
 
 {% if created %}
 <div class="alert alert--success">Organisation angelegt.</div>
@@ -16,8 +23,9 @@
 <div class="alert alert--error">Ein Kürzel mit diesem Namen existiert bereits.</div>
 {% endif %}
 
-<div class="table-responsive">
-  <table class="table">
+<div class="sys-card">
+<div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive">
     <thead>
       <tr>
         <th>Farbe</th>
@@ -31,55 +39,56 @@
     </thead>
     <tbody>
       {% for org in orgs %}
-      <tr {% if org.deleted_at %}class="table-danger"{% endif %}>
-        <td><span class="org-color-dot" style="background:{{ org.color }}"></span></td>
-        <td>
-          {% if org.logo_path %}<img src="{{ org.logo_path }}" alt="" style="height:24px;margin-right:6px">{% endif %}
+      <tr {% if org.deleted_at %}class="sys-danger"{% endif %}>
+        <td data-label="Farbe"><span class="sys-org-color" style="--sys-org-color:{{ org.color }}"></span></td>
+        <td data-label="Name">
+          {% if org.logo_path %}<img src="{{ org.logo_path }}" alt="" class="sys-logo-xs">{% endif %}
           <strong>{{ org.name }}</strong>
           {% if org.deleted_at %}
-          <span class="badge badge-danger">Gelöscht {{ (org.deleted_at|local).strftime('%d.%m.%Y') }}</span>
+          <span class="sys-pill sys-danger">Gelöscht {{ (org.deleted_at|local).strftime('%d.%m.%Y') }}</span>
           {% endif %}
         </td>
-        <td><code>{{ org.slug }}</code></td>
-        <td>{{ org.bos }}</td>
-        <td>{{ org.contact_email or '–' }}</td>
-        <td>
+        <td data-label="Slug"><code>{{ org.slug }}</code></td>
+        <td data-label="BOS">{{ org.bos }}</td>
+        <td data-label="Kontakt">{{ org.contact_email or '–' }}</td>
+        <td data-label="Status">
           {% if org.deleted_at %}
-          <span class="badge badge-danger">Soft-Delete</span>
+          <span class="sys-pill sys-danger">Soft-Delete</span>
           {% elif org.is_active %}
-          <span class="badge badge-success">Aktiv</span>
+          <span class="sys-pill sys-ok">Aktiv</span>
           {% else %}
-          <span class="badge badge-warning">Inaktiv</span>
+          <span class="sys-pill sys-pill--warn">Inaktiv</span>
           {% endif %}
         </td>
-        <td style="white-space:nowrap">
+        <td data-label="Aktionen"><div class="sys-row sys-gap-sm">
           {% if org.deleted_at %}
-          <form method="post" action="/admin/organisations/{{ org.id }}/restore" style="display:inline">
-            <button type="submit" class="btn btn-sm btn-outline">Wiederherstellen</button>
+          <form method="post" action="/admin/organisations/{{ org.id }}/restore" class="sys-inline-form">
+            <button type="submit" class="btn btn--ghost btn--sm">Wiederherstellen</button>
           </form>
           {% else %}
-          <form method="post" action="/admin/organisations/{{ org.id }}/toggle" style="display:inline">
-            <button type="submit" class="btn btn-sm btn-outline">
+          <form method="post" action="/admin/organisations/{{ org.id }}/toggle" class="sys-inline-form">
+            <button type="submit" class="btn btn--ghost btn--sm">
               {% if org.is_active %}Deaktivieren{% else %}Aktivieren{% endif %}
             </button>
           </form>
-          <form method="post" action="/admin/organisations/{{ org.id }}/delete" style="display:inline"
+          <form method="post" action="/admin/organisations/{{ org.id }}/delete" class="sys-inline-form"
                 onsubmit="return confirm('Org wirklich löschen? 30-Tage-Frist beginnt.')">
-            <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
+            <button type="submit" class="btn btn--danger btn--sm">Löschen</button>
           </form>
           {% endif %}
-        </td>
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+</div>
 
-<section class="card mt-4" id="new-org">
-  <div class="card-header"><h2>Neue Organisation anlegen</h2></div>
-  <div class="card-body">
+<section class="sys-card" id="new-org">
+  <div class="sys-card__head"><h2>{{ icon("plus") }} Neue Organisation anlegen</h2></div>
+  <div>
     <form method="post" action="/admin/organisations/new">
-      <div class="form-grid">
+      <div class="sys-form-grid">
         <div class="form-group">
           <label>Kürzel (slug, z.B. <code>lauterach</code>)</label>
           <input type="text" name="slug" required pattern="[a-z0-9\-]+"
@@ -92,7 +101,7 @@
         </div>
         <div class="form-group">
           <label>Farbe</label>
-          <input type="color" name="color" value="#1877f2" class="form-control" style="width:60px;height:40px;padding:2px">
+          <input type="color" name="color" value="#1877f2" class="form-control sys-color-field">
         </div>
         <div class="form-group">
           <label>BOS-Typ</label>
@@ -117,9 +126,9 @@
           <small>Alarmtypen, Vorlagen und Lage-Hinweise werden aus dem Profil kopiert.</small>
         </div>
       </div>
-      <fieldset class="card mt-3">
-        <legend class="card-header">Ersten Org-Admin einladen (optional)</legend>
-        <div class="card-body form-grid">
+      <fieldset class="sys-fieldset sys-mt-2">
+        <legend>Ersten Org-Admin einladen (optional)</legend>
+        <div class="sys-form-grid">
           <div class="form-group">
             <label>E-Mail-Adresse</label>
             <input type="email" name="admin_email" class="form-control" placeholder="admin@example.com">
@@ -129,16 +138,17 @@
             <input type="text" name="admin_name" class="form-control" placeholder="Max Mustermann">
           </div>
         </div>
-        <small class="px-3 pb-2 d-block text-muted">Der Benutzer erhält einen Passwort-Set-Link per E-Mail (7 Tage gültig).</small>
+        <small class="sys-block sys-muted sys-mt-1">Der Benutzer erhält einen Passwort-Set-Link per E-Mail (7 Tage gültig).</small>
       </fieldset>
-      <div class="form-actions mt-3">
-        <button type="submit" class="btn btn-primary">Organisation anlegen</button>
+      <div class="sys-actions">
+        <button type="submit" class="btn btn--primary">Organisation anlegen</button>
       </div>
     </form>
   </div>
 </section>
 
 {% if seed_profiles %}
-<p class="mt-3"><small><a href="/admin/seed-vorlagen">Seed-Vorlagen verwalten</a></small></p>
+<p class="sys-mt-2"><small><a href="/admin/seed-vorlagen">Seed-Vorlagen verwalten</a></small></p>
 {% endif %}
+</div>
 {% endblock %}

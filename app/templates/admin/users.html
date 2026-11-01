@@ -5,25 +5,33 @@
 
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Benutzer'}]) }}{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='benutzer' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
 {% set invitation_status = einladungs_status|default({}) %}
-<div class="page-header">
-  <div>
-    <h1>Benutzerverwaltung</h1>
-    <p class="page-header__sub">Login-Accounts, Rollen, Kontaktdaten, Passwort-Reset</p>
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div>
+      <h1>{{ icon("users") }} Benutzerverwaltung</h1>
+      <p class="sys-muted">Login-Accounts, Rollen, Kontaktdaten, Passwort-Reset</p>
+    </div>
+    <div class="sys-row">
+      <a class="btn btn--ghost" href="/admin/benutzer/mail-vorschau">{{ icon("mail", size="sm") }} Mail-Vorschau</a>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newUserModal"
+              {{ tip('Neuen Login-Account anlegen') }}>{{ icon("plus", size="sm") }} Benutzer</button>
+    </div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <a class="btn btn--ghost" href="/admin/benutzer/mail-vorschau">Mail-Vorschau</a>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newUserModal"
-            {{ tip('Neuen Login-Account anlegen') }}>{{ icon("plus", size="sm") }} Benutzer</button>
-  </div>
-</div>
+</header>
 
 {% if new_password %}
 <div class="alert alert--success">
-  Neues Passwort für {{ new_password_user }}: <code style="font-size:1.1rem; letter-spacing:.1em">{{ new_password }}</code>
+  Neues Passwort für {{ new_password_user }}: <code class="sys-code-big">{{ new_password }}</code>
   <br><small>Bitte notieren – wird nur einmal angezeigt.</small>
 </div>
 {% endif %}
@@ -48,16 +56,17 @@
 <form method="post" action="/admin/benutzer/bulk-loeschen" id="bulkUserForm"
       onsubmit="return checkBulkUsers()">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+<div class="sys-row sys-mb-1">
   <button type="button" class="btn btn--ghost btn--xs" onclick="toggleAllUsers()">Alle wählen</button>
   <button type="submit" class="btn btn--danger btn--xs">Markierte löschen</button>
   <small class="text-muted">Endgültig — kann nicht rückgängig gemacht werden.</small>
 </div>
 
-<table class="table-admin table-admin--cards">
+<div class="sys-table-wrap">
+<table class="sys-table sys-table--responsive sys-table--wide">
   <thead>
     <tr>
-      <th style="width:32px;"></th>
+      <th class="sys-col-32"><span class="sr-only">Auswahl</span></th>
       <th>Benutzername</th>
       <th>Echter Name</th>
       <th>E-Mail</th>
@@ -94,7 +103,8 @@
         {% elif invitation_status.get(u.id) == 'abgelaufen' %}<br><span class="badge-pill badge-pill--gray">Einladung abgelaufen</span>{% endif %}
         {% if u.locked_until %}<br><span class="badge-pill badge-pill--red" {{ tip('Account ist temporär gesperrt') }}>Gesperrt</span>{% endif %}
       </td>
-      <td data-label="Aktionen" style="display:flex; gap:4px; flex-wrap:wrap;">
+      <td data-label="Aktionen">
+        <div class="sys-row sys-gap-sm">
         {% if protected_system_admin %}
         <span class="text-muted">Nur Systemadministrator</span>
         {% else %}
@@ -138,11 +148,13 @@
         </button>
         {% endif %}
         {% endif %}
+        </div>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
 </form>
 
 <!-- Neuer Benutzer -->
@@ -165,12 +177,12 @@
           <input type="text" name="full_name" class="form-input" {{ tip('Für Audit-Log und Mail-Anrede') }}></div>
       </div>
       <div class="form-row">
-        <div class="form-group" style="flex:2;"><label class="form-label">E-Mail</label>
+        <div class="form-group sys-grow-2"><label class="form-label">E-Mail</label>
           <input type="email" name="email" class="form-input" {{ tip('Für Passwort-Reset und Benachrichtigungen — muss eindeutig sein') }}></div>
-        <div class="form-group" style="flex:1;"><label class="form-label">Telefon</label>
+        <div class="form-group sys-grow-1"><label class="form-label">Telefon</label>
           <input type="tel" name="phone" class="form-input" {{ tip('Optional — z. B. für Pager-Listen') }}></div>
       </div>
-      <p class="text-muted" style="font-size:.85rem; margin:.25rem 0 .75rem;">
+      <p class="sys-muted sys-small">
         Initial-Passwort wird automatisch sicher generiert. Mit Einladung legt der Benutzer sein Passwort selbst fest.
       </p>
       {% if is_sysadmin %}
@@ -200,7 +212,7 @@
         <label class="checkbox-label"><input type="checkbox" name="role_codes" value="{{ r.code }}"> {{ r.label }}</label>
         {% endfor %}
       </div>
-      <div class="form-group" style="margin-top:.75rem; border-top:1px solid var(--border); padding-top:.75rem;">
+      <div class="form-group sys-divider">
         <label class="form-label">E-Mail-Benachrichtigungen</label>
         <label class="checkbox-label">
           <input type="checkbox" name="send_welcome" value="true" checked
@@ -208,7 +220,7 @@
           Einladung zum Festlegen eines Passworts senden
         </label>
         {% if org_sso_enabled %}
-        <label class="checkbox-label" style="margin-top:.25rem;">
+        <label class="checkbox-label sys-mt-1">
           <input type="checkbox" name="send_sso_info" value="true"
                  {{ tip('Sendet eine Anleitung zum Microsoft-SSO-Login an den neuen Benutzer') }}>
           SSO-Anleitung (Microsoft-Login) per Mail senden
@@ -236,9 +248,9 @@
         <div class="form-group"><label class="form-label">Echter Name</label>
           <input type="text" name="full_name" id="eu_full_name" class="form-input"></div>
         <div class="form-row">
-          <div class="form-group" style="flex:2;"><label class="form-label">E-Mail</label>
+          <div class="form-group sys-grow-2"><label class="form-label">E-Mail</label>
             <input type="email" name="email" id="eu_email" class="form-input"></div>
-          <div class="form-group" style="flex:1;"><label class="form-label">Telefon</label>
+          <div class="form-group sys-grow-1"><label class="form-label">Telefon</label>
             <input type="tel" name="phone" id="eu_phone" class="form-input"></div>
         </div>
         {% if is_sysadmin %}
@@ -279,6 +291,7 @@
   </div>
 </dialog>
 
+</div>
 {% endblock %}
 
 {% block scripts %}

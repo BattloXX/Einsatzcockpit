@@ -435,3 +435,43 @@
 .sys-steps { list-style: decimal; }
 .sys-hint-list { list-style: disc; }
 .sys-page input[type="checkbox"], .sys-page input[type="radio"] { min-height: 0; width: 1.1rem; height: 1.1rem; flex: 0 0 auto; }
+
+/* Stammdaten und Benutzer (V5). */
+.sys-grow-2 { flex: 2; }
+.sys-hidden { display: none; }
+.sys-gap-md { gap: .6rem; }
+.sys-page .sys-toolbar-search { flex: 1 1 16rem; min-width: 0; max-width: 32rem; }
+.sys-page .sys-select-w160 { width: 10rem; }
+.sys-page .sys-select-w170 { width: 10.6rem; }
+.sys-bulk-bar { display: none; align-items: center; gap: .75rem; margin: .5rem 0; padding: .5rem .75rem; border-radius: .4rem; background: var(--surface-high); }
+.sys-bulk-bar[style*="flex"] { display: flex; }
+.sys-warn { color: var(--yellow); }
+.sys-notice--warn { border-color: var(--yellow); color: var(--yellow); }
+.sys-pill--tiny { font-size: .65rem; margin-left: .25rem; vertical-align: middle; }
+.sys-dnd-handle { cursor: grab; user-select: none; text-align: center; color: var(--text-muted); font-size: 1.1rem; }
+.sys-logo-xs { height: 24px; margin-right: .4rem; vertical-align: middle; }
+.sys-page .sys-color-field { width: 60px; height: 40px; padding: 2px; }
+.sys-coords { font-size: .8rem; color: var(--text-muted); white-space: nowrap; }
+.sys-check-row { display: flex; align-items: center; gap: .5rem; }
+.sys-wrap-gap { display: flex; flex-wrap: wrap; gap: .4rem; }
+.sys-fieldset-stack { display: flex; flex-direction: column; gap: .4rem; }
+.sys-page .sys-input-w160 { width: 10rem; }
+.sys-label-min160 { min-width: 10rem; }
+.sys-block-gap-bottom { margin-bottom: .5rem; }
+.sys-col-2 { flex: 2; min-width: 0; }
+.sys-col-1 { flex: 1; min-width: 0; }
+.sys-flex-gap { display: flex; gap: .5rem; }
+#membersTable th.sortable, #wsTable th.sortable { cursor: pointer; user-select: none; }
+#membersTable th.sortable:hover, #wsTable th.sortable:hover { color: var(--red); }
+.sys-min-200 { min-width: 200px; }
+.sys-min-150 { min-width: 150px; }
+/* Breite Stammdaten-Tabellen: automatische Spaltenbreite, Scrollen im Wrapper, mobil Karten. */
+.sys-table--responsive.sys-table--wide { table-layout: auto; overflow-wrap: normal; min-width: 64rem; }
+.sys-table--wide td[data-label="Aktionen"] .sys-row { min-width: 13rem; }
+.sys-table--wide td, .sys-table--wide th { overflow-wrap: break-word; }
+@media (max-width: 760px) {
+  .sys-table--responsive.sys-table--wide { min-width: 0; }
+  .sys-table--wide td[data-label="Aktionen"] .sys-row { min-width: 0; }
+  .sys-page .sys-toolbar-search { flex: none; max-width: none; }
+  .sys-toolbar > .form-group { width: 100%; min-width: 0; }
+}

@@ -1,21 +1,27 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Mitglieder – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='personal' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
 {% set user_role_codes = user.roles|map(attribute='code')|list %}
 {% set can_manage_members = 'system_admin' in user_role_codes or 'admin' in user_role_codes or 'org_admin' in user_role_codes %}
-<div class="page-content">
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
-      <h1>Mannschaftsregister</h1>
-      <p class="page-header__sub">{{ members|length }} Mitglieder</p>
+      <h1>{{ icon("users-group") }} Mannschaftsregister</h1>
+      <p class="sys-muted">{{ members|length }} Mitglieder</p>
     </div>
-    {% if can_manage_members %}<div style="display:flex;gap:8px;">
-      <button class="btn btn--secondary" data-ec-action="open-dialog" data-ec-dialog="excelImportModal">Excel importieren</button>
+    {% if can_manage_members %}<div class="sys-row">
+      <button class="btn btn--secondary" data-ec-action="open-dialog" data-ec-dialog="excelImportModal">{{ icon("upload", size="sm") }} Excel importieren</button>
       <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newMemberModal">{{ icon("plus", size="sm") }} Mitglied</button>
     </div>{% endif %}
-  </div>
+   </div>
+  </header>
 
   {% if saved %}
   <div class="alert alert--success">
@@ -58,32 +64,34 @@
   {% endif %}
 
   <!-- Filter + Sort-Steuerung -->
-  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:12px 0;">
+  <div class="sys-toolbar sys-mb-2">
     <input type="search" id="memberFilter"
            placeholder="Suchen: Name, Telefon, E-Mail, syBOS-ID oder Qualifikation (z. B. AGT)"
-           class="form-input" style="flex:1; min-width:260px; max-width:520px;"
+           class="form-input sys-toolbar-search"
            oninput="applyMemberFilter()">
-    <select data-no-dirty id="memberStatusFilter" class="form-select" style="width:160px;" onchange="applyMemberFilter()">
+    <select data-no-dirty id="memberStatusFilter" class="form-select sys-select-narrow sys-select-w160" onchange="applyMemberFilter()">
       <option value="all">Alle Status</option>
       <option value="active" selected>Nur aktive</option>
       <option value="inactive">Nur inaktive</option>
     </select>
-    <span class="text-muted" id="memberFilterCount" style="font-size:.85rem;"></span>
+    <span class="sys-muted sys-small" id="memberFilterCount"></span>
   </div>
 
-  {% if can_manage_members %}<div id="bulkBar" style="display:none;align-items:center;gap:10px;margin:8px 0;padding:8px 12px;background:var(--surface-2,#1f2937);border-radius:6px;">
+  {% if can_manage_members %}<div id="bulkBar" class="sys-bulk-bar">
     <span><strong id="bulkCount">0</strong> ausgewählt</span>
     <button type="button" class="btn btn--danger btn--sm" onclick="bulkDeleteMembers()">Auswahl löschen</button>
     <button type="button" class="btn btn--ghost btn--sm" onclick="clearMemberSelection()">Auswahl aufheben</button>
   </div>
 
-  <form id="bulkDeleteForm" method="post" action="/admin/mitglieder/bulk-delete" style="display:none"></form>
+  <form id="bulkDeleteForm" method="post" action="/admin/mitglieder/bulk-delete" class="sys-hidden"></form>
   {% endif %}
 
-  <table class="table-admin table-admin--cards" id="membersTable">
+  <div class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive sys-table--wide" id="membersTable">
     <thead>
       <tr>
-        {% if can_manage_members %}<th style="width:32px"><input type="checkbox" id="selectAllMembers" onchange="toggleSelectAllMembers(this)"></th>{% endif %}
+        {% if can_manage_members %}<th class="sys-col-32"><input type="checkbox" id="selectAllMembers" aria-label="Alle auswählen" onchange="toggleSelectAllMembers(this)"></th>{% endif %}
         <th class="sortable" data-sort="name" onclick="sortMembers('name')">Name <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th>Qualifikationen</th>
         <th class="sortable" data-sort="phone" onclick="sortMembers('phone')">Telefon <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
@@ -122,7 +130,7 @@
         </td>
         {% set _existing_quals = {} %}
         {% for mq in m.qualifications %}{% if mq.qualification %}{% set _ = _existing_quals.update({mq.qualification.code: (mq.valid_until.isoformat() if mq.valid_until else None)}) %}{% endif %}{% endfor %}
-        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
+        <td data-label="Aktionen"><div class="sys-row sys-gap-sm">
           {% if can_manage_members %}<button class="btn btn--ghost btn--xs"
                   onclick="openEditMember({{ m.id }}, '{{ m.lastname|replace("'","\\'")|e }}', '{{ m.firstname|replace("'","\\'")|e }}', '{{ m.phone or "" }}', '{{ m.email or "" }}', '{{ m.sybos_id or "" }}')">
             Bearbeiten
@@ -131,25 +139,22 @@
                   onclick="openQualiEditor({{ m.id }}, '{{ m.full_name|replace("'","\\'")|e }}', {{ _existing_quals|tojson|forceescape }})">
             Qualifikationen
           </button>
-          {% if can_manage_members %}<form method="post" action="/admin/mitglieder/{{ m.id }}/toggle" style="display:inline">
+          {% if can_manage_members %}<form method="post" action="/admin/mitglieder/{{ m.id }}/toggle" class="sys-inline-form">
             <button type="submit" class="btn btn--ghost btn--xs">
               {% if m.active %}Deaktivieren{% else %}Aktivieren{% endif %}
             </button>
           </form>
           {% if mailing_tags %}{% with member=m, tags=mailing_tags, assigned_ids=mailing_tag_assignments.get(m.id, []) %}{% include "mailing/_member_tags.html" %}{% endwith %}{% endif %}{% endif %}
-        </td>
+        </div></td>
       </tr>
       {% else %}
-      <tr><td colspan="{{ 8 if can_manage_members else 7 }}" class="text-center text-muted">Keine Mitglieder.</td></tr>
+      <tr><td colspan="{{ 8 if can_manage_members else 7 }}" class="sys-table-empty sys-muted">Keine Mitglieder.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </div>
 </div>
-
-<style>
-  #membersTable th.sortable { cursor: pointer; user-select: none; }
-  #membersTable th.sortable:hover { color: var(--red-light, #ff5252); }
-</style>
 
 {% if can_manage_members %}
 <!-- Excel Import -->
@@ -160,12 +165,12 @@
       <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
-      <p style="margin-bottom:8px;font-size:.85rem;color:var(--text-muted);">
+      <p class="sys-muted sys-small sys-mb-1">
         Excel-Datei (.xlsx) mit den Spalten <strong>Vorname</strong> und <strong>Zuname/Nachname</strong>
         sowie optional <strong>Telefon</strong>, <strong>E-Mail</strong>, <strong>Bezeichnung</strong>
         und <strong>syBOS-ID</strong>.
       </p>
-      <ul style="margin:0 0 12px 0;padding-left:18px;font-size:.82rem;color:var(--text-muted);line-height:1.7;">
+      <ul class="sys-hint-list sys-mb-2">
         <li><strong>Neue Mitglieder</strong> werden angelegt.</li>
         <li><strong>Bestehende Mitglieder</strong> (gleicher Name) werden aktualisiert: Telefon, E-Mail und syBOS-ID werden überschrieben, sofern in der Datei vorhanden.</li>
         <li><strong>Einsatzfunktionen-Liste</strong> (Bezeichnung = z. B. „Maschinist", „Atemschutz"): Qualifikationen werden additiv ergänzt – nie gelöscht.</li>
@@ -208,7 +213,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Qualifikationen</label>
-        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        <div class="sys-wrap-gap">
           {% for q in qualifications %}
           <label class="checkbox-label"><input type="checkbox" name="qualification_codes" value="{{ q.code }}"> {{ q.label }} ({{ q.code }})</label>
           {% endfor %}
@@ -246,7 +251,7 @@
         <div class="form-group">
           <label class="form-label">syBOS-ID</label>
           <input type="text" name="sybos_id" id="em_sybos_id" class="form-input">
-          <p class="form-hint" style="margin:4px 0 0 0">Verknüpft DIBOS-Personenrückmeldungen (Zu-/Absagen) automatisch mit diesem Mitglied.</p>
+          <p class="form-hint">Verknüpft DIBOS-Personenrückmeldungen (Zu-/Absagen) automatisch mit diesem Mitglied.</p>
         </div>
       </div>
       <div class="modal__footer">
@@ -269,14 +274,14 @@
       <div class="modal__body">
         <div class="form-group">
           <label class="form-label">Qualifikationen mit optionalem Ablaufdatum</label>
-          <div style="display:flex; flex-direction:column; gap:6px;">
+          <div class="sys-fieldset-stack">
             {% for q in qualifications %}
-            <div style="display:flex; align-items:center; gap:10px;">
-              <label style="min-width:160px">
+            <div class="sys-row">
+              <label class="sys-label-min160">
                 <input type="checkbox" name="qualification_codes" value="{{ q.code }}"> {{ q.label }} ({{ q.code }})
               </label>
-              <input type="date" name="valid_until_{{ q.code }}" class="form-input form-input--sm"
-                     placeholder="Ablaufdatum (optional)" style="width:160px">
+              <input type="date" name="valid_until_{{ q.code }}" class="form-input form-input--sm sys-input-w160"
+                     placeholder="Ablaufdatum (optional)">
             </div>
             {% endfor %}
           </div>
