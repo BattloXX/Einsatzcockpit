@@ -203,6 +203,18 @@ async def admin_push_pruefen(org_id: int | None = None, limit: int = 20, quelle:
     return await call_tool("admin_push_pruefen", org_id=org_id, limit=limit, quelle=quelle)
 
 
+@server.tool(description=ADMIN_TOOLS["admin_geraete_pruefen"].description)
+async def admin_geraete_pruefen(org_id: int | None = None, nur_probleme: bool = False,
+                               sdk_max: int | None = None, limit: int = 50) -> dict:
+    return await call_tool("admin_geraete_pruefen", org_id=org_id, nur_probleme=nur_probleme,
+                           sdk_max=sdk_max, limit=limit)
+
+
+@server.tool(description=ADMIN_TOOLS["admin_geraet_details"].description)
+async def admin_geraet_details(geraet_id: int) -> dict:
+    return await call_tool("admin_geraet_details", geraet_id=geraet_id)
+
+
 @server.tool(description=ADMIN_TOOLS["admin_diagnose_starten"].description)
 async def admin_diagnose_starten(checks: list[str] | None = None, umfang: str = "schnell") -> dict:
     return await call_tool("admin_diagnose_starten", checks=checks, umfang=umfang)

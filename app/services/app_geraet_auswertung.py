@@ -199,8 +199,10 @@ def liste(
     nur_probleme: bool = False,
     lange_nicht_gesehen: bool = False,
     page: int = 0,
-    page_size: int = 25,
+    page_size: int | None = 25,
+    geraet_id: int | None = None,
 ) -> dict:
+    # None liefert die vollstaendige Auswahl fuer lesende Aggregate.
     soll = soll_version()
     query = (
         select(AppGeraet, User, FireDept, DeviceToken, VehicleMaster)
@@ -211,6 +213,7 @@ def liste(
     )
     query = _scope(db, query)
     for name, value in (
+        ("id", geraet_id),
         ("org_id", org_id),
         ("android_version", android_version),
         ("geraeteklasse", geraeteklasse),
@@ -252,9 +255,10 @@ def liste(
                 gesundheit=gesundheit(codes),
                 befunde=codes,
                 fehlerzahl=sum(f.anzahl for f in fehler),
+                fehler=fehler,
             )
         )
-    size = max(1, min(page_size, 100))
+    size = max(1, min(page_size, 100)) if page_size is not None else max(1, len(rows))
     page = max(0, page)
     return dict(
         geraete=rows[page * size : (page + 1) * size], gesamt=len(rows), page=page, page_size=size, soll_version=soll

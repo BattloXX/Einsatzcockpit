@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from app import log_buffer
+from app.admin_mcp.geraete_tools import collect_geraete
 from app.admin_mcp.masking import mask_text
 from app.admin_mcp.osm_tools import collect_osm
 from app.config import settings
@@ -31,7 +32,14 @@ ADMIN_TOOLS = {
 }
 
 
+GERAETE_TOOLS = {
+    "admin_geraete_pruefen": AdminTool("App-Geraeteflotte, Verteilungen und gemeinsame Befunde lesen.", "app"),
+    "admin_geraet_details": AdminTool("App-Geraetedetails und Einstellungen ausschliesslich lesen.", "app"),
+}
+ADMIN_TOOLS.update(GERAETE_TOOLS)
 READ_TOOLS = tuple(ADMIN_TOOLS)
+# Parametrisierte Detail-/Flottenabfragen gehoeren nicht in Gesamtzustand-Panels.
+OVERVIEW_EXCLUDED = ("admin_system_uebersicht", "admin_logs_analysieren", *GERAETE_TOOLS)
 ADMIN_TOOLS["admin_push_pruefen"] = AdminTool(
     "FCM-Konfiguration, Token-Faehigkeiten je Org und letzte Push-Zustellungen mit Empfangsbestaetigung lesen.", "push")
 ADMIN_TOOLS["admin_osm_pruefen"] = AdminTool("Lokalen OSM-Bestand, Statistik und optionale Live-Proben lesen.", "osm")
@@ -57,7 +65,7 @@ def collect(db, name: str, **arguments) -> dict:
     if name == "admin_system_uebersicht":
         parts = {}
         for key in (*READ_TOOLS, "admin_osm_pruefen"):
-            if key in ("admin_system_uebersicht", "admin_logs_analysieren"):
+            if key in OVERVIEW_EXCLUDED:
                 continue
             try:
                 parts[key] = collect(db, key, **({"live": False} if key == "admin_osm_pruefen" else {}))
@@ -80,6 +88,8 @@ def collect(db, name: str, **arguments) -> dict:
         return {"status": status, "github_zugang": access, "evidence": {"version": version["evidence"],
                 "deploy": deploy,
                 "teilchecks": {k: v["status"] for k, v in parts.items()}}}
+    if name in GERAETE_TOOLS:
+        return collect_geraete(db, name, **arguments)
     if name == "admin_push_pruefen":
         return diagnose.push_summary(db, arguments.get("org_id"), arguments.get("limit", 20), arguments.get("quelle"))
     if name == "admin_osm_pruefen":

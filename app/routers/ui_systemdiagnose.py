@@ -14,7 +14,7 @@ from app.admin_mcp.code_tools import collect_code, safe_title
 from app.admin_mcp.diagnose_tools import collect_diagnose
 from app.admin_mcp.login_hinweise import HINWEISE
 from app.admin_mcp.masking import mask_text
-from app.admin_mcp.registry import READ_TOOLS, collect
+from app.admin_mcp.registry import OVERVIEW_EXCLUDED, READ_TOOLS, collect
 from app.admin_mcp.repair_tools import collect_repair
 from app.config import settings
 from app.core.async_bridge import run_async
@@ -99,7 +99,7 @@ def render(request, db, section, **extra):
     if section == "gesamt":
         context["summary"] = collect(db, "admin_system_uebersicht")
         context["parts"] = {name: collect(db, name) for name in READ_TOOLS
-                            if name not in ("admin_system_uebersicht", "admin_logs_analysieren")}
+                            if name not in OVERVIEW_EXCLUDED}
     elif section == "diagnose":
         context["run"] = db.scalar(select(DiagRun).order_by(DiagRun.id.desc()).limit(1))
         context["throttled"] = einsatz_aktiv(db)
