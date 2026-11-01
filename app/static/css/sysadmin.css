@@ -118,11 +118,11 @@
 .sys-security-card .card-body > * + * { margin-top: .75rem; }
 .sys-security-card .sys-inline-form { display: inline; }
 .sys-security-card .form-input { max-width: 100%; box-sizing: border-box; }
-.sys-security-card .sys-switch-row input[type="checkbox"] { appearance: none; position: relative; flex: 0 0 3rem; width: 3rem; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; cursor: pointer; }
-.sys-security-card .sys-switch-row input[type="checkbox"]::before { content: ""; position: absolute; inset: .6rem 0; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-high); }
-.sys-security-card .sys-switch-row input[type="checkbox"]::after { content: ""; position: absolute; top: 50%; left: .25rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--on-surface); transform: translateY(-50%); }
-.sys-security-card .sys-switch-row input:checked::before { background: var(--green); }
-.sys-security-card .sys-switch-row input:checked::after { left: 1.75rem; background: var(--surface); }
+.sys-settings .sys-switch-row input[type="checkbox"] { appearance: none; position: relative; flex: 0 0 3rem; width: 3rem; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; cursor: pointer; }
+.sys-settings .sys-switch-row input[type="checkbox"]::before { content: ""; position: absolute; inset: .6rem 0; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-high); }
+.sys-settings .sys-switch-row input[type="checkbox"]::after { content: ""; position: absolute; top: 50%; left: .25rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--on-surface); transform: translateY(-50%); }
+.sys-settings .sys-switch-row input:checked::before { background: var(--green); }
+.sys-settings .sys-switch-row input:checked::after { left: 1.75rem; background: var(--surface); }
 @media (min-width: 1100px) {
   .sys-subnav { position: sticky; top: calc(var(--topnav-h, 4rem) + 1rem); float: left; display: block; width: 12rem; box-sizing: border-box; max-height: calc(100dvh - var(--topnav-h, 4rem) - 2rem); overflow-y: auto; }
   .sys-subnav__group { display: grid; gap: .25rem; margin-bottom: .75rem; }
@@ -134,4 +134,27 @@
 .admin-main:has(.sys-settings) { min-width: 0; }
 @media (max-width: 1100px) {
   .sys-settings section[id] { scroll-margin-top: calc(var(--topnav-h, 4rem) + 4rem); }
+}
+
+/* Formulare und mobile Einstellungslisten (System-Einstellungen). */
+.sys-settings .sys-card > .sys-muted { margin: 0 0 1rem; }
+.sys-settings .sys-new-setting { margin: 1rem 0; }
+.sys-settings .sys-form-grid > .sys-switch-row { display: flex; align-self: stretch; }
+.sys-settings .sys-field { display: grid; gap: .4rem; min-width: 0; }
+.sys-settings .sys-switch-row { margin: 0; }
+.sys-settings .sys-switch-row small { display: block; margin-top: .3rem; }
+.sys-settings .sys-table .form-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.sys-settings .sys-table--settings { table-layout: fixed; }
+.sys-settings .sys-table--settings th:first-child { width: 27%; }
+.sys-settings .sys-table--settings th:nth-child(2) { width: 30%; }
+.sys-settings .sys-table--settings .sys-switch-row { border: 0; padding: 0; }
+.sys-settings .sys-table--settings .sys-switch-row > span { font-size: .85rem; }
+@media (max-width: 760px) {
+  .sys-settings .sys-table--settings { min-width: 0; }
+  .sys-settings .sys-table--settings :is(thead, th) { display: none; }
+  .sys-settings .sys-table--settings :is(tbody, tr, td) { display: block; width: auto; }
+  .sys-settings .sys-table--settings tr { padding: .75rem 0; border-bottom: 1px solid var(--border); }
+  .sys-settings .sys-table--settings tr:last-child { border: 0; }
+  .sys-settings .sys-table--settings td { padding: .35rem 0; border: 0; }
+  .sys-settings .sys-table--settings td::before { content: attr(data-label); display: block; margin-bottom: .3rem; font-size: .8rem; font-weight: 700; color: var(--text-muted); }
 }
