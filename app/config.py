@@ -134,6 +134,13 @@ class Settings(BaseSettings):
     FCM_PROJECT_ID: str = ""
     # Pfad zur Service-Account-JSON-Datei (außerhalb des Repos!)
     FCM_CREDENTIALS_PATH: str = ""
+    # .p8-Schluessel mit APNs-Berechtigung aus dem Apple-Developer-Portal, ausserhalb des Repos.
+    APNS_KEY_PATH: str = ""
+    APNS_KEY_ID: str = ""
+    APNS_TEAM_ID: str = ""
+    APNS_BUNDLE_ID: str = "cloud.einsatzleiter.app"
+    # Sandbox fuer Entwicklungs-Builds.
+    APNS_SANDBOX: bool = False
     # Apple Developer Team-ID, 10 Zeichen; leer = AASA nicht ausgeliefert
     APPLE_TEAM_ID: str = ""
     # Erst nach Freigabe der Critical-Alerts-Berechtigung durch Apple aktivieren.

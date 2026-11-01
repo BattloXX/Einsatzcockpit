@@ -16,11 +16,14 @@ from sqlalchemy.orm import Session
 from app.core.async_bridge import run_async
 from app.core.dependencies import _set_module_states
 from app.core.permissions import can_view_kontakt_directory, can_view_kontakt_directory_request
+from app.core.queries import visible_incidents_q
 from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
+from app.models.incident import Incident
+from app.models.live_activity import LiveActivityToken
 from app.models.master import VehicleMaster
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, PushLog, User
-from app.services import app_geraet_service, push_service
+from app.services import app_geraet_service, live_activity_service, push_service
 from app.services import device_auth_failure_service as dat
 from app.services.einsatz_live_service import build_live_state
 from app.services.gsl_live_service import build_gsl_live_state, build_my_lage_queue
@@ -244,6 +247,50 @@ def register_fcm_token(request: Request, db: Session = Depends(get_db)):
         "ok": True,
         "capabilities": gespeichert.split(",") if gespeichert else [],
     })
+
+
+def _live_activity_body(request: Request) -> dict:
+    try:
+        data = run_async(request.json)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Ungueltiges JSON") from exc
+    token = data.get("token") if isinstance(data, dict) else None
+    if not isinstance(token, str) or re.fullmatch(r"[0-9a-fA-F]{1,512}", token) is None:
+        raise HTTPException(status_code=400, detail="Ungueltiges Token")
+    return data
+
+
+@router.post("/live-activity-token")
+def register_live_activity_token(request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None) or _resolve_user_via_bearer_token(request, db)
+    if not user:
+        raise _unauthorized(request)
+    data = _live_activity_body(request)
+    kind = data.get("kind")
+    incident_id = data.get("incident_id")
+    if kind not in ("start", "activity") or (
+        incident_id is not None and type(incident_id) is not int
+    ) or (kind == "activity" and incident_id is None):
+        raise HTTPException(status_code=400, detail="Ungueltige Art oder incident_id")
+    if incident_id is not None and visible_incidents_q(db, user).filter(Incident.id == incident_id).first() is None:
+        raise HTTPException(status_code=404, detail="Einsatz nicht gefunden")
+    device = _get_device_token(user.id, db, request)
+    live_activity_service.upsert_token(db, user, kind, data["token"], incident_id, device.id if device else None)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/live-activity-token")
+def unregister_live_activity_token(request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None) or _resolve_user_via_bearer_token(request, db)
+    if not user:
+        raise _unauthorized(request)
+    data = _live_activity_body(request)
+    row = db.query(LiveActivityToken).filter_by(token=data["token"], user_id=user.id).first()
+    if row is not None:
+        db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 _FCM_ALARM_TEST_SPERRE = timedelta(seconds=20)
