@@ -1,46 +1,45 @@
 {# HTMX-Partial: direktes Repo-Update (Branch) – wird in #github-branch-box geswapped #}
-<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+<div class="sys-row sys-between sys-mb-2">
   <form hx-get="/admin/system/update/check-branch"
         hx-target="#github-branch-box" hx-swap="innerHTML"
-        style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-    <label style="font-size:.87rem;">Branch</label>
+        class="sys-row sys-gap-sm">
+    <label class="sys-small">Branch</label>
     {% if branches %}
-    <select name="branch" class="form-control" style="max-width:280px;padding:4px 8px;"
+    <select name="branch" class="form-control sys-select-narrow"
             onchange="this.form.requestSubmit()">
       {% for b in branches %}
       <option value="{{ b.name }}" {% if b.name == branch %}selected{% endif %}>{{ b.name }} ({{ b.sha }})</option>
       {% endfor %}
     </select>
     {% else %}
-    <input type="text" name="branch" value="{{ branch }}" class="form-control"
-           style="max-width:220px;padding:4px 8px;" placeholder="main">
+    <input type="text" name="branch" value="{{ branch }}" class="form-control sys-select-narrow" placeholder="main">
     {% endif %}
     <button type="submit" class="btn btn--secondary btn--sm">Prüfen</button>
   </form>
   {% if deployed_ref %}
-  <span class="text-muted" style="font-size:.8rem;">
+  <span class="sys-muted sys-small">
     Zuletzt eingespielt: <code>{{ deployed_ref.branch }}@{{ deployed_ref.sha[:7] }}</code>
   </span>
   {% endif %}
 </div>
 
 {% if branch_info.get('error') %}
-<div class="alert alert--error" style="margin-bottom:0;">
-  Branch <code>{{ branch }}</code> nicht abrufbar: <code style="font-size:.82rem;">{{ branch_info.error }}</code><br>
-  <span style="font-size:.82rem;">Bei privatem Repository unten einen GitHub-Token hinterlegen.</span>
+<div class="alert alert--error sys-alert-flush">
+  Branch <code>{{ branch }}</code> nicht abrufbar: <code class="sys-small">{{ branch_info.error }}</code><br>
+  <span class="sys-small">Bei privatem Repository unten einen GitHub-Token hinterlegen.</span>
 </div>
 {% else %}
 
 {% set ist_eingespielt = deployed_ref and deployed_ref.sha == branch_info.sha %}
-<div style="padding:10px 14px;background:var(--surface-low,#f3f4f6);border-radius:6px;border:1px solid var(--border);margin-bottom:12px;">
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-    <code style="font-size:.85rem;">{{ branch }}@{{ branch_info.sha_short }}</code>
+<div class="sys-hint-box">
+  <div class="sys-row">
+    <code>{{ branch }}@{{ branch_info.sha_short }}</code>
     {% if ist_eingespielt %}
-    <span class="badge-pill badge-pill--green" style="font-size:.78rem;padding:2px 7px;">bereits eingespielt</span>
+    <span class="sys-pill sys-status--ok">{{ icon("check", size="sm") }} bereits eingespielt</span>
     {% endif %}
   </div>
-  <div style="font-size:.85rem;margin-top:6px;">{{ branch_info.commit_message }}</div>
-  <div class="text-muted" style="font-size:.78rem;margin-top:2px;">
+  <div class="sys-mt-1">{{ branch_info.commit_message }}</div>
+  <div class="sys-muted sys-small">
     {{ branch_info.commit_author }}{% if branch_info.commit_date %} · {{ branch_info.commit_date }}{% endif %}
   </div>
 </div>
@@ -52,17 +51,17 @@
                  this.querySelector('button[type=submit]').textContent='Wird eingespielt…', true)">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <input type="hidden" name="branch" value="{{ branch }}">
-  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+  <div class="sys-row">
     <button type="submit" class="btn btn--danger" {% if ist_eingespielt %}disabled title="Dieser Stand ist bereits eingespielt"{% endif %}>
       Branch-Stand einspielen
     </button>
-    <label style="display:flex;align-items:center;gap:5px;font-size:.85rem;cursor:pointer;">
+    <label class="sys-check sys-small">
       <input type="checkbox" name="install_deps_raw" value="1" checked>
       Abhängigkeiten installieren (<code>pip install -e .</code>)
     </label>
   </div>
 </form>
-<p class="text-muted" style="font-size:.78rem;margin:8px 0 0;">
+<p class="sys-muted sys-text-xs sys-mt-1">
   Lädt den GitHub-Zipball des Branches und spielt ihn über den regulären Update-Mechanismus ein
   (geschützte Dateien bleiben erhalten, danach Migrationen + Server-Reload). Gedacht für Hotfixes
   und Testsysteme — für Produktion sind Releases der sauberere Weg.
@@ -71,7 +70,7 @@
 
 {% if update_result is defined %}
 {% if update_result.success %}
-<div class="alert alert--success" style="margin-top:12px;margin-bottom:0;">
+<div class="alert alert--success sys-alert-top">
   <strong>Update erfolgreich!</strong><br>
   Dateien aktualisiert: {{ update_result.files_updated }},
   geschützt übersprungen: {{ update_result.files_skipped }},
@@ -81,7 +80,7 @@
   Server-Reload: {{ 'Ja' if update_result.server_reloaded else 'Manuell erforderlich' }}
 </div>
 {% else %}
-<div class="alert alert--error" style="margin-top:12px;margin-bottom:0;">
+<div class="alert alert--error sys-alert-top">
   <strong>Fehler:</strong> {{ update_result.message }}
   {% if update_result.locked %}<br><code>locked: true</code>{% endif %}
   {% if update_result.backup is defined %}<br>Backup: {{ update_result.backup.message }}{% endif %}

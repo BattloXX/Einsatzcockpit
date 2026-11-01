@@ -1,44 +1,44 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Backup & Export – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='updates_backups' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div><h1>Backup & Export</h1><p class="page-header__sub">Stammdaten-Backup für Migration und Restore</p></div>
-  </div>
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("package") }} Backup & Export</h1>
+    <p class="sys-muted">Stammdaten-Backup für Migration und Restore</p>
+  </header>
 
-  <div class="admin-grid">
-    <div class="admin-card">
-      <div class="admin-card__icon">{{ icon("package", size="lg") }}</div>
-      <div class="admin-card__title">JSON-Export (Stammdaten)</div>
-      <div class="admin-card__desc">Exportiert alle Stammdaten (Fahrzeuge, Mitglieder, Qualifikationen, Alarmtypen, Auftragsvorlagen, Lage-Hinweise, Ausrückordnung) als JSON-Datei.</div>
-      <div style="margin-top:16px">
+  <div class="sys-tpl-grid">
+    <section class="sys-card sys-card--col">
+      <div class="sys-card__head"><h2>{{ icon("package") }} JSON-Export (Stammdaten)</h2></div>
+      <p class="sys-muted sys-m-0">Exportiert alle Stammdaten (Fahrzeuge, Mitglieder, Qualifikationen, Alarmtypen, Auftragsvorlagen, Lage-Hinweise, Ausrückordnung) als JSON-Datei.</p>
+      <div class="sys-actions sys-push-bottom">
         <a href="/admin/backup/json" class="btn btn--primary">JSON herunterladen</a>
       </div>
-    </div>
+    </section>
 
-    <div class="admin-card">
-      <div class="admin-card__icon">{{ icon("inbox", size="lg") }}</div>
-      <div class="admin-card__title">JSON-Import (Restore)</div>
-      <div class="admin-card__desc">Importiert Stammdaten aus einem zuvor erstellten JSON-Export. Bestehende Datensätze werden aktualisiert (Upsert).</div>
-      <div style="margin-top:16px">
-        <form method="post" action="/admin/backup/restore" enctype="multipart/form-data"
-              onsubmit="return confirm('Wirklich importieren? Bestehende Daten werden überschrieben.')">
-          <input type="file" name="backup_file" accept=".json" required class="form-input" style="margin-bottom:8px">
-          <button type="submit" class="btn btn--danger">Import starten</button>
-        </form>
-        {% if import_result %}
-        <pre style="margin-top:12px; font-size:.8rem; white-space:pre-wrap">{{ import_result }}</pre>
-        {% endif %}
-      </div>
-    </div>
+    <section class="sys-card sys-card--col">
+      <div class="sys-card__head"><h2>{{ icon("inbox") }} JSON-Import (Restore)</h2></div>
+      <p class="sys-muted sys-m-0">Importiert Stammdaten aus einem zuvor erstellten JSON-Export. Bestehende Datensätze werden aktualisiert (Upsert).</p>
+      <form method="post" action="/admin/backup/restore" enctype="multipart/form-data" class="sys-stack sys-push-bottom"
+            onsubmit="return confirm('Wirklich importieren? Bestehende Daten werden überschrieben.')">
+        <input type="file" name="backup_file" accept=".json" required class="form-input">
+        <div class="sys-actions sys-m-0"><button type="submit" class="btn btn--danger">Import starten</button></div>
+      </form>
+      {% if import_result %}
+      <pre class="sys-notes">{{ import_result }}</pre>
+      {% endif %}
+    </section>
 
-    <div class="admin-card">
-      <div class="admin-card__icon">{{ icon("archive", size="lg") }}</div>
-      <div class="admin-card__title">MariaDB-Dump</div>
-      <div class="admin-card__desc">Für vollständige DB-Backups (inkl. Einsatzdaten) das CloudPanel-Backup-Tool verwenden. Die JSON-Export-Funktion hier deckt nur Stammdaten ab.</div>
-    </div>
+    <section class="sys-card sys-card--col">
+      <div class="sys-card__head"><h2>{{ icon("archive") }} MariaDB-Dump</h2></div>
+      <p class="sys-muted sys-m-0">Für vollständige DB-Backups (inkl. Einsatzdaten) das CloudPanel-Backup-Tool verwenden. Die JSON-Export-Funktion hier deckt nur Stammdaten ab.</p>
+    </section>
   </div>
 </div>
 {% endblock %}

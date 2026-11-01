@@ -1,68 +1,71 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Über diese App{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block admin_content %}
-<div class="page-header">
-  <h1>Über {{ brand }}</h1>
-</div>
-
-<div class="card mb-4" style="max-width:600px">
-  <div class="card-body">
-    <div style="display:flex;align-items:center;gap:1.5rem;margin-bottom:1.5rem">
-      <img src="/static/img/logo_einsatzcockpit.png" alt="Logo" style="height:64px;object-fit:contain">
-      <div>
-        <div style="font-size:2rem;font-weight:700;color:var(--red)">v{{ version }}</div>
-        <div style="color:var(--text-muted)">{{ brand }}</div>
-      </div>
+<div class="sys-page">
+<header class="sys-hero">
+  <div class="sys-row sys-about-head">
+    <img src="/static/img/logo_einsatzcockpit.png" alt="Logo" class="sys-about-logo">
+    <div>
+      <h1>{{ icon("info-circle") }} Über {{ brand }}</h1>
+      <div class="sys-about-version">v{{ version }}</div>
     </div>
+  </div>
+</header>
 
-    <dl class="info-list">
-      <dt>Version</dt>
-      <dd><strong>{{ version }}</strong></dd>
+<section class="sys-card sys-form-wide">
+    <dl class="sys-kv">
+      <div><dt>Version</dt>
+      <dd><strong>{{ version }}</strong></dd></div>
 
-      <dt>Python</dt>
-      <dd>3.14</dd>
+      <div><dt>Python</dt>
+      <dd>3.14</dd></div>
 
-      <dt>Framework</dt>
-      <dd>FastAPI + HTMX + Alpine.js</dd>
+      <div><dt>Framework</dt>
+      <dd>FastAPI + HTMX + Alpine.js</dd></div>
 
-      <dt>Datenbank</dt>
-      <dd>MariaDB 10.11+ (SQLAlchemy 2.x, Alembic)</dd>
+      <div><dt>Datenbank</dt>
+      <dd>MariaDB 10.11+ (SQLAlchemy 2.x, Alembic)</dd></div>
 
-      <dt>Port</dt>
-      <dd>8092</dd>
+      <div><dt>Port</dt>
+      <dd>8092</dd></div>
 
-      <dt>Lizenz</dt>
-      <dd>LGPL-2.1 – Johannes Battlogg</dd>
+      <div><dt>Lizenz</dt>
+      <dd>LGPL-2.1 – Johannes Battlogg</dd></div>
     </dl>
 
-    <hr class="my-3">
+    <hr class="sys-divider-line">
 
-    <h3 class="mb-2">Autoren</h3>
-    <div style="display:flex;flex-direction:column;gap:.75rem">
-      <div style="display:flex;align-items:center;gap:.75rem">
-        <div class="author-avatar">JB</div>
+    <h3 class="sys-subhead">Autoren</h3>
+    <div class="sys-stack">
+      <div class="sys-row">
+        <div class="sys-avatar">JB</div>
         <div>
           <strong>Johannes Battlogg</strong>
-          <div style="color:var(--text-muted);font-size:.875rem">Lead-Entwicklung, Konzept &amp; Design</div>
-          <a href="https://github.com/BattloXX" target="_blank" rel="noopener" style="font-size:.8rem">github.com/BattloXX</a>
+          <div class="sys-muted sys-small">Lead-Entwicklung, Konzept &amp; Design</div>
+          <a href="https://github.com/BattloXX" target="_blank" rel="noopener" class="sys-small">github.com/BattloXX</a>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:.75rem">
-        <div class="author-avatar">RR</div>
+      <div class="sys-row">
+        <div class="sys-avatar">RR</div>
         <div>
           <strong>Roman Reiter</strong>
-          <div style="color:var(--text-muted);font-size:.875rem">Fachberatung Einsatzleitung &amp; Atemschutz</div>
+          <div class="sys-muted sys-small">Fachberatung Einsatzleitung &amp; Atemschutz</div>
         </div>
       </div>
     </div>
 
-    <hr class="my-3">
+    <hr class="sys-divider-line">
 
-    <h3 class="mb-2">Changelog</h3>
-    <div class="changelog">
-      <div class="version-entry">
-        <span class="version-badge">v2.1.0</span>
+    <h3 class="sys-subhead">Changelog</h3>
+    <div class="sys-changelog">
+      <div class="sys-changelog__entry">
+        <span class="sys-changelog__badge">v2.1.0</span>
         <ul>
           <li>Modul Großschadenslage: Phasen-Board, Priorisierung, Disposition, Dashboard &amp; Karte</li>
           <li>QR-Login mit Namensabfrage (author_name in allen Journal-/Meldungseinträgen)</li>
@@ -73,8 +76,8 @@
           <li>Lage-Zeitreise &amp; Übungsmodus mit ÜBUNG-Wasserzeichen</li>
         </ul>
       </div>
-      <div class="version-entry">
-        <span class="version-badge">v2.0.0</span>
+      <div class="sys-changelog__entry">
+        <span class="sys-changelog__badge">v2.0.0</span>
         <ul>
           <li>Multi-Organisations-Unterstützung (mehrere Wehren, gemeinsame Einsätze)</li>
           <li>System-Admin-Rolle (organisationsübergreifend)</li>
@@ -84,8 +87,8 @@
           <li>Port 8092</li>
         </ul>
       </div>
-      <div class="version-entry">
-        <span class="version-badge">v1.0.0</span>
+      <div class="sys-changelog__entry">
+        <span class="sys-changelog__badge">v1.0.0</span>
         <ul>
           <li>Initiale Multi-User-Webapp (FastAPI + HTMX)</li>
           <li>Kanban-Board mit WebSocket-Echtzeit-Sync</li>
@@ -100,9 +103,9 @@
       </div>
     </div>
 
-    <hr class="my-3">
+    <hr class="sys-divider-line">
 
-    <p style="font-size:.875rem;color:var(--text-muted)">
+    <p class="sys-muted sys-small">
       Dieses Werkzeug wurde speziell für die Bedürfnisse der
       Freiwilligen Feuerwehr Wolfurt entwickelt und steht allen
       österreichischen Feuerwehren unter der LGPL-2.1-Lizenz frei zur Verfügung.<br>
@@ -111,33 +114,6 @@
         github.com/BattloXX/Einsatzcockpit
       </a>
     </p>
-  </div>
+</section>
 </div>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-.author-avatar {
-  width: 40px; height: 40px;
-  background: var(--red);
-  color: white;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: .875rem;
-  flex-shrink: 0;
-}
-.changelog { display: flex; flex-direction: column; gap: 1rem; }
-.version-entry { display: flex; gap: 1rem; align-items: flex-start; }
-.version-badge {
-  background: var(--surface-2);
-  color: var(--text);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-family: monospace;
-  font-size: .85rem;
-  flex-shrink: 0;
-  margin-top: .15rem;
-}
-.version-entry ul { margin: 0; padding-left: 1.2rem; font-size: .875rem; }
-</style>
 {% endblock %}

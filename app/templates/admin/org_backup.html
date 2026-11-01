@@ -2,22 +2,25 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Datensicherung{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Datensicherung'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
 {% with section_id='org_backup' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <div>
-    <h1>Datensicherung</h1>
-    <p class="page-header__sub">Alle Daten dieser Organisation als Archiv sichern (Einsätze, Mannschaft, Objekte inkl. Dokumente/Fotos, Konfiguration) — herunterladen oder automatisch an ein eigenes Ziel senden</p>
-  </div>
-</div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("archive") }} Datensicherung</h1>
+  <p class="sys-muted">Alle Daten dieser Organisation als Archiv sichern (Einsätze, Mannschaft, Objekte inkl. Dokumente/Fotos, Konfiguration) – herunterladen oder automatisch an ein eigenes Ziel senden</p>
+</header>
 
 {% if is_sysadmin and all_orgs %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:16px 20px;">
-    <label style="font-weight:600;margin-bottom:6px;display:block;">Organisation wählen:</label>
-    <select class="form-control" style="max-width:320px"
+<section class="sys-card">
+  <div class="sys-stack">
+    <label class="sys-semibold" for="org-backup-org-select">Organisation wählen:</label>
+    <select id="org-backup-org-select" class="form-control sys-select-narrow"
             onchange="location.href='/admin/org-backup?org_id='+this.value">
       <option value="">-- bitte wählen --</option>
       {% for o in all_orgs %}
@@ -38,172 +41,171 @@
   'run_incomplete': ['error', 'Ziel unvollständig konfiguriert — Sicherung nicht möglich.'],
 } %}
 {% if flash and flash in flash_map %}
-<div class="alert alert--{{ flash_map[flash][0] }} mb-4">{{ flash_map[flash][1] }}</div>
+<div class="alert alert--{{ flash_map[flash][0] }}">{{ flash_map[flash][1] }}</div>
 {% endif %}
 
 {% if not org_backup_enabled %}
-<div class="alert alert--error mb-4">Die Datensicherung ist systemweit deaktiviert (ORG_BACKUP_ENABLED=false).</div>
+<div class="alert alert--error">Die Datensicherung ist systemweit deaktiviert (ORG_BACKUP_ENABLED=false).</div>
 {% elif not org %}
-<div class="alert alert--info mb-4">Bitte zuerst eine Organisation auswählen.</div>
+<div class="alert alert--info">Bitte zuerst eine Organisation auswählen.</div>
 {% else %}
 
-<section class="card mb-4">
-  <div class="card-body" style="padding:20px;">
-    <h2 style="margin-top:0;">Archiv herunterladen</h2>
-    <p>Erzeugt ein vollständiges, nur diese Organisation umfassendes Archiv (ZIP) und lädt es
-       sofort herunter. Ausgenommen sind server-gebundene Geheimnisse (SSO-/Mail-Secrets, API-Keys, Tokens).</p>
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("download") }} Archiv herunterladen</h2></div>
+  <p>Erzeugt ein vollständiges, nur diese Organisation umfassendes Archiv (ZIP) und lädt es
+     sofort herunter. Ausgenommen sind server-gebundene Geheimnisse (SSO-/Mail-Secrets, API-Keys, Tokens).</p>
+  <div class="sys-actions">
     <a class="btn btn--primary"
        href="/admin/org-backup/export.zip{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}">
       {{ icon("download", size="sm") }} Archiv herunterladen
     </a>
     {% if is_sysadmin %}
-    <a class="btn" href="/admin/org-backup/restore" style="margin-left:8px;">{{ icon("recycle", size="sm") }} Archiv wiederherstellen…</a>
+    <a class="btn" href="/admin/org-backup/restore">{{ icon("recycle", size="sm") }} Archiv wiederherstellen…</a>
     {% endif %}
   </div>
 </section>
 
-<section class="card mb-4">
-  <div class="card-body" style="padding:20px;">
-    <h2 style="margin-top:0;">Automatische Sicherung an ein eigenes Ziel</h2>
-    {% if cfg and cfg.last_run_at %}
-    <p class="page-header__sub">
-      Letzter Lauf: {{ (cfg.last_run_at | local_datetime) if cfg.last_run_at else '—' }} —
-      Status: <strong>{{ 'OK' if cfg.last_status == 'ok' else ('Fehler' if cfg.last_status == 'error' else '—') }}</strong>
-      {% if cfg.last_status == 'error' and cfg.last_error %}<br><span style="color:#b91c1c">{{ cfg.last_error }}</span>{% endif %}
-    </p>
-    {% endif %}
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("cloud") }} Automatische Sicherung an ein eigenes Ziel</h2></div>
+  {% if cfg and cfg.last_run_at %}
+  <p class="sys-muted">
+    Letzter Lauf: {{ (cfg.last_run_at | local_datetime) if cfg.last_run_at else '—' }} —
+    Status: <strong>{{ 'OK' if cfg.last_status == 'ok' else ('Fehler' if cfg.last_status == 'error' else '—') }}</strong>
+    {% if cfg.last_status == 'error' and cfg.last_error %}<br><span class="sys-danger">{{ cfg.last_error }}</span>{% endif %}
+  </p>
+  {% endif %}
 
-    <form method="post" action="/admin/org-backup/save" style="max-width:640px">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+  <form method="post" action="/admin/org-backup/save" class="sys-stack sys-form-wide">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
 
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-        <input type="checkbox" name="enabled" value="1" {% if cfg and cfg.enabled %}checked{% endif %}>
-        <strong>Automatische Sicherung aktiv</strong>
-      </label>
+    <label class="sys-check">
+      <input type="checkbox" name="enabled" value="1" {% if cfg and cfg.enabled %}checked{% endif %}>
+      <strong>Automatische Sicherung aktiv</strong>
+    </label>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div>
-          <label>Protokoll</label>
-          <select class="form-control" name="protocol">
-            {% for p in protokolle %}
-            <option value="{{ p }}" {% if cfg and cfg.protocol == p %}selected{% endif %}>{{ p }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label>Zielverzeichnis / Remote-Pfad</label>
-          <input class="form-control" name="remote_path" value="{{ cfg.remote_path or '' if cfg else '' }}" placeholder="/backups/ec">
-        </div>
-        <div>
-          <label>Host</label>
-          <input class="form-control" name="host" value="{{ cfg.host or '' if cfg else '' }}" placeholder="backup.example.org">
-        </div>
-        <div>
-          <label>Port (0 = Standard)</label>
-          <input class="form-control" type="number" name="port" value="{{ cfg.port if cfg else 0 }}">
-        </div>
-        <div>
-          <label>Benutzer</label>
-          <input class="form-control" name="username" value="{{ cfg.username or '' if cfg else '' }}">
-        </div>
-        <div>
-          <label>rclone-Remote (nur Protokoll rclone)</label>
-          <input class="form-control" name="rclone_remote" value="{{ cfg.rclone_remote or '' if cfg else '' }}" placeholder="offsite:">
-        </div>
-        <div>
-          <label>Passwort (nur ftp/ftps){% if cfg and cfg.password_enc %} — gesetzt{% endif %}</label>
-          <input class="form-control" type="password" name="password" autocomplete="new-password" placeholder="{% if cfg and cfg.password_enc %}unverändert lassen{% endif %}">
-          {% if cfg and cfg.password_enc %}<label style="font-weight:400"><input type="checkbox" name="clear_password" value="1"> löschen</label>{% endif %}
-        </div>
-        <div>
-          <label>SSH-Hostkey-Prüfung</label>
-          <select class="form-control" name="ssh_strict">
-            {% for s in ['accept-new','yes','no'] %}
-            <option value="{{ s }}" {% if cfg and cfg.ssh_strict == s %}selected{% endif %}>{{ s }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <div style="margin-top:10px;">
-        <label>Privater SSH-Key (nur sftp/scp/rsync){% if cfg and cfg.ssh_key_enc %} — gesetzt{% endif %}</label>
-        <textarea class="form-control" name="ssh_key" rows="3" placeholder="{% if cfg and cfg.ssh_key_enc %}unverändert lassen{% else %}-----BEGIN OPENSSH PRIVATE KEY-----{% endif %}"></textarea>
-        {% if cfg and cfg.ssh_key_enc %}<label style="font-weight:400"><input type="checkbox" name="clear_key" value="1"> Key löschen</label>{% endif %}
-      </div>
-
-      <details style="margin-top:12px;" {% if cfg and cfg.protocol == 'graph' %}open{% endif %}>
-        <summary style="cursor:pointer;font-weight:600;">Microsoft 365 (SharePoint / OneDrive) — nur für Protokoll „graph"</summary>
-        <p class="page-header__sub" style="margin:6px 0;">Azure-App (App-only) mit Berechtigung <code>Sites.ReadWrite.All</code> (SharePoint) bzw. <code>Files.ReadWrite.All</code> (OneDrive). Ziel wird über die <strong>Drive-ID</strong> adressiert (SharePoint-Dokumentbibliothek ODER OneDrive-Drive).</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div><label>Tenant-ID</label><input class="form-control" name="graph_tenant_id" value="{{ cfg.graph_tenant_id or '' if cfg else '' }}"></div>
-          <div><label>Client-ID</label><input class="form-control" name="graph_client_id" value="{{ cfg.graph_client_id or '' if cfg else '' }}"></div>
-          <div>
-            <label>Client-Secret{% if cfg and cfg.graph_client_secret_enc %} — gesetzt{% endif %}</label>
-            <input class="form-control" type="password" name="graph_client_secret" autocomplete="new-password" placeholder="{% if cfg and cfg.graph_client_secret_enc %}unverändert lassen{% endif %}">
-            {% if cfg and cfg.graph_client_secret_enc %}<label style="font-weight:400"><input type="checkbox" name="clear_graph_secret" value="1"> löschen</label>{% endif %}
-          </div>
-          <div><label>Drive-ID</label><input class="form-control" name="graph_drive_id" value="{{ cfg.graph_drive_id or '' if cfg else '' }}"></div>
-          <div><label>Ordner (im Drive)</label><input class="form-control" name="graph_folder" value="{{ cfg.graph_folder or '' if cfg else '' }}" placeholder="Backups/Einsatzcockpit"></div>
-        </div>
-      </details>
-
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px;">
-        <div>
-          <label>Zeitplan</label>
-          <select class="form-control" name="schedule">
-            <option value="daily" {% if not cfg or cfg.schedule == 'daily' %}selected{% endif %}>täglich</option>
-            <option value="weekly" {% if cfg and cfg.schedule == 'weekly' %}selected{% endif %}>wöchentlich</option>
-          </select>
-        </div>
-        <div>
-          <label>Stunde (UTC)</label>
-          <input class="form-control" type="number" min="0" max="23" name="hour" value="{{ cfg.hour if cfg else 3 }}">
-        </div>
-        <div>
-          <label>Wochentag (0=Mo)</label>
-          <input class="form-control" type="number" min="0" max="6" name="weekday" value="{{ cfg.weekday if cfg and cfg.weekday is not none else '' }}">
-        </div>
-        <div>
-          <label>Aufbewahrung</label>
-          <input class="form-control" type="number" min="1" name="keep_count" value="{{ cfg.keep_count if cfg else 7 }}">
-        </div>
-      </div>
-
-      <div style="margin-top:16px;">
-        <label style="font-weight:600;">Umfang (partielles Backup)</label>
-        <p class="page-header__sub" style="margin:4px 0 8px;">Stammdaten und Konfiguration sind immer enthalten. Abgewählte Bereiche werden nicht gesichert.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
-          {% for key, label in area_labels.items() %}
-          <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
-            <input type="checkbox" name="areas" value="{{ key }}"
-                   {% if gewaehlte_areas is none or key in gewaehlte_areas %}checked{% endif %}>
-            {{ label }}
-          </label>
+    <div class="sys-form-grid">
+      <div class="sys-field">
+        <label>Protokoll</label>
+        <select class="form-control" name="protocol">
+          {% for p in protokolle %}
+          <option value="{{ p }}" {% if cfg and cfg.protocol == p %}selected{% endif %}>{{ p }}</option>
           {% endfor %}
+        </select>
+      </div>
+      <div class="sys-field">
+        <label>Zielverzeichnis / Remote-Pfad</label>
+        <input class="form-control" name="remote_path" value="{{ cfg.remote_path or '' if cfg else '' }}" placeholder="/backups/ec">
+      </div>
+      <div class="sys-field">
+        <label>Host</label>
+        <input class="form-control" name="host" value="{{ cfg.host or '' if cfg else '' }}" placeholder="backup.example.org">
+      </div>
+      <div class="sys-field">
+        <label>Port (0 = Standard)</label>
+        <input class="form-control" type="number" name="port" value="{{ cfg.port if cfg else 0 }}">
+      </div>
+      <div class="sys-field">
+        <label>Benutzer</label>
+        <input class="form-control" name="username" value="{{ cfg.username or '' if cfg else '' }}">
+      </div>
+      <div class="sys-field">
+        <label>rclone-Remote (nur Protokoll rclone)</label>
+        <input class="form-control" name="rclone_remote" value="{{ cfg.rclone_remote or '' if cfg else '' }}" placeholder="offsite:">
+      </div>
+      <div class="sys-field">
+        <label>Passwort (nur ftp/ftps){% if cfg and cfg.password_enc %} — gesetzt{% endif %}</label>
+        <input class="form-control" type="password" name="password" autocomplete="new-password" placeholder="{% if cfg and cfg.password_enc %}unverändert lassen{% endif %}">
+        {% if cfg and cfg.password_enc %}<label class="sys-check"><input type="checkbox" name="clear_password" value="1"> löschen</label>{% endif %}
+      </div>
+      <div class="sys-field">
+        <label>SSH-Hostkey-Prüfung</label>
+        <select class="form-control" name="ssh_strict">
+          {% for s in ['accept-new','yes','no'] %}
+          <option value="{{ s }}" {% if cfg and cfg.ssh_strict == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="sys-field">
+      <label>Privater SSH-Key (nur sftp/scp/rsync){% if cfg and cfg.ssh_key_enc %} — gesetzt{% endif %}</label>
+      <textarea class="form-control" name="ssh_key" rows="3" placeholder="{% if cfg and cfg.ssh_key_enc %}unverändert lassen{% else %}-----BEGIN OPENSSH PRIVATE KEY-----{% endif %}"></textarea>
+      {% if cfg and cfg.ssh_key_enc %}<label class="sys-check"><input type="checkbox" name="clear_key" value="1"> Key löschen</label>{% endif %}
+    </div>
+
+    <details class="sys-details" {% if cfg and cfg.protocol == 'graph' %}open{% endif %}>
+      <summary class="sys-summary">Microsoft 365 (SharePoint / OneDrive) – nur für Protokoll „graph"</summary>
+      <p class="sys-muted">Azure-App (App-only) mit Berechtigung <code>Sites.ReadWrite.All</code> (SharePoint) bzw. <code>Files.ReadWrite.All</code> (OneDrive). Ziel wird über die <strong>Drive-ID</strong> adressiert (SharePoint-Dokumentbibliothek ODER OneDrive-Drive).</p>
+      <div class="sys-form-grid">
+        <div class="sys-field"><label>Tenant-ID</label><input class="form-control" name="graph_tenant_id" value="{{ cfg.graph_tenant_id or '' if cfg else '' }}"></div>
+        <div class="sys-field"><label>Client-ID</label><input class="form-control" name="graph_client_id" value="{{ cfg.graph_client_id or '' if cfg else '' }}"></div>
+        <div class="sys-field">
+          <label>Client-Secret{% if cfg and cfg.graph_client_secret_enc %} — gesetzt{% endif %}</label>
+          <input class="form-control" type="password" name="graph_client_secret" autocomplete="new-password" placeholder="{% if cfg and cfg.graph_client_secret_enc %}unverändert lassen{% endif %}">
+          {% if cfg and cfg.graph_client_secret_enc %}<label class="sys-check"><input type="checkbox" name="clear_graph_secret" value="1"> löschen</label>{% endif %}
         </div>
+        <div class="sys-field"><label>Drive-ID</label><input class="form-control" name="graph_drive_id" value="{{ cfg.graph_drive_id or '' if cfg else '' }}"></div>
+        <div class="sys-field"><label>Ordner (im Drive)</label><input class="form-control" name="graph_folder" value="{{ cfg.graph_folder or '' if cfg else '' }}" placeholder="Backups/Einsatzcockpit"></div>
       </div>
+    </details>
 
-      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;">
-        <input type="checkbox" name="include_media" value="1" {% if not cfg or cfg.include_media %}checked{% endif %}>
-        Mediendateien (Fotos/Dokumente) einschließen
-      </label>
-
-      <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn--primary" type="submit">Speichern</button>
-        <button class="btn" type="submit" formaction="/admin/org-backup/test">{{ icon("plug", size="sm") }} Verbindung testen</button>
-        <button class="btn" type="submit" formaction="/admin/org-backup/run-now">{{ icon("stopwatch", size="sm") }} Jetzt sichern</button>
+    <div class="sys-form-grid sys-form-grid--map">
+      <div class="sys-field">
+        <label>Zeitplan</label>
+        <select class="form-control" name="schedule">
+          <option value="daily" {% if not cfg or cfg.schedule == 'daily' %}selected{% endif %}>täglich</option>
+          <option value="weekly" {% if cfg and cfg.schedule == 'weekly' %}selected{% endif %}>wöchentlich</option>
+        </select>
       </div>
-    </form>
+      <div class="sys-field">
+        <label>Stunde (UTC)</label>
+        <input class="form-control" type="number" min="0" max="23" name="hour" value="{{ cfg.hour if cfg else 3 }}">
+      </div>
+      <div class="sys-field">
+        <label>Wochentag (0=Mo)</label>
+        <input class="form-control" type="number" min="0" max="6" name="weekday" value="{{ cfg.weekday if cfg and cfg.weekday is not none else '' }}">
+      </div>
+      <div class="sys-field">
+        <label>Aufbewahrung</label>
+        <input class="form-control" type="number" min="1" name="keep_count" value="{{ cfg.keep_count if cfg else 7 }}">
+      </div>
+    </div>
 
-    <p class="page-header__sub" style="margin-top:14px;">
-      <strong>Datenschutz:</strong> Das Archiv enthält personenbezogene Daten (Mannschaft, Einsätze).
-      Es wird unverschlüsselt an das von Ihnen gewählte Ziel übertragen — verwenden Sie ein
-      verschlüsseltes Protokoll (sftp/scp/rsync/ftps, nicht ftp über offene Netze) und ein
-      zugriffsbeschränktes Zielverzeichnis. SSH-Ziele nutzen Key-Authentifizierung.
-    </p>
-  </div>
+    <fieldset class="sys-fieldset">
+      <legend>Umfang (partielles Backup)</legend>
+      <p class="sys-muted sys-small">Stammdaten und Konfiguration sind immer enthalten. Abgewählte Bereiche werden nicht gesichert.</p>
+      <div class="sys-grid-2">
+        {% for key, label in area_labels.items() %}
+        <label class="sys-check">
+          <input type="checkbox" name="areas" value="{{ key }}"
+                 {% if gewaehlte_areas is none or key in gewaehlte_areas %}checked{% endif %}>
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <label class="sys-check">
+      <input type="checkbox" name="include_media" value="1" {% if not cfg or cfg.include_media %}checked{% endif %}>
+      Mediendateien (Fotos/Dokumente) einschließen
+    </label>
+
+    <div class="sys-actions">
+      <button class="btn btn--primary" type="submit">Speichern</button>
+      <button class="btn" type="submit" formaction="/admin/org-backup/test">{{ icon("plug", size="sm") }} Verbindung testen</button>
+      <button class="btn" type="submit" formaction="/admin/org-backup/run-now">{{ icon("stopwatch", size="sm") }} Jetzt sichern</button>
+    </div>
+  </form>
+
+  <p class="sys-muted sys-mt-2">
+    <strong>Datenschutz:</strong> Das Archiv enthält personenbezogene Daten (Mannschaft, Einsätze).
+    Es wird unverschlüsselt an das von Ihnen gewählte Ziel übertragen — verwenden Sie ein
+    verschlüsseltes Protokoll (sftp/scp/rsync/ftps, nicht ftp über offene Netze) und ein
+    zugriffsbeschränktes Zielverzeichnis. SSH-Ziele nutzen Key-Authentifizierung.
+  </p>
 </section>
 
 {% endif %}
+</div>
 {% endblock %}

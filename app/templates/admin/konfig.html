@@ -1,21 +1,24 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Konfig Export / Import{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Konfig'}]) }}{% endblock %}
 
 {% block admin_content %}
-<div class="page-header">
-  <div>
-    <h1>Konfig Export / Import</h1>
-    <p class="page-header__sub">Org-Konfiguration als JSON sichern und wiederherstellen</p>
-  </div>
-</div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("adjustments") }} Konfig Export / Import</h1>
+  <p class="sys-muted">Org-Konfiguration als JSON sichern und wiederherstellen</p>
+</header>
 
 {% if is_sysadmin and all_orgs %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:16px 20px;">
-    <label style="font-weight:600;margin-bottom:6px;display:block;">Organisation wählen:</label>
-    <select class="form-control" style="max-width:320px"
+<section class="sys-card">
+  <div class="sys-field sys-form-wide">
+    <label class="sys-semibold" for="konfig-org-select">Organisation wählen:</label>
+    <select id="konfig-org-select" class="form-control"
             onchange="location.href='/admin/konfig?org_id='+this.value">
       <option value="">-- bitte wählen --</option>
       {% for o in all_orgs %}
@@ -27,92 +30,86 @@
 {% endif %}
 
 {% if import_result %}
-<div class="alert alert--{% if 'Fehler' in import_result %}error{% else %}success{% endif %} mb-4">
+<div class="alert alert--{% if 'Fehler' in import_result %}error{% else %}success{% endif %}">
   {{ import_result }}
 </div>
 {% endif %}
 
 {% if diff and (diff.org or diff.settings) %}
-<section class="card mb-4">
-  <div class="card-header"><h2>Änderungsvorschau (Dry-Run)</h2></div>
-  <div class="card-body">
-    <table class="table table--compact">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("eye") }} Änderungsvorschau (Dry-Run)</h2></div>
+  <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead><tr><th>Bereich</th><th>Feld</th><th>Aktuell</th><th>Neu</th></tr></thead>
       <tbody>
         {% for c in diff.org %}
         <tr>
-          <td><span class="badge">org</span></td>
-          <td>{{ c.field }}</td>
-          <td class="text-muted">{{ c.old if c.old is not none else '–' }}</td>
-          <td style="color:var(--color-success)">{{ c.new if c.new is not none else '–' }}</td>
+          <td data-label="Bereich"><span class="sys-pill">org</span></td>
+          <td data-label="Feld">{{ c.field }}</td>
+          <td class="sys-muted" data-label="Aktuell">{{ c.old if c.old is not none else '–' }}</td>
+          <td class="sys-ok" data-label="Neu">{{ c.new if c.new is not none else '–' }}</td>
         </tr>
         {% endfor %}
         {% for c in diff.settings %}
         <tr>
-          <td><span class="badge">settings</span></td>
-          <td>{{ c.field }}</td>
-          <td class="text-muted">{{ c.old if c.old is not none else '–' }}</td>
-          <td style="color:var(--color-success)">{{ c.new if c.new is not none else '–' }}</td>
+          <td data-label="Bereich"><span class="sys-pill">settings</span></td>
+          <td data-label="Feld">{{ c.field }}</td>
+          <td class="sys-muted" data-label="Aktuell">{{ c.old if c.old is not none else '–' }}</td>
+          <td class="sys-ok" data-label="Neu">{{ c.new if c.new is not none else '–' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    {% if pending_import %}
-    <form method="post" action="/admin/konfig/import-apply" style="margin-top:12px">
-      {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-      <input type="hidden" name="konfig_json" value="{{ pending_import|e }}">
-      <button type="submit" class="btn btn--danger"
-              onclick="return confirm('Änderungen wirklich anwenden?')">Jetzt anwenden</button>
-    </form>
-    {% endif %}
   </div>
+  {% if pending_import %}
+  <form method="post" action="/admin/konfig/import-apply" class="sys-actions">
+    {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+    <input type="hidden" name="konfig_json" value="{{ pending_import|e }}">
+    <button type="submit" class="btn btn--danger"
+            onclick="return confirm('Änderungen wirklich anwenden?')">Jetzt anwenden</button>
+  </form>
+  {% endif %}
 </section>
 {% elif diff is not none %}
-<div class="alert alert--info mb-4">Keine Änderungen – Konfig ist bereits aktuell.</div>
+<div class="alert alert--info">Keine Änderungen – Konfig ist bereits aktuell.</div>
 {% endif %}
 
-<div class="admin-grid">
-  <div class="admin-card">
-    <div class="admin-card__icon">{{ icon("package", size="lg") }}</div>
-    <div class="admin-card__title">JSON-Export</div>
-    <div class="admin-card__desc">
+<div class="sys-grid sys-grid--top">
+  <section class="sys-card sys-card--col">
+    <div class="sys-card__head"><h2>{{ icon("package") }} JSON-Export</h2></div>
+    <p class="sys-muted sys-m-0">
       Exportiert Org-Stammdaten und OrgSettings (inkl. Auto-Schließen-Override) als JSON-Datei.
       Keine Einsatzdaten, keine API-Keys.
-    </div>
-    <div style="margin-top:16px">
+    </p>
+    <div class="sys-actions sys-push-bottom">
       {% if org %}
       <a id="exportLink"
          href="/admin/konfig/export.json{% if is_sysadmin %}?org_id={{ org.id }}{% endif %}"
          class="btn btn--primary">JSON herunterladen</a>
       {% else %}
-      <span class="text-muted">Bitte zuerst eine Organisation wählen.</span>
+      <span class="sys-muted">Bitte zuerst eine Organisation wählen.</span>
       {% endif %}
     </div>
-  </div>
+  </section>
 
-  <div class="admin-card">
-    <div class="admin-card__icon">{{ icon("inbox", size="lg") }}</div>
-    <div class="admin-card__title">JSON-Import</div>
-    <div class="admin-card__desc">
+  <section class="sys-card sys-card--col">
+    <div class="sys-card__head"><h2>{{ icon("inbox") }} JSON-Import</h2></div>
+    <p class="sys-muted sys-m-0">
       Importiert Org-Konfiguration aus einer zuvor exportierten JSON-Datei.
       Mit „Nur Vorschau" werden Änderungen angezeigt, aber nicht gespeichert.
-    </div>
-    <div style="margin-top:16px">
-      <form method="post" action="/admin/konfig/import" enctype="multipart/form-data">
-        {% if is_sysadmin and org %}
-        <input type="hidden" name="target_org_id" value="{{ org.id }}">
-        {% endif %}
-        <input type="file" name="konfig_file" accept=".json" required
-               class="form-input" style="margin-bottom:8px">
-        <div style="margin-bottom:10px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-            <input type="checkbox" name="dry_run" value="1" checked>
-            Nur Vorschau (nicht anwenden)
-          </label>
-        </div>
-        <button type="submit" class="btn btn--primary">Prüfen / Importieren</button>
-      </form>
-    </div>
-  </div>
+    </p>
+    <form method="post" action="/admin/konfig/import" enctype="multipart/form-data" class="sys-stack sys-push-bottom">
+      {% if is_sysadmin and org %}
+      <input type="hidden" name="target_org_id" value="{{ org.id }}">
+      {% endif %}
+      <input type="file" name="konfig_file" accept=".json" required class="form-input">
+      <label class="sys-check">
+        <input type="checkbox" name="dry_run" value="1" checked>
+        Nur Vorschau (nicht anwenden)
+      </label>
+      <div class="sys-actions sys-m-0"><button type="submit" class="btn btn--primary">Prüfen / Importieren</button></div>
+    </form>
+  </section>
+</div>
 </div>
 {% endblock %}

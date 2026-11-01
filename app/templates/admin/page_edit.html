@@ -3,6 +3,7 @@
 
 {% block head_extra %}
 {{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
 <link href="/static/css/quill.snow.css" rel="stylesheet">
 <style>
   /* ── Quill dark-theme overrides ──────────────────────────────────── */
@@ -82,20 +83,23 @@
 {% block admin_content %}
 {% with section_id='systemkonfiguration' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <div>
-    <h1>{{ meta.label }} bearbeiten</h1>
-    <p class="page-header__sub">Ganze Seite visuell oder direkt als HTML – Änderungen mit „Speichern" übernehmen.</p>
+<div class="sys-page">
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div>
+      <h1>{{ icon("pencil") }} {{ meta.label }} bearbeiten</h1>
+      <p class="sys-muted">Ganze Seite visuell oder direkt als HTML – Änderungen mit „Speichern" übernehmen.</p>
+    </div>
+    <div class="sys-actions sys-m-0">
+      {% if slug == 'landing' %}
+      <a href="/startseite/vorschau" target="_blank" class="btn btn--ghost">Vorschau {{ icon("external-link", size="sm") }}</a>
+      {% else %}
+      <a href="/{{ slug }}" target="_blank" class="btn btn--ghost">Ansehen {{ icon("external-link", size="sm") }}</a>
+      {% endif %}
+      <a href="/admin/seiten" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Übersicht</a>
+    </div>
   </div>
-  <div class="page-header__actions">
-    {% if slug == 'landing' %}
-    <a href="/startseite/vorschau" target="_blank" class="btn btn--ghost">Vorschau {{ icon("external-link", size="sm") }}</a>
-    {% else %}
-    <a href="/{{ slug }}" target="_blank" class="btn btn--ghost">Ansehen {{ icon("external-link", size="sm") }}</a>
-    {% endif %}
-    <a href="/admin/seiten" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Übersicht</a>
-  </div>
-</div>
+</header>
 
 {% if saved %}
 <div class="alert alert--success">Seite gespeichert.</div>
@@ -108,7 +112,7 @@
 <textarea id="html-source" class="wysiwyg-source" spellcheck="false"></textarea>
 <p class="wysiwyg-hint">Tipp: Im HTML-Modus kannst du den Quelltext direkt bearbeiten. Bilder aus der Galerie unten lassen sich per „Einfügen" an der Cursor-Position einsetzen.</p>
 
-<form id="save-form" method="post" action="/admin/seiten/{{ slug }}" style="margin-top:16px">
+<form id="save-form" method="post" action="/admin/seiten/{{ slug }}" class="sys-mt-2">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <input type="hidden" name="html" id="html-field">
   <button type="submit" class="btn btn--primary">Speichern</button>
@@ -116,7 +120,7 @@
 
 <section class="gallery">
   <div class="gallery__head">
-    <h2>{{ icon("photo", size="md") }} Bildergalerie</h2>
+    <h2>{{ icon("photo") }} Bildergalerie</h2>
     <button type="button" id="btn-upload" class="btn btn--ghost btn--sm">Bild hochladen</button>
     <button type="button" id="btn-refresh" class="btn btn--ghost btn--sm">Aktualisieren</button>
   </div>
@@ -127,7 +131,9 @@
   </div>
 </section>
 
-<input type="file" id="image-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
+<input type="file" id="image-input" accept="image/png,image/jpeg,image/webp,image/gif" class="sys-hidden">
+
+</div>
 
 <script src="/static/js/quill.min.js"></script>
 <script>

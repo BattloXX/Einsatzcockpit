@@ -9,47 +9,22 @@
   <div class="alert alert--error">{{ failures|join('; ') }}</div>
   {% endif %}
 
-  <div class="db-table-wrap">
-    <table class="db-table">
-      <thead><tr><th>Datei</th><th>Datenbank</th><th>Datum</th><th>Größe</th><th></th></tr></thead>
+  <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive sys-table--wide">
+      <thead><tr><th>Datei</th><th>Datenbank</th><th>Datum</th><th>Größe</th><th>Aktion</th></tr></thead>
       <tbody>
       {% for dump in dumps %}
         <tr>
-          <td><code>{{ dump.name }}</code></td>
-          <td>{{ dump.label }}</td>
-          <td>{{ dump.zeitpunkt|local_datetime }}</td>
-          <td>{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</td>
-          <td><a class="btn btn--sm" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a></td>
+          <td data-label="Datei"><code>{{ dump.name }}</code></td>
+          <td data-label="Datenbank">{{ dump.label }}</td>
+          <td data-label="Datum">{{ dump.zeitpunkt|local_datetime }}</td>
+          <td data-label="Größe">{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</td>
+          <td data-label="Aktion"><a class="btn btn--sm" href="/admin/db-backups/{{ dump.name }}">{{ icon("download", size="sm") }} Herunterladen</a></td>
         </tr>
       {% else %}
-        <tr><td colspan="5" class="text-muted">Keine DB-Dumps vorhanden.</td></tr>
+        <tr><td colspan="5" class="sys-muted sys-table-empty">Keine DB-Dumps vorhanden.</td></tr>
       {% endfor %}
       </tbody>
     </table>
-  </div>
-
-  <div class="db-mobile-list">
-    {% for dump in dumps %}
-    <article class="db-mobile-card">
-      <div class="db-mobile-card__name"><code>{{ dump.name }}</code></div>
-      <div class="db-mobile-card__grid">
-        <div>
-          <div class="db-mobile-card__label">Datenbank</div>
-          <div class="db-mobile-card__value">{{ dump.label }}</div>
-        </div>
-        <div>
-          <div class="db-mobile-card__label">Datum</div>
-          <div class="db-mobile-card__value">{{ dump.zeitpunkt|local_datetime }}</div>
-        </div>
-        <div>
-          <div class="db-mobile-card__label">Größe</div>
-          <div class="db-mobile-card__value">{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</div>
-        </div>
-      </div>
-      <a class="btn btn--sm" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a>
-    </article>
-    {% else %}
-    <div class="text-muted">Keine DB-Dumps vorhanden.</div>
-    {% endfor %}
   </div>
 </div>
