@@ -4,26 +4,29 @@
 {% block title %}Lagekarte-Tokens – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Lagekarte-Tokens'}]) }}{% endblock %}
 
-{% block admin_content %}
-<div class="page-content">
-  {% include "admin/_zugaenge_tabs.html" %}
-  <div class="page-header">
-    <div>
-      <h1>Lagekarte-Tokens</h1>
-      <p class="page-header__sub">Read-only Tokens für den GeoJSON-Endpoint — für <em>lagekarte.info → Daten importieren → URL</em></p>
-    </div>
-  </div>
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Neuen Token erstellen</h2></div>
+{% block admin_content %}
+<div class="sys-page">
+  {% include "admin/_zugaenge_tabs.html" %}
+  <header class="sys-hero">
+    <h1>{{ icon("map") }} Lagekarte-Tokens</h1>
+    <p class="sys-muted">Read-only Tokens für den GeoJSON-Endpoint — für <em>lagekarte.info → Daten importieren → URL</em></p>
+  </header>
+
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("plus") }} Neuen Token erstellen</h2></div>
     <div class="card-body">
-      <form method="post" action="/admin/lagekarte-tokens/neu" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <form class="sys-row sys-end" method="post" action="/admin/lagekarte-tokens/neu">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <div class="form-group" style="flex:1;min-width:200px">
+        <div class="form-group sys-grow">
           <label class="form-label">Bezeichnung</label>
           <input type="text" name="label" placeholder="z.B. lagekarte.info Auto-Reload" class="form-input" required>
         </div>
-        <div class="form-group" style="flex:1;min-width:200px">
+        <div class="form-group sys-grow">
           <label class="form-label" {{ tip('Optional: Token gilt nur für diesen Einsatz. Leer = gilt für alle Einsätze der Org.') }}>Beschränkung auf Einsatz</label>
           <select name="einsatz_id" class="form-select">
             <option value="">— Alle aktiven Einsätze —</option>
@@ -32,7 +35,7 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group" style="min-width:160px">
+        <div class="form-group sys-min-160">
           <label class="form-label" {{ tip('Leer = Token läuft nie ab') }}>Ablauf (optional)</label>
           <input type="date" name="expires_at" class="form-input">
         </div>
@@ -44,35 +47,36 @@
   </section>
 
   {% if new_token %}
-  <div class="alert alert--success mb-4">
+  <div class="alert alert--success">
     <strong>Neuer Token (nur einmal angezeigt!):</strong><br>
     <code class="api-key-display">{{ new_token }}</code>
     <button onclick="navigator.clipboard.writeText('{{ new_token }}')" class="btn btn--xs btn--ghost" type="button">Kopieren</button>
-    <p style="margin-top:.5rem;font-size:.85rem">
+    <p class="sys-mt-1 sys-small">
       Einsatz-URL für lagekarte.info:<br>
       <code>{{ request.base_url }}api/lagekarte/einsatz/&lt;EINSATZ_ID&gt;/fahrzeuge.geojson?token={{ new_token }}</code>
     </p>
   </div>
   {% endif %}
 
-  <section class="card">
-    <div class="card-header"><h2>Aktive &amp; gesperrte Tokens</h2></div>
-    <div class="card-body" style="padding:0">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("key") }} Aktive &amp; gesperrte Tokens</h2></div>
+    <div class="card-body sys-pad-0">
 
-      <div style="display:flex;gap:8px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--border);">
+      <div class="sys-row sys-pad-line">
         <button type="button" class="btn btn--ghost btn--xs" onclick="toggleAllTokens()">Alle wählen</button>
-        <form method="post" action="/admin/lagekarte-tokens/bulk-loeschen" id="bulkTokenForm"
-              style="display:inline" onsubmit="return prepareBulkDelete()">
+        <form class="sys-inline-form" method="post" action="/admin/lagekarte-tokens/bulk-loeschen" id="bulkTokenForm"
+              onsubmit="return prepareBulkDelete()">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <div id="bulkHiddenIds"></div>
           <button type="submit" class="btn btn--danger btn--xs">Markierte löschen</button>
         </form>
       </div>
 
-      <table class="table">
+      <div class="sys-table-wrap">
+      <table class="sys-table">
         <thead>
           <tr>
-            <th style="width:32px;"></th>
+            <th class="sys-col-32"></th>
             <th>Bezeichnung</th>
             <th>Org</th>
             <th>Einsatz</th>
@@ -94,44 +98,44 @@
             <td>{{ t.last_used_at|local_datetime if t.last_used_at else '–' }}</td>
             <td>{{ (t.expires_at|local).strftime('%d.%m.%Y') if t.expires_at else '∞' }}</td>
             <td><span class="badge {% if t.is_active %}badge--active{% else %}badge--closed{% endif %}">{{ 'Aktiv' if t.is_active else 'Gesperrt' }}</span></td>
-            <td style="white-space:nowrap;">
+            <td class="sys-nowrap">
               {% if t.is_active %}
-              <form method="post" action="/admin/lagekarte-tokens/{{ t.id }}/sperren" style="display:inline">
+              <form class="sys-inline-form" method="post" action="/admin/lagekarte-tokens/{{ t.id }}/sperren">
                 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                 <button type="submit" class="btn btn--xs btn--danger"
                         onclick="return confirm('Token sperren?')">Sperren</button>
               </form>
               {% endif %}
-              <form method="post" action="/admin/lagekarte-tokens/{{ t.id }}/loeschen" style="display:inline">
+              <form class="sys-inline-form" method="post" action="/admin/lagekarte-tokens/{{ t.id }}/loeschen">
                 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <button type="submit" class="btn btn--xs btn--ghost"
-                        style="color:var(--color-danger)"
+                <button type="submit" class="btn btn--xs btn--ghost sys-danger"
                         data-label="{{ t.label | e }}"
-                        onclick="return confirm('Token „' + this.dataset.label + '“ endg\xfcltig l\xf6schen?')">L&ouml;schen</button>
+                        onclick="return confirm('Token &quot;' + this.dataset.label + '&quot; endgültig löschen?')">Löschen</button>
               </form>
             </td>
           </tr>
           {% endfor %}
           {% if not tokens %}
-          <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:1.5rem">Noch keine Tokens angelegt.</td></tr>
+          <tr><td class="sys-table-empty sys-muted" colspan="9">Noch keine Tokens angelegt.</td></tr>
           {% endif %}
         </tbody>
       </table>
+      </div>
 
     </div>
   </section>
 
-  <section class="card mt-4">
-    <div class="card-header"><h2>Verwendung in lagekarte.info</h2></div>
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("info-circle") }} Verwendung in lagekarte.info</h2></div>
     <div class="card-body">
-      <ol style="line-height:2;padding-left:1.2rem">
+      <ol class="sys-steps">
         <li>Token erstellen (Org-weit oder auf einen Einsatz beschränkt)</li>
         <li>In lagekarte.info: <strong>Daten importieren → URL</strong> anklicken</li>
         <li>URL eintragen: <code>{{ request.base_url }}api/lagekarte/einsatz/&lt;EINSATZ_ID&gt;/fahrzeuge.geojson?token=&lt;TOKEN&gt;</code></li>
         <li><strong>Auto-Reload</strong> aktivieren (empfohlen: 30–60 Sekunden)</li>
         <li>Fahrzeuge des Einsatzes erscheinen als Punkte auf der Karte</li>
       </ol>
-      <p style="margin-top:.75rem;font-size:.875rem;color:var(--text-muted)">
+      <p class="sys-mt-1 sys-small sys-muted">
         Alternativ: KML-Export unter <code>…/fahrzeuge.kml?token=&lt;TOKEN&gt;</code>
       </p>
     </div>

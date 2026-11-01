@@ -1,33 +1,43 @@
 {% extends "admin/_layout.html" %}
 {% block title %}API-Keys – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block admin_content %}
 {% include "admin/_zugaenge_tabs.html" %}
-<div class="page-header">
-  <h2>API-Keys</h2>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    <form method="post" action="/admin/api-keys/neu" class="inline-form">
+<div class="sys-page">
+<header class="sys-hero">
+  <div class="sys-hero__head"><h1>{{ icon("key") }} API-Keys</h1>
+    <a href="/api/docs" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">API-Dokumentation {{ icon("chevron-right", size="xs") }}</a></div>
+  <p class="sys-muted">Schlüssel für Schnittstellen mit Berechtigungen und optionaler IP-Allowlist.</p>
+</header>
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("plus") }} Neuer API-Key</h2></div>
+  <div>
+    <form method="post" action="/admin/api-keys/neu" class="sys-form-grid">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="text" name="label" placeholder="Bezeichnung..." class="form-input" required>
-      <fieldset style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border:0;padding:0;margin:0;">
+      <input type="text" name="label" placeholder="Bezeichnung..." class="form-input" required aria-label="Bezeichnung">
+      <fieldset class="sys-fieldset sys-row">
         <legend class="sr-only">Berechtigungen</legend>
-        <label><input type="checkbox" name="scopes" value="einsatz:write" checked> Einsätze</label>
-        <label><input type="checkbox" name="scopes" value="mailing:import" checked> Mailing-Import</label>
-        <label><input type="checkbox" name="scopes" value="kontakte:read"> Gesamtes Kontaktverzeichnis lesen und synchronisieren</label>
-        <label><input type="checkbox" name="scopes" value="sms:send"> SMS senden</label>
-        <label><input type="checkbox" name="scopes" value="mail:send"> E-Mail senden</label>
+        <label class="sys-check"><input type="checkbox" name="scopes" value="einsatz:write" checked> Einsätze</label>
+        <label class="sys-check"><input type="checkbox" name="scopes" value="mailing:import" checked> Mailing-Import</label>
+        <label class="sys-check"><input type="checkbox" name="scopes" value="kontakte:read"> Gesamtes Kontaktverzeichnis lesen und synchronisieren</label>
+        <label class="sys-check"><input type="checkbox" name="scopes" value="sms:send"> SMS senden</label>
+        <label class="sys-check"><input type="checkbox" name="scopes" value="mail:send"> E-Mail senden</label>
       </fieldset>
-      <fieldset style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border:0;padding:0;margin:0;">
+      <fieldset class="sys-fieldset sys-row">
         <legend>Einsatz-Feed lesen</legend>
-        <label title="Stichwort, Status, Zeiten, Adresse, Koordinaten, bestätigtes Objekt und Anzahl Kräfte."><input type="checkbox" name="scopes" value="einsatz:read"> Basisdaten</label>
-        <label title="Fahrzeugkennungen, Fahrzeugstatus, Wachenstatus und Zeiten pro Einheit."><input type="checkbox" name="scopes" value="einsatz:read:kraefte"> Kräfte</label>
-        <label title="Nur Titel, Ampel/Status und Zeiten von Aufgaben und Meldungen."><input type="checkbox" name="scopes" value="einsatz:read:board"> Board</label>
+        <label class="sys-check" title="Stichwort, Status, Zeiten, Adresse, Koordinaten, bestätigtes Objekt und Anzahl Kräfte."><input type="checkbox" name="scopes" value="einsatz:read"> Basisdaten</label>
+        <label class="sys-check" title="Fahrzeugkennungen, Fahrzeugstatus, Wachenstatus und Zeiten pro Einheit."><input type="checkbox" name="scopes" value="einsatz:read:kraefte"> Kräfte</label>
+        <label class="sys-check" title="Nur Titel, Ampel/Status und Zeiten von Aufgaben und Meldungen."><input type="checkbox" name="scopes" value="einsatz:read:board"> Board</label>
       </fieldset>
-      <input type="text" name="ip_allowlist" placeholder="IP-Allowlist (CIDR, kommagetrennt)" class="form-input">
+      <input type="text" name="ip_allowlist" placeholder="IP-Allowlist (CIDR, kommagetrennt)" class="form-input" aria-label="IP-Allowlist">
       <button type="submit" class="btn btn--primary">{{ icon("plus", size="sm") }} API-Key erstellen</button>
     </form>
-    <a href="/api/docs" target="_blank" class="btn btn--ghost btn--sm">API-Dokumentation {{ icon("chevron-right", size="xs") }}</a>
   </div>
-</div>
+</section>
 
 {% if error %}
 <div class="alert alert--error">{{ error }}</div>
@@ -41,7 +51,9 @@
 </div>
 {% endif %}
 
-<table class="table">
+<section class="sys-card">
+<div class="sys-table-wrap">
+<table class="sys-table">
   <thead><tr><th>Bezeichnung</th><th>Scopes</th><th>IP-Allowlist</th><th>Erstellt</th><th>Zuletzt genutzt</th><th>Ablauf</th><th>Status</th><th></th></tr></thead>
   <tbody>
     {% for k in keys %}
@@ -55,7 +67,7 @@
       <td><span class="badge {% if k.is_active %}badge--active{% else %}badge--closed{% endif %}">{{ 'Aktiv' if k.is_active else 'Gesperrt' }}</span></td>
       <td>
         {% if k.is_active %}
-        <form method="post" action="/admin/api-keys/{{ k.id }}/sperren" style="display:inline">
+        <form class="sys-inline-form" method="post" action="/admin/api-keys/{{ k.id }}/sperren">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button type="submit" class="btn btn--xs btn--danger"
                   onclick="return confirm('Key sperren?')">Sperren</button>
@@ -66,4 +78,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
+</section>
+</div>
 {% endblock %}

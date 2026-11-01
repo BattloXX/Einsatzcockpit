@@ -1,36 +1,39 @@
 {% extends "base.html" %}
 {% block title %}Atemschutz-Geräteprüfung – Einstellungen{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block content %}
-<div class="container" style="max-width:1280px;margin:0 auto;padding:1rem;">
+<div class="container sys-page sys-page-narrow">
 {% include "atemschutz_pruefung/_tabs.html" %}
 {% include "atemschutz_pruefung/_einstellungen_tabs.html" %}
-<div class="page-header">
-  <div>
-    <h1>Atemschutz-Geräteprüfung – Einstellungen</h1>
-    <p class="page-header__sub">Wart-Benachrichtigung bei Defekt</p>
-  </div>
-</div>
+<header class="sys-hero">
+  <h1>{{ icon("settings") }} Atemschutz-Geräteprüfung – Einstellungen</h1>
+  <p class="sys-muted">Wart-Benachrichtigung bei Defekt</p>
+</header>
 
-<p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;">
+<p class="sys-small sys-muted sys-mb-2">
   Das Modul selbst wird unter <a href="/admin/settings">Organisation</a> aktiviert/deaktiviert.
 </p>
 
 {% if saved %}
-<div class="alert alert--success" style="margin-bottom:1rem;">Einstellungen gespeichert.</div>
+<div class="alert alert--success sys-mb-2">Einstellungen gespeichert.</div>
 {% endif %}
 
 <form method="post" action="/admin/atemschutz-pruefung/einstellungen">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
-  <div class="card" style="margin-bottom:1.25rem;">
-    <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-      <strong>Wart-Benachrichtigung bei Defekt</strong>
-      <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">
+  <div class="sys-card">
+    <div class="sys-card__head">
+      <h2>{{ icon("bell") }} Wart-Benachrichtigung bei Defekt</h2>
+      <span class="sys-text-xs sys-muted sys-ml-1">
         Sichtprüfung, Hochdruckprüfung oder Gerät einsatzbereit = nicht in Ordnung
       </span>
     </div>
-    <div style="padding:1rem;display:flex;flex-direction:column;gap:1rem;">
+    <div class="sys-stack">
       <div class="form-group">
         <label class="form-label">Atemschutzgerätewart – E-Mail</label>
         <input type="email" name="atemschutz_wart_mail" class="form-control"
@@ -48,7 +51,7 @@
     </div>
   </div>
 
-  <div style="display:flex;justify-content:flex-end;">
+  <div class="sys-row sys-actions--end">
     <button type="submit" class="btn btn--primary">Speichern</button>
   </div>
 </form>

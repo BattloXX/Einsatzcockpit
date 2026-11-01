@@ -25,6 +25,7 @@ HTMX_FRAGMENTE = {
         "gateway/_alarmempfang_detail.html",
         "gateway/_alarmempfang_parser.html",
     ],
+    "gateway/druckregeln.html": ["gateway/_druckregel_simulation.html"],
     "admin/settings_dibos.html": ["admin/_dibos_live.html"],
     "admin/sms_send.html": ["admin/_sms_log_details.html"],
     "admin/systemdiagnose/index.html": [

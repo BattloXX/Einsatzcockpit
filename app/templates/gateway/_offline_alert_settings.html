@@ -1,5 +1,5 @@
-<div id="offline-alarme" class="gwx-panel" style="margin-bottom:16px;">
-  <div class="gwx-panel__hd"><div class="gwx-panel__t">Offline-Alarme</div></div>
+<div id="offline-alarme" class="sys-card sys-mb-2">
+  <div class="sys-card__head"><div class="gwx-panel__t">Offline-Alarme</div></div>
   <div class="gwx-panel__bd">
     {% if alert_settings_saved %}<p role="status">Ausfallalarmierung gespeichert.</p>{% endif %}
     <form method="post" action="/gateway/{{ gw.id }}/offline-alarme"
@@ -11,7 +11,7 @@
         tatsächlicher Verbindungsstatus sichtbar; es wird von der Druck-Gateway-Ausfallüberwachung ausgenommen.</p>
       <p>SMS, Teams und E-Mail sowie Empfänger, Karenzzeit und Wiederholungen unter
         <a href="/admin/systemstatus">Systemstatus</a> konfigurieren.{% if not gw.is_windows_agent %} Die serielle Alarmleitung wird separat überwacht.{% endif %}</p>
-      <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Speichern</button>
+      <button class="btn btn--primary btn--sm" type="submit">Speichern</button>
     </form>
   </div>
 </div>

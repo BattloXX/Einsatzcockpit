@@ -1,5 +1,5 @@
-<div id="alarm-parser-mcp" class="gwx-panel" style="margin-bottom:16px;">
-  <div class="gwx-panel__hd"><div class="gwx-panel__t">Alarm-Parser und MCP</div></div>
+<div id="alarm-parser-mcp" class="sys-card sys-mb-2">
+  <div class="sys-card__head"><div class="gwx-panel__t">Alarm-Parser und MCP</div></div>
   <div class="gwx-panel__bd">
     {% if parser_mcp_saved %}<p role="status">MCP-Freigabe gespeichert.</p>{% endif %}
     <form method="post" action="/gateway/{{ gw.id }}/alarm-parser-mcp"
@@ -12,7 +12,7 @@
         erkennt Telefonnummern, E-Mail-Adressen, IBAN und gekennzeichnete Anrufernamen;
         frei formulierte Personendaten können unerkannt bleiben. Nur bei erlaubter Datenweitergabe aktivieren.
         MCP und das Gateway-Modul müssen ebenfalls aktiv sein. Freigaben bleiben in der Oberfläche.</p>
-      <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Speichern</button>
+      <button class="btn btn--primary btn--sm" type="submit">Speichern</button>
     </form>
   </div>
 </div>

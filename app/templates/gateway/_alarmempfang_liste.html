@@ -1,13 +1,13 @@
 <div class="gwx-col-12 gwx-stack" id="alarm-liste" hx-get="/gateway/{{ gw.id }}/alarmempfang" hx-trigger="every 15s, alarm-ingest-refresh from:body" hx-include="#alarm-filter" hx-swap="outerHTML">
-  <section class="gwx-panel">
-<div class="gwx-panel__hd"><div>
+  <section class="sys-card">
+<div class="sys-card__head"><div>
       <h2 class="gwx-panel__t">{{ icon('antenna', size='md') }} Status</h2>
       <div class="gwx-panel__sub">Verbindung und Empfangskennzahlen · Aktualisierung alle 15 Sekunden.</div>
     </div></div>
     <div class="gwx-panel__bd gwx-stack">
       <div class="gwx-pills">
-        <span class="gwx-pill {{ 'gwx-pill--ok' if connected else 'gwx-pill--err' }}">{{ icon('server', size='sm') }} Gateway: {{ 'Online' if connected else 'Offline' }}</span>
-        <span class="gwx-pill {{ 'gwx-pill--ok' if gw.serial_connected else 'gwx-pill--warn' }}">{{ icon('plug', size='sm') }} Alarmleitung: {{ 'Verbunden' if gw.serial_connected else ('Getrennt' if gw.serial_connected is sameas false else 'Unbekannt') }}</span>
+        <span class="sys-pill {{ 'sys-status--ok' if connected else 'sys-status--fail' }}">{{ icon('server', size='sm') }} Gateway: {{ 'Online' if connected else 'Offline' }}</span>
+        <span class="sys-pill {{ 'sys-status--ok' if gw.serial_connected else 'sys-status--warn' }}">{{ icon('plug', size='sm') }} Alarmleitung: {{ 'Verbunden' if gw.serial_connected else ('Getrennt' if gw.serial_connected is sameas false else 'Unbekannt') }}</span>
       </div>
       <dl class="gwx-reception-meta">
         <div><dt>Letztes Lebenszeichen</dt><dd>{{ gw.last_seen_at|local_datetime_sec or '-' }}</dd></div>
@@ -21,17 +21,17 @@
       </div>
     </div>
   </section>
-  <section class="gwx-panel">
-<div class="gwx-panel__hd"><div>
+  <section class="sys-card">
+<div class="sys-card__head"><div>
       <h2 class="gwx-panel__t">{{ icon('inbox', size='md') }} Empfänge</h2>
       <div class="gwx-panel__sub">Höchstens die letzten 200 Einträge im gewählten Zeitraum.</div>
     </div></div>
-  <div class="gwx-table-wrap"><table class="gwx-table">
+  <div class="sys-table-wrap"><table class="sys-table">
     <thead><tr><th>Zeit</th><th>Nummer</th><th>Stichwort</th><th>Ort</th><th>Status</th><th>Qualität / Parse-Status</th><th>Version</th><th>Einsatz</th></tr></thead>
     <tbody>{% for ingest in ingests %}{% set p = ingest.parsed or {} %}
       <tr><td><a href="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}" hx-get="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}" hx-target="#alarm-detail">{{ ingest.received_at|local_datetime_sec }}</a></td>
         <td>{{ ingest.leitstellennummer or '-' }}</td><td>{{ p.get('alarm_type_code') or '-' }}</td>
-        <td>{{ p.get('gemeinde') or p.get('city') or '-' }}</td><td><span class="gwx-chip {{ 'gwx-chip--ok' if ingest.process_status == 'applied' else ('gwx-chip--err' if ingest.process_status == 'error' else 'gwx-chip--warn') }}">{{ ingest.process_status or '-' }}</span></td>
+        <td>{{ p.get('gemeinde') or p.get('city') or '-' }}</td><td><span class="sys-pill {{ 'sys-status--ok' if ingest.process_status == 'applied' else ('sys-status--fail' if ingest.process_status == 'error' else 'sys-status--warn') }}">{{ ingest.process_status or '-' }}</span></td>
         <td>{{ p.get('qualitaet', '-') }} / {{ ingest.parse_status }}</td><td>{{ ingest.version_no or '-' }}</td>
         <td>{% if ingest.einsatz_id %}<a href="/einsatz/{{ ingest.einsatz_id }}">#{{ ingest.einsatz_id }}</a>{% else %}-{% endif %}</td></tr>
     {% else %}<tr><td colspan="8" class="gwx-empty">Keine Alarmempfänge im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>

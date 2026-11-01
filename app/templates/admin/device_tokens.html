@@ -4,20 +4,27 @@
 {% block title %}Geräte-Login – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Geräte-Login'}]) }}{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block admin_content %}
-<div class="page-content">
+<div class="sys-page">
   {% include "admin/_zugaenge_tabs.html" %}
-  <div class="page-header">
+  <header class="sys-hero">
+    <div class="sys-hero__head">
     <div>
-      <h1>Geräte-Login</h1>
-      <p class="page-header__sub">Token-basierte Anmelde-URLs für Tablets, Anzeigegeräte und SMS-Gateways.</p>
+      <h1>{{ icon("device-mobile") }} Geräte-Login</h1>
+      <p class="sys-muted">Token-basierte Anmelde-URLs für Tablets, Anzeigegeräte und SMS-Gateways.</p>
     </div>
     <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newDeviceModal"
             {{ tip('Neues Gerät oder SMS-Gateway registrieren') }}>{{ icon("plus", size="sm") }} Gerät registrieren</button>
-  </div>
+    </div>
+  </header>
 
   {% if saved and new_token %}
-  <div class="alert alert--success" style="margin-bottom:20px;">
+  <div class="alert alert--success sys-mb-2">
     {% if new_token_type == 'sms-gateway' %}
     <strong>SMS-Gateway „{{ new_label }}" erstellt.</strong> Bitte den QR-Code jetzt mit der Android-App scannen – Token wird nur einmal angezeigt.
     {% elif new_token_type == 'unit+sms-gateway' %}
@@ -25,30 +32,30 @@
     {% else %}
     <strong>Gerät „{{ new_label }}" erstellt.</strong> Bitte die URL / den QR-Code jetzt sichern – sie werden nur einmal angezeigt.
     {% endif %}
-    <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">
-      <div style="flex:1;min-width:220px;background:var(--surface-high);border-radius:6px;padding:12px 14px;">
-        <div style="font-size:.8rem;font-weight:600;margin-bottom:6px;">
+    <div class="sys-mt-2 sys-row sys-start">
+      <div class="sys-token-box sys-grow-1">
+        <div class="sys-box-title">
           {% if new_token_type == 'sms-gateway' %}SMS-Gateway QR / Token{% else %}Login-URL{% endif %}
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="sys-row">
           {% if new_token_type == 'sms-gateway' %}
-          <code id="newTokenUrl" style="flex:1;word-break:break-all;font-size:.83rem;">{{ new_token }}</code>
+          <code class="sys-code-url" id="newTokenUrl">{{ new_token }}</code>
           {% elif new_token_type == 'unit+sms-gateway' and new_login_url %}
-          <code id="newTokenUrl" style="flex:1;word-break:break-all;font-size:.83rem;">{{ new_login_url }}</code>
+          <code class="sys-code-url" id="newTokenUrl">{{ new_login_url }}</code>
           {% else %}
-          <code id="newTokenUrl" style="flex:1;word-break:break-all;font-size:.83rem;">{{ base_url }}/geraet-login?token={{ new_token }}</code>
+          <code class="sys-code-url" id="newTokenUrl">{{ base_url }}/geraet-login?token={{ new_token }}</code>
           {% endif %}
           <button class="btn btn--ghost btn--sm" onclick="copyDeviceUrl()" {{ tip('In Zwischenablage kopieren') }}>
             {{ icon("clipboard-list", size="xs") }} Kopieren
           </button>
         </div>
         {% if new_token_type == 'unit+sms-gateway' and new_gateway_token %}
-        <div style="margin-top:8px;font-size:.8rem;font-weight:600;">SMS-Gateway-Token (Bestandteil der URL oben)</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
-          <code style="flex:1;word-break:break-all;font-size:.83rem;">{{ new_gateway_token }}</code>
+        <div class="sys-mt-1 sys-text-xs sys-semibold">SMS-Gateway-Token (Bestandteil der URL oben)</div>
+        <div class="sys-row sys-nogap-top">
+          <code class="sys-code-url">{{ new_gateway_token }}</code>
         </div>
         {% endif %}
-        <div style="margin-top:6px;font-size:.78rem;color:var(--color-text-muted);">
+        <div class="sys-mt-1 sys-text-xs sys-muted">
           {% if new_token_type == 'sms-gateway' %}
           → QR-Code mit Android-App scannen, um den SMS-Gateway-Modus zu aktivieren
           {% elif new_token_type == 'unit+sms-gateway' %}
@@ -59,22 +66,22 @@
         </div>
       </div>
       {% if new_qr_b64 %}
-      <div style="background:#fff;border-radius:6px;padding:8px;display:inline-block;">
-        <div style="font-size:.75rem;font-weight:600;color:#333;text-align:center;margin-bottom:4px;">
+      <div class="sys-qr-box">
+        <div class="sys-qr-title">
           {% if new_token_type == 'sms-gateway' %}SMS-Gateway QR
           {%- elif new_token_type == 'unit+sms-gateway' %}Kombi-QR (Board + Gateway)
           {%- else %}App-Login QR-Code{% endif %}
         </div>
-        <img src="data:image/png;base64,{{ new_qr_b64 }}"
-             alt="QR-Code Login" style="width:160px;height:160px;display:block;">
-        <div style="font-size:.7rem;color:#555;text-align:center;margin-top:4px;">Mit {{ brand }} App scannen</div>
+        <img class="sys-qr-img" src="data:image/png;base64,{{ new_qr_b64 }}"
+             alt="QR-Code Login">
+        <div class="sys-qr-caption">Mit {{ brand }} App scannen</div>
       </div>
       {% endif %}
       {% if new_pin %}
-      <div style="background:var(--surface-high);border-radius:6px;padding:12px 14px;">
-        <div style="font-size:.8rem;font-weight:600;margin-bottom:6px;">PIN statt Scannen</div>
-        <div style="font-family:monospace;font-size:1.3rem;letter-spacing:.15em;">{{ new_pin }}</div>
-        <div style="margin-top:6px;font-size:.78rem;color:var(--color-text-muted);">
+      <div class="sys-token-box">
+        <div class="sys-box-title">PIN statt Scannen</div>
+        <div class="sys-pin">{{ new_pin }}</div>
+        <div class="sys-mt-1 sys-text-xs sys-muted">
           → In der App "PIN eingeben statt scannen" wählen. Gültig 10 Minuten, einmalig verwendbar.
         </div>
       </div>
@@ -82,41 +89,41 @@
     </div>
   </div>
   {% elif saved and new_pin %}
-  <div class="alert alert--success" style="margin-bottom:20px;">
+  <div class="alert alert--success sys-mb-2">
     <strong>Neue PIN für „{{ new_label }}" erzeugt.</strong> Nur einmal angezeigt — bitte jetzt notieren.
-    <div style="margin-top:12px;background:var(--surface-high);border-radius:6px;padding:12px 14px;max-width:260px;">
-      <div style="font-family:monospace;font-size:1.3rem;letter-spacing:.15em;">{{ new_pin }}</div>
-      <div style="margin-top:6px;font-size:.78rem;color:var(--color-text-muted);">Gültig 10 Minuten, einmalig verwendbar.</div>
+    <div class="sys-mt-2 sys-token-box sys-token-box--pin">
+      <div class="sys-pin">{{ new_pin }}</div>
+      <div class="sys-mt-1 sys-text-xs sys-muted">Gültig 10 Minuten, einmalig verwendbar.</div>
     </div>
   </div>
   {% elif saved %}
-  <div class="alert alert--success" style="margin-bottom:20px;">Änderung gespeichert.</div>
+  <div class="alert alert--success sys-mb-2">Änderung gespeichert.</div>
   {% endif %}
 
   {% if error == 'empty_label' %}
-  <div class="alert alert--error" style="margin-bottom:20px;">Bezeichnung darf nicht leer sein.</div>
+  <div class="alert alert--error sys-mb-2">Bezeichnung darf nicht leer sein.</div>
   {% endif %}
 
   <!-- Android-App Download -->
-  <div style="display:flex;align-items:center;gap:14px;background:var(--surface-high);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:24px;">
-    <div style="font-size:2rem;flex-shrink:0;">{{ icon("device-mobile", size="lg") }}</div>
-    <div style="flex:1;min-width:0;">
-      <div style="font-weight:600;font-size:.95rem;">{{ brand }}-App für Android</div>
-      <div style="font-size:.82rem;color:var(--color-text-muted);margin-top:2px;">
+  <div class="sys-banner">
+    <div class="sys-icon-lg sys-no-shrink">{{ icon("device-mobile", size="lg") }}</div>
+    <div class="sys-grow-1 sys-min-0">
+      <div class="sys-semibold sys-option-title">{{ brand }}-App für Android</div>
+      <div class="sys-small sys-muted sys-hint-top">
         Einheit-Geräte und SMS-Gateways benötigen die native Android-App (APK Sideload).
       </div>
     </div>
     <a href="https://github.com/BattloXX/Einsatzcockpit-Android/releases/latest"
        target="_blank" rel="noopener"
-       class="btn btn--primary btn--sm"
-       style="white-space:nowrap;flex-shrink:0;">
+       class="btn btn--primary btn--sm sys-nowrap sys-no-shrink"
+      >
       {{ icon("download", size="xs") }} APK herunterladen
     </a>
   </div>
 
   <!-- Einheit-Geräte-Tabelle -->
-  <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">{{ icon("device-mobile", size="md") }} Einheit-Geräte</h2>
-  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" role="group" aria-label="Geräte filtern">
+  <h2 class="sys-section-title">{{ icon("device-mobile", size="md") }} Einheit-Geräte</h2>
+  <div class="sys-row sys-gap-sm sys-mb-1" role="group" aria-label="Geräte filtern">
     {% for key, label in [('alle', 'Alle'), ('aktiv', 'Aktiv'), ('widerrufen', 'Widerrufen'), ('auffaellig', 'Auffällig')] %}
     <a href="/admin/geraete-login{% if key != 'alle' %}?filter={{ key }}{% endif %}"
        class="btn btn--sm {% if geraete_filter == key %}btn--primary{% else %}btn--ghost{% endif %}"
@@ -124,8 +131,8 @@
     {% endfor %}
   </div>
   {% if tokens %}
-  <div style="overflow-x:auto;margin-bottom:32px;">
-    <table class="table-admin" style="min-width:600px;">
+  <div class="sys-table-wrap sys-mb-3">
+    <table class="sys-table sys-min-600">
       <thead>
         <tr>
           <th>Bezeichnung</th>
@@ -133,28 +140,28 @@
           {% if is_sysadmin %}<th>Organisation</th>{% endif %}
           <th>GSL-Profil</th>
           <th>Fahrzeug</th>
-          <th style="width:130px;">App / Gerät</th>
-          <th style="width:130px;">Fehlversuche</th>
-          <th style="width:130px;">Erstellt</th>
-          <th style="width:130px;">Zuletzt genutzt</th>
-          <th style="width:90px;">Status</th>
-          <th style="width:150px;">Aktionen</th>
+          <th class="sys-col-130">App / Gerät</th>
+          <th class="sys-col-130">Fehlversuche</th>
+          <th class="sys-col-130">Erstellt</th>
+          <th class="sys-col-130">Zuletzt genutzt</th>
+          <th class="sys-col-90">Status</th>
+          <th class="sys-col-150">Aktionen</th>
         </tr>
       </thead>
       <tbody>
         {% for dt in tokens %}
         <tr>
           <td>
-            <a href="/admin/geraete-login/{{ dt.id }}" class="link-sm"
-               style="font-weight:600;color:inherit;text-decoration:none;"
+            <a href="/admin/geraete-login/{{ dt.id }}" class="link-sm sys-semibold sys-plain-link"
+              
                title="Gerätedetails &amp; letzten Standort anzeigen">{{ dt.label }}</a>
             {% if dt.last_lat and dt.last_lng %}
-            <span style="font-size:.75rem;color:var(--color-success);" title="Letzter Standort vorhanden">{{ icon("map-pin", size="sm") }}</span>
+            <span class="sys-text-xs sys-ok" title="Letzter Standort vorhanden">{{ icon("map-pin", size="sm") }}</span>
             {% endif %}
             {% if standort_veraltet(dt) %}
-            <span style="font-size:.75rem;color:var(--color-danger);" title="Keine Standortmessung in den letzten 24 Stunden">{{ icon("alert-triangle", size="sm") }}</span>
+            <span class="sys-text-xs sys-danger" title="Keine Standortmessung in den letzten 24 Stunden">{{ icon("alert-triangle", size="sm") }}</span>
             {% endif %}
-            <br><small class="text-muted" style="font-family:monospace;">{{ dt.user.username if dt.user else '—' }}</small>
+            <br><small class="text-muted sys-mono">{{ dt.user.username if dt.user else '—' }}</small>
           </td>
           <td>
             {% if dt.user %}
@@ -165,9 +172,9 @@
           <td>{{ dt.user.org.name if dt.user and dt.user.org else '—' }}</td>
           {% endif %}
           <td>
-            <form method="post" action="/admin/geraete-login/{{ dt.id }}/gsl-profil"
-                  style="display:flex;align-items:center;gap:4px;">
-              <select name="gsl_profil" class="form-input" style="padding:3px 6px;font-size:.82rem;min-width:120px;">
+            <form class="sys-row sys-gap-sm" method="post" action="/admin/geraete-login/{{ dt.id }}/gsl-profil"
+                 >
+              <select name="gsl_profil" class="form-input sys-select-compact">
                 <option value="" {% if dt.gsl_profil is none %}selected{% endif %}>– bisherig –</option>
                 <option value="einheit" {% if dt.gsl_profil == 'einheit' %}selected{% endif %}>Einheit</option>
                 <option value="fuehrung" {% if dt.gsl_profil == 'fuehrung' %}selected{% endif %}>Führung</option>
@@ -179,10 +186,10 @@
             {% endif %}
           </td>
           <td>
-            <form method="post" action="/admin/geraete-login/{{ dt.id }}/fahrzeug"
-                  style="display:flex;align-items:center;gap:4px;">
-              <select name="vehicle_master_id" class="form-input"
-                      style="padding:3px 6px;font-size:.82rem;min-width:120px;">
+            <form class="sys-row sys-gap-sm" method="post" action="/admin/geraete-login/{{ dt.id }}/fahrzeug"
+                 >
+              <select name="vehicle_master_id" class="form-input sys-select-compact"
+                     >
                 <option value="">– kein –</option>
                 {% for v in vehicles %}
                 <option value="{{ v.id }}" {% if dt.vehicle_master_id == v.id %}selected{% endif %}>
@@ -194,51 +201,51 @@
                       aria-label="Fahrzeugzuordnung speichern" title="Fahrzeugzuordnung speichern">{{ icon("device-floppy", size="xs") }}</button>
             </form>
           </td>
-          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+          <td class="sys-nowrap sys-small sys-muted">
             {{ dt.app_version or '–' }}
             {% if dt.platform or dt.os_version or dt.device_model %}
             <br><small>{{ [dt.platform, dt.os_version, dt.device_model]|select|join(' · ') }}</small>
             {% endif %}
           </td>
-          <td style="white-space:nowrap;font-size:.85rem;">
+          <td class="sys-nowrap sys-small">
             {% if dt.fail_count %}
-              <span class="badge-pill badge-pill--red" title="Fehlgeschlagene Zugriffsversuche mit diesem Zugang">{{ dt.fail_count }}</span>
+              <span class="sys-pill sys-status--fail" title="Fehlgeschlagene Zugriffsversuche mit diesem Zugang">{{ dt.fail_count }}</span>
               {% if dt.last_failed_at %}<br><small class="text-muted">zuletzt {{ dt.last_failed_at|local_datetime }}</small>{% endif %}
             {% else %}<span class="text-muted">–</span>{% endif %}
           </td>
-          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+          <td class="sys-nowrap sys-small sys-muted">
             {{ (dt.created_at|local).strftime('%d.%m.%Y') }}
           </td>
-          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+          <td class="sys-nowrap sys-small sys-muted">
             {% if dt.last_used_at %}{{ (dt.last_used_at|local).strftime('%d.%m.%Y %H:%M') }}
             {% else %}<span class="text-muted">Nie</span>{% endif %}
           </td>
           <td>
             {% if dt.is_active %}
-              <span class="badge-pill badge-pill--green" style="font-size:.8rem;">Aktiv</span>
+              <span class="sys-pill sys-status--ok">Aktiv</span>
             {% else %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.8rem;"
+              <span class="sys-pill"
                     {% if dt.revoked_at %}title="Deaktiviert am {{ dt.revoked_at|local_datetime }}"{% endif %}>Widerrufen</span>
             {% endif %}
           </td>
-          <td style="white-space:nowrap;">
+          <td class="sys-nowrap">
             {% if dt.is_active %}
-            <form method="post" action="/admin/geraete-login/{{ dt.id }}/pin-neu" style="display:inline;">
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/{{ dt.id }}/pin-neu">
               <button class="btn btn--ghost btn--sm" {{ tip('Neue PIN als Alternative zum QR-Code-Scan erzeugen') }}>PIN neu</button>
             </form>
-            <form method="post" action="/admin/geraete-login/{{ dt.id }}/widerrufen" style="display:inline;"
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/{{ dt.id }}/widerrufen"
                   data-label="{{ dt.label }}" onsubmit="return confirmRevoke(this)">
               <button class="btn btn--ghost btn--sm" {{ tip('Anmeldung sofort sperren') }}>Widerrufen</button>
             </form>
             {% else %}
-            <form method="post" action="/admin/geraete-login/{{ dt.id }}/reaktivieren" style="display:inline;"
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/{{ dt.id }}/reaktivieren"
                   data-label="{{ dt.label }}" onsubmit="return confirm('Zugang von &quot;' + this.dataset.label + '&quot; wieder freigeben?')">
               <button class="btn btn--ghost btn--sm" {{ tip('Token reaktivieren') }}>Reaktivieren</button>
             </form>
             {% endif %}
-            <form method="post" action="/admin/geraete-login/{{ dt.id }}/loeschen" style="display:inline;"
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/{{ dt.id }}/loeschen"
                   data-label="{{ dt.label }}" onsubmit="return confirmDelete(this)">
-              <button class="btn btn--ghost btn--sm" style="color:var(--color-danger)"
+              <button class="btn btn--ghost btn--sm sys-danger"
                       {{ tip('Gerät endgültig löschen') }}>Löschen</button>
             </form>
           </td>
@@ -248,87 +255,87 @@
     </table>
   </div>
   {% else %}
-  <div class="chart-box" style="text-align:center;padding:32px;margin-bottom:32px;">
-    <div style="font-size:2rem;margin-bottom:6px;">{{ icon("device-mobile", size="lg") }}</div>
+  <div class="sys-empty sys-empty-box sys-mb-3">
+    <div class="sys-empty-icon">{{ icon("device-mobile", size="lg") }}</div>
     <p class="text-muted">Noch keine Einheit-Geräte registriert.</p>
   </div>
   {% endif %}
 
   <!-- Fehlgeschlagene Zugriffe (SEC-01) -->
-  <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">{{ icon("shield", size="md") }} Fehlgeschlagene Geräte-Zugriffe</h2>
-  <p class="page-header__sub" style="margin-bottom:10px;">Geräte, die mit abgelaufenen, widerrufenen oder ersetzten Zugangsdaten anfragen. Wiederholte Versuche werden zusammengefasst; Tokens werden nie gespeichert.</p>
+  <h2 class="sys-section-title">{{ icon("shield", size="md") }} Fehlgeschlagene Geräte-Zugriffe</h2>
+  <p class="sys-muted sys-mb-1">Geräte, die mit abgelaufenen, widerrufenen oder ersetzten Zugangsdaten anfragen. Wiederholte Versuche werden zusammengefasst; Tokens werden nie gespeichert.</p>
   {% include "admin/_auth_failures.html" %}
 
   <!-- SMS-Gateway-Tokens-Tabelle -->
-  <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">{{ icon("antenna", size="md") }} SMS-Gateways (Android)</h2>
+  <h2 class="sys-section-title">{{ icon("antenna", size="md") }} SMS-Gateways (Android)</h2>
   {% if gateway_tokens %}
-  <div style="overflow-x:auto;margin-bottom:32px;">
-    <table class="table-admin" style="min-width:500px;">
+  <div class="sys-table-wrap sys-mb-3">
+    <table class="sys-table sys-min-500">
       <thead>
         <tr>
           <th>Bezeichnung</th>
           {% if is_sysadmin %}<th>Organisation</th>{% endif %}
-          <th style="width:100px;">Reihenfolge</th>
-          <th style="width:130px;">Erstellt</th>
-          <th style="width:130px;">Zuletzt verbunden</th>
-          <th style="width:90px;">Status</th>
-          <th style="width:150px;">Aktionen</th>
+          <th class="sys-col-100">Reihenfolge</th>
+          <th class="sys-col-130">Erstellt</th>
+          <th class="sys-col-130">Zuletzt verbunden</th>
+          <th class="sys-col-90">Status</th>
+          <th class="sys-col-150">Aktionen</th>
         </tr>
       </thead>
       <tbody>
         {% for gw in gateway_tokens %}
         <tr>
-          <td style="font-weight:600;">{{ gw.label }}</td>
+          <td class="sys-semibold">{{ gw.label }}</td>
           {% if is_sysadmin %}
           <td>{{ gw.org.name if gw.org else '—' }}</td>
           {% endif %}
-          <td style="white-space:nowrap;">
-            <form method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/prioritaet" style="display:inline;">
+          <td class="sys-nowrap">
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/prioritaet">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="richtung" value="hoch">
               <button class="btn btn--ghost btn--sm" aria-label="Gateway nach oben verschieben"
                       {{ tip('Nach oben') }} {% if loop.first %}disabled{% endif %}>{{ icon("chevron-up", size="xs") }}</button>
             </form>
-            <form method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/prioritaet" style="display:inline;">
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/prioritaet">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="richtung" value="runter">
               <button class="btn btn--ghost btn--sm" aria-label="Gateway nach unten verschieben"
                       {{ tip('Nach unten') }} {% if loop.last %}disabled{% endif %}>{{ icon("chevron-down", size="xs") }}</button>
             </form>
           </td>
-          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+          <td class="sys-nowrap sys-small sys-muted">
             {{ (gw.created_at|local).strftime('%d.%m.%Y') }}
           </td>
-          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+          <td class="sys-nowrap sys-small sys-muted">
             {% if gw.last_used_at %}{{ (gw.last_used_at|local).strftime('%d.%m.%Y %H:%M') }}
             {% else %}<span class="text-muted">Nie</span>{% endif %}
           </td>
           <td>
             {% if gw.is_active %}
-              <span class="badge-pill badge-pill--green" style="font-size:.8rem;">Aktiv</span>
+              <span class="sys-pill sys-status--ok">Aktiv</span>
             {% else %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.8rem;">Widerrufen</span>
+              <span class="sys-pill">Widerrufen</span>
             {% endif %}
             {% if gw.id in connected_gateway_ids %}
-              <span class="badge-pill badge-pill--green" style="font-size:.8rem;">Verbunden</span>
+              <span class="sys-pill sys-status--ok">Verbunden</span>
             {% else %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.8rem;">Nicht verbunden</span>
+              <span class="sys-pill">Nicht verbunden</span>
             {% endif %}
           </td>
-          <td style="white-space:nowrap;">
+          <td class="sys-nowrap">
             {% if gw.is_active %}
-            <form method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/widerrufen" style="display:inline;"
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/widerrufen"
                   data-label="{{ gw.label }}" onsubmit="return confirmRevoke(this)">
               <button class="btn btn--ghost btn--sm" {{ tip('Gateway-Token widerrufen') }}>Widerrufen</button>
             </form>
             {% else %}
-            <form method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/reaktivieren" style="display:inline;">
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/reaktivieren">
               <button class="btn btn--ghost btn--sm" {{ tip('Token reaktivieren') }}>Reaktivieren</button>
             </form>
             {% endif %}
-            <form method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/loeschen" style="display:inline;"
+            <form class="sys-inline-form" method="post" action="/admin/geraete-login/gateway/{{ gw.id }}/loeschen"
                   data-label="{{ gw.label }}" onsubmit="return confirmDelete(this)">
-              <button class="btn btn--ghost btn--sm" style="color:var(--color-danger)"
+              <button class="btn btn--ghost btn--sm sys-danger"
                       {{ tip('Gateway-Token endgültig löschen') }}>Löschen</button>
             </form>
           </td>
@@ -338,49 +345,49 @@
     </table>
   </div>
   {% else %}
-  <div class="chart-box" style="text-align:center;padding:32px;margin-bottom:32px;">
-    <div style="font-size:2rem;margin-bottom:6px;">{{ icon("antenna", size="lg") }}</div>
+  <div class="sys-empty sys-empty-box sys-mb-3">
+    <div class="sys-empty-icon">{{ icon("antenna", size="lg") }}</div>
     <p class="text-muted">Noch kein SMS-Gateway registriert.</p>
   </div>
   {% endif %}
 
   <!-- Android Standort-Hinweis -->
-  <div class="alert" style="border-left:4px solid var(--color-warning,#f59e0b);background:var(--surface-high);padding:14px 16px;border-radius:6px;margin-bottom:12px;">
+  <div class="alert sys-hint-box sys-hint-box--warn">
     <strong>{{ icon("map-pin", size="sm") }} Android-App: Standort im Hintergrund aktivieren</strong>
-    <p style="margin:.5rem 0 0;font-size:.9rem;color:var(--color-text-muted);line-height:1.6;">
+    <p class="sys-note-text">
       Damit die {{ brand }}-App den Fahrzeugstandort auch bei gesperrtem Display oder im Hintergrund übermittelt (erforderlich für die Lagekarte), muss in den Android-Systemeinstellungen die Standort-Berechtigung auf <strong>„Immer zulassen"</strong> gesetzt werden:
     </p>
-    <ol style="margin:.5rem 0 0;padding-left:1.2rem;font-size:.875rem;color:var(--color-text-muted);line-height:1.8;">
+    <ol class="sys-steps">
       <li>Android-Einstellungen → <strong>Apps</strong> → <strong>{{ brand }}</strong></li>
       <li><strong>Berechtigungen</strong> → <strong>Standort</strong></li>
       <li>Option <strong>„Immer zulassen"</strong> auswählen</li>
     </ol>
-    <p style="margin:.5rem 0 0;font-size:.8rem;color:var(--color-text-muted);">
+    <p class="sys-note-small">
       Ohne diese Einstellung wird der Standort nur übermittelt, solange die App aktiv im Vordergrund ist.
     </p>
   </div>
 
   <!-- Android Akku-Optimierung Hinweis -->
-  <div class="alert" style="border-left:4px solid var(--color-danger,#dc2626);background:var(--surface-high);padding:14px 16px;border-radius:6px;margin-bottom:16px;">
+  <div class="alert sys-hint-box sys-hint-box--fail">
     <strong>{{ icon("battery", size="sm") }} Android-App: Akku-Optimierung deaktivieren (dauerhafter Hintergrund-Betrieb)</strong>
-    <p style="margin:.5rem 0 0;font-size:.9rem;color:var(--color-text-muted);line-height:1.6;">
+    <p class="sys-note-text">
       Der Android-Energiesparmodus kann Hintergrunddienste (GPS, Verbindung) unterbrechen, auch wenn die Standort-Berechtigung auf „Immer zulassen" steht. Für zuverlässigen Dauerbetrieb im Einsatz die App von der Akku-Optimierung ausnehmen:
     </p>
-    <ol style="margin:.5rem 0 0;padding-left:1.2rem;font-size:.875rem;color:var(--color-text-muted);line-height:1.8;">
+    <ol class="sys-steps">
       <li>Android-Einstellungen → <strong>Apps</strong> → <strong>{{ brand }}</strong></li>
       <li><strong>Akku</strong> (oder „Akkuverbrauch")</li>
       <li>Option <strong>„Nicht eingeschränkt"</strong> oder <strong>„Keine Einschränkungen"</strong> auswählen</li>
     </ol>
-    <p style="margin:.5rem 0 0;font-size:.8rem;color:var(--color-text-muted);">
+    <p class="sys-note-small">
       Alternativ: Einstellungen → Akku → Akku-Optimierung → Alle Apps → {{ brand }} → „Nicht optimieren".<br>
       Unser eigener Energiesparmodus (unter 20&nbsp;% Akku) reduziert nur die GPS-Häufigkeit – das GPS-Tracking selbst läuft immer weiter.
     </p>
   </div>
 
   <!-- Hinweise -->
-  <div class="chart-box">
-    <h3 style="margin-bottom:8px;">Hinweise</h3>
-    <ul style="margin:0;padding-left:18px;line-height:1.7;color:var(--color-text-muted);font-size:.9rem;">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("info-circle") }} Hinweise</h2></div>
+    <ul class="sys-hint-list">
       <li>Die Login-URL enthält einen geheimen Token und ersetzt Benutzername + Passwort.</li>
       <li>Die URL / der Token wird nur beim Erstellen einmalig angezeigt — bitte sofort kopieren oder QR scannen.</li>
       <li>Widerrufene Token können reaktiviert werden.</li>
@@ -391,12 +398,12 @@
       <li>Der aktuell verbundene SMS-Gateway-Status ist unter <a href="/admin/sms-gateway/status" class="link-sm">Admin → SMS-Gateway-Status</a> sichtbar.</li>
       <li><strong>Gerät + SMS-Gateway</strong>: Ein Gerät kann gleichzeitig als Einheit-Board und als SMS-Gateway laufen (z.B. ein fest verbautes Fahrzeug-Tablet mit SIM). Ein Scan koppelt beide Rollen; das Board wird angezeigt, der SMS-Versand läuft im Hintergrund weiter.</li>
     </ul>
-  </div>
+  </section>
 </div>
 
 <!-- Modal: Neues Gerät -->
-<dialog id="newDeviceModal" style="background:var(--surface-mid);border:1px solid var(--border);border-radius:.75rem;color:var(--on-surface);padding:0;max-width:500px;width:100%;">
-  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+<dialog class="sys-dialog" id="newDeviceModal">
+  <div class="sys-card__head sys-pad-md">
     <h2>Gerät registrieren</h2>
     <button aria-label="Schließen" class="btn btn--ghost btn--sm" data-ec-action="close-dialog" data-ec-dialog="newDeviceModal">{{ icon("x", size="xs") }}</button>
   </div>
@@ -406,40 +413,40 @@
 
       <!-- Typ-Auswahl -->
       <div class="form-group">
-        <label class="form-label">Gerätetyp <span style="color:var(--color-danger)">*</span></label>
-        <div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;">
-          <label style="flex:1;min-width:180px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
+        <label class="form-label">Gerätetyp <span class="sys-danger">*</span></label>
+        <div class="sys-row sys-mt-1">
+          <label class="sys-type-option"
                  id="typeUnitLabel">
-            <input type="radio" name="device_type" value="unit" checked
-                   onchange="updateDeviceTypeUi()" style="margin-top:3px;flex-shrink:0;">
+            <input class="sys-radio-top" type="radio" name="device_type" value="unit" checked
+                   onchange="updateDeviceTypeUi()">
             <div>
-              <div style="font-weight:600;font-size:.93rem;">{{ icon("device-mobile", size="sm") }} Einheit-Gerät</div>
-              <div style="font-size:.8rem;color:var(--color-text-muted);margin-top:2px;">Tablet / Anzeigescreen mit Standort &amp; Push</div>
+              <div class="sys-semibold sys-option-title">{{ icon("device-mobile", size="sm") }} Einheit-Gerät</div>
+              <div class="sys-text-xs sys-muted sys-hint-top">Tablet / Anzeigescreen mit Standort &amp; Push</div>
             </div>
           </label>
-          <label style="flex:1;min-width:180px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
+          <label class="sys-type-option"
                  id="typeGwLabel">
-            <input type="radio" name="device_type" value="sms-gateway"
-                   onchange="updateDeviceTypeUi()" style="margin-top:3px;flex-shrink:0;">
+            <input class="sys-radio-top" type="radio" name="device_type" value="sms-gateway"
+                   onchange="updateDeviceTypeUi()">
             <div>
-              <div style="font-weight:600;font-size:.93rem;">{{ icon("antenna", size="sm") }} SMS-Gateway</div>
-              <div style="font-size:.8rem;color:var(--color-text-muted);margin-top:2px;">Android-Gerät sendet SMS über eingebaute SIM</div>
+              <div class="sys-semibold sys-option-title">{{ icon("antenna", size="sm") }} SMS-Gateway</div>
+              <div class="sys-text-xs sys-muted sys-hint-top">Android-Gerät sendet SMS über eingebaute SIM</div>
             </div>
           </label>
-          <label style="flex:1;min-width:180px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
+          <label class="sys-type-option"
                  id="typeCombinedLabel">
-            <input type="radio" name="device_type" value="unit+sms-gateway"
-                   onchange="updateDeviceTypeUi()" style="margin-top:3px;flex-shrink:0;">
+            <input class="sys-radio-top" type="radio" name="device_type" value="unit+sms-gateway"
+                   onchange="updateDeviceTypeUi()">
             <div>
-              <div style="font-weight:600;font-size:.93rem;">{{ icon("device-mobile", size="sm") }}{{ icon("antenna", size="sm") }} Gerät + SMS-Gateway</div>
-              <div style="font-size:.8rem;color:var(--color-text-muted);margin-top:2px;">Board-Gerät, sendet zusätzlich SMS über eingebaute SIM</div>
+              <div class="sys-semibold sys-option-title">{{ icon("device-mobile", size="sm") }}{{ icon("antenna", size="sm") }} Gerät + SMS-Gateway</div>
+              <div class="sys-text-xs sys-muted sys-hint-top">Board-Gerät, sendet zusätzlich SMS über eingebaute SIM</div>
             </div>
           </label>
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Bezeichnung <span style="color:var(--color-danger)">*</span></label>
+        <label class="form-label">Bezeichnung <span class="sys-danger">*</span></label>
         <input type="text" name="label" class="form-input" required maxlength="150"
                id="deviceLabelInput"
                placeholder="z.B. Tablet Gerätehaus EG"
@@ -450,13 +457,13 @@
       <div id="unitOnlyFields">
         <div class="form-group">
           <label class="form-label">Rollen</label>
-          <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+          <div class="sys-col-list">
             {% for role in roles %}
             {% if role.code != 'system_admin' or is_sysadmin %}
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <label class="sys-check">
               <input type="checkbox" name="role_codes" value="{{ role.code }}">
               <span>{{ role.label }}</span>
-              <small class="text-muted" style="font-family:monospace;">({{ role.code }})</small>
+              <small class="text-muted sys-mono">({{ role.code }})</small>
             </label>
             {% endif %}
             {% endfor %}
@@ -495,7 +502,7 @@
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
+      <div class="sys-row sys-actions--end sys-mt-2">
         <button type="button" class="btn btn--ghost" data-ec-action="close-dialog" data-ec-dialog="newDeviceModal">Abbrechen</button>
         <button type="submit" class="btn btn--primary" id="createBtn">Gerät erstellen &amp; Token generieren</button>
       </div>
