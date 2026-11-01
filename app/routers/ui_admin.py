@@ -3291,9 +3291,14 @@ def device_token_detail(
     )
     _assert_device_token_access(dt, request.state.user)
     assert dt is not None
+    from app.models.app_geraet import AppGeraet
+    app_geraete = (db.query(AppGeraet).filter(AppGeraet.device_token_id == dt.id)
+                  .order_by(AppGeraet.last_report_at.desc()).all()
+                  if has_role(request.state.user, "system_admin") else [])
     return templates.TemplateResponse(request, "admin/device_token_detail.html", {
         "user": request.state.user,
         "dt": dt,
+        "app_geraete": app_geraete,
         "auth_failures": _auth_failures_query(db, request.state.user, dt.id).limit(50).all(),
     })
 

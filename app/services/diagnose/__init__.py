@@ -1,5 +1,6 @@
 """Diagnose-Registry; Import registriert ausschliesslich lesende Checks."""
 from app.services.diagnose import (  # noqa: F401
+    app_geraete,
     datenbank,
     deploy,
     einsatz,

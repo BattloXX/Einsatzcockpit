@@ -72,3 +72,23 @@ Alle Felder ausser schema/install_id optional; Server validiert per Whitelist, k
 
 Datenschutz: NIE IMEI, Seriennummer, Telefonnummer, SIM-ID, Werbe-ID, MAC, Standort, Tokens, SMS-Texte,
 vollstaendige URLs (nur Host). Server maskiert Fehlertexte zusaetzlich (Telefonnummern, Tokens, E-Mails, URLs-Query).
+
+## Zentrale Auswertung (B2/B3)
+
+`app_geraet_auswertung` liefert rein lesend Liste, Verteilungen, CalVer-Ampel und
+Gesundheitsregeln. Der Aufrufer setzt den Tenant-Kontext; nur die persoenliche
+Systemadmin-Diagnose hebt die Organisationsgrenze explizit auf. Soll-Version und
+APK teilen GitHub-Abruf, Erfolgscache (1 Stunde) und Fehlercache (5 Minuten).
+Ein Ausfall ergibt die Ampel unbekannt und keinen Versionsbefund.
+
+Systemstatus > Systemdiagnose > App-Geraete zeigt die Flotte und Details ohne
+Schreibaktionen. Der Aufruf eines Details erzeugt `diag.ui.geraet` im Audit.
+Der leichte Check `app.geraete` aggregiert Regelverletzungen und Fehler-Cluster,
+begrenzt IDs und DB-Zeilen mit dem Diagnosebudget. Push-Korrelation erfolgt nur
+ueber `modul=push` in der Cluster-Evidenz, ohne Abhaengigkeit zum Push-Service.
+
+Die Fehleranzahl wird von der App kumuliert gemeldet. Die 7-Tage-Regel bedeutet
+somit: kumulierte Anzahl >= 5 und zuletzt innerhalb der letzten 7 Tage gemeldet;
+eine exakte Anzahl einzelner Fehler innerhalb des Zeitfensters ist mit Schema 1
+nicht rekonstruierbar. Dienstaktiv bedeutet: verknuepftes, nicht widerrufenes
+DeviceToken mit `duty_active=true`. Die 12-Monatsgrenze nutzt Kalendermonate.

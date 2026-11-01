@@ -9,6 +9,7 @@ from app.config import settings
 
 _ERFOLG_TTL = 60 * 60
 _FEHLER_TTL = 5 * 60
+_cache_version: str | None = None
 _cache_url: str | None = None
 _cache_bis = 0.0
 
@@ -19,12 +20,13 @@ def _fallback_url() -> str:
 
 def android_apk_url() -> str:
     """Liefert die aktuelle APK-URL, mit kurzzeitigem Fallback bei GitHub-Fehlern."""
-    global _cache_bis, _cache_url
+    global _cache_bis, _cache_url, _cache_version
 
     now = time.monotonic()
     if _cache_url is not None and now < _cache_bis:
         return _cache_url
 
+    _cache_version = None
     fallback = _fallback_url()
     try:
         response = httpx.get(
@@ -36,7 +38,10 @@ def android_apk_url() -> str:
             timeout=5.0,
         )
         response.raise_for_status()
-        assets = response.json().get("assets", [])
+        release = response.json()
+        tag = release.get("tag_name")
+        _cache_version = tag if isinstance(tag, str) else None
+        assets = release.get("assets", [])
         apk = next(
             (
                 asset.get("browser_download_url")
@@ -49,11 +54,20 @@ def android_apk_url() -> str:
             None,
         )
         if not apk:
-            raise ValueError("Keine passende APK im aktuellen Release")
-    except (httpx.HTTPError, ValueError, TypeError):
+            _cache_url = fallback
+            _cache_bis = now + _FEHLER_TTL
+            return _cache_url
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        _cache_version = None
         _cache_url = fallback
         _cache_bis = now + _FEHLER_TTL
     else:
         _cache_url = apk
         _cache_bis = now + _ERFOLG_TTL
     return _cache_url
+
+
+def android_release_version() -> str | None:
+    """Release-Tag aus demselben Abruf und Cache wie der APK-Download."""
+    android_apk_url()
+    return _cache_version

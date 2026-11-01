@@ -510,3 +510,10 @@ def test_jede_admin_seite_gehoert_genau_einem_hauptpunkt():
     assert not mehrfach, f"Admin-Seiten mit mehreren Hauptpunkten: {mehrfach}"
     veraltet = set(OHNE_KATALOGEINTRAG) - set(pfade)
     assert not veraltet, f"Ausnahmen ohne Route, bitte entfernen: {sorted(veraltet)}"
+
+
+@pytest.mark.parametrize("path", ["/admin/systemdiagnose/teil/geraete", "/admin/systemdiagnose/geraet/1"])
+def test_app_geraete_gehoeren_zur_systemdiagnose(path):
+    nav = _nav(path, role="system_admin")
+    assert nav.eintrag("systemstatus").ist_aktiv(path)
+    assert next(t for t in nav.eintrag("systemstatus").tabs if t.id == "systemdiagnose").ist_aktiv(path)

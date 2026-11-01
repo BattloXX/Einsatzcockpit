@@ -87,6 +87,8 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
         monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
         monkeypatch.setattr(GitHubReadonly, "compare", lambda self, sha: {
             "status": "ok", "daten": {"commits_hinter_main": 0}})
+    if check_id == "app.geraete":
+        monkeypatch.setattr("app.services.diagnose.app_geraete.soll_version", lambda: None)
     check = registry.CHECKS[check_id]
     before = snapshot(diag_engine)
     result = registry.execute_check(diag_engine, check)
@@ -108,6 +110,8 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
                    redis=redis, loops={})
         elif check_id == "redis.zustand":
             redis.update(connected=False, publish_failures=3)
+        elif check_id == "app.geraete":
+            insert(db, "app_geraet", user_id=99999, sdk_int=23)
         elif check_id == "gateway.jobs":
             insert(db, "incident_alarm_job", incident_id=99999, org_id=org, channel="sms",
                    next_attempt_at=utcnow() - timedelta(minutes=10), status="pending", context={})

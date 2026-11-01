@@ -8,6 +8,7 @@
 
 {% block admin_content %}
 <div class="page-content">
+  {% for g in app_geraete %}<p><a href="/admin/systemdiagnose?geraet={{ g.id }}">App-Geraet: {{ g.hersteller or '' }} {{ g.modell or '' }}</a></p>{% endfor %}
   <div class="page-header">
     <div>
       <h1>{{ dt.label }}</h1>

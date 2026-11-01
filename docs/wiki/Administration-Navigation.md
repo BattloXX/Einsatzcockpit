@@ -59,3 +59,7 @@ Im Verwaltungsmenü gibt es pro Fachgebiet **einen** Menüpunkt. Die zugehörige
 - Tabs oder Menüpunkte, für die Ihnen die Berechtigung oder das Modul fehlt, werden nicht angezeigt.
 - Die Organisations-Einstellungen sind ein einziges Formular: Speichern übernimmt alle vier Tabs und bringt Sie zurück in den aktuellen Tab.
 - Entwicklerinfos: `docs/architecture/admin-navigation.md` im Repository.
+
+Die Systemdiagnose enthaelt den lesenden Bereich **App-Geraete** mit HTMX-Detailansicht
+`/admin/systemdiagnose/geraet/{geraet_id}` (nur persoenliche Systemadmin-Konten).
+Er gehoert zum vorhandenen Hauptpunkt Systemstatus, Tab Systemdiagnose.

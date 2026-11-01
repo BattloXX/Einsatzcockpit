@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- Systemdiagnose: lesende App-Geraeteflotte mit Filtern, Release-Ampel, Detailansicht und gemeinsamem Gesundheitscheck `app.geraete`.
+
 - **App-Geraetebericht:** Neuer Endpunkt `POST /api/v1/device/diagnose-report` nimmt den Geraetebericht der Android-App entgegen (Version, Geraete-/Display-/Android-Eigenschaften, WebView, Einstellungen, Berechtigungen, Dienstzustand, strukturierte Fehler). Whitelist-Validierung, Maskierung, 64 KB und 30 Berichte/Stunde, 90 Tage Aufbewahrung; kein Rueckkanal fuer Einstellungen. Migration 0339.
 
 - **Admin-MCP / Deploy:** Die Systemuebersicht vergleicht den Deploy-Commit mit main und warnt bei Rueckstand. Ein bestaetigt aktueller Stand schliesst alte Versionsbefunde; GitHub-Tokenbefunde bleiben offen. Ein nicht verfuegbarer GitHub-Abgleich verschlechtert den Status nicht.
