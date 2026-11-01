@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Systemstatus:** Ein organisationsloser Systemadmin bekam unter `/admin/systemstatus` den Fehler 400 "Keine Organisation ausgewaehlt". Die Seite waehlt jetzt die erste Organisation vor und bietet eine Organisationsauswahl.
+
 - **Verwaltungs-Startseite:** Inhaltlich an das Wiki angepasst: Uebersicht aller fuer die Rolle sichtbaren Hauptpunkte aus dem Navigationskatalog, Einrichtungsreihenfolge mit Wiki-Verweisen und die Dokumentation nach Themen (Grundeinrichtung, Alarmierung, Module, GSL, Schnittstellen, Sicherheit und Betrieb fuer Systemadmins). Quelle: `app/services/admin_startseite.py`; ein Test prueft, dass alle Wiki-Seiten existieren.
 
 - **Sysadmin-Design:** Systemdiagnose, System-Einstellungen, Systemstatus, Server-Log, System-Update, Organisationen und Quotas im einheitlichen `sys-*`-Design (`app/static/css/sysadmin.css`): Reiter mit aktivem Zustand, Ampel-Kopf, Kennzahlkarten, Schluessel/Wert-Listen statt JSON, Sprungnavigation und Schalter in den System-Einstellungen, echte Umlaute. Danach alle weiteren Verwaltungsseiten (89 Seiten mit Admin-Layout: Organisations-Einstellungen, Integrationen, SMS/Push/Mail, Geraete/Gateway, Stammdaten, Foerderstrecke/Verleih/Probenplanung/Planspiel, Backups/Medien/Seiten) ohne statische Inline-Styles; ein Waechtertest sichert das ab. Nur Optik; Routen, Felder und Berechtigungen unveraendert. Plan: `docs/plans/sysadmin-design-plan.md`.

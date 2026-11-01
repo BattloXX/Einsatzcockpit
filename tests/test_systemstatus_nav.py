@@ -288,3 +288,26 @@ def test_ui_und_uptime_api_zeigen_sms_teilstoerung(client, setup_db, monkeypatch
         ).delete()
         db.commit()
         db.close()
+
+
+def test_orgloser_systemadmin_wird_auf_organisation_weitergeleitet(client, setup_db):
+    org_id = _make_org_admin("systemstatus_orgadmin_ref", "systemstatus-ref")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = User(username="systemstatus_sysadmin", password_hash=hash_password("Test1234!"),
+                    display_name="Sys", org_id=None, active=True)
+        db.add(user)
+        db.flush()
+        role = db.query(Role).filter(Role.code == "system_admin").first()
+        db.add(UserRole(user_id=user.id, role_id=role.id))
+        db.commit()
+    finally:
+        db.close()
+    _login(client, "systemstatus_sysadmin", "Test1234!")
+    antwort = client.get("/admin/systemstatus", follow_redirects=False)
+    assert antwort.status_code == 303
+    assert antwort.headers["location"].startswith("/admin/systemstatus?org_id=")
+    seite = client.get(f"/admin/systemstatus?org_id={org_id}")
+    assert seite.status_code == 200
+    assert 'id="status-org"' in seite.text
