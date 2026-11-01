@@ -1,15 +1,20 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block title %}Mail-Versand{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Mail-Versand'}]) }}{% endblock %}
 
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='schnittstellen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
+<div class="sys-hero">
   <div>
-    <h1>Mail-Versand</h1>
-    <p class="page-header__sub">Office 365, Resend und SMTP je Organisation mit automatischer Fallback-Kette</p>
+    <h1>{{ icon("mail") }} Mail-Versand</h1>
+    <p class="sys-muted">Office 365, Resend und SMTP je Organisation mit automatischer Fallback-Kette</p>
   </div>
 </div>
 
@@ -24,16 +29,13 @@
 </div>
 {% endif %}
 
-<style>
-  .mail-address-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
-  @media (max-width:760px) { .mail-address-grid { grid-template-columns:1fr; } }
-</style>
+
 
 {% if is_sysadmin and all_orgs %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:16px 20px">
-    <label style="font-weight:600;margin-bottom:6px;display:block">Organisation:</label>
-    <select class="form-control" style="max-width:320px"
+<section class="sys-card">
+  <div class="card-body">
+    <label class="sys-semibold sys-mb-1">Organisation:</label>
+    <select class="form-control"
             onchange="location.href='/admin/mail?org_id='+this.value">
       <option value="">-- bitte wählen --</option>
       {% for o in all_orgs %}
@@ -48,11 +50,11 @@
 <div class="alert alert--info">Bitte eine Organisation auswählen.</div>
 {% else %}
 
-<section class="card mb-4">
-  <div class="card-header"><h2>Ihre Mail-Adressen</h2></div>
-  <div class="card-body mail-address-grid" style="padding:16px 20px">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("settings") }} Ihre Mail-Adressen</h2></div>
+  <div class="card-body sys-grid-3">
     <div>
-      <h3 style="margin-top:0">Vom Einsatzcockpit bereitgestellt</h3>
+      <h3 class="sys-m-0">Vom Einsatzcockpit bereitgestellt</h3>
       <p class="form-hint">Absender</p>
       {% if adressen_uebersicht.system.absender %}
       <code>{{ adressen_uebersicht.system.absender }}</code>
@@ -69,7 +71,7 @@
       </span></p>
     </div>
     <div>
-      <h3 style="margin-top:0">Eigene Wege</h3>
+      <h3 class="sys-m-0">Eigene Wege</h3>
       <p><strong>Office 365</strong> {% if adressen_uebersicht.eigene.o365.absender %}<code>{{ adressen_uebersicht.eigene.o365.absender }}</code>{% else %}<span class="badge-pill badge-pill--gray">nicht konfiguriert</span>{% endif %}</p>
       {% if adressen_uebersicht.eigene.o365.absender %}<button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.eigene.o365.absender }}">Kopieren</button>{% endif %}
       {% if adressen_uebersicht.eigene.o365.empfang %}<p class="form-hint">Empfangspostfach: <code>{{ adressen_uebersicht.eigene.o365.empfang }}</code> <button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.eigene.o365.empfang }}">Kopieren</button></p>{% endif %}
@@ -83,7 +85,7 @@
       <p><span class="badge-pill {% if adressen_uebersicht.eigene.smtp.enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">Versand {% if adressen_uebersicht.eigene.smtp.enabled %}aktiv{% else %}aus{% endif %}</span> <span class="badge-pill {% if adressen_uebersicht.eigene.smtp.imap_enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">IMAP {% if adressen_uebersicht.eigene.smtp.imap_enabled %}aktiv{% else %}aus{% endif %}</span></p>
     </div>
     <div>
-      <h3 style="margin-top:0">Aktuell verwendet</h3>
+      <h3 class="sys-m-0">Aktuell verwendet</h3>
       {% set weg_labels = {'o365': 'Office 365', 'resend_org': 'Eigenes Resend', 'resend_global': 'Einsatzcockpit (Resend)', 'smtp_org': 'Eigener SMTP-Server', 'smtp_global': 'Systemweiter SMTP-Server', 'keiner': 'Kein Versand konfiguriert (Mails werden nur protokolliert)'} %}
       <p><strong>Versand:</strong> {{ weg_labels[adressen_uebersicht.versand.weg] }}
         <span class="badge-pill badge-pill--green">wird verwendet</span></p>
@@ -97,10 +99,10 @@
   </div>
 </section>
 
-<section class="card mb-4">
-  <div class="card-header"><h2>Reihenfolge beim Versand</h2></div>
-  <div class="card-body" style="padding:16px 20px">
-    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("settings") }} Reihenfolge beim Versand</h2></div>
+  <div class="card-body">
+    <p class="sys-small sys-muted sys-m-0">
       Ist Office 365 aktiviert und vollständig konfiguriert, wird zuerst darüber versendet.
       Danach folgt Resend (eigene Org-Konfiguration, sonst global) und als letzte Stufe
       SMTP (eigener Server der Organisation, sonst globaler System-SMTP).
@@ -116,13 +118,13 @@
 </div>
 {% endif %}
 
-<form method="post" action="/admin/mail/eingang/einstellungen/save">
+<form method="post" action="/admin/mail/eingang/einstellungen/save" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-  <section class="card mb-4">
-    <div class="card-header"><h2>Mail-Eingang</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:14px">
-      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Mail-Eingang</h2></div>
+    <div class="card-body sys-stack">
+      <div class="sys-form-grid">
         <label>Modus <select name="mail_eingang_modus" class="form-input"><option value="aus" {% if not org_settings or org_settings.mail_eingang_modus == 'aus' %}selected{% endif %}>Aus</option><option value="freigegeben" {% if org_settings and org_settings.mail_eingang_modus == 'freigegeben' %}selected{% endif %}>Nur freigegebene Absender</option><option value="alle" {% if org_settings and org_settings.mail_eingang_modus == 'alle' %}selected{% endif %}>Alle</option></select></label>
         <label>Rückblick (Min.) <input class="form-input" type="number" name="mail_eingang_rueckblick_min" min="5" max="240" value="{{ org_settings.mail_eingang_rueckblick_min if org_settings else 30 }}"></label>
         <label>Mehrere Einsätze <select name="mail_eingang_mehrere" class="form-input"><option value="posteingang" {% if not org_settings or org_settings.mail_eingang_mehrere == 'posteingang' %}selected{% endif %}>Posteingang</option><option value="neuester" {% if org_settings and org_settings.mail_eingang_mehrere == 'neuester' %}selected{% endif %}>Neuesten nehmen</option></select></label>
@@ -135,15 +137,15 @@
 </form>
 
 <!-- ── Eigener SMTP-Server ─────────────────────────────────────────────────── -->
-<form method="post" action="/admin/mail/smtp/save">
+<form method="post" action="/admin/mail/smtp/save" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}
   <input type="hidden" name="target_org_id" value="{{ org.id }}">
   {% endif %}
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Eigener SMTP-Server</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Eigener SMTP-Server</h2></div>
+    <div class="card-body sys-stack">
 
       <input type="hidden" name="imap_enabled" value="{{ '1' if smtp_config and smtp_config.imap_enabled else '' }}">
       <input type="hidden" name="imap_host" value="{{ smtp_config.imap_host or '' if smtp_config else '' }}">
@@ -151,54 +153,54 @@
       <input type="hidden" name="imap_use_ssl" value="{{ '1' if not smtp_config or smtp_config.imap_use_ssl else '' }}">
       <input type="hidden" name="imap_ordner" value="{{ smtp_config.imap_ordner or 'INBOX' if smtp_config else 'INBOX' }}">
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="enabled" value="1"
                  {% if smtp_config and smtp_config.enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Eigenen SMTP-Server verwenden
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Ohne Aktivierung wird der globale System-SMTP verwendet.</p>
+        <p class="form-hint sys-my-1">Ohne Aktivierung wird der globale System-SMTP verwendet.</p>
       </div>
 
-      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
-        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+      <div class="sys-form-grid">
+        <div class="form-group sys-grow sys-m-0">
           <label for="host">Host</label>
           <input type="text" id="host" name="host"
                  value="{{ smtp_config.host or '' if smtp_config else '' }}"
                  placeholder="smtp.example.at" class="form-input" autocomplete="off">
         </div>
-        <div class="form-group" style="margin:0;width:120px">
+        <div class="form-group sys-m-0">
           <label for="port">Port</label>
           <input type="number" id="port" name="port" min="1" max="65535"
                  value="{{ smtp_config.port if smtp_config else 587 }}" class="form-input">
         </div>
-        <div class="form-group" style="margin:0;width:160px">
+        <div class="form-group sys-m-0">
           <label for="timeout">Timeout (Sek.)</label>
           <input type="number" id="timeout" name="timeout" min="1" max="120"
                  value="{{ smtp_config.timeout if smtp_config else 15 }}" class="form-input">
         </div>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="smtp_user">Benutzername</label>
         <input type="text" id="smtp_user" name="smtp_user"
                value="{{ smtp_config.user or '' if smtp_config else '' }}"
                class="form-input" autocomplete="off">
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="password">Passwort</label>
         {% if smtp_config and smtp_config.password_enc %}
-        <div id="secret-status-smtp" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="color:var(--color-success);font-size:.85rem">&#10003; Passwort gesetzt</span>
+        <div id="secret-status-smtp" class="sys-row sys-mb-1 sys-secret-status">
+          <span class="sys-small sys-status--ok">{{ icon("check") }} Passwort gesetzt</span>
           <button type="button" class="btn btn--ghost btn--sm"
                   onclick="document.getElementById('secret-status-smtp').style.display='none';document.getElementById('secret-replace-smtp').style.display='';document.getElementById('secret_changed_smtp').value='1'">
             Ersetzen
           </button>
         </div>
-        <div id="secret-replace-smtp" style="display:none">
+        <div id="secret-replace-smtp" class="sys-secret-replace">
           <input type="password" id="password" name="password"
                  class="form-input" autocomplete="new-password" placeholder="Neues Passwort eingeben">
         </div>
@@ -212,15 +214,15 @@
         <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
       </div>
 
-      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
-        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+      <div class="sys-form-grid">
+        <div class="form-group sys-grow sys-m-0">
           <label for="from_addr">Absenderadresse</label>
           <input type="text" id="from_addr" name="from_addr"
                  value="{{ smtp_config.from_addr or '' if smtp_config else '' }}"
                  placeholder="einsatz@feuerwehr-beispiel.at" class="form-input" autocomplete="off">
         </div>
-        <div class="form-group" style="margin:0">
-          <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <div class="form-group sys-m-0">
+          <label class="toggle-label sys-check">
             <input type="checkbox" name="starttls" value="1"
                    {% if not smtp_config or smtp_config.starttls %}checked{% endif %}
                    class="toggle-checkbox">
@@ -230,57 +232,57 @@
         </div>
       </div>
 
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="sys-row">
         <button type="submit" class="btn btn--primary">Speichern</button>
         <input type="email" id="smtp-test-recipient" placeholder="Test-Empfänger (optional)"
-               class="form-input" style="max-width:260px">
+               class="form-input">
         <button type="button" class="btn btn--ghost"
                 onclick="einsatzcockpitSmtpTest()">
           Test-Mail senden
         </button>
       </div>
-      <div id="smtp-test-result" style="font-size:.85rem"></div>
+      <div id="smtp-test-result" class="sys-small"></div>
     </div>
   </section>
 </form>
 
 <!-- ── Office 365 / Microsoft Graph ────────────────────────────────────────── -->
-<form method="post" action="/admin/mail/o365/save">
+<form method="post" action="/admin/mail/o365/save" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}
   <input type="hidden" name="target_org_id" value="{{ org.id }}">
   {% endif %}
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Office 365 / Microsoft Graph</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Office 365 / Microsoft Graph</h2></div>
+    <div class="card-body sys-stack">
 
-      <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+      <p class="sys-small sys-muted sys-m-0">
         Braucht eine Azure-AD-App-Registrierung mit Application permission
         <code>Mail.Send</code> (admin-consented), ggf. eingeschränkt auf das
         Absender-Postfach über eine Application Access Policy.
       </p>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="enabled" value="1"
                  {% if o365_config and o365_config.enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Office 365 aktiviert
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Wird zuerst versucht, bevor auf SMTP zurückgefallen wird.</p>
+        <p class="form-hint sys-my-1">Wird zuerst versucht, bevor auf SMTP zurückgefallen wird.</p>
       </div>
 
-      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
-        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+      <div class="sys-form-grid">
+        <div class="form-group sys-grow sys-m-0">
           <label for="tenant_id">Tenant-ID</label>
           <input type="text" id="tenant_id" name="tenant_id"
                  value="{{ o365_config.tenant_id or '' if o365_config else '' }}"
                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                  class="form-input" autocomplete="off">
         </div>
-        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+        <div class="form-group sys-grow sys-m-0">
           <label for="client_id">App (Client)-ID</label>
           <input type="text" id="client_id" name="client_id"
                  value="{{ o365_config.client_id or '' if o365_config else '' }}"
@@ -289,17 +291,17 @@
         </div>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="client_secret">Client-Secret</label>
         {% if o365_config and o365_config.client_secret_enc %}
-        <div id="secret-status-o365" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="color:var(--color-success);font-size:.85rem">&#10003; Secret gesetzt</span>
+        <div id="secret-status-o365" class="sys-row sys-mb-1 sys-secret-status">
+          <span class="sys-small sys-status--ok">{{ icon("check") }} Secret gesetzt</span>
           <button type="button" class="btn btn--ghost btn--sm"
                   onclick="document.getElementById('secret-status-o365').style.display='none';document.getElementById('secret-replace-o365').style.display='';document.getElementById('secret_changed_o365').value='1'">
             Ersetzen
           </button>
         </div>
-        <div id="secret-replace-o365" style="display:none">
+        <div id="secret-replace-o365" class="sys-secret-replace">
           <input type="password" id="client_secret" name="client_secret"
                  class="form-input" autocomplete="new-password" placeholder="Neues Client-Secret eingeben">
         </div>
@@ -313,7 +315,7 @@
         <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="sender_address">Absender-Postfach</label>
         <input type="text" id="sender_address" name="sender_address"
                value="{{ o365_config.sender_address or '' if o365_config else '' }}"
@@ -322,46 +324,46 @@
       </div>
       <input type="hidden" name="read_postfach" value="{{ o365_config.read_postfach or '' if o365_config else '' }}">
 
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="sys-row">
         <button type="submit" class="btn btn--primary">Speichern</button>
         <input type="email" id="o365-test-recipient" placeholder="Test-Empfänger (optional)"
-               class="form-input" style="max-width:260px">
+               class="form-input">
         <button type="button" class="btn btn--ghost"
                 onclick="einsatzcockpitO365Test()">
           Test-Mail senden
         </button>
       </div>
-      <div id="o365-test-result" style="font-size:.85rem"></div>
+      <div id="o365-test-result" class="sys-small"></div>
     </div>
   </section>
 </form>
 
 <!-- Resend -->
-<form method="post" action="/admin/mail/resend/save">
+<form method="post" action="/admin/mail/resend/save" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-  <section class="card mb-4">
-    <div class="card-header"><h2>Resend</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Resend</h2></div>
+    <div class="card-body sys-stack">
       <p class="form-hint">Die Absender-Domain muss im <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">Resend-Dashboard</a> verifiziert sein.</p>
-      <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <label class="toggle-label sys-check">
         <input type="checkbox" name="enabled" value="1" {% if resend_config and resend_config.enabled %}checked{% endif %} class="toggle-checkbox">
         <span class="toggle-switch"></span>Resend für diese Organisation verwenden
       </label>
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="resend_from_addr">Absenderadresse</label>
         <input type="email" id="resend_from_addr" name="from_addr" class="form-input"
                value="{{ resend_config.from_addr or '' if resend_config else '' }}"
                placeholder="einsatz@feuerwehr-beispiel.at" autocomplete="off">
       </div>
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="resend_api_key">API-Key</label>
         {% if resend_config and resend_config.api_key_enc %}
-        <div id="secret-status-resend" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="color:var(--color-success);font-size:.85rem">&#10003; API-Key gesetzt</span>
+        <div id="secret-status-resend" class="sys-row sys-mb-1 sys-secret-status">
+          <span class="sys-small sys-status--ok">{{ icon("check") }} API-Key gesetzt</span>
           <button type="button" class="btn btn--ghost btn--sm" onclick="document.getElementById('secret-status-resend').style.display='none';document.getElementById('secret-replace-resend').style.display='';document.getElementById('secret_changed_resend').value='1'">Ersetzen</button>
         </div>
-        <div id="secret-replace-resend" style="display:none">
+        <div id="secret-replace-resend" class="sys-secret-replace">
           <input type="password" id="resend_api_key" name="api_key" class="form-input" autocomplete="new-password" placeholder="Neuen API-Key eingeben">
         </div>
         {% else %}
@@ -370,25 +372,25 @@
         <input type="hidden" id="secret_changed_resend" name="secret_changed" value="{{ '0' if resend_config and resend_config.api_key_enc else '1' }}">
         <p class="form-hint">Der API-Key wird Fernet-verschlüsselt gespeichert und nie angezeigt.</p>
       </div>
-      <div style="border-top:1px solid var(--color-border);padding-top:14px;display:grid;gap:10px">
-        <h3 style="margin:0">Posteingang über Resend</h3>
+      <div class="sys-stack sys-divider">
+        <h3 class="sys-m-0">Posteingang über Resend</h3>
         <label class="toggle-label"><input type="checkbox" name="inbound_enabled" value="1" {% if resend_config and resend_config.inbound_enabled %}checked{% endif %}> Posteingang aktiv</label>
-        <p class="form-hint">Systemweiter Empfang: {% if system_inbound_configured %}<span style="color:var(--color-success)">&#10003; Empfang eingerichtet</span>{% else %}<span style="color:var(--color-danger)">nicht eingerichtet - System-Administrator informieren</span>{% endif %}</p>
+        <p class="form-hint">Systemweiter Empfang: {% if system_inbound_configured %}<span class="sys-status--ok">{{ icon("check") }} Empfang eingerichtet</span>{% else %}<span class="sys-status--fail">nicht eingerichtet - System-Administrator informieren</span>{% endif %}</p>
         <label>Aufbewahrung in Tagen <input type="number" name="inbound_retention_days" min="1" max="365" value="{{ resend_config.inbound_retention_days if resend_config else 90 }}"></label>
         <p class="form-hint">Der API-Key benötigt Empfangsrechte (Full Access). Die Empfangsadresse ist oben angegeben.</p><a href="/admin/mail/eingang">Posteingang öffnen</a>
       </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="sys-row">
         <button type="submit" class="btn btn--primary">Speichern</button>
-        <input type="email" id="resend-test-recipient" placeholder="Test-Empfänger (optional)" class="form-input" style="max-width:260px">
+        <input type="email" id="resend-test-recipient" placeholder="Test-Empfänger (optional)" class="form-input">
         <button type="button" class="btn btn--ghost" onclick="einsatzcockpitResendTest()">Test-Mail senden</button>
       </div>
-      <div id="resend-test-result" style="font-size:.85rem"></div>
+      <div id="resend-test-result" class="sys-small"></div>
     </div>
   </section>
 </form>
 
 <!-- ── Posteingang abrufen ─────────────────────────────────────────────────── -->
-<form method="post" action="/admin/mail/smtp/save">
+<form method="post" action="/admin/mail/smtp/save" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}
   <input type="hidden" name="target_org_id" value="{{ org.id }}">
@@ -404,17 +406,17 @@
   <input type="hidden" name="timeout" value="{{ smtp_config.timeout if smtp_config else 15 }}">
   <input type="hidden" name="secret_changed" value="0">
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Posteingang abrufen</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
-      <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Posteingang abrufen</h2></div>
+    <div class="card-body sys-stack">
+      <p class="sys-small sys-muted sys-m-0">
         Eingehende Mails werden jede Minute aus dem Postfach gelesen und wie Mails an die Empfangsadresse verarbeitet.
         Das Postfach bleibt unverändert (nichts wird gelesen markiert, verschoben oder gelöscht). Beim Einschalten werden
         die Mails der letzten 24 Stunden übernommen.
       </p>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="imap_enabled" value="1"
                  {% if smtp_config and smtp_config.imap_enabled %}checked{% endif %}
                  class="toggle-checkbox">
@@ -423,20 +425,20 @@
         </label>
       </div>
 
-      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
-        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+      <div class="sys-form-grid">
+        <div class="form-group sys-grow sys-m-0">
           <label for="imap_host">IMAP-Host</label>
           <input type="text" id="imap_host" name="imap_host"
                  value="{{ smtp_config.imap_host or '' if smtp_config else '' }}"
                  placeholder="imap.example.at" class="form-input" autocomplete="off">
         </div>
-        <div class="form-group" style="margin:0;width:120px">
+        <div class="form-group sys-m-0">
           <label for="imap_port">Port</label>
           <input type="number" id="imap_port" name="imap_port" min="1" max="65535"
                  value="{{ smtp_config.imap_port if smtp_config else 993 }}" class="form-input">
         </div>
-        <div class="form-group" style="margin:0">
-          <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <div class="form-group sys-m-0">
+          <label class="toggle-label sys-check">
             <input type="checkbox" name="imap_use_ssl" value="1"
                    {% if not smtp_config or smtp_config.imap_use_ssl %}checked{% endif %}
                    class="toggle-checkbox">
@@ -444,13 +446,13 @@
             SSL/TLS
           </label>
         </div>
-        <div class="form-group" style="margin:0;flex:1;min-width:160px">
+        <div class="form-group sys-grow sys-m-0">
           <label for="imap_ordner">Ordner</label>
           <input type="text" id="imap_ordner" name="imap_ordner" value="{{ smtp_config.imap_ordner or 'INBOX' if smtp_config else 'INBOX' }}" class="form-input" autocomplete="off">
         </div>
       </div>
 
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="sys-row">
         <button type="submit" class="btn btn--primary">Speichern</button>
         <button type="submit" form="imap-test-form" class="btn btn--ghost btn--sm">Verbindung testen</button>
         <a href="/admin/mail/eingang" class="btn btn--ghost btn--sm">Posteingang öffnen</a>
@@ -459,7 +461,7 @@
   </section>
 </form>
 
-<form method="post" action="/admin/mail/o365/save">
+<form method="post" action="/admin/mail/o365/save" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}
   <input type="hidden" name="target_org_id" value="{{ org.id }}">
@@ -472,25 +474,26 @@
   <input type="hidden" name="read_postfach" value="{{ o365_config.read_postfach or '' if o365_config else '' }}">
   <input type="hidden" name="secret_changed" value="0">
 
-  <section class="card mb-4">
-    <div class="card-body" style="padding:16px 20px">
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("mail") }} Office-365-Posteingang</h2></div>
+    <div class="card-body">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="read_enabled" value="1"
                  {% if o365_config and o365_config.read_enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Mail.Read-Abruf aktivieren (Office-365-Postfach, gleiche App-Registrierung)
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Braucht zusätzlich die Application-Permission <code>Mail.Read</code> in Azure.</p>
+        <p class="form-hint sys-my-1">Braucht zusätzlich die Application-Permission <code>Mail.Read</code> in Azure.</p>
       </div>
-      <div class="form-group" style="margin:12px 0 0 0">
+      <div class="form-group sys-my-1">
         <label for="read_postfach">Postfach für den Abruf (optional)</label>
         <input type="text" id="read_postfach" name="read_postfach"
                value="{{ o365_config.read_postfach or '' if o365_config else '' }}"
                placeholder="Leer = Absender-Postfach" class="form-input" autocomplete="off">
       </div>
-      <div style="margin-top:12px">
+      <div class="sys-mt-2">
         <button type="submit" class="btn btn--primary">Speichern</button>
         <button type="submit" form="o365-connection-test-form" class="btn btn--ghost btn--sm">Verbindung testen</button>
       </div>
@@ -554,11 +557,11 @@ function einsatzcockpitResendTest() {
 }
 </script>
 
-<form id="imap-test-form" method="post" action="/admin/mail/imap/verbindung-testen">
+<form id="imap-test-form" method="post" action="/admin/mail/imap/verbindung-testen" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
 </form>
-<form id="o365-connection-test-form" method="post" action="/admin/mail/o365/verbindung-testen">
+<form id="o365-connection-test-form" method="post" action="/admin/mail/o365/verbindung-testen" class="sys-form-grid">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
 </form>
@@ -574,4 +577,6 @@ document.querySelectorAll("[data-copy-address]").forEach(function (button) {
 </script>
 
 {% endif %}
+
+</div>
 {% endblock %}

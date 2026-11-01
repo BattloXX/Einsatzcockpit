@@ -218,3 +218,59 @@
 .sys-page .sys-check input[type="checkbox"] { min-height: 0; width: 1.1rem; height: 1.1rem; }
 .sys-token-link { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
 .sys-token-link .api-key-display { flex: 1 1 18rem; min-width: 0; margin: 0; }
+
+/* Gemeinsame Organisations-Einstellungen: Abstände, Formulargruppen und Medien. */
+.sys-stack { display: grid; gap: 1rem; min-width: 0; }
+.sys-row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; min-width: 0; }
+.sys-grid-2, .sys-grid-3 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.sys-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sys-m-0 { margin: 0; }
+.sys-mt-1 { margin-top: .5rem; }
+.sys-mt-2 { margin-top: 1rem; }
+.sys-mt-3 { margin-top: 1.5rem; }
+.sys-mb-1 { margin-bottom: .5rem; }
+.sys-mb-2 { margin-bottom: 1rem; }
+.sys-my-1 { margin-top: .5rem; margin-bottom: .5rem; }
+.sys-w-full { width: 100%; }
+.sys-semibold { font-weight: 600; }
+.sys-uppercase { text-transform: uppercase; }
+.sys-disabled { opacity: .5; cursor: not-allowed; }
+.sys-inline-form { display: inline; }
+/* Bestands-JS blendet zuerst die Statuszeile aus und setzt beim Ersatzfeld
+   display auf ''. Die Nachbarregel erhält dieses Verhalten ohne JS-Änderung. */
+.sys-secret-replace, .sys-initially-hidden { display: none; }
+.sys-secret-status[style*="display: none"] + .sys-secret-replace { display: block; }
+.sys-logo-preview.sys-initially-hidden[src] { display: block; }
+.sys-resize-y { resize: vertical; }
+.sys-divider { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
+.sys-fieldset { min-width: 0; border: 1px solid var(--border); border-radius: .5rem; padding: .75rem 1rem; }
+.sys-fieldset legend { padding: 0 .4rem; font-size: .82rem; font-weight: 600; color: var(--text-muted); }
+.sys-summary { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; min-height: 44px; cursor: pointer; font-weight: 600; }
+.sys-code { padding: 0 .25rem; border-radius: .2rem; background: var(--surface-high); }
+.sys-notice { padding: .75rem 1rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface-high); }
+.sys-indicator { display: inline-block; flex: 0 0 .65rem; width: .65rem; height: .65rem; border-radius: 50%; background: currentColor; }
+.sys-map-picker { height: 260px; margin: .75rem 0 1rem; border: 1px solid var(--border); border-radius: .5rem; overflow: hidden; }
+.sys-logo-preview { max-height: 60px; max-width: min(200px, 100%); object-fit: contain; background: #fff; border-radius: .25rem; padding: .25rem; }
+.sys-qr { width: 80px; height: 80px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: .25rem; background: #fff; }
+.sys-page .sys-color-input { flex: 0 0 60px; width: 60px; padding: 2px; }
+.sys-page .form-group > label:not(.sys-check, .toggle-label),
+.sys-form-grid > div > label:not(.sys-check, .toggle-label) { display: block; margin-bottom: .4rem; font-weight: 600; }
+.sys-page :is(.form-hint, .form-group > small) { display: block; margin-top: .35rem; font-size: .82rem; line-height: 1.5; color: var(--text-muted); }
+.sys-page :is(.form-control, .form-input, .form-select) { min-width: 0; width: 100%; }
+.sys-page .sys-form-grid > input[type="hidden"] { display: none; }
+.sys-form-grid > :is(.sys-card__head, .sys-check, .sys-actions, fieldset) { grid-column: 1 / -1; }
+.sys-table--responsive { table-layout: fixed; overflow-wrap: anywhere; }
+.sperren-teams__status--sent { color: var(--green); }
+.sperren-teams__status--failed { color: var(--red); }
+@media (max-width: 760px) {
+  .sys-grid-2, .sys-grid-3 { grid-template-columns: 1fr; }
+  .sys-row > .sys-grow { flex-basis: 100%; }
+  .sys-table--responsive { min-width: 0; }
+  .sys-table--responsive thead { display: none; }
+  .sys-table--responsive :is(tbody, tr, td) { display: block; width: auto; }
+  .sys-table--responsive tr { padding: .75rem 0; border-bottom: 1px solid var(--border); }
+  .sys-table--responsive td { padding: .35rem 0; border: 0; text-align: left; }
+  .sys-table--responsive td::before { content: attr(data-label); display: block; margin-bottom: .3rem; font-size: .8rem; font-weight: 600; color: var(--text-muted); }
+}
+.sys-form-grid > :is(.sys-card, [data-settings-panel], h3, .sys-row, .sys-notice) { grid-column: 1 / -1; }
+.sys-form-grid > :is(.form-actions, .sys-map-picker, .sys-token-link, .form-group.sys-row) { grid-column: 1 / -1; }

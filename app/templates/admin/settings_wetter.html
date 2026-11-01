@@ -1,23 +1,28 @@
 {% extends "admin/_layout.html" %}
 {% from "_tooltip.html" import tip %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block title %}Wetter-Einstellungen{% endblock %}
 
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Wetter'}]) }}{% endblock %}
 
 {% block admin_content %}
-<div class="page-header">
+<div class="sys-page">
+<div class="sys-hero">
   <div>
-    <h1>&#x1F321;&#xFE0F; Wetter-Einstellungen</h1>
-    <p class="page-header__sub">Wetterstation, Pegel, Warnungen und Wetter-Aktivierung</p>
+    <h1>{{ icon("temperature") }} Wetter-Einstellungen</h1>
+    <p class="sys-muted">Wetterstation, Pegel, Warnungen und Wetter-Aktivierung</p>
   </div>
 </div>
 
 {% if is_sysadmin and all_orgs %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:16px 20px;">
-    <label style="font-weight:600;margin-bottom:6px;display:block;">Organisation w&auml;hlen:</label>
-    <select class="form-control" style="max-width:320px"
+<section class="sys-card">
+  <div class="card-body">
+    <label class="sys-semibold sys-mb-1">Organisation w&auml;hlen:</label>
+    <select class="form-control"
             onchange="location.href='/admin/settings/wetter?org_id='+this.value">
       <option value="">-- bitte w&auml;hlen --</option>
       {% for o in all_orgs %}
@@ -53,9 +58,9 @@
     <button type="button" class="tabnav__item" :class="{'tabnav__item--active': tab === 'diagnose'}" @click="tab = 'diagnose'">Diagnose</button>
   </nav>
 
-<section class="card mb-4" id="diagnose" x-show="tab === 'diagnose'">
-  <div class="card-header"><h2>{{ icon("cloud-rain") }} Wetter-Diagnose</h2></div>
-  <div class="card-body" style="overflow-wrap:anywhere">
+<section class="sys-card" id="diagnose" x-show="tab === 'diagnose'">
+  <div class="sys-card__head"><h2>{{ icon("cloud-rain") }} Wetter-Diagnose</h2></div>
+  <div class="card-body">
     <p>Cache: {{ weather_diagnostics.cache_mode }}</p>
     <p>Kachelmann für diese Organisation konfiguriert: {{ 'Ja' if kachelmann_is_configured else 'Nein' }}</p>
     {% with warnings_result=weather_diagnostics.warnings_result %}{% include "weather/_warnstatus.html" %}{% endwith %}
@@ -64,7 +69,7 @@
     <p>Amtliche Warnungen: GeoSphere (wenn aktiviert)</p>
     <h3>Provider-Zustand (serverweit)</h3>
     {% for provider, row in weather_diagnostics.health.items() %}
-    <div style="margin-bottom:14px">
+    <div class="sys-mb-2">
       <strong>{{ provider }}</strong>
       <p>Letzter Erfolg: {{ row.last_success_at|local_datetime if row.last_success_at else 'Noch keiner' }} · Letzter Fehler: {{ row.last_error_at|local_datetime if row.last_error_at else 'Keiner' }}</p>
       <p>Fehlercode: {{ row.last_error or 'Keiner' }} · Latenz: {{ row.last_latency_ms }} ms · Erfolge: {{ row.success_count }} · Fehler: {{ row.error_count }}</p>
@@ -76,23 +81,23 @@
 </section>
 
 {# ── Wetter aktivieren/deaktivieren ─────────────────────────────────────── #}
-<section class="card mb-4" id="integration" x-show="tab === 'integration'">
-  <div class="card-header"><h2>Wetter-Integration</h2></div>
+<section class="sys-card" id="integration" x-show="tab === 'integration'">
+  <div class="sys-card__head"><h2>{{ icon("settings") }} Wetter-Integration</h2></div>
   <div class="card-body">
     {% set _wx_on = org_settings.weather_enabled if org_settings and org_settings.weather_enabled is not none else True %}
-    <form method="post" action="/admin/settings/wetter/weather-toggle">
+    <form method="post" action="/admin/settings/wetter/weather-toggle" class="sys-form-grid">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-      <div style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
-        <div style="flex:1;min-width:260px">
-          <label style="font-weight:600">Wetter-Tab und Wetter-Daten aktivieren</label>
-          <p class="form-hint" style="margin-top:.25rem">
+      <div class="sys-row">
+        <div class="sys-grow">
+          <label class="sys-semibold">Wetter-Tab und Wetter-Daten aktivieren</label>
+          <p class="form-hint sys-mt-1">
             Steuert ob Wetter-Tab, Radar-Karte und Warnungen in GSL und Einsatz angezeigt werden.
             NULL (kein Wert) nutzt die globale Server-Einstellung (<code>WEATHER_ENABLED</code>).
           </p>
         </div>
-        <div style="display:flex;align-items:center;gap:.75rem">
-          <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+        <div class="sys-row">
+          <label class="toggle-label sys-check">
             <input type="checkbox" name="enabled_raw" value="1"
                    {% if _wx_on %}checked{% endif %}
                    onchange="this.form.submit()">
@@ -101,12 +106,12 @@
         </div>
       </div>
     </form>
-    <h3 style="margin-top:1.5rem">Aktive Datenquellen</h3>
+    <h3 class="sys-mt-3">Aktive Datenquellen</h3>
     <p class="form-hint">Reihenfolge der Abfragen; bei Ausfall wird die nächste Quelle verwendet.</p>
     <dl>
       {% for label, providers in weather_provider_orders.items() %}
-      <div style="margin-top:.75rem;overflow-wrap:anywhere">
-        <dt style="font-weight:600">{{ label }}</dt>
+      <div class="sys-mt-2">
+        <dt class="sys-semibold">{{ label }}</dt>
         <dd>{{ providers | join(" → ") if providers else "Keine aktive Quelle" }}</dd>
       </div>
       {% endfor %}
@@ -116,38 +121,38 @@
 
 
 {# ── Lokale Wetterstation (Davis/Meteobridge) ────────────────────────────── #}
-<section class="card mb-4" id="wetterstation" x-show="tab === 'wetterstation'">
-  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-    <h2>&#x1F4E1; Eigene Wetterstation</h2>
-    <span class="badge badge--muted" style="font-size:.72rem;">Wetter-Panel &rsaquo; Ist-Stand</span>
+<section class="sys-card" id="wetterstation" x-show="tab === 'wetterstation'">
+  <div class="sys-card__head">
+    <h2>{{ icon("antenna") }} Eigene Wetterstation</h2>
+    <span class="badge badge--muted sys-small">Wetter-Panel &rsaquo; Ist-Stand</span>
   </div>
   <div class="card-body">
 
     {% if weather_error %}
-    <div class="alert alert--error" style="margin-bottom:1rem;">{{ weather_error }}</div>
+    <div class="alert alert--error sys-mb-2">{{ weather_error }}</div>
     {% endif %}
 
-    <div class="alert" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:.6rem .9rem;font-size:.82rem;color:var(--text-primary);margin-bottom:1.25rem;">
+    <div class="alert sys-small sys-mb-2 sys-notice">
       <strong>So binden Sie Ihre Station an:</strong>
       Die Station (z.&thinsp;B. Davis Vantage Pro 2 &uuml;ber eine <em>Meteobridge</em>) sendet ihre Messwerte
       per HTTPS an diese Plattform (Push). Legen Sie unten eine Station an &ndash; Sie erhalten dann
       <strong>einmalig</strong> einen Token und eine fertige Push-URL, die Sie in der Meteobridge unter
-      <code style="background:rgba(255,255,255,.1);padding:0 4px;border-radius:3px;">Services &rsaquo; Custom HTTP</code>
+      <code class="sys-code">Services &rsaquo; Custom HTTP</code>
       eintragen. Die Daten sind ausschlie&szlig;lich f&uuml;r Ihre Organisation sichtbar.
-      {% if not weather_db_enabled %}<br><strong style="color:var(--ampel-gelb,#eab308);">Hinweis:</strong>
+      {% if not weather_db_enabled %}<br><strong class="sys-status--warn">Hinweis:</strong>
       Historien-Datenbank nicht konfiguriert &ndash; es wird nur der aktuelle Ist-Stand gespeichert (kein Verlauf).{% endif %}
     </div>
 
     {% if new_station_token %}
-    <div class="alert" style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.35);border-radius:6px;padding:.8rem 1rem;margin-bottom:1.25rem;">
-      <strong>&#x2705; Station gespeichert &ndash; Token wird nur jetzt angezeigt!</strong>
-      <p style="font-size:.82rem;color:var(--text-muted);margin:.4rem 0;">
+    <div class="alert sys-mb-2 alert--success">
+      <strong>{{ icon("circle-check") }} Station gespeichert &ndash; Token wird nur jetzt angezeigt!</strong>
+      <p class="sys-small sys-muted sys-my-1">
         Kopieren Sie die folgende Push-URL in die Meteobridge. Der Token kann sp&auml;ter nicht erneut
         eingesehen werden (nur neu erzeugt).
       </p>
       <textarea id="wxPushUrl" readonly rows="3"
-                style="width:100%;font-family:var(--font-mono,monospace);font-size:.76rem;background:rgba(0,0,0,.25);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:.5rem;resize:vertical;">{{ public_base_url }}/api/v1/weather/ingest?token={{ new_station_token }}&temp=[th0temp-act]&hum=[th0hum-act]&wind=[wind0wind-act]&gust=[wind0gust-act]&dir=[wind0dir-act]&press=[thb0seapress-act]&rainrate=[rain0rate-act]&rainday=[rain0total-daysum]&dew=[th0dew-act]&solar=[sol0rad-act]&uv=[uv0index-act]&ts=[epoch]</textarea>
-      <button type="button" class="btn btn--sm btn--primary" style="margin-top:.5rem;"
+                class="sys-mono sys-resize-y sys-small sys-w-full form-control">{{ public_base_url }}/api/v1/weather/ingest?token={{ new_station_token }}&temp=[th0temp-act]&hum=[th0hum-act]&wind=[wind0wind-act]&gust=[wind0gust-act]&dir=[wind0dir-act]&press=[thb0seapress-act]&rainrate=[rain0rate-act]&rainday=[rain0total-daysum]&dew=[th0dew-act]&solar=[sol0rad-act]&uv=[uv0index-act]&ts=[epoch]</textarea>
+      <button type="button" class="btn btn--sm btn--primary sys-mt-1"
               onclick="var t=document.getElementById('wxPushUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert';">
         URL kopieren
       </button>
@@ -155,27 +160,27 @@
     {% endif %}
 
     {% if weather_stations %}
-    <table style="width:100%;border-collapse:collapse;margin-bottom:1.25rem;font-size:.85rem;">
+    <div class="sys-table-wrap"><table class="sys-small sys-mb-2 sys-w-full sys-table sys-table--responsive">
       <thead>
-        <tr style="border-bottom:1px solid var(--border);">
-          <th style="text-align:left;padding:4px 10px 6px 0;color:var(--text-muted);font-weight:600;">Name</th>
-          <th style="text-align:left;padding:4px 10px 6px;color:var(--text-muted);font-weight:600;">Koordinaten</th>
-          <th style="text-align:left;padding:4px 10px 6px;color:var(--text-muted);font-weight:600;">Zuletzt empfangen</th>
-          <th style="width:180px;"></th>
+        <tr>
+          <th class="sys-semibold sys-muted">Name</th>
+          <th class="sys-semibold sys-muted">Koordinaten</th>
+          <th class="sys-semibold sys-muted">Zuletzt empfangen</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for st in weather_stations %}
-        <tr style="border-bottom:1px solid var(--border-subtle);">
-          <td style="padding:7px 10px 7px 0;">{{ st.name }}</td>
-          <td style="padding:7px 10px;color:var(--text-muted);font-size:.80rem;">
+        <tr>
+          <td data-label="Name">{{ st.name }}</td>
+          <td class="sys-small sys-muted" data-label="Koordinaten">
             {% if st.lat is not none and st.lng is not none %}{{ "%.4f"|format(st.lat) }}, {{ "%.4f"|format(st.lng) }}{% else %}&ndash;{% endif %}
           </td>
-          <td style="padding:7px 10px;color:var(--text-muted);font-size:.80rem;">
+          <td class="sys-small sys-muted" data-label="Zuletzt empfangen">
             {% if st.last_seen_at %}{{ st.last_seen_at | local_datetime }}{% else %}<em>noch nie</em>{% endif %}
           </td>
-          <td style="padding:7px 0;text-align:right;">
-            <form method="post" action="/admin/settings/weather/regenerate" style="display:inline;">
+          <td class="sys-number" data-label="Aktionen">
+            <form method="post" action="/admin/settings/weather/regenerate" class="sys-inline-form">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="station_id" value="{{ st.id }}">
               {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
@@ -184,7 +189,7 @@
                 Token neu
               </button>
             </form>
-            <form method="post" action="/admin/settings/weather/remove" style="display:inline;">
+            <form method="post" action="/admin/settings/weather/remove" class="sys-inline-form">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="station_id" value="{{ st.id }}">
               {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
@@ -197,30 +202,30 @@
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
     {% else %}
-    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1.25rem;">
+    <p class="sys-small sys-muted sys-mb-2">
       Noch keine Station konfiguriert. Unten hinzuf&uuml;gen.
     </p>
     {% endif %}
 
-    <form method="post" action="/admin/settings/weather/add">
+    <form method="post" action="/admin/settings/weather/add" class="sys-form-grid">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;">
-        <legend style="font-size:.80rem;font-weight:600;color:var(--text-muted);padding:0 6px;">Station hinzuf&uuml;gen</legend>
-        <div style="display:grid;grid-template-columns:1fr 140px 140px auto;gap:.5rem;align-items:end;">
+      <fieldset class="sys-fieldset">
+        <legend class="sys-small sys-semibold sys-muted">Station hinzuf&uuml;gen</legend>
+        <div class="sys-form-grid">
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Name *</label>
+            <label class="sys-small sys-semibold sys-mb-1">Name *</label>
             <input type="text" name="name" class="form-control" required
                    placeholder="FW-Haus Wolfurt" maxlength="150">
           </div>
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Breite (lat)</label>
+            <label class="sys-small sys-semibold sys-mb-1">Breite (lat)</label>
             <input type="text" name="lat" class="form-control" placeholder="47.466" inputmode="decimal">
           </div>
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">L&auml;nge (lng)</label>
+            <label class="sys-small sys-semibold sys-mb-1">L&auml;nge (lng)</label>
             <input type="text" name="lng" class="form-control" placeholder="9.738" inputmode="decimal">
           </div>
           <div>
@@ -234,20 +239,20 @@
 </section>
 
 {# ── Pegelmessstationen ──────────────────────────────────────────────────── #}
-<section class="card mb-4" id="pegel" x-show="tab === 'pegel'">
-  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-    <h2>&#x1F30A; Pegelmessstationen</h2>
-    <span class="badge badge--muted" style="font-size:.72rem;">Wetter-Panel &rsaquo; Tab &bdquo;Pegel&ldquo;</span>
+<section class="sys-card" id="pegel" x-show="tab === 'pegel'">
+  <div class="sys-card__head">
+    <h2>{{ icon("ripple") }} Pegelmessstationen</h2>
+    <span class="badge badge--muted sys-small">Wetter-Panel &rsaquo; Tab &bdquo;Pegel&ldquo;</span>
   </div>
   <div class="card-body">
 
-    <div class="alert" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:.6rem .9rem;font-size:.82rem;color:var(--text-primary);margin-bottom:1.25rem;">
+    <div class="alert sys-small sys-mb-2 sys-notice">
       <strong>So finden Sie die hzbnr:</strong>
-      Besuchen Sie <a href="https://vowis.vorarlberg.at" target="_blank" rel="noopener" style="color:var(--link);">vowis.vorarlberg.at</a>,
+      Besuchen Sie <a href="https://vowis.vorarlberg.at" target="_blank" rel="noopener">vowis.vorarlberg.at</a>,
       w&auml;hlen Sie eine Messstation aus und lesen Sie den Parameter
-      <code style="background:rgba(255,255,255,.1);padding:0 4px;border-radius:3px;">hzbnr=XXXXXX</code>
+      <code class="sys-code">hzbnr=XXXXXX</code>
       aus der URL ab, z.&thinsp;B.
-      <code style="background:rgba(255,255,255,.1);padding:0 4px;border-radius:3px;">ofwStation.aspx?hzbnr=200329</code>
+      <code class="sys-code">ofwStation.aspx?hzbnr=200329</code>
       &rarr; hzbnr <strong>200329</strong>.<br>
       Werte werden alle 10&thinsp;Minuten von vowis abgerufen und tempor&auml;r im Arbeitsspeicher
       gehalten (kein Neustart-Recovery).
@@ -255,23 +260,23 @@
 
     {% set _stationen = (org_settings.abfluss_stationen_list if org_settings else []) %}
     {% if _stationen %}
-    <table style="width:100%;border-collapse:collapse;margin-bottom:1.25rem;font-size:.85rem;">
+    <div class="sys-table-wrap"><table class="sys-small sys-mb-2 sys-w-full sys-table sys-table--responsive">
       <thead>
-        <tr style="border-bottom:1px solid var(--border);">
-          <th style="text-align:left;padding:4px 10px 6px 0;color:var(--text-muted);font-weight:600;">hzbnr</th>
-          <th style="text-align:left;padding:4px 10px 6px;color:var(--text-muted);font-weight:600;">Name</th>
-          <th style="text-align:left;padding:4px 10px 6px;color:var(--text-muted);font-weight:600;">Beschreibung</th>
-          <th style="width:80px;"></th>
+        <tr>
+          <th class="sys-semibold sys-muted">hzbnr</th>
+          <th class="sys-semibold sys-muted">Name</th>
+          <th class="sys-semibold sys-muted">Beschreibung</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for st in _stationen %}
-        <tr style="border-bottom:1px solid var(--border-subtle);">
-          <td style="padding:7px 10px 7px 0;"><code style="font-size:.82rem;">{{ st.hzbnr }}</code></td>
-          <td style="padding:7px 10px;">{{ st.name }}</td>
-          <td style="padding:7px 10px;color:var(--text-muted);font-size:.80rem;">{{ st.beschreibung or "&ndash;" }}</td>
-          <td style="padding:7px 0;">
-            <form method="post" action="/admin/settings/abfluss/remove" style="display:inline;">
+        <tr>
+          <td data-label="hzbnr"><code class="sys-small">{{ st.hzbnr }}</code></td>
+          <td data-label="Name">{{ st.name }}</td>
+          <td class="sys-small sys-muted" data-label="Beschreibung">{{ st.beschreibung or "&ndash;" }}</td>
+          <td data-label="Aktionen">
+            <form method="post" action="/admin/settings/abfluss/remove" class="sys-inline-form">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="hzbnr" value="{{ st.hzbnr }}">
               {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
@@ -284,32 +289,32 @@
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
     {% else %}
-    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1.25rem;">
+    <p class="sys-small sys-muted sys-mb-2">
       Noch keine Stationen konfiguriert. Stationen unten hinzuf&uuml;gen.
     </p>
     {% endif %}
 
-    <form method="post" action="/admin/settings/abfluss/add">
+    <form method="post" action="/admin/settings/abfluss/add" class="sys-form-grid">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;">
-        <legend style="font-size:.80rem;font-weight:600;color:var(--text-muted);padding:0 6px;">Station hinzuf&uuml;gen</legend>
-        <div style="display:grid;grid-template-columns:120px 1fr 1fr auto;gap:.5rem;align-items:end;">
+      <fieldset class="sys-fieldset">
+        <legend class="sys-small sys-semibold sys-muted">Station hinzuf&uuml;gen</legend>
+        <div class="sys-form-grid">
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">hzbnr *</label>
+            <label class="sys-small sys-semibold sys-mb-1">hzbnr *</label>
             <input type="text" name="hzbnr" class="form-control" required
                    placeholder="200329" pattern="[0-9]+" maxlength="10"
                    title="Nur Ziffern, z.B. 200329">
           </div>
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Name *</label>
+            <label class="sys-small sys-semibold sys-mb-1">Name *</label>
             <input type="text" name="name" class="form-control" required
                    placeholder="Bregenzerach Kennelbach" maxlength="80">
           </div>
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Beschreibung</label>
+            <label class="sys-small sys-semibold sys-mb-1">Beschreibung</label>
             <input type="text" name="beschreibung" class="form-control"
                    placeholder="Hauptzufluss Wolfurt (optional)" maxlength="200">
           </div>
@@ -324,13 +329,13 @@
 </section>
 
 {# ── Wetterwarnungen & Benachrichtigungen ────────────────────────────────── #}
-<section class="card mb-4" id="warnungen" x-show="tab === 'warnungen'">
-  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-    <h2>&#x1F514; Wetterwarnungen &amp; Benachrichtigungen</h2>
+<section class="sys-card" id="warnungen" x-show="tab === 'warnungen'">
+  <div class="sys-card__head">
+    <h2>{{ icon("bell") }} Wetterwarnungen &amp; Benachrichtigungen</h2>
     <a href="https://github.com/BattloXX/Einsatzcockpit/wiki/Administration-Wetterwarnungen"
        target="_blank" rel="noopener"
-       style="font-size:.78rem;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:.3rem;"
-       title="Dokumentation im Wiki">&#x1F517; Dokumentation &nbsp;&#x2197;</a>
+
+       title="Dokumentation im Wiki" class="sys-row sys-small sys-muted">{{ icon("link") }} Dokumentation &nbsp;&#x2197;</a>
   </div>
   <div class="card-body">
 
@@ -347,7 +352,7 @@
     <div class="alert alert--error mb-4">Teams-Fehler: {{ request.query_params.get('alert_teams_error') }}</div>
     {% endif %}
 
-    <div class="alert" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:.6rem .9rem;font-size:.82rem;color:var(--text-primary);margin-bottom:1.25rem;">
+    <div class="alert sys-small sys-mb-2 sys-notice">
       Der Loop pr&uuml;ft alle <strong>5 Minuten</strong> alle aktivierten Regeln anhand der
       aktuellen Wetterdaten (Station, Nowcast, Prognose, amtliche Warnungen). Meldungen gehen
       an die Org-weiten Empf&auml;nger unten &ndash; oder an den im Regel-Override eingetragenen Empf&auml;nger.
@@ -355,29 +360,29 @@
     </div>
 
     {# Org-weite Kanal-Konfiguration #}
-    <form method="post" action="/admin/settings/wetter/alert-channels" style="margin-bottom:1.5rem;">
+    <form method="post" action="/admin/settings/wetter/alert-channels" class="sys-mb-2">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;">
-        <legend style="font-size:.80rem;font-weight:600;color:var(--text-muted);padding:0 6px;">Org-weite Empf&auml;nger</legend>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
+      <fieldset class="sys-fieldset">
+        <legend class="sys-small sys-semibold sys-muted">Org-weite Empf&auml;nger</legend>
+        <div class="sys-form-grid sys-mb-2">
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">E-Mail-Verteiler</label>
+            <label class="sys-small sys-semibold sys-mb-1">E-Mail-Verteiler</label>
             <input type="email" name="alert_mail" class="form-control"
                    value="{{ org_settings.weather_alert_mail or '' }}"
                    placeholder="warnungen@feuerwehr.at" maxlength="255">
             <span class="form-hint">Mehrere Adressen kommagetrennt</span>
           </div>
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">MS-Teams-Webhook-URL</label>
+            <label class="sys-small sys-semibold sys-mb-1">MS-Teams-Webhook-URL</label>
             <input type="url" name="alert_teams_webhook" class="form-control"
                    value="{{ org_settings.weather_alert_teams_webhook_url or '' }}"
                    placeholder="https://outlook.office.com/webhook/..." maxlength="1000">
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:180px 1fr;gap:.75rem;align-items:end;margin-bottom:.75rem;">
+        <div class="sys-form-grid sys-mb-2">
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Bodensee-Temp. Override (°C)</label>
+            <label class="sys-small sys-semibold sys-mb-1">Bodensee-Temp. Override (°C)</label>
             <input type="number" name="bodensee_temp_override" class="form-control"
                    value="{{ '%.1f'|format(org_settings.bodensee_temp_override_c) if org_settings and org_settings.bodensee_temp_override_c is not none else '' }}"
                    placeholder="z.B. 12.5" step="0.1" min="-5" max="30">
@@ -385,19 +390,19 @@
             <span class="form-hint">Letzter Wert: {{ org_settings.bodensee_temp_override_at | local_datetime }}</span>
             {% endif %}
           </div>
-          <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;">
+          <div class="sys-small sys-muted">
             F&uuml;r Lake-Effekt-Regel. Leer = automatischer Klimatologie-Fallback.
             G&uuml;ltig 14 Tage ab Speichern.
           </div>
         </div>
-        <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+        <div class="sys-row">
           <button type="submit" class="btn btn--primary btn--sm">Empf&auml;nger speichern</button>
-          <form method="post" action="/admin/settings/wetter/alert-test/mail" style="display:inline;">
+          <form method="post" action="/admin/settings/wetter/alert-test/mail" class="sys-inline-form">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
             <button type="submit" class="btn btn--sm">&#x2709; Test-Mail senden</button>
           </form>
-          <form method="post" action="/admin/settings/wetter/alert-test/teams" style="display:inline;">
+          <form method="post" action="/admin/settings/wetter/alert-test/teams" class="sys-inline-form">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
             <button type="submit" class="btn btn--sm">&#x1F4E2; Test-Teams-Card</button>
@@ -453,72 +458,70 @@
         "min_level: Mindeststufe amtliche Schwergewitter-/Sturmwarnung (3 = gro&szlig;e Gef&auml;hrdung) &bull;
          boe_sprung_ms: (reserviert)"
     } %}
-    <h3 style="font-size:.88rem;font-weight:600;color:var(--text-muted);margin:.25rem 0 .75rem;">Warnregeln</h3>
+    <h3 class="sys-small sys-semibold sys-muted sys-my-1">Warnregeln</h3>
     {% for rule in alert_rules %}
-    <details style="border:1px solid var(--border);border-radius:6px;margin-bottom:.5rem;"
-             {% if rule.enabled %}open{% endif %}>
-      <summary style="padding:.6rem .9rem;cursor:pointer;display:flex;align-items:center;gap:.75rem;list-style:none;font-weight:600;font-size:.85rem;">
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
-                     background:{% if rule.enabled %}#22c55e{% else %}#6b7280{% endif %};
-                     flex-shrink:0;"></span>
+    <details
+             {% if rule.enabled %}open{% endif %} class="sys-mb-1 sys-fieldset">
+      <summary class="sys-row sys-small sys-semibold sys-summary">
+        <span class="sys-indicator {% if rule.enabled %}sys-status--ok{% else %}sys-muted{% endif %}"></span>
         {{ rule_labels.get(rule.key, rule.key) }}
-        {% if not rule.enabled %}<span style="font-weight:400;color:var(--text-muted);font-size:.78rem;">(deaktiviert)</span>{% endif %}
+        {% if not rule.enabled %}<span class="sys-small sys-muted">(deaktiviert)</span>{% endif %}
       </summary>
-      <div style="padding:.75rem 1rem;border-top:1px solid var(--border-subtle);">
-        <form method="post" action="/admin/settings/wetter/alert-rule/{{ rule.id }}">
+      <div class="sys-divider">
+        <form method="post" action="/admin/settings/wetter/alert-rule/{{ rule.id }}" class="sys-form-grid">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
 
-          <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin-bottom:.75rem;">
-            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+          <div class="sys-row sys-mb-2">
+            <label class="sys-check sys-small">
               <input type="checkbox" name="enabled" value="1" {% if rule.enabled %}checked{% endif %}>
               Aktiv
             </label>
-            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+            <label class="sys-check sys-small">
               <input type="checkbox" name="vorwarnung" value="1" {% if rule.vorwarnung %}checked{% endif %}>
               Vorwarnung
             </label>
-            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+            <label class="sys-check sys-small">
               <input type="checkbox" name="eskalation" value="1" {% if rule.eskalation %}checked{% endif %}>
               Eskalation
             </label>
-            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+            <label class="sys-check sys-small">
               <input type="checkbox" name="channel_mail" value="1" {% if rule.channel_mail %}checked{% endif %}>
               &#x2709; Mail
             </label>
-            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+            <label class="sys-check sys-small">
               <input type="checkbox" name="channel_teams" value="1" {% if rule.channel_teams %}checked{% endif %}>
               &#x1F4AC; Teams
             </label>
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr 140px;gap:.5rem;margin-bottom:.75rem;">
+          <div class="sys-form-grid sys-mb-2">
             <div>
-              <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">Mail-Override (Regel-spezifisch)</label>
-              <input type="email" name="mail_override" class="form-control" style="font-size:.82rem;"
+              <label class="sys-small sys-semibold sys-mb-1">Mail-Override (Regel-spezifisch)</label>
+              <input type="email" name="mail_override" class="form-control sys-small"
                      value="{{ rule.mail_override or '' }}" placeholder="leer = Org-Standard" maxlength="255">
             </div>
             <div>
-              <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">Teams-Webhook-Override</label>
-              <input type="url" name="teams_webhook_override" class="form-control" style="font-size:.82rem;"
+              <label class="sys-small sys-semibold sys-mb-1">Teams-Webhook-Override</label>
+              <input type="url" name="teams_webhook_override" class="form-control sys-small"
                      value="{{ rule.teams_webhook_override or '' }}" placeholder="leer = Org-Standard" maxlength="1000">
             </div>
             <div>
-              <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">Cooldown (Minuten)</label>
-              <input type="number" name="cooldown_min" class="form-control" style="font-size:.82rem;"
+              <label class="sys-small sys-semibold sys-mb-1">Cooldown (Minuten)</label>
+              <input type="number" name="cooldown_min" class="form-control sys-small"
                      value="{{ rule.cooldown_min }}" min="1" max="1440">
             </div>
           </div>
 
-          <div style="margin-bottom:.75rem;">
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">
+          <div class="sys-mb-2">
+            <label class="sys-small sys-semibold sys-mb-1">
               Schwellwerte (JSON)
             </label>
-            <textarea name="params_json" class="form-control"
-                      style="font-family:var(--font-mono,monospace);font-size:.76rem;resize:vertical;"
+            <textarea name="params_json" class="form-control sys-mono sys-resize-y sys-small"
+
                       rows="2">{{ rule.params | tojson if rule.params else (rule_defaults.get(rule.key, {}) | tojson) }}</textarea>
             {% if param_hints.get(rule.key) %}
-            <p class="form-hint" style="margin-top:.35rem;line-height:1.5;">{{ param_hints[rule.key] | safe }}</p>
+            <p class="form-hint sys-mt-1">{{ param_hints[rule.key] | safe }}</p>
             {% endif %}
           </div>
 
@@ -531,39 +534,39 @@
 
     {# Versand-Protokoll #}
     {% if alert_logs %}
-    <h3 style="font-size:.88rem;font-weight:600;color:var(--text-muted);margin:1.25rem 0 .5rem;">Letzte Versand-Protokolle</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:.80rem;">
+    <h3 class="sys-small sys-semibold sys-muted sys-my-1">Letzte Versand-Protokolle</h3>
+    <div class="sys-table-wrap"><table class="sys-small sys-w-full sys-table sys-table--responsive">
       <thead>
-        <tr style="border-bottom:1px solid var(--border);">
-          <th style="text-align:left;padding:3px 8px 5px 0;color:var(--text-muted);font-weight:600;">Zeit</th>
-          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Regel</th>
-          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Stufe</th>
-          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Kanal</th>
-          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Status</th>
+        <tr>
+          <th class="sys-semibold sys-muted">Zeit</th>
+          <th class="sys-semibold sys-muted">Regel</th>
+          <th class="sys-semibold sys-muted">Stufe</th>
+          <th class="sys-semibold sys-muted">Kanal</th>
+          <th class="sys-semibold sys-muted">Status</th>
         </tr>
       </thead>
       <tbody>
         {% for log in alert_logs %}
-        <tr style="border-bottom:1px solid var(--border-subtle);">
-          <td style="padding:4px 8px 4px 0;color:var(--text-muted);">{{ log.gesendet_am | local_datetime }}</td>
-          <td style="padding:4px 8px;">{{ rule_labels.get(log.key, log.key) }}</td>
-          <td style="padding:4px 8px;">
-            <span style="color:{% if log.state == 'akut' %}var(--red){% else %}#f59e0b{% endif %}">
+        <tr>
+          <td class="sys-muted" data-label="Zeit">{{ log.gesendet_am | local_datetime }}</td>
+          <td data-label="Regel">{{ rule_labels.get(log.key, log.key) }}</td>
+          <td data-label="Stufe">
+            <span class="{% if log.state == 'akut' %}sys-status--fail{% else %}sys-status--warn{% endif %}">
               {{ log.state }}
             </span>
           </td>
-          <td style="padding:4px 8px;">{{ log.kanal }}</td>
-          <td style="padding:4px 8px;">
+          <td data-label="Kanal">{{ log.kanal }}</td>
+          <td data-label="Status">
             {% if log.status == 'gesendet' %}
-            <span style="color:var(--ampel-gruen,#22c55e);">&#x2713; gesendet</span>
+            <span class="sys-status--ok">{{ icon("check") }} gesendet</span>
             {% else %}
-            <span style="color:var(--red);" title="{{ log.fehlertext or '' }}">&#x2717; Fehler</span>
+            <span title="{{ log.fehlertext or '' }}" class="sys-status--fail">{{ icon("x") }} Fehler</span>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
     {% endif %}
 
   </div>
@@ -572,31 +575,29 @@
 {# ── Kachelmann Wetter API ───────────────────────────────────────────────── #}
 <div x-show="tab === 'kachelmann'">
 {% if request.query_params.get('kachelmann_ok') %}
-<div class="alert alert--success" style="margin-bottom:1rem;">&#x2705; {{ request.query_params.get('kachelmann_ok') | replace('+', ' ') }}</div>
+<div class="alert alert--success sys-mb-2">{{ icon("circle-check") }} {{ request.query_params.get('kachelmann_ok') | replace('+', ' ') }}</div>
 {% endif %}
 {% if request.query_params.get('kachelmann_error') %}
-<div class="alert alert--error" style="margin-bottom:1rem;">&#x26A0; {{ request.query_params.get('kachelmann_error') | replace('+', ' ') }}</div>
+<div class="alert alert--error sys-mb-2">{{ icon("alert-triangle") }} {{ request.query_params.get('kachelmann_error') | replace('+', ' ') }}</div>
 {% endif %}
-<section class="card mb-4" id="kachelmann">
-  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-    <h2>&#x1F327; Kachelmann Wetter API</h2>
-    <span class="badge badge--muted" style="font-size:.72rem;">Je Organisation &bull; Nowcast-Quelle</span>
+<section class="sys-card" id="kachelmann">
+  <div class="sys-card__head">
+    <h2>{{ icon("cloud-rain") }} Kachelmann Wetter API</h2>
+    <span class="badge badge--muted sys-small">Je Organisation &bull; Nowcast-Quelle</span>
   </div>
   <div class="card-body">
 
-    <div class="alert" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:.6rem .9rem;font-size:.82rem;color:var(--text-primary);margin-bottom:1.25rem;">
+    <div class="alert sys-small sys-mb-2 sys-notice">
       Der Kachelmann-API-Key liefert Ist-Werte und Vorhersage (15-min-Nowcast). <strong>Ohne Key</strong> wird
       ZAMG/GeoSphere genutzt. Der Key gilt nur f&uuml;r diese Organisation.
       Dokumentation: <a href="https://api.kachelmannwetter.com/v02/_doc.html" target="_blank" rel="noopener"
-         style="color:var(--link);">api.kachelmannwetter.com</a>
+        >api.kachelmannwetter.com</a>
       (kostenpflichtiges &bdquo;Plus&ldquo;-Abo erforderlich).
     </div>
 
-    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1.25rem;">
-      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
-                   background:{% if kachelmann_is_configured %}#22c55e{% else %}#6b7280{% endif %};
-                   box-shadow:0 0 5px {% if kachelmann_is_configured %}rgba(34,197,94,.6){% else %}none{% endif %};"></span>
-      <span style="font-size:.88rem;">
+    <div class="sys-row sys-mb-2">
+      <span class="sys-indicator {% if kachelmann_is_configured %}sys-status--ok{% else %}sys-muted{% endif %}"></span>
+      <span class="sys-small">
         {% if kachelmann_is_configured %}
           Kachelmann API <strong>aktiv</strong> &ndash; Nowcast aus Kachelmann-Daten.
         {% else %}
@@ -605,14 +606,14 @@
       </span>
     </div>
 
-    <form method="post" action="/admin/settings/wetter/kachelmann">
+    <form method="post" action="/admin/settings/wetter/kachelmann" class="sys-form-grid">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if is_sysadmin and org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
-      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;">
-        <legend style="font-size:.80rem;font-weight:600;color:var(--text-muted);padding:0 6px;">API-Key &auml;ndern</legend>
-        <div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:end;">
+      <fieldset class="sys-fieldset">
+        <legend class="sys-small sys-semibold sys-muted">API-Key &auml;ndern</legend>
+        <div class="sys-form-grid">
           <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Kachelmann API-Key</label>
+            <label class="sys-small sys-semibold sys-mb-1">Kachelmann API-Key</label>
             <input type="password" name="kachelmann_api_key" class="form-control"
                    placeholder="{% if kachelmann_is_configured %}(bestehender Key &ndash; leer lassen = keine &Auml;nderung){% else %}API-Key eingeben&hellip;{% endif %}"
                    autocomplete="new-password">
@@ -624,11 +625,11 @@
         </div>
       </fieldset>
     </form>
-    <form method="post" action="/admin/settings/wetter/test-kachelmann" style="margin-top:.75rem;">
+    <form method="post" action="/admin/settings/wetter/test-kachelmann" class="sys-mt-2">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if is_sysadmin and org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
       <button type="submit" class="btn btn--secondary btn--sm">&#x1F50C; Verbindung testen</button>
-      <small class="form-hint" style="display:inline;margin-left:.5rem;">Verwendet den <em>gespeicherten</em> Key (zuerst speichern, dann testen).</small>
+      <small class="form-hint sys-inline-form">Verwendet den <em>gespeicherten</em> Key (zuerst speichern, dann testen).</small>
     </form>
 
   </div>
@@ -640,4 +641,6 @@
 <div class="alert alert--error">Keine Organisation ausgew&auml;hlt.</div>
 {% endif %}
 
+
+</div>
 {% endblock %}
