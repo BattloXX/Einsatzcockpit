@@ -1,26 +1,42 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Audit-Log – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='benutzer' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <h2>System-Audit-Log</h2>
+<div class="page-content sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("file-text") }} System-Audit-Log</h1>
+    <p class="sys-muted">Sicherheitsrelevante Aktionen im System.</p>
+  </header>
+  <nav class="sys-tabs" aria-label="Audit-Bereiche">
+    {% set scope = request.query_params.get('scope') %}
+    <a class="sys-tabs__item" href="/admin/audit"{% if not scope %} aria-current="page"{% endif %}>Alle</a>
+    <a class="sys-tabs__item" href="/admin/audit?scope=mailing"{% if scope == 'mailing' %} aria-current="page"{% endif %}>Mailing</a>
+    <a class="sys-tabs__item" href="/admin/audit?scope=roles"{% if scope == 'roles' %} aria-current="page"{% endif %}>Rollen</a>
+  </nav>
+  <section class="sys-card">
+    <div class="sys-table-wrap">
+      <table class="sys-table sys-table--responsive">
+        <thead><tr><th>Zeit</th><th>Aktion</th><th>User</th><th>Einsatz</th><th>IP</th></tr></thead>
+        <tbody>
+          {% for e in entries %}
+          <tr>
+            <td data-label="Zeit" class="sys-nowrap">{{ (e.created_at|local).strftime('%d.%m. %H:%M:%S') }}</td>
+            <td data-label="Aktion"><span class="sys-pill">{{ e.action }}</span></td>
+            <td data-label="User">{{ e.user_id or '–' }}</td>
+            <td data-label="Einsatz">{{ e.incident_id or '–' }}</td>
+            <td data-label="IP">{{ e.ip or '–' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="sys-table-empty sys-muted">Keine Einträge.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 </div>
-<nav><a href="/admin/audit">Alle</a> · <a href="/admin/audit?scope=mailing">Mailing</a> · <a href="/admin/audit?scope=roles">Rollen</a></nav>
-<table class="table table--compact">
-  <thead><tr><th>Zeit</th><th>Aktion</th><th>User</th><th>Einsatz</th><th>IP</th></tr></thead>
-  <tbody>
-    {% for e in entries %}
-    <tr>
-      <td class="nowrap">{{ (e.created_at|local).strftime('%d.%m. %H:%M:%S') }}</td>
-      <td><span class="badge badge--action">{{ e.action }}</span></td>
-      <td>{{ e.user_id or '–' }}</td>
-      <td>{{ e.incident_id or '–' }}</td>
-      <td>{{ e.ip or '–' }}</td>
-    </tr>
-    {% else %}
-    <tr><td colspan="5" class="text-center text-muted">Keine Einträge.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
 {% endblock %}
