@@ -25,6 +25,12 @@ HTMX_FRAGMENTE = {
         "gateway/_alarmempfang_detail.html",
         "gateway/_alarmempfang_parser.html",
     ],
+    "admin/systemdiagnose/index.html": [
+        "admin/systemdiagnose/_panel.html",
+        "admin/systemdiagnose/_finding.html",
+        "admin/systemdiagnose/_geraet.html",
+        "admin/systemdiagnose/_codex.html",
+    ],
 }
 MODIFIER_RE = re.compile(r"^[a-z][a-z0-9-]*--[a-z0-9-]+$")
 CSS_CLASS_RE = re.compile(r"\.([a-z][a-z0-9-]*--[a-z0-9-]+)")

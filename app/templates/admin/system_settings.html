@@ -14,7 +14,7 @@
   <header class="sys-hero">
     <h1>{{ icon("settings") }} System-Einstellungen</h1>
     <p class="sys-muted">Systemweite Konfiguration. Werte in der Datenbank überschreiben gleichnamige Umgebungsvariablen.</p>
-    <dl class="sys-kpis">
+    <dl class="sys-kpis" aria-label="Version / Commit / Build">
       <div class="sys-kpi"><dt>Version</dt><dd>{{ version.APP_VERSION }}</dd></div>
       <div class="sys-kpi"><dt>Commit</dt><dd>{{ version.GIT_SHA[:12] or 'unbekannt' }}</dd></div>
       <div class="sys-kpi"><dt>Build</dt><dd>{{ version.BUILD_TIME or 'unbekannt' }}</dd></div>

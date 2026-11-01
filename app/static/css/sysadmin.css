@@ -199,6 +199,7 @@
 .sys-progress--fail { accent-color: var(--red); }
 .sys-standalone { width: calc(100% - 2rem); margin: 2rem auto; max-width: 760px; }
 .sys-standalone--login { max-width: 460px; }
+.sys-standalone--repair { max-width: 640px; }
 .sys-standalone .sys-hero { padding: 0; border: 0; background: none; }
 .sys-standalone-form { display: grid; gap: .75rem; }
 .sys-standalone-form .form-control { width: 100%; }
