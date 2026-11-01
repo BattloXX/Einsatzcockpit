@@ -3,6 +3,7 @@
 Diese Endpoints werden von der nativen Android-App (Capacitor) aufgerufen.
 Auth über bestehende Session-Cookies (Device-Login via /geraet-login).
 """
+import json
 import logging
 import re
 from datetime import UTC, datetime, timedelta
@@ -19,8 +20,8 @@ from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
 from app.models.master import VehicleMaster
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, PushLog, User
+from app.services import app_geraet_service, push_service
 from app.services import device_auth_failure_service as dat
-from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
 from app.services.gsl_live_service import build_gsl_live_state, build_my_lage_queue
 from app.services.kontakt_sync_service import delta as kontakt_delta
@@ -151,6 +152,44 @@ def sync_kontakte(
     if cursor is None:
         return kontakt_snapshot(db, user.org_id, page_after, limit)
     return kontakt_delta(db, user.org_id, cursor, limit)
+
+
+async def _diagnose_body(request: Request) -> bytes:
+    """Auch chunked Bodies begrenzen, ohne den ganzen Body vorher einzulesen."""
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 64 * 1024:
+            raise HTTPException(status_code=413, detail="Bericht groesser als 64 KB")
+        body.extend(chunk)
+    return bytes(body)
+
+
+@router.post("/diagnose-report")
+def diagnose_report(request: Request, db: Session = Depends(get_db)):
+    """Nimmt Diagnose entgegen. Es gibt keinen Rueckkanal fuer App-Einstellungen."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+    if not user:
+        raise _unauthorized(request)
+    body = run_async(_diagnose_body, request)
+    try:
+        data = app_geraet_service.validiere_bericht(json.loads(body))
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+        raise HTTPException(status_code=400, detail="Ungueltiges JSON, schema oder install_id") from exc
+    # Kein Fallback auf ein beliebiges anderes Token bei normalen Sitzungen.
+    bezug = getattr(request.state, "bearer_device_token_id", None) or getattr(request.state, "device_token_id", None)
+    device_token = _get_device_token(user.id, db, request) if bezug else None
+    if device_token is not None and device_token.id != bezug:
+        device_token = None
+    try:
+        geraet = app_geraet_service.speichere_bericht(db, user, data, device_token)
+    except app_geraet_service.BerichtLimitErreicht as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail="Maximal 30 Berichte pro Stunde") from exc
+    geraet_id = geraet.id
+    db.commit()
+    return {"ok": True, "geraet_id": geraet_id, "server_time": datetime.now(UTC).isoformat().replace("+00:00", "Z")}
 
 
 # ── FCM-Token ─────────────────────────────────────────────────────────────────

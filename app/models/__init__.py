@@ -2,6 +2,7 @@ from app.models.admin_mcp import AdminMCPOAuthClient, AdminMCPOAuthCode, AdminMC
 from app.models.admin_repair import AdminApproval, AdminRepairRun
 from app.models.admin_security import AdminRecoveryCode, AdminTotp
 from app.models.api_message import ApiMessage, ApiMessageRecipient
+from app.models.app_geraet import AppGeraet, AppGeraetFehler
 from app.models.atemschutz_pruefung import (
     AtemschutzGeraet,
     AtemschutzPruefBenachrichtigung,
@@ -303,6 +304,8 @@ from app.models.wordpress_report import WordPressReportConfig
 from app.models.worker_runtime import WorkerRuntime  # noqa: F401
 
 __all__ = [
+    "AppGeraet",
+    "AppGeraetFehler",
     "AdminRepairRun",
     "AdminApproval",
     "AdminRecoveryCode", "AdminTotp",

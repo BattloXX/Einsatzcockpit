@@ -1,0 +1,74 @@
+# App-Geraetebericht
+
+Die native App meldet Diagnose ausschliesslich per `POST /api/v1/device/diagnose-report`.
+Sitzungs-Cookie oder Bearer-Geraetetoken wie bei `/fcm-token`; ohne Authentifizierung 401.
+Es gibt keinen Endpunkt zum Aendern oder Ausliefern von App-Einstellungen.
+
+Schema 1 und eine UUID4 als `install_id` sind Pflicht (sonst 400). Alle anderen Felder
+werden anhand der Service-Whitelist typisiert, begrenzt oder einzeln verworfen.
+Unbekannte Felder werden nie gespeichert. Einstellungen: `el_alarm_tone` (String,
+max. 120), `el_alarm_volume_percent` (Integer 0..100), `el_alarm_override_silent`,
+`el_live_enabled`, `el_gateway_receive_enabled`, `auto_update` (jeweils bool) und
+`base_url_host` (reiner Hostname, max. 253, keine URL). Fehlertexte werden vor dem
+Kuerzen auf 200 Zeichen maskiert; auch andere freie Diagnosestrings werden maskiert.
+
+Das Body-Limit gilt auch ohne Content-Length und bei Streaming: mehr als 65536 Bytes
+liefern 413. Pro Benutzer/Installation gelten maximal 30 angenommene Berichte im
+rollenden Stundenfenster (danach 429). Die interne JSON-Spalte `report_zeiten` und
+DB-Zeilensperren halten das Limit workeruebergreifend. Der Benutzer wird zuerst
+gesperrt, damit auch gleichzeitige Erstberichte keinen doppelten Datensatz erzeugen.
+
+Nur das tatsaechlich zur Authentifizierung verwendete DeviceToken wird verknuepft
+und mit App-Version, Android-Version und Modell aktualisiert. Normale Sitzungen
+funktionieren ohne DeviceToken. Benutzer und Organisation stammen immer aus der
+Authentifizierung, niemals aus dem Body. `geraet_details` enthaelt die uebrigen
+validierten Gruppen; JSON-Gruppen stellen den zuletzt gemeldeten Zustand dar.
+
+Fehler: maximal 50 Eintraege pro Bericht und 200 unterschiedliche
+(Geraet, Komponente, Code)-Kombinationen. Nur ein neuerer Zeitstempel addiert die
+Anzahl; Wiederholungen und aeltere Meldungen addieren nichts. Bei Ueberlauf entfallen
+die aeltesten Eintraege nach `last_at`. Fehler aelter als 90 Tage oder mehr als
+fuenf Minuten in der Zukunft werden verworfen. DB-Zeitstempel sind naive UTC;
+die Antwort liefert `server_time` mit Z-Suffix.
+
+`purge_app_geraete()` laeuft im bestehenden taeglichen `sms_log_retention_loop`
+um 03:40 Europe/Vienna (Leader-Hintergrunddienst). Es loescht Fehler aelter als
+90 Tage und Geraete mit `last_report_at` aelter als 90 Tage samt Fehlern, auch ohne
+Organisation. Manuell kann die Funktion ebenfalls aus einem System-Kontext
+aufgerufen werden. Migration 0339 folgt 0338; Fremdschluessel uebernehmen den
+bestehenden ID-Typ einschliesslich MariaDB-Signedness (INT/BIGINT).
+
+## Verbindlicher Payload-Vertrag
+
+# Vertrag Geraetebericht (schema 1)
+
+POST /api/v1/device/diagnose-report   (Auth: Bearer-Geraetetoken ODER Sitzung wie /fcm-token; Body <= 64 KB; JSON)
+Antwort: {"ok": true, "geraet_id": int, "server_time": "...Z"}.  Kein Rueckkanal fuer Einstellungen.
+
+Alle Felder ausser schema/install_id optional; Server validiert per Whitelist, kuerzt Strings, verwirft Unbekanntes.
+
+{
+ "schema": 1,
+ "install_id": "uuid4 (zufaellig, pro Installation, in App-Speicher)",
+ "sent_at": "ISO-8601 UTC",
+ "app": {"version_name","version_code":int,"build_variant":"auto_update|standard","target_sdk":int,"min_sdk":int,
+         "first_install_at","last_update_at"},
+ "geraet": {"hersteller","marke","modell","geraetename","klasse":"handy|tablet","foldable":bool,"abi",
+            "ram_mb_total":int,"ram_mb_free":int,"speicher_mb_free":int,"akku_prozent":int,"laedt":bool,
+            "akkusparer":bool,"sim_anzahl":int,"nfc":bool,"kamera":bool,"telefonie":bool},
+ "android": {"version","sdk_int":int,"sicherheitspatch":"YYYY-MM-DD","build_id","oberflaeche"},
+ "display": {"breite_px":int,"hoehe_px":int,"dpi":int,"dichte_bucket","breite_dp":int,"hz":number,
+             "ausrichtung":"hoch|quer","schrift_skala":number,"anzeige_skala":number},
+ "webview": {"paket","version"},
+ "locale": {"sprache","zeitzone","uhr_abweichung_s": int|null},
+ "einstellungen": { "<whitelist-key>": bool|int|string },   // nur nicht-geheime App-Einstellungen
+ "berechtigungen": {"benachrichtigungen":bool,"akku_optimierung_aus":bool,"vollbild_intent":bool,
+                    "dnd_zugriff":bool,"standort":"nein|vordergrund|immer","sms":bool,"netz":"wlan|mobil|keins"},
+ "dienste": {"poller_laeuft":bool,"keepalive":bool,"gateway_verbunden":bool,"fcm_registriert":bool,
+             "fcm_faehigkeiten":[str],"device_token_vorhanden":bool,"gateway_token_vorhanden":bool,
+             "letzter_poll_ok_at","letzte_push_bestaetigung_at","letzter_kontaktsync_at"},
+ "fehler": [ {"ts","komponente","code","text":"<=200 Zeichen maskiert","anzahl":int} ]   // max 50
+}
+
+Datenschutz: NIE IMEI, Seriennummer, Telefonnummer, SIM-ID, Werbe-ID, MAC, Standort, Tokens, SMS-Texte,
+vollstaendige URLs (nur Host). Server maskiert Fehlertexte zusaetzlich (Telefonnummern, Tokens, E-Mails, URLs-Query).
