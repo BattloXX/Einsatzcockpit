@@ -1496,6 +1496,7 @@ def test_public_weather_presentation_scoped_by_token(client, setup_db, monkeypat
 def test_admin_mcp_ist_keine_org_token_hintertuer(client):
     """Die neuen anonymen Admin-OAuth-/MCP-Pfade akzeptieren keine Org-Tokens."""
     from uuid import uuid4
+
     from tests.test_mcp_fundament import _enable_mcp, _oauth_tokens
 
     org = _enable_mcp("admin-isolation-" + uuid4().hex[:8], "admin-isolation-" + uuid4().hex[:8])
@@ -1604,3 +1605,45 @@ def test_alarm_kurzlink_sieht_keine_kartenobjekte_fremder_org(client):
     assert "GEHEIM-KURZ-B" not in response.text
     assert client.get("/a/FalscherCode").status_code == 404
     assert client.get("/a/alm_falsch").status_code == 404
+
+
+def test_diagnose_report_bearer_bleibt_in_eigener_org(client):
+    """Gleiche install_id und gefaelschte IDs veraendern kein fremdes Geraet."""
+    from uuid import uuid4
+
+    from app.models.app_geraet import AppGeraet
+    from app.models.user import DeviceToken, User
+
+    install_id = str(uuid4())
+    ids = []
+    tokens = []
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        for nummer in range(2):
+            org = FireDept(slug=f"diagnose-{uuid4()}", name=f"Diagnose Org {nummer}")
+            db.add(org)
+            db.flush()
+            user = User(username=f"diag-{uuid4()}", display_name="Diagnose", password_hash="unused",
+                        active=True, org_id=org.id)
+            db.add(user)
+            db.flush()
+            token = str(uuid4())
+            db.add(DeviceToken(user_id=user.id, label="Diagnose", token_hash=hash_api_key(token)))
+            ids.append((user.id, org.id))
+            tokens.append(token)
+        db.commit()
+    client.cookies.clear()
+    geraete = []
+    for nummer in (1, 0):
+        response = client.post("/api/v1/device/diagnose-report", headers={"Authorization": f"Bearer {tokens[nummer]}"},
+                               json={"schema": 1, "install_id": install_id, "org_id": ids[1][1],
+                                     "user_id": ids[1][0], "geraet_id": geraete[0] if geraete else 0,
+                                     "app": {"version_name": f"org-{nummer}"}})
+        assert response.status_code == 200
+        geraete.append(response.json()["geraet_id"])
+    assert geraete[0] != geraete[1]
+    with SessionLocal() as db:
+        for nummer, gid in ((1, geraete[0]), (0, geraete[1])):
+            row = db.get(AppGeraet, gid)
+            assert (row.user_id, row.org_id) == ids[nummer]
+            assert row.app_version == f"org-{nummer}"
