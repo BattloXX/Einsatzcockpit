@@ -71,7 +71,7 @@ test('Detailseite, Slash-Variante und alter Einsatzcache funktionieren ohne Eins
 
 test('Cache-Miss zeigt Offline-HTML nur bei Navigation; Fragmente behalten X-Offline/503', async () => {
   const sw = worker();
-  await sw.put('/static/offline.html', 'KEINE VERBINDUNG', 'ec-v26');
+  await sw.put('/static/offline.html', 'KEINE VERBINDUNG', 'ec-v27');
   await sw.put('/', 'FALSCHE STARTSEITE', 'core');
   for (const path of ['/objekte/9', '/kontakte', '/kontakte/9', '/andere-seite']) {
     const response = await sw.fetch(path);

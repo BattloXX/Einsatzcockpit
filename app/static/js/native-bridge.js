@@ -33,6 +33,12 @@
     );
   }
 
+  function _platform() {
+    return window.Capacitor && typeof window.Capacitor.getPlatform === 'function'
+      ? window.Capacitor.getPlatform()
+      : 'android';
+  }
+
   // ─── Ungültiger Gerätezugang (SEC-02) ───────────────────────────────────────
   // Der Server antwortet mit 401 und Header X-ECP-Auth-Error, wenn der Gerätezugang
   // endgültig ungültig ist (widerrufen, unbekannt/ersetzt, Benutzer gesperrt). Dann
@@ -83,9 +89,7 @@
   function _deviceHeaders() {
     const h = { 'X-Requested-With': 'XMLHttpRequest' };
     try {
-      if (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') {
-        h['X-ECP-Platform'] = window.Capacitor.getPlatform();
-      }
+      h['X-ECP-Platform'] = _platform();
     } catch (_) {}
     return h;
   }
@@ -175,7 +179,7 @@
               const res = await fetch('/api/v1/device/fcm-token', {
                 method: 'POST',
                 headers: Object.assign({ 'Content-Type': 'application/json' }, _deviceHeaders()),
-                body: JSON.stringify({ token: reg.value, platform: 'android' }),
+                body: JSON.stringify({ token: reg.value, platform: _platform() }),
               });
               const invalid = _authErrorCode(res);
               if (invalid) {
@@ -611,9 +615,9 @@
   }
 
   // ─── QR-Scanner ─────────────────────────────────────────────────────────────
-  // @capacitor-mlkit/barcode-scanning v7: scan() nutzt das Google Barcode Scanner
-  // Module (Google Play Services). Vor dem ersten Aufruf muss das Modul geprüft
-  // und ggf. installiert werden; ohne diese Prüfung schlägt scan() lautlos fehl.
+  // @capacitor-mlkit/barcode-scanning v7: Auf Android nutzt scan() das Google
+  // Barcode Scanner Module (Google Play Services), das ggf. installiert werden muss.
+  // Auf iOS muss vor scan() die Kameraberechtigung angefordert werden.
   async function scanQr(onResult, onError) {
     function _err(msg) {
       console.warn('[ELNative] QR-Scanner Fehler:', msg);
@@ -633,20 +637,28 @@
     }
 
     try {
-      // Google Barcode Scanner Module prüfen und ggf. installieren
-      // COMPLETED=4, FAILED=5 (GoogleBarcodeScannerModuleInstallState enum)
-      const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
-      if (!available) {
-        await new Promise(async (resolve, reject) => {
-          const handle = await BarcodeScanner.addListener(
-            'googleBarcodeScannerModuleInstallProgress',
-            (event) => {
-              if (event.state === 4) { handle.remove(); resolve(); }
-              else if (event.state === 5) { handle.remove(); reject(new Error('Google-Modul-Installation fehlgeschlagen (state=5)')); }
-            }
-          );
-          await BarcodeScanner.installGoogleBarcodeScannerModule();
-        });
+      if (_platform() === 'android') {
+        // Google Barcode Scanner Module prüfen und ggf. installieren
+        // COMPLETED=4, FAILED=5 (GoogleBarcodeScannerModuleInstallState enum)
+        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+        if (!available) {
+          await new Promise(async (resolve, reject) => {
+            const handle = await BarcodeScanner.addListener(
+              'googleBarcodeScannerModuleInstallProgress',
+              (event) => {
+                if (event.state === 4) { handle.remove(); resolve(); }
+                else if (event.state === 5) { handle.remove(); reject(new Error('Google-Modul-Installation fehlgeschlagen (state=5)')); }
+              }
+            );
+            await BarcodeScanner.installGoogleBarcodeScannerModule();
+          });
+        }
+      } else if (_platform() === 'ios') {
+        const { camera } = await BarcodeScanner.requestPermissions();
+        if (camera !== 'granted') {
+          _err('Kamerazugriff wurde nicht erlaubt');
+          return;
+        }
       }
 
       const { barcodes } = await BarcodeScanner.scan();

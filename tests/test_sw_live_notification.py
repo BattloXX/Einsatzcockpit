@@ -12,7 +12,7 @@ def _sw_source() -> str:
 def test_live_notification_payload_handling():
     src = _sw_source()
     # Cache-Version wird bei jeder JS/CSS-Aenderung erhöht.
-    assert "const CACHE = 'ec-v26';" in src
+    assert "const CACHE = 'ec-v27';" in src
     assert "einsatz_live" in src
     assert "einsatz_live_end" in src
     assert "gsl_live" in src

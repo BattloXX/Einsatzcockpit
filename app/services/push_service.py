@@ -219,7 +219,7 @@ def upsert_fcm_token(
     *,
     user_id: int,
     token: str,
-    platform: str = "android",
+    platform: str | None = None,
     device_token_id: int | None = None,
     capabilities: str | None = None,
     capabilities_provided: bool = False,
@@ -238,6 +238,8 @@ def upsert_fcm_token(
         existing.user_id = user_id
         existing.device_token_id = device_token_id
         existing.last_used_at = now
+        if platform is not None:
+            existing.platform = platform[:20]
         if capabilities_provided or capabilities is not None:
             existing.capabilities = capabilities
     else:
@@ -245,7 +247,7 @@ def upsert_fcm_token(
             user_id=user_id,
             device_token_id=device_token_id,
             token=token,
-            platform=platform[:20],
+            platform=(platform or "android")[:20],
             capabilities=capabilities,
             created_at=now,
             last_used_at=now,

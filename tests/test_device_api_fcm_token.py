@@ -82,6 +82,38 @@ def test_fcm_token_post_upsert_per_bearer_token(client, setup_db):
         db.close()
 
 
+def test_fcm_token_post_aktualisiert_platform_auf_ios(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_api_platform")
+    _authenticate(client, user_id, device_id)
+    token = "fcm-api-platform-token"
+
+    assert client.post(
+        "/api/v1/device/fcm-token", json={"token": token}
+    ).status_code == 200
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(FcmToken).filter_by(token=token).one()
+        token_id = row.id
+        assert row.platform == "android"
+    finally:
+        db.close()
+
+    assert client.post(
+        "/api/v1/device/fcm-token", json={"token": token, "platform": "ios"}
+    ).status_code == 200
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(FcmToken).filter_by(token=token).one()
+        assert row.id == token_id
+        assert row.user_id == user_id
+        assert row.device_token_id == device_id
+        assert row.platform == "ios"
+    finally:
+        db.close()
+
+
 def test_fcm_token_delete_loescht_nur_eigene_tokens(client, setup_db):
     owner_id, owner_device_id = _make_device_user("fcm_api_owner")
     other_id, _ = _make_device_user("fcm_api_other")
