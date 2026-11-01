@@ -20,7 +20,7 @@ def test_alle_wiki_slugs_existieren():
 
 def test_alle_icons_der_startseite_sind_vendort():
     erlaubt = set((ROOT / "app/static/icons/tabler-auswahl.txt").read_text(encoding="utf-8").split())
-    namen = {b.icon for b in WIKI_BEREICHE} | {l.icon for b in WIKI_BEREICHE for l in b.links}
+    namen = {b.icon for b in WIKI_BEREICHE} | {link.icon for b in WIKI_BEREICHE for link in b.links}
     assert not sorted(namen - erlaubt), sorted(namen - erlaubt)
 
 
