@@ -1,0 +1,25 @@
+{% macro badge(value) %}<span class="badge-pill badge-pill--{{ 'green' if value in ['aktuell','ok'] else 'red' if value == 'fail' else 'gray' if value == 'unbekannt' else 'yellow' }}">{{ value }}</span>{% endmacro %}
+{% macro werte(values) %}
+<dl>{% for key, value in values.items() %}<dt>{{ labels.get(key, key) }}</dt><dd>{% if value is sameas true %}ja{% elif value is sameas false %}nein{% elif value is none %}unbekannt{% elif key.endswith('_at') and github_date(value) %}{{ github_date(value)|local_datetime }}{% elif value is sequence and value is not string %}{{ value|join(', ') }}{% else %}{{ value }}{% endif %}</dd>{% else %}<dd>Nicht gemeldet</dd>{% endfor %}</dl>
+{% endmacro %}
+<article class="diag-card">
+<h2>App-Geraet #{{ geraet.id }}: {{ geraet.hersteller or '' }} {{ geraet.modell or '' }}</h2>
+<p>Benutzer: {{ benutzer.display_name or benutzer.username if benutzer else '-' }} · Organisation: {{ org.name if org else 'Ohne Organisation' }} · Fahrzeug: {{ token.vehicle.name if token and token.vehicle else '-' }}</p>
+<p>Installations-ID: {{ geraet.install_id }} · Zuletzt gesehen: {{ geraet.last_seen_at|local_datetime }}</p>
+<h3 style="font-size:1.75rem">{{ geraet.app_version or 'Version unbekannt' }} {{ badge(ampel) }}</h3>
+<p>Versionscode: {{ geraet.version_code if geraet.version_code is not none else '-' }} · Build-Variante: {{ geraet.build_variant or '-' }} · Soll-Version: {{ soll or 'unbekannt' }}</p>
+<p>Gesundheit: {{ badge(gesundheit) }}</p>
+<ul>{% for befund in befunde %}<li>{{ befund }}</li>{% endfor %}</ul>
+<p>Erstmals gemeldet: {{ geraet.first_seen_at|local_datetime }} · Letzte Meldung: {{ geraet.last_report_at|local_datetime }}</p>
+<p>Klasse: {{ geraet.geraeteklasse or '-' }} · Aufloesung: {{ geraet.aufloesung or '-' }} · Android: {{ geraet.android_version or '-' }} · SDK: {{ geraet.sdk_int or '-' }} · Sicherheitspatch: {{ geraet.sicherheitspatch or '-' }} · WebView: {{ geraet.webview_version or '-' }} · ABI: {{ geraet.abi or '-' }} · DPI: {{ geraet.dichte_dpi or '-' }}</p>
+<p>Einstellungen koennen nur in der App geaendert werden.</p>
+<div class="diag-grid">
+{% for group in ['app','geraet','android','display','webview','locale'] %}<section class="diag-card"><h3>{{ labels[group] }}</h3>{{ werte((geraet.geraet_details or {}).get(group, {})) }}</section>{% endfor %}
+<section class="diag-card"><h3>Einstellungen</h3>{{ werte(geraet.einstellungen or {}) }}</section>
+<section class="diag-card"><h3>Berechtigungen</h3>{{ werte(geraet.berechtigungen or {}) }}</section>
+<section class="diag-card"><h3>Dienstzustand</h3>{{ werte(geraet.dienste or {}) }}</section>
+</div>
+<h3>Fehlerliste</h3><div style="overflow-x:auto;max-width:100%" tabindex="0" aria-label="App-Fehlerliste"><table class="data-table"><thead><tr><th>Komponente</th><th>Code</th><th>Text</th><th>Anzahl</th><th>Zuerst</th><th>Zuletzt</th></tr></thead><tbody>
+{% for f in fehler %}<tr><td>{{ f.komponente }}</td><td>{{ f.code }}</td><td>{{ f.text }}</td><td>{{ f.anzahl }}</td><td>{{ f.first_at|local_datetime }}</td><td>{{ f.last_at|local_datetime }}</td></tr>{% else %}<tr><td colspan="6">Keine Fehler gemeldet.</td></tr>{% endfor %}
+</tbody></table></div>
+</article>

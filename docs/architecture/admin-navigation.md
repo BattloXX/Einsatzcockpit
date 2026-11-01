@@ -108,3 +108,7 @@ bleibt ueber Tab-Links erhalten.
   Einsatzwissen, Objekte, Kontakte (fachliche Verwaltung im Modul).
 - Tabs aus dem Konzept ohne Bestand (Rollen & Berechtigungen, Importprotokoll, Datenpruefung, Dateipruefung,
   Dienste, Datenquellen) sind nicht gebaut.
+
+Die Systemdiagnose enthaelt den lesenden Bereich **App-Geraete** mit HTMX-Detailansicht
+`/admin/systemdiagnose/geraet/{geraet_id}` (nur persoenliche Systemadmin-Konten).
+Er gehoert zum vorhandenen Hauptpunkt Systemstatus, Tab Systemdiagnose.

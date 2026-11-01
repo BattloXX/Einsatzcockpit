@@ -15,10 +15,10 @@
 <h1>{{ icon("server") }} Systemdiagnose</h1>
 <p>Globale technische Zustaende und IDs. Diagnose liest; Reparaturen benoetigen gesonderte Freigaben.</p>
 <nav class="diag-wrap" aria-label="Systemdiagnose-Bereiche">
-{% set labels = {'gesamt':'Gesamtzustand','diagnose':'Diagnoselauf','befunde':'Integritaetsbefunde','laeufe':'Fehlerhistorie','reparaturen':'Reparaturen','github':'GitHub-CI / Code','audit':'Audit'} %}
+{% set labels = {'gesamt':'Gesamtzustand','diagnose':'Diagnoselauf','befunde':'Integritaetsbefunde','laeufe':'Fehlerhistorie','reparaturen':'Reparaturen','github':'GitHub-CI / Code','audit':'Audit','geraete':'App-Geraete'} %}
 {% for section in sections %}<button type="button" class="btn btn--secondary" hx-get="/admin/systemdiagnose/teil/{{ section }}" hx-target="#diag-panel">{{ labels[section] }}</button>{% endfor %}
 </nav>
 <div id="diag-panel" hx-get="/admin/systemdiagnose/teil/gesamt" hx-trigger="load" aria-live="polite">Gesamtzustand wird geladen.</div>
-<div id="diag-detail" aria-live="polite"></div>
+<div id="diag-detail" aria-live="polite" {% if geraet_id %}hx-get="/admin/systemdiagnose/geraet/{{ geraet_id }}" hx-trigger="load"{% endif %}></div>
 </div>
 {% endblock %}

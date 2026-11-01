@@ -9,7 +9,9 @@
 <form hx-post="/admin/systemdiagnose/{{ action }}" hx-target="#diag-panel" method="post">{{ csrf() }}{% for key,value in fields.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<button class="btn btn--secondary" type="submit">{{ label }}</button></form>
 {% endmacro %}
 {% if message %}<p role="status">{{ message }}</p>{% endif %}
-{% if section == 'gesamt' %}
+{% if section == 'geraete' %}
+{% include 'admin/systemdiagnose/_geraete.html' %}
+{% elif section == 'gesamt' %}
 <h2>Gesamtzustand: {{ summary.status }}</h2>
 <p>{{ status_dot('gruen' if summary.status == 'ok' else 'rot' if summary.status == 'fail' else 'gelb', summary.status) }} Ampel: {{ summary.status }}</p>
 <p>Version {{ summary.evidence.version.APP_VERSION }} / Commit {{ summary.evidence.version.GIT_SHA }} / Build {{ github_date(summary.evidence.version.BUILD_TIME)|local_datetime }}</p>

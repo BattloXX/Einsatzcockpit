@@ -24,9 +24,11 @@ from app.core.templating import templates
 from app.core.tenant import set_tenant_context
 from app.db import get_db
 from app.models.admin_repair import AdminRepairRun
+from app.models.app_geraet import AppGeraet, AppGeraetFehler
 from app.models.diagnose import DiagFinding, DiagRun
-from app.models.master import SystemSettings
-from app.models.user import AuditLog
+from app.models.master import FireDept, SystemSettings
+from app.models.user import AuditLog, DeviceToken, User
+from app.services import app_geraet_auswertung as geraete
 from app.services import diag_schedule, github_token, totp_service
 from app.services.diagnose.registry import CHECKS
 from app.services.diagnose.runner import einsatz_aktiv
@@ -56,7 +58,7 @@ def personal(request: Request, db: Session = Depends(get_db), _=Depends(require_
 
 
 router = APIRouter(prefix="/admin/systemdiagnose", dependencies=[Depends(personal)])
-SECTIONS = ("gesamt", "diagnose", "befunde", "laeufe", "reparaturen", "github", "audit")
+SECTIONS = ("gesamt", "diagnose", "befunde", "laeufe", "reparaturen", "github", "audit", "geraete")
 
 
 def numbers(value):
@@ -125,6 +127,19 @@ def render(request, db, section, **extra):
     elif section == "github":
         context["ci"] = collect_code(db, "admin_ci_status")
         context["analysis"] = collect_code(db, "admin_code_analyse")
+    elif section == "geraete":
+        filters = {key: value for key in ("version", "android_version", "geraeteklasse", "hersteller")
+                   if (value := request.query_params.get(key))}
+        try:
+            numeric = {key: int(value) for key in ("org_id", "sdk_max")
+                       if (value := request.query_params.get(key))}
+            context["devices"] = geraete.liste(db, **filters, **numeric,
+                nur_probleme=request.query_params.get("nur_probleme") == "1",
+                lange_nicht_gesehen=request.query_params.get("lange_nicht_gesehen") == "1",
+                page=page_number(request))
+        except ValueError as exc:
+            raise HTTPException(400, "Ungueltiger Geraetefilter") from exc
+        context["verteilung"] = geraete.verteilung(db)
     elif section == "audit":
         page = page_number(request)
         context["entries"] = list(db.scalars(select(AuditLog).where(or_(
@@ -143,7 +158,9 @@ def render(request, db, section, **extra):
 def cockpit(request: Request, db: Session = Depends(get_db)):
     audit(db, request, "opened")
     response = templates.TemplateResponse(request, "admin/systemdiagnose/index.html", {
-        "user": request.state.user, "sections": SECTIONS})
+        "user": request.state.user, "sections": SECTIONS,
+        "geraet_id": (request.query_params.get("geraet", "")
+                      if request.query_params.get("geraet", "").isdigit() else "")})
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -257,3 +274,101 @@ def save_settings(request: Request, db: Session = Depends(get_db)):
     audit(db, request, "settings")
     return templates.TemplateResponse(request, "admin/systemdiagnose/_settings.html", {
         "diag_settings": values, "saved": True})
+
+
+@router.get("/geraet/{geraet_id}")
+def geraet_detail(geraet_id: int, request: Request, db: Session = Depends(get_db)):
+    row = db.get(AppGeraet, geraet_id)
+    if row is None:
+        raise HTTPException(404, "App-Geraet nicht gefunden")
+    errors = list(db.scalars(select(AppGeraetFehler).where(
+        AppGeraetFehler.geraet_id == row.id).order_by(AppGeraetFehler.last_at.desc())))
+    token = db.get(DeviceToken, row.device_token_id) if row.device_token_id else None
+    soll = geraete.soll_version()
+    codes = geraete.befunde(row, soll, token=token, fehler=errors)
+    audit(db, request, "geraet", geraet_id)
+    response = templates.TemplateResponse(request, "admin/systemdiagnose/_geraet.html", {
+        "user": request.state.user, "geraet": row, "fehler": errors, "soll": soll,
+        "benutzer": db.get(User, row.user_id), "token": token,
+        "org": db.get(FireDept, row.org_id) if row.org_id else None,
+        "ampel": geraete.ampel(row.app_version, soll), "gesundheit": geraete.gesundheit(codes),
+        "befunde": [geraete.REGELN[code][0] for code in codes],
+        "labels": GERAET_LABELS, "github_date": github_token.parse_date})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+GERAET_LABELS = {
+    "app": "App",
+    "geraet": "Geraet",
+    "android": "Android",
+    "display": "Anzeige",
+    "webview": "WebView",
+    "locale": "Sprache und Uhr",
+    "version_name": "Versionsname",
+    "version_code": "Versionscode",
+    "build_variant": "Build-Variante",
+    "target_sdk": "Ziel-SDK",
+    "min_sdk": "Mindest-SDK",
+    "first_install_at": "Erste Installation",
+    "last_update_at": "Letztes Update",
+    "hersteller": "Hersteller",
+    "marke": "Marke",
+    "modell": "Modell",
+    "geraetename": "Geraetename",
+    "klasse": "Geraeteklasse",
+    "foldable": "Faltbar",
+    "abi": "Prozessorarchitektur",
+    "ram_mb_total": "Arbeitsspeicher gesamt (MB)",
+    "ram_mb_free": "Arbeitsspeicher frei (MB)",
+    "speicher_mb_free": "Speicher frei (MB)",
+    "akku_prozent": "Akku (%)",
+    "laedt": "Wird geladen",
+    "akkusparer": "Energiesparmodus",
+    "sim_anzahl": "SIM-Anzahl",
+    "nfc": "NFC",
+    "kamera": "Kamera",
+    "telefonie": "Telefonie",
+    "version": "Version",
+    "sdk_int": "SDK",
+    "sicherheitspatch": "Sicherheitspatch",
+    "build_id": "Build-ID",
+    "oberflaeche": "Oberflaeche",
+    "breite_px": "Breite (Pixel)",
+    "hoehe_px": "Hoehe (Pixel)",
+    "dpi": "Pixeldichte (DPI)",
+    "dichte_bucket": "Dichteklasse",
+    "breite_dp": "Breite (DP)",
+    "hz": "Bildfrequenz (Hz)",
+    "ausrichtung": "Ausrichtung",
+    "schrift_skala": "Schriftskalierung",
+    "anzeige_skala": "Anzeigeskalierung",
+    "paket": "Paket",
+    "sprache": "Sprache",
+    "zeitzone": "Zeitzone",
+    "uhr_abweichung_s": "Uhrabweichung (Sekunden)",
+    "el_alarm_tone": "Alarmton",
+    "el_alarm_volume_percent": "Alarmlautstaerke (%)",
+    "el_alarm_override_silent": "Lautlosmodus bei Alarm uebergehen",
+    "el_live_enabled": "Live-Verbindung aktiviert",
+    "el_gateway_receive_enabled": "Gateway-Empfang aktiviert",
+    "auto_update": "Automatische Updates",
+    "base_url_host": "Server-Hostname",
+    "benachrichtigungen": "Benachrichtigungen",
+    "akku_optimierung_aus": "Akku-Optimierung ausgenommen",
+    "vollbild_intent": "Vollbild-Intent",
+    "dnd_zugriff": "Nicht-stoeren-Zugriff",
+    "standort": "Standortberechtigung",
+    "sms": "SMS",
+    "netz": "Netz",
+    "poller_laeuft": "Abfragedienst laeuft",
+    "keepalive": "Verbindung halten",
+    "gateway_verbunden": "Gateway verbunden",
+    "fcm_registriert": "FCM registriert",
+    "fcm_faehigkeiten": "FCM-Faehigkeiten",
+    "device_token_vorhanden": "Geraetezugang vorhanden",
+    "gateway_token_vorhanden": "Gateway-Zugang vorhanden",
+    "letzter_poll_ok_at": "Letzte erfolgreiche Abfrage",
+    "letzte_push_bestaetigung_at": "Letzte Push-Bestaetigung",
+    "letzter_kontaktsync_at": "Letzter Kontaktabgleich"
+}

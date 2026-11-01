@@ -1,0 +1,31 @@
+{% macro badge(value) %}<span class="badge-pill badge-pill--{{ 'green' if value in ['aktuell','ok'] else 'red' if value == 'fail' else 'gray' if value == 'unbekannt' else 'yellow' }}">{{ value }}</span>{% endmacro %}
+<h2>App-Geraete</h2>
+<p>Soll-Version: {{ devices.soll_version or 'unbekannt' }}. {{ devices.gesamt }} Geraete.</p>
+<div class="diag-grid">
+{% for key, label in [('app_version','App-Version'),('android_version','Android'),('sdk_int','SDK'),('hersteller','Hersteller'),('geraeteklasse','Geraeteklasse')] %}
+<article class="diag-card"><h3>{{ label }}</h3>{% for value, anzahl in verteilung[key].items() %}<div>{{ anzahl }} x {{ label }} {{ value if value is not none else 'unbekannt' }}</div>{% else %}<p>Keine Meldungen</p>{% endfor %}</article>
+{% endfor %}
+</div>
+<form method="get" action="/admin/systemdiagnose/teil/geraete" hx-get="/admin/systemdiagnose/teil/geraete" hx-target="#diag-panel" class="diag-wrap" style="margin-top:16px">
+{% for key, label in [('android_version','Android-Version'),('geraeteklasse','Geraeteklasse'),('hersteller','Hersteller')] %}
+<label>{{ label }} <select name="{{ key }}" class="form-input"><option value="">Alle</option>{% for value in verteilung[key] if value is not none %}<option value="{{ value }}" {% if request.query_params.get(key) == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+{% endfor %}
+<label>SDK maximal <input type="number" name="sdk_max" min="1" max="200" value="{{ request.query_params.get('sdk_max','') }}" class="form-input"></label>
+<label>Organisation-ID <input type="number" name="org_id" min="1" value="{{ request.query_params.get('org_id','') }}" class="form-input"></label>
+<label><input type="checkbox" name="nur_probleme" value="1" {% if request.query_params.get('nur_probleme') == '1' %}checked{% endif %}> Nur Probleme</label>
+<label><input type="checkbox" name="version" value="veraltet" {% if request.query_params.get('version') == 'veraltet' %}checked{% endif %}> Veraltete App</label>
+<label><input type="checkbox" name="lange_nicht_gesehen" value="1" {% if request.query_params.get('lange_nicht_gesehen') == '1' %}checked{% endif %}> Seit mehr als 48 Stunden nicht gesehen</label>
+<button class="btn btn--secondary" type="submit">Filtern</button>
+</form>
+<div style="overflow-x:auto;max-width:100%" tabindex="0" aria-label="App-Geraeteflotte">
+<table class="data-table"><thead><tr><th>Geraet / Klasse</th><th>Benutzer / Fahrzeug / Organisation</th><th>App-Version</th><th>Android / SDK</th><th>Aufloesung</th><th>Letzte Meldung</th><th>Fehleranzahl</th><th>Gesundheit</th></tr></thead>
+<tbody>{% for row in devices.geraete %}{% set g = row.geraet %}<tr>
+<td><a href="/admin/systemdiagnose/geraet/{{ g.id }}" hx-get="/admin/systemdiagnose/geraet/{{ g.id }}" hx-target="#diag-detail">{{ g.hersteller or '' }} {{ g.modell or 'Unbekanntes Geraet' }}</a><br>{{ g.geraeteklasse or '-' }}</td>
+<td>{{ row.benutzer.display_name or row.benutzer.username }}<br>{{ row.fahrzeug.name if row.fahrzeug else '-' }}<br>{{ row.org.name if row.org else 'Ohne Organisation' }}</td>
+<td>{{ g.app_version or '-' }} {{ badge(row.ampel) }}</td><td>{{ g.android_version or '-' }} / SDK {{ g.sdk_int or '-' }}</td><td>{{ g.aufloesung or '-' }}</td><td>{{ g.last_report_at|local_datetime }}</td><td>{{ row.fehlerzahl }}</td><td>{{ badge(row.gesundheit) }}</td>
+</tr>{% else %}<tr><td colspan="8">Keine passenden App-Geraete.</td></tr>{% endfor %}</tbody></table>
+</div>
+<nav class="diag-wrap" aria-label="Geraeteseiten">
+{% if devices.page > 0 %}<a class="btn btn--secondary" href="{{ request.url.include_query_params(page=devices.page-1) }}" hx-get="{{ request.url.include_query_params(page=devices.page-1) }}" hx-target="#diag-panel">Zurueck</a>{% endif %}
+{% if (devices.page+1)*devices.page_size < devices.gesamt %}<a class="btn btn--secondary" href="{{ request.url.include_query_params(page=devices.page+1) }}" hx-get="{{ request.url.include_query_params(page=devices.page+1) }}" hx-target="#diag-panel">Weiter</a>{% endif %}
+</nav>
