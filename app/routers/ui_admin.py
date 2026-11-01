@@ -610,6 +610,7 @@ def admin_index(request: Request, db: Session = Depends(get_db),
     from app.core.permissions import has_role
     from app.core.queries import visible_incidents_q
     from app.models.incident import Incident
+    from app.services.admin_startseite import einrichtung_fuer, wiki_bereiche_fuer, wiki_url
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
 
@@ -644,6 +645,9 @@ def admin_index(request: Request, db: Session = Depends(get_db),
         "kpis": kpis,
         "recent_incidents": recent_incidents,
         "recent_audit": recent_audit,
+        "einrichtung": einrichtung_fuer(is_sysadmin),
+        "wiki_bereiche": wiki_bereiche_fuer(is_sysadmin),
+        "wiki_url": wiki_url,
     })
 
 

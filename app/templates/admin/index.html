@@ -42,40 +42,62 @@
   </dl>
 </div>
 
+{% set nav = admin_navigation(request, user) %}
+<section class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ icon("layout-dashboard") }} Verwaltung auf einen Blick</h2>
+    <a href="{{ wiki_url('Administration-Navigation') }}" target="_blank" rel="noopener" class="btn btn-sm">Menü erklärt {{ icon("external-link", size="xs") }}</a>
+  </div>
+  <p class="sys-muted">Pro Fachgebiet ein Menüpunkt, die Unterseiten sind Tabs im Inhalt. Angezeigt wird, was Ihre Rolle und die aktivierten Module erlauben.</p>
+  {% for gruppe in nav.gruppen %}{% if gruppe.eintraege %}
+  <h3 class="sys-section-title">{{ gruppe.titel }}</h3>
+  <div class="sys-link-tiles">
+    {% for eintrag in gruppe.eintraege %}
+    <a href="{{ eintrag.href }}"{% if eintrag.neues_fenster %} target="_blank" rel="noopener"{% endif %} class="sys-link-tile"{% if eintrag.tooltip %} {{ tip(eintrag.tooltip) }}{% endif %}>
+      <span class="sys-no-shrink">{% if eintrag.icon_art == 'modul_icon' %}{{ modul_icon(eintrag.icon, size="sm") }}{% elif eintrag.icon_art == 'text' %}{{ eintrag.icon }}{% else %}{{ icon(eintrag.icon, size="sm") }}{% endif %}</span>
+      <span class="sys-link-tile__label">{{ eintrag.label }}</span>
+      {% if eintrag.tabs|length > 1 %}<span class="sys-ml-auto sys-muted sys-no-shrink">{{ eintrag.tabs|length }} Tabs</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}{% endfor %}
+</section>
+
+<section class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ icon("rocket") }} Einrichtung in sinnvoller Reihenfolge</h2>
+    <a href="{{ wiki_url('Installation-Erst-Setup') }}" target="_blank" rel="noopener" class="btn btn-sm">Erst-Setup {{ icon("external-link", size="xs") }}</a>
+  </div>
+  <ol class="sys-steps">
+    {% for schritt in einrichtung %}
+    <li class="sys-step">
+      <div>
+        <a href="{{ schritt.href }}"><strong>{{ schritt.titel }}</strong></a>
+        <p class="sys-muted sys-m-0">{{ schritt.beschreibung }}</p>
+      </div>
+      <a href="{{ wiki_url(schritt.wiki) }}" target="_blank" rel="noopener" class="sys-muted sys-nowrap" aria-label="Wiki: {{ schritt.titel }}">Wiki {{ icon("external-link", size="xs") }}</a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
 <section class="sys-card">
   <div class="sys-card__head">
     <h2>{{ icon("book") }} Dokumentation &amp; Hilfe</h2>
-    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki"
-       target="_blank" rel="noopener"
-       class="btn btn-sm">Vollständiges Wiki {{ icon("external-link", size="xs") }}</a>
+    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki" target="_blank" rel="noopener" class="btn btn-sm">Vollständiges Wiki {{ icon("external-link", size="xs") }}</a>
   </div>
+  {% for bereich in wiki_bereiche %}
+  <h3 class="sys-section-title">{{ icon(bereich.icon, size="sm") }} {{ bereich.titel }}</h3>
   <div class="sys-link-tiles">
-    {% set wiki_links = [
-      ('book', 'Erste Schritte', 'Anwender-Erste-Schritte'),
-      ('urgent', 'Einsatz starten', 'Anwender-Einsatz-starten'),
-      ('folders', 'Kanban-Board', 'Anwender-Kanban-Board-bedienen'),
-      ('lungs', 'Atemschutz', 'Anwender-Atemschutzueberwachung'),
-      ('home-x', 'Großschadenslage', 'Anwender-Grosschadenslage'),
-      ('map', 'Lagekarte GSL', 'Anwender-Grosschadenslage-Karte'),
-      ('target', 'Taktische Karte', 'Anwender-Taktische-Lagekarte'),
-      ('cloud-rain', 'Wetter', 'Anwender-Wetter'),
-      ('speakerphone', 'Übergreifende Meldungen', 'Anwender-Uebergreifende-Meldungen'),
-      ('users', 'GSL-Ressourcen', 'Anwender-GSL-Ressourcenverwaltung'),
-      ('package', 'Geräteverleih', 'Anwender-Geraeteverleih'),
-      ('drone', 'Drohne / UAS', 'Anwender-Drohne-UAS'),
-      ('key', 'Single Sign-On', 'Administration-Single-Sign-On'),
-      ('tools', 'Installation', 'Installation-App-Installation'),
-      ('message', 'Fehler & Wünsche', 'Feedback-und-Support'),
-    ] %}
-    {% for icon_name, label, slug in wiki_links %}
-    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki/{{ slug }}"
-       target="_blank" rel="noopener" class="sys-link-tile">
-      <span class="sys-no-shrink">{{ icon(icon_name, size="sm") }}</span>
-      <span class="sys-link-tile__label">{{ label }}</span>
+    {% for link in bereich.links %}
+    <a href="{{ wiki_url(link.slug) }}" target="_blank" rel="noopener" class="sys-link-tile">
+      <span class="sys-no-shrink">{{ icon(link.icon, size="sm") }}</span>
+      <span class="sys-link-tile__label">{{ link.label }}</span>
       <span class="sys-ml-auto sys-muted sys-no-shrink">{{ icon("external-link", size="xs") }}</span>
     </a>
     {% endfor %}
   </div>
+  {% endfor %}
 </section>
 
 <div class="sys-grid sys-grid--top">
