@@ -109,3 +109,24 @@ Sysadmin-Navigation, Textänderungen an Fachaussagen.
 
 ## Abnahme
 ruff, mypy, `pytest -n auto`, Screenshots, CI grün, dann Squash-Merge; Gerätesichtprüfung durch den Nutzer.
+
+## Erweiterung 2026-11-01: restliche Verwaltung (Pakete V1-V8)
+
+Alle weiteren Seiten, die `admin/_layout.html` erweitern (82 Dateien, davon bis zu 170 Inline-Styles
+je Seite), werden auf dieselben `sys-*`-Bausteine umgestellt. Vorgehen je Seite: `sys-page` +
+`sys-hero`-Kopf, Karten als `sys-card`, Tabellen als `sys-table` (mobil mit `data-label`),
+Formulare im `sys-form-grid`, Inline-Styles durch Klassen ersetzen (Hilfsklassen `sys-stack`,
+`sys-row`, `sys-grid-2`, `sys-mt-*`, `sys-muted`), Emojis/ASCII-Umlaute bereinigen. Verhalten,
+Routen, Felder, `hx-*`, Alpine-Logik und IDs bleiben unveraendert. Je Paket Chromium-Pruefung bei
+1440 und 390 px (kein horizontaler Overflow, keine JS-Fehler).
+
+| Paket | Inhalt |
+|---|---|
+| V1 | Organisations-Einstellungen: `settings.html`, `settings_wetter*.html`, `settings_strassensperren_infoscreen.html`, `road_closure/einstellungen.html`, `settings_statistik.html`, `_settings_statistik_panel.html`, `settings_wordpress_report.html`, `settings_org_mail.html` |
+| V2 | Integrationen: `settings_sso.html`, `_sso_group_map.html`, `settings_dibos.html`, `_dibos_*.html`, `dibos_einsaetze.html`, `settings_teams_bot.html`, `settings_lis.html`, `_lis_captures.html`, `gsl_einstellungen.html`, `einsatz_import.html` |
+| V3 | Alarmierung und Nachrichten: `sms_*.html`, `_sms_*.html`, `einsatzinfo_sms.html`, `einsatzinfo_mail.html`, `push_notifications.html`, `default_messages.html`, `dispatch_order.html`, `alarm_types.html`, `mail_eingang*.html`, `_mail_eingang_content.html`, `mail_weiterleitungen.html`, `message_suggestions.html`, `task_suggestions.html`, `lage_hints.html`, `ai_prompts.html`, `ai_request_log.html` |
+| V4 | Geraete und Zugaenge: `device_tokens.html`, `device_token_detail.html`, `api_keys.html`, `lagekarte_tokens.html`, `_auth_failures.html`, `atemschutz_pruefung/*`, `gateway/*` |
+| V5 | Stammdaten: `users.html`, `user_mail_preview.html`, `members.html`, `vehicles.html`, `qualifications.html`, `organisations.html`, `wasserstellen.html` |
+| V6 | Foerderstrecke, Verleih, Probenplanung, Planspiel, Objekt-Infoscreen: `foerder_*.html`, `verleih/*`, `probenplanung/*`, `planspiel/admin/*`, `objekt/infoscreen_verwaltung.html` |
+| V7 | Betrieb: `backup.html`, `org_backup.html`, `org_restore.html`, `db_backups.html`, `_db_backups_liste.html`, `_github_update.html`, `_github_branch_update.html`, `medienverwaltung.html`, `seed_templates.html`, `pages_list.html`, `page_edit.html`, `konfig.html`, `about.html`, `hilfe.html`, `index.html` |
+| V8 | Abschluss: Waechtertest auf alle Admin-Seiten erweitern (keine statischen Inline-Styles), Screenshots, CHANGELOG, Wiki-/Doku-Hinweis, volle CI |
