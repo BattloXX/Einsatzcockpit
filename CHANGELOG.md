@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **BSP-Overlays:** Die Karte zeigt hoechstens eine Brandschutzplan-Ebene gleichzeitig (Planwechsel entfernt die vorherige, die Auswahl wird gemerkt). Ausblenden wirkt sofort und bleibt nach Neuladen und Planwechsel bestehen; eine gespeicherte Einsatz-/Objektvorgabe wird nicht mehr von einer alten persoenlichen Ueberschreibung verdeckt. Die Auswahlliste und der Autodruck enthalten je logischem Plan nur die zuletzt freigegebene auslieferbare Ebene.
+
 - Systemdiagnose: lesende App-Geraeteflotte mit Filtern, Release-Ampel, Detailansicht und gemeinsamem Gesundheitscheck `app.geraete`.
 
 - **App-Geraetebericht:** Neuer Endpunkt `POST /api/v1/device/diagnose-report` nimmt den Geraetebericht der Android-App entgegen (Version, Geraete-/Display-/Android-Eigenschaften, WebView, Einstellungen, Berechtigungen, Dienstzustand, strukturierte Fehler). Whitelist-Validierung, Maskierung, 64 KB und 30 Berichte/Stunde, 90 Tage Aufbewahrung; kein Rueckkanal fuer Einstellungen. Migration 0339.

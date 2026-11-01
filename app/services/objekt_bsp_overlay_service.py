@@ -351,15 +351,42 @@ def overlay_ist_auslieferbar(db: Session, overlay: ObjektBspOverlay) -> bool:
         return False
 
 
+def _plan_schluessel(overlay: ObjektBspOverlay) -> tuple:
+    """Logischer Plan: gleiches Dokument, gleiche Seite und gleiche Bezeichnung."""
+    return (overlay.objekt_id, overlay.dokument_id, overlay.seite, (overlay.name or "").strip().lower(),
+            (overlay.geschoss or "").strip().lower(), (overlay.bereich or "").strip().lower())
+
+
+def _rang(overlay: ObjektBspOverlay) -> tuple[float, int]:
+    zeit = overlay.freigegeben_am.replace(tzinfo=UTC).timestamp() if overlay.freigegeben_am else 0.0
+    return zeit, overlay.id
+
+
+def nur_neueste_je_plan(overlays: list[ObjektBspOverlay]) -> list[ObjektBspOverlay]:
+    """Je logischem Plan nur die zuletzt freigegebene auslieferbare Ebene (Auswahlliste)."""
+    neueste: dict[tuple, ObjektBspOverlay] = {}
+    for overlay in overlays:
+        alt = neueste.get(_plan_schluessel(overlay))
+        if alt is None or _rang(overlay) > _rang(alt):
+            neueste[_plan_schluessel(overlay)] = overlay
+    return sorted(neueste.values(), key=lambda o: o.id)
+
+
+def ersetzte_overlay_ids(db: Session, objekt: Objekt) -> set[int]:
+    """Auslieferbare, aber durch eine neuere Freigabe desselben Plans ersetzte Ebenen."""
+    liste = [o for o in db.query(ObjektBspOverlay).filter_by(objekt_id=objekt.id, org_id=objekt.org_id).all()
+             if overlay_ist_auslieferbar(db, o)]
+    return {o.id for o in liste} - {o.id for o in nur_neueste_je_plan(liste)}
+
+
 def overlays_fuer_einsatz(db: Session, incident_id: int, *, einsatzvorgabe: bool = True) -> list[dict]:
     zuordnungen = db.query(ObjektEinsatz).filter_by(incident_id=incident_id, status="bestaetigt").all()
     ergebnis = []
     for zuordnung in zuordnungen:
-        for overlay in db.query(ObjektBspOverlay).filter_by(
+        auslieferbar = [o for o in db.query(ObjektBspOverlay).filter_by(
             objekt_id=zuordnung.objekt_id, org_id=zuordnung.org_id
-        ).order_by(ObjektBspOverlay.id).all():
-            if not overlay_ist_auslieferbar(db, overlay):
-                continue
+        ).order_by(ObjektBspOverlay.id).all() if overlay_ist_auslieferbar(db, o)]
+        for overlay in nur_neueste_je_plan(auslieferbar):
             einstellung = db.query(BspOverlayEinsatz).filter_by(
                 incident_id=incident_id, overlay_id=overlay.id, org_id=overlay.org_id
             ).first()
@@ -382,13 +409,10 @@ def _anzeige_daten(
 
 def objekt_overlays_json(db: Session, objekt: Objekt, user: User) -> list[dict]:
     """Auslieferbare Objekt-Ebenen ohne einsatzbezogene Einstellungen."""
-    daten = [
-        _anzeige_daten(overlay)
-        for overlay in db.query(ObjektBspOverlay).filter_by(
-            objekt_id=objekt.id, org_id=objekt.org_id
-        ).order_by(ObjektBspOverlay.id).all()
-        if overlay_ist_auslieferbar(db, overlay)
-    ]
+    auslieferbar = [o for o in db.query(ObjektBspOverlay).filter_by(
+        objekt_id=objekt.id, org_id=objekt.org_id
+    ).order_by(ObjektBspOverlay.id).all() if overlay_ist_auslieferbar(db, o)]
+    daten = [_anzeige_daten(overlay) for overlay in nur_neueste_je_plan(auslieferbar)]
     return _overlays_json(db, daten, user)
 
 
