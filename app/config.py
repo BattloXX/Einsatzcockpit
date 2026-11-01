@@ -129,11 +129,13 @@ class Settings(BaseSettings):
     TURNSTILE_SITE_KEY: str = ""
     TURNSTILE_SECRET_KEY: str = ""
 
-    # Firebase Cloud Messaging (native Android Push)
+    # Firebase Cloud Messaging (native Android- und iOS-Pushes)
     FCM_ENABLED: bool = False
     FCM_PROJECT_ID: str = ""
     # Pfad zur Service-Account-JSON-Datei (außerhalb des Repos!)
     FCM_CREDENTIALS_PATH: str = ""
+    # Erst nach Freigabe der Critical-Alerts-Berechtigung durch Apple aktivieren.
+    IOS_CRITICAL_ALERTS_ENABLED: bool = False
 
     BOOTSTRAP_ADMIN_USER: str = "admin"
     BOOTSTRAP_ADMIN_PASSWORD: str = ""  # Leer → wird beim ersten Start zufällig generiert

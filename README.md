@@ -165,6 +165,7 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 | [Dokumente im Einsatz – Phase 4](docs/einsatzwissen/einsatzdokumente-phase4.md) | Unveränderliche Übernahmen, Auftrag und Einheitenfreigaben, Board, Archiv und Backup |
 | [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen, Modulschalter |
 | [Lokaler OSM-Gebaeudebestand](docs/architecture/osm-gebaeude.md) | Import, Overpass-Rueckfall, Statistik und Diagnose |
+| [iOS-Push](docs/architecture/ios-push.md) | APNs-Nachrichten, Alarmstufen und Critical Alerts |
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |
 | [MCP-Server](docs/wiki/Administration-MCP-Server.md) | KI-Anwendungen, OAuth, Aktivierung und Betrieb |
