@@ -1,0 +1,86 @@
+/* Sysadmin-Bausteine (handgeschrieben).
+   sys-hero: Seitenkopf oder Gesamtampel; sys-kpis > sys-kpi: Kennzahlen.
+   sys-card > sys-card__head: Icon, Überschrift und sys-pill.
+   sys-kv: rekursive dl-Liste; sys-tabs: Navigation mit aria-current="page".
+   sys-toolbar: Formularzeile; sys-switch-row: Text und beschrifteter Schalter.
+   sys-table-wrap > sys-table: scrollbar mit fixiertem Tabellenkopf.
+   sys-empty: Leerzustand; sys-status--ok/--warn/--fail: Status mit Text.
+   Alle interaktiven Elemente erhalten 44px Touchfläche und sichtbaren Fokus. */
+.sys-page { min-width: 0; color: var(--on-surface); overflow-wrap: anywhere; }
+.sys-hero, .sys-card, .sys-kpi {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: .75rem;
+  background: var(--surface-low);
+  margin-bottom: 1rem;
+}
+.sys-hero { background: var(--surface); }
+.sys-hero__head, .sys-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+.sys-hero h1, .sys-hero h2, .sys-card__head h2, .sys-card__head h3 {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+  font-size: 1.15rem;
+}
+.sys-hero h1 { font-size: 1.6rem; }
+.sys-hero p { margin: .5rem 0 0; }
+.sys-muted, .sys-kv dt, .sys-kpi dt { color: var(--text-muted); }
+.sys-grid, .sys-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.sys-grid > .sys-card { margin: 0; }
+.sys-grid { margin-bottom: 1rem; }
+.sys-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); margin: 1rem 0 0; }
+.sys-kpi { margin: 0; background: var(--surface); }
+.sys-kpi dd { margin: .4rem 0 0; font-weight: 700; }
+.sys-kv { margin: 0; }
+.sys-kv > div { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(0, 2fr); gap: .5rem 1rem; padding: .65rem 0; border-bottom: 1px solid var(--border); }
+.sys-kv > div:last-child { border-bottom: 0; }
+.sys-kv dd { min-width: 0; margin: 0; }
+.sys-kv .sys-kv > div:first-child { padding-top: 0; }
+.sys-list { margin: 0; padding-left: 1.25rem; }
+.sys-list > li + li { margin-top: .5rem; }
+.sys-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .65rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-high); font-size: .8rem; font-weight: 600; }
+.sys-status--ok { color: var(--green); }
+.sys-status--warn { color: var(--yellow); }
+.sys-status--fail { color: var(--red); }
+.sys-tabs { display: flex; gap: .4rem; overflow-x: auto; margin-bottom: 1rem; padding: .4rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface-low); }
+.sys-tabs > button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; flex: 0 0 auto; min-height: 44px; padding: .6rem .9rem; border: 1px solid transparent; border-radius: .5rem; background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; white-space: nowrap; }
+.sys-tabs > button:hover { background: var(--surface-high); color: var(--on-surface); }
+.sys-tabs > [aria-current="page"] { background: var(--surface-high); border-color: var(--border); color: var(--on-surface); font-weight: 700; }
+.sys-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.sys-toolbar > label { display: grid; flex: 1 1 14rem; gap: .4rem; min-width: 0; }
+.sys-toolbar .form-input { width: 100%; }
+.sys-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid var(--border); }
+.sys-switch-row p { margin: .3rem 0 0; color: var(--text-muted); }
+.sys-switch-row input { accent-color: var(--green); }
+.sys-table-wrap { max-width: 100%; overflow-x: auto; }
+.sys-table { width: 100%; border-collapse: collapse; text-align: left; }
+.sys-table caption { padding: .75rem; text-align: left; font-weight: 700; }
+.sys-table th, .sys-table td { padding: .75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.sys-table thead th { position: sticky; top: 0; background: var(--surface-high); color: var(--on-surface); }
+.sys-table tbody tr:hover { background: var(--surface-high); }
+.sys-empty { display: flex; align-items: center; justify-content: center; gap: .75rem; padding: 2rem 1rem; border: 1px dashed var(--border); border-radius: .75rem; color: var(--text-muted); }
+.sys-progress { display: block; width: 100%; height: 1rem; margin: 1rem 0; accent-color: var(--green); }
+.sys-pills { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.sys-details { margin-top: 1rem; }
+.sys-details > summary { display: list-item; min-height: 44px; padding: .65rem 0; cursor: pointer; }
+.sys-details pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sys-page :is(button, .btn, select, input:not([type="hidden"])) { min-height: 44px; }
+.sys-page :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
+.sys-switch-row:focus-within { outline: 2px solid var(--on-surface); outline-offset: 3px; }
+@media (max-width: 760px) {
+  .sys-grid, .sys-kpis, .sys-kv > div { grid-template-columns: 1fr; }
+  .sys-hero, .sys-card, .sys-kpi { padding: 1rem; }
+  .sys-toolbar { align-items: stretch; flex-direction: column; }
+  .sys-toolbar > label { flex: auto; }
+  .sys-toolbar > .btn { width: 100%; }
+  .sys-table { min-width: 32rem; }
+}

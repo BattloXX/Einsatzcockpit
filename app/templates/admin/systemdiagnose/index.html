@@ -1,5 +1,9 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Systemdiagnose{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='systemstatus' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
@@ -11,12 +15,16 @@
 .diag input,.diag select,.diag textarea {max-width:100%}
 @media(max-width:760px){.diag-grid{grid-template-columns:1fr}.diag .btn{min-height:44px}.diag-wrap>*{flex:1 1 auto}.diag-card{padding:12px}}
 </style>
-<div class="page-content diag">
+<div class="page-content diag sys-page" x-data="{tab:'gesamt'}"
+     @htmx:after-swap.camel="if ($event.target.id === 'diag-panel') { const path = new URL($event.detail.xhr.responseURL).pathname; const match = path.match(/\/teil\/([^/]+)$/); if (match) tab = match[1]; else if (path.endsWith('/start')) tab = 'diagnose'; }">
+<header class="sys-hero">
 <h1>{{ icon("server") }} Systemdiagnose</h1>
-<p>Globale technische Zustaende und IDs. Diagnose liest; Reparaturen benoetigen gesonderte Freigaben.</p>
-<nav class="diag-wrap" aria-label="Systemdiagnose-Bereiche">
-{% set labels = {'gesamt':'Gesamtzustand','diagnose':'Diagnoselauf','befunde':'Integritaetsbefunde','laeufe':'Fehlerhistorie','reparaturen':'Reparaturen','github':'GitHub-CI / Code','audit':'Audit','geraete':'App-Geraete'} %}
-{% for section in sections %}<button type="button" class="btn btn--secondary" hx-get="/admin/systemdiagnose/teil/{{ section }}" hx-target="#diag-panel">{{ labels[section] }}</button>{% endfor %}
+<p class="sys-muted">Globale technische Zustände und IDs. Diagnose liest; Reparaturen benötigen gesonderte Freigaben.</p>
+</header>
+<nav class="sys-tabs" aria-label="Systemdiagnose-Bereiche">
+{% set labels = {'gesamt':'Gesamtzustand','diagnose':'Diagnoselauf','befunde':'Integritätsbefunde','laeufe':'Fehlerhistorie','reparaturen':'Reparaturen','github':'GitHub-CI / Code','audit':'Audit','geraete':'App-Geräte'} %}
+{% set icons = {'gesamt':'traffic-lights','diagnose':'clipboard-check','befunde':'alert-triangle','laeufe':'history','reparaturen':'tools','github':'brand-github','audit':'file-text','geraete':'device-mobile'} %}
+{% for section in sections %}<button type="button" class="sys-tabs__item" {% if section == 'gesamt' %}aria-current="page"{% endif %} :aria-current="tab === '{{ section }}' ? 'page' : null" hx-get="/admin/systemdiagnose/teil/{{ section }}" hx-target="#diag-panel">{{ icon(icons[section]) }} {{ labels[section] }}</button>{% endfor %}
 </nav>
 <div id="diag-panel" hx-get="/admin/systemdiagnose/teil/gesamt" hx-trigger="load" aria-live="polite">Gesamtzustand wird geladen.</div>
 <div id="diag-detail" aria-live="polite" {% if geraet_id %}hx-get="/admin/systemdiagnose/geraet/{{ geraet_id }}" hx-trigger="load"{% endif %}></div>
