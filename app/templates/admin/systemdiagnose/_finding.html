@@ -1,7 +1,15 @@
-<article class="diag-card"><h2>Befund #{{ finding.id }}: {{ safe_title(finding.titel) }}</h2>
-<p>{{ check.modul if check else 'system' }} / {{ finding.schweregrad }} / {{ finding.status }}</p>
-<p>Erstmals {{ finding.first_seen_at|local_datetime }} / zuletzt {{ finding.last_seen_at|local_datetime }} / behoben {{ finding.behoben_am|local_datetime }} / Anzahl {{ finding.occurrences }}</p>
-<h3>Evidenz (nur Werte, freie Texte und Feldnamen maskiert)</h3><pre>{{ numbers(finding.evidenz)|tojson(indent=2) }}</pre><h3>Betroffene IDs</h3><pre>{{ numbers(finding.betroffene_ids)|tojson(indent=2) }}</pre>
-<h3>Hypothese</h3><p>Hypothese: {{ safe_title(finding.ursache_hypothese) }}. Nicht bestaetigt.</p>
-<h3>Empfehlung</h3><p>{{ safe_title(finding.empfehlung) }}. Betroffene IDs anhand der Pruefung {{ check.id if check else 'unbekannt' }} kontrollieren.</p>
-{% if check %}<p>{{ check.beschreibung }}</p>{% endif %}</article>
+{% from 'admin/systemdiagnose/_panel.html' import kv, status_pill with context %}
+<article class="sys-card">
+<header class="sys-card__head"><h2>{{ icon("alert-triangle") }} Befund #{{ finding.id }}: {{ safe_title(finding.titel) }}</h2>{{ status_pill(finding.schweregrad) }}</header>
+<div class="sys-pills"><span class="sys-pill">{{ check.modul if check else 'system' }}</span><span class="sys-pill">{{ 'unterdrückt' if finding.status == 'unterdrueckt' else finding.status }}</span></div>
+<dl class="sys-kv">
+<div><dt>Erstmals</dt><dd>{{ finding.first_seen_at|local_datetime }}</dd></div><div><dt>Zuletzt</dt><dd>{{ finding.last_seen_at|local_datetime }}</dd></div><div><dt>Behoben</dt><dd>{{ finding.behoben_am|local_datetime }}</dd></div><div><dt>Anzahl</dt><dd>{{ finding.occurrences }}</dd></div>
+</dl>
+</article>
+<div class="sys-grid">
+<section class="sys-card"><header class="sys-card__head"><h3>Evidenz (nur Werte, freie Texte und Feldnamen maskiert)</h3></header>{{ kv(numbers(finding.evidenz)) }}</section>
+<section class="sys-card"><header class="sys-card__head"><h3>Betroffene IDs</h3></header>{{ kv(numbers(finding.betroffene_ids)) }}</section>
+<section class="sys-card"><header class="sys-card__head"><h3>Hypothese</h3></header><p>Hypothese: {{ safe_title(finding.ursache_hypothese) }}. Nicht bestätigt.</p></section>
+<section class="sys-card"><header class="sys-card__head"><h3>Empfehlung</h3></header><p>{{ safe_title(finding.empfehlung) }}. Betroffene IDs anhand der Prüfung {{ check.id if check else 'unbekannt' }} kontrollieren.</p>
+{% if check %}<p>{{ check.beschreibung }}</p>{% endif %}</section>
+</div>

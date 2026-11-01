@@ -84,3 +84,25 @@
   .sys-toolbar > .btn { width: 100%; }
   .sys-table { min-width: 32rem; }
 }
+/* Aktionszeilen, Formularraster und Verteilungen der Systemdiagnose. */
+.sys-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
+.sys-actions form { margin: 0; }
+.sys-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1rem; }
+.sys-form-grid > label { display: grid; gap: .4rem; min-width: 0; }
+.sys-form-grid .form-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.sys-form-grid > :is(button, details) { grid-column: 1 / -1; }
+.sys-form-grid > button { justify-self: start; }
+.sys-toolbar > .sys-check, .sys-form-grid > .sys-check { display: flex; align-items: center; gap: .5rem; }
+.sys-check input { flex: 0 0 auto; }
+.sys-bars { list-style: none; padding: 0; margin: 0; }
+.sys-bars > li + li { margin-top: .75rem; }
+.sys-bars__label { display: flex; justify-content: space-between; gap: .75rem; }
+.sys-bars .sys-progress { margin: .4rem 0 0; }
+.sys-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.sys-codex { display: block; width: 100%; max-width: 100%; box-sizing: border-box; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sys-repair-steps { margin-top: 1rem; }
+.sys-repair-steps h4 { margin: .75rem 0; }
+@media (max-width: 760px) {
+  .sys-form-grid { grid-template-columns: 1fr; }
+  .sys-actions > :is(form, .btn), .sys-actions form > .btn { width: 100%; }
+}
