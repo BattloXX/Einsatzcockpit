@@ -105,6 +105,7 @@ from app.models.lagefuehrung import (
 )
 from app.models.lagekarte import LagekarteToken
 from app.models.lis import LisSyncedObject, OrgLisConfig
+from app.models.live_activity import LiveActivityToken
 from app.models.login_pin import LoginPin
 from app.models.mail_weiterleitung import MailWeiterleitung, MailWeiterleitungLog  # noqa: F401
 from app.models.mailing import (  # noqa: F401 -- imports register ORM models in Base.metadata
@@ -344,6 +345,7 @@ __all__ = [
     "DeviceAuthFailure",
     "DeviceToken",
     "FcmToken",
+    "LiveActivityToken",
     "PushLog",
     "SmsGatewayToken",
     "FireDept",

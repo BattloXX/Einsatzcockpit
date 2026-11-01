@@ -57,7 +57,7 @@ _GLOBAL_TABLES = frozenset({
 # Daten-Backups (Tokens/Sessions/Push sind server-/geraetegebunden).
 _EPHEMERAL_TABLES = frozenset({
     "citizen_report_verification",
-    "password_reset_token", "login_pin", "device_token", "fcm_token",
+    "password_reset_token", "login_pin", "device_token", "fcm_token", "live_activity_token",
     "push_subscription", "push_log", "incident_token", "alarm_token",
     "lage_token", "lagekarte_token", "weather_dashboard_token",
     "alarm_infoscreen_token", "api_key", "sms_gateway_token",

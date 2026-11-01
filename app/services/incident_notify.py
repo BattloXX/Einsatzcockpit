@@ -201,16 +201,8 @@ async def notify_incident_created(
     except Exception:
         db.rollback()
         logger.exception("Alarmierungsstart konnte nicht protokolliert werden (Einsatz %s)", incident.id)
-    try:
-        from app.services.einsatz_live_service import build_incident_live_payload
-
-        live_payload = build_incident_live_payload(db, incident)
-        incident.live_push_phase = live_payload["phase_index"]
-        incident.live_push_at = datetime.now(UTC).replace(tzinfo=None)
-        db.commit()
-    except Exception:
-        db.rollback()
-        logger.exception("Initialer Live-Status fehlgeschlagen (Einsatz %s)", incident.id)
+    # Den initialen Live-Phasenmerker erst im Outbox-Push atomar beanspruchen;
+    # er verhindert auch doppelte ActivityKit-Starts im alternativen Live-Pfad.
     if background_tasks is not None:
         background_tasks.add_task(process_incident_alarm, incident.id)
     else:

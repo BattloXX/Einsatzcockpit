@@ -60,6 +60,8 @@ def _claim_push(db: Session, incident: Incident, phase_index: int, reason: str) 
         conditions.append(
             or_(Incident.live_push_at.is_(None), Incident.live_push_at < now - timedelta(seconds=90))
         )
+    if reason == "created":
+        conditions.append(Incident.live_push_phase.is_(None))
     if reason == "unit_status":
         conditions.append(
             or_(Incident.live_push_phase.is_(None), Incident.live_push_phase != phase_index)
@@ -81,6 +83,7 @@ def _claim_push(db: Session, incident: Incident, phase_index: int, reason: str) 
 def _dispatch_live_push(incident_id: int, org_id: int | None, reason: str) -> None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
+    from app.services import apns_live_activity
     from app.services.einsatz_live_service import build_incident_live_payload
     from app.services.push_service import notify_org_web
 
@@ -123,6 +126,29 @@ def _dispatch_live_push(incident_id: int, org_id: int | None, reason: str) -> No
             db, org_id, title, body, url,
             extra=_live_extra(payload, alert=reason == "created", kind=kind),
         )
+        apns_live_activity.dispatch_incident(db, incident, org_id, payload, reason)
+        db.commit()
+    finally:
+        db.close()
+
+
+def start_live_activity_once(incident_id: int, org_id: int) -> None:
+    """Startet die Live Activity genau einmal je Einsatz (atomarer Phasenmerker)."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.services import apns_live_activity
+    from app.services.einsatz_live_service import build_incident_live_payload
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, incident_id)
+        if incident is None:
+            return
+        payload = build_incident_live_payload(db, incident)
+        if _claim_push(db, incident, payload["phase_index"], "created"):
+            apns_live_activity.dispatch_incident(db, incident, org_id, payload, "created")
+            db.commit()
     finally:
         db.close()
 
