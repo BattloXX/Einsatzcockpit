@@ -158,3 +158,62 @@
   .sys-settings .sys-table--settings td { padding: .35rem 0; border: 0; }
   .sys-settings .sys-table--settings td::before { content: attr(data-label); display: block; margin-bottom: .3rem; font-size: .8rem; font-weight: 700; color: var(--text-muted); }
 }
+
+/* Dienstüberwachung und System-Konsole: Tabellen scrollen innerhalb der Karte. */
+.admin-main:has(.sys-page) { min-width: 0; }
+.sys-page .card-body { min-width: 0; padding: 0; }
+.sys-page .form-group { min-width: 0; }
+.sys-page :is(.form-input, .form-control) { max-width: 100%; box-sizing: border-box; }
+.sys-small { font-size: .82rem; }
+.sys-grow { flex: 1 1 12rem; min-width: 0; }
+.sys-number { text-align: right; font-variant-numeric: tabular-nums; }
+.sys-table-empty { text-align: center; padding: 1.5rem; }
+.sys-section-title { display: flex; align-items: center; gap: .5rem; margin: 1.5rem 0 .75rem; }
+.sys-token, .sys-page .api-key-display { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+.sys-token-form { margin-bottom: 1rem; }
+.sys-service { border-left-width: 4px; }
+.sys-service--ok { border-left-color: var(--green); }
+.sys-service--warn { border-left-color: var(--yellow); }
+.sys-service--fail { border-left-color: var(--red); }
+.sys-service-parts { list-style: none; padding: 0; margin: .75rem 0; }
+.sys-service-parts li { padding: .65rem 0; border-top: 1px solid var(--border); }
+.sys-service-part__head, .sys-quota-label { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-bottom: .4rem; }
+.sys-log-filter { display: grid; gap: .4rem; }
+.sys-log-filter .form-label { margin: 0; }
+.sys-log-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+.sys-log-card { padding: 0; overflow: hidden; }
+.sys-log-output { background: var(--surface); color: var(--on-surface); padding: 1rem; margin: 0; max-height: 70vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .82rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.sys-log-output .ll-DEBUG { color: var(--text-muted); }
+.sys-log-output .ll-INFO { color: var(--on-surface); }
+.sys-log-output .ll-WARNING { color: var(--yellow); }
+.sys-log-output :is(.ll-ERROR, .ll-CRITICAL) { color: var(--red); }
+.sys-log-output .ll-CRITICAL { font-weight: 700; }
+.sys-org-color { display: inline-block; width: .85rem; height: .85rem; border-radius: 50%; background: var(--sys-org-color); flex-shrink: 0; }
+.sys-org-actions { min-width: 12rem; }
+.sys-org-actions .btn { margin-bottom: .4rem; }
+.sys-quota-block { margin-top: 1rem; }
+.sys-quota-input { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+.sys-quota-input input { min-width: 0; width: 100%; padding: .6rem; border: 1px solid var(--border); border-radius: .35rem; background: var(--surface); color: var(--on-surface); }
+.sys-quota-input > span { white-space: nowrap; }
+.sys-progress--warn { accent-color: var(--yellow); }
+.sys-progress--fail { accent-color: var(--red); }
+.sys-standalone { width: calc(100% - 2rem); margin: 2rem auto; max-width: 760px; }
+.sys-standalone--login { max-width: 460px; }
+.sys-standalone .sys-hero { padding: 0; border: 0; background: none; }
+.sys-standalone-form { display: grid; gap: .75rem; }
+.sys-standalone-form .form-control { width: 100%; }
+.sys-standalone-form > button { justify-self: start; }
+@media (max-width: 760px) {
+  .sys-log-toolbar { align-items: stretch; }
+  .sys-log-toolbar .sys-grow { display: none; }
+  .sys-toolbar > .sys-grow { flex: auto; width: 100%; }
+}
+
+/* Lange Tabellen bleiben lesbar; nur URLs und Kennungen brechen beliebig um. */
+.sys-table { overflow-wrap: normal; }
+.sys-table--orgs { min-width: 70rem; }
+.sys-pill { white-space: nowrap; }
+.sys-page .sys-check { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.sys-page .sys-check input[type="checkbox"] { min-height: 0; width: 1.1rem; height: 1.1rem; }
+.sys-token-link { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.sys-token-link .api-key-display { flex: 1 1 18rem; min-width: 0; margin: 0; }

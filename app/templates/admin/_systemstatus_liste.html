@@ -1,83 +1,91 @@
 {% for warnung in alarmempfang_warnungen|default([]) %}
 <p class="alert alert--warn" role="status">{{ warnung }}</p>
 {% endfor %}
-<div class="grid grid--cards">
+<div class="sys-grid">
   {% for check in checks %}
   {% set row = status_rows.get(check.key) %}
   {% set zustand = dienst_zustaende.get(check.key, 'ok') %}
-  <article class="card">
-    <div class="card-body">
-      <h3>{{ labels.get(check.key, check.key) }}</h3>
-      {% if zustand == 'nicht_konfiguriert' %}
-      <span class="badge">{{ "Keine überwachten Gateways" if check.key == "print_gateway" else "Nicht eingerichtet" }}</span>
-      {% elif zustand == 'teilweise' %}
-      <span class="badge badge--warn">Teilstörung</span>
+  {% set farbe = 'fail' if zustand == 'down' else ('warn' if zustand == 'teilweise' else ('neutral' if zustand == 'nicht_konfiguriert' else 'ok')) %}
+  {% set bezeichnung = {'down': 'Ausfall', 'teilweise': 'Teilstörung', 'nicht_konfiguriert': 'Nicht eingerichtet'}.get(zustand, 'OK') %}
+  <article class="sys-card sys-service sys-service--{{ farbe }}">
+    <header class="sys-card__head">
+      <h3>{{ icon({'mail': 'mail', 'sms_gateway': 'device-mobile-message', 'print_gateway': 'printer', 'redis_bus': 'topology-star-3', 'sms_jobs': 'message', 'print_jobs': 'printer', 'alarm_seriell': 'plug', 'alarm_dibos': 'bell', 'alarm_outbox': 'inbox'}.get(check.key, 'server')) }} {{ labels.get(check.key, check.key) }}</h3>
+      <span class="sys-pill sys-status--{{ farbe }}">{{ status_dot({'ok': 'gruen', 'warn': 'orange', 'fail': 'rot', 'neutral': 'grau'}[farbe], bezeichnung) }} {{ bezeichnung }}</span>
+    </header>
+    {% if zustand == 'nicht_konfiguriert' and check.key == 'print_gateway' %}<p class="sys-muted">Keine überwachten Gateways</p>{% endif %}
+    {% if zustand in ('down', 'teilweise') %}
       {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
-      {% elif zustand == 'down' %}
-      <span class="badge badge--closed">Ausfall</span>
-      {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
-      {% else %}
-      <span class="badge badge--active">OK</span>
-      {% endif %}
-      {% if zustand in ('down', 'teilweise') and not row.outage_notified_at %}<p style="color:var(--text-muted);font-size:.8rem">Keine Benachrichtigung verschickt{% if org_settings and not org_settings.dienst_monitor_enabled %} – Überwachung ist deaktiviert.{% endif %}</p>{% endif %}
-      <p>{{ check.detail }}</p>
-      {% if check.teile|length > 1 %}
-      <ul style="list-style:none;padding:0;margin:.75rem 0">
-        {% for teil in check.teile %}
-        <li style="margin-bottom:.5rem"><strong>{{ teil.name }}</strong> <span class="badge {% if teil.state == 'ok' %}badge--active{% elif teil.state == 'unknown' %}badge--warn{% else %}badge--closed{% endif %}">{{ 'OK' if teil.state == 'ok' else ('Unbekannt' if teil.state == 'unknown' else 'Ausfall') }}</span><br><span style="color:var(--text-muted);font-size:.8rem">{{ teil.detail }}</span></li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-      <p style="color:var(--text-muted);font-size:.8rem;margin-bottom:0">Rohstatus: {{ check.state }}</p>
-    </div>
+      {% if not row.outage_notified_at %}<p class="sys-muted sys-small">Keine Benachrichtigung verschickt{% if org_settings and not org_settings.dienst_monitor_enabled %} – Überwachung ist deaktiviert.{% endif %}</p>{% endif %}
+    {% endif %}
+    <p>{{ check.detail }}</p>
+    {% if check.teile|length > 1 %}
+    <ul class="sys-service-parts">
+      {% for teil in check.teile %}
+      {% set teil_farbe = 'ok' if teil.state == 'ok' else ('warn' if teil.state == 'unknown' else 'fail') %}
+      {% set teil_text = 'OK' if teil.state == 'ok' else ('Unbekannt' if teil.state == 'unknown' else 'Ausfall') %}
+      <li><div class="sys-service-part__head"><strong>{{ teil.name }}</strong><span class="sys-pill sys-status--{{ teil_farbe }}">{{ status_dot({'ok': 'gruen', 'warn': 'orange', 'fail': 'rot'}[teil_farbe], teil_text) }} {{ teil_text }}</span></div><small class="sys-muted">{{ teil.detail }}</small></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <p class="sys-muted sys-small">Rohstatus: {{ check.state }}</p>
   </article>
   {% endfor %}
 </div>
 
-<h3 class="mt-4">Worker und Auftragsverarbeitung</h3>
+<h3 class="sys-section-title">{{ icon("server") }} Worker und Auftragsverarbeitung</h3>
 <p>{{ runtime.worker_count }} aktive App-/Gunicorn-Worker (Heartbeat höchstens 20 Sekunden alt).
-  Leader: <span style="overflow-wrap:anywhere">{{ runtime.leader_workers|join(', ') or 'kein aktiver Leader' }}</span>.
+  Leader: <span class="sys-token">{{ runtime.leader_workers|join(', ') or 'kein aktiver Leader' }}</span>.
   Letzter erfolgreicher Loop-Durchlauf: {{ runtime.last_success_at|local_datetime if runtime.last_success_at else 'noch nicht bestätigt' }}.</p>
 <p>Verbundene SMS-Gateways: <strong>{{ runtime.sms_connected }}</strong> ·
   verbundene Drucker-Gateways: <strong>{{ runtime.print_connected }}</strong>.
   Redis: {{ runtime.redis.connected_workers }}/{{ runtime.redis.configured_workers }} konfigurierte Worker verbunden.</p>
-<div class="table-scroll">
-  <table class="table">
+<div class="sys-table-wrap">
+  <table class="sys-table">
     <thead><tr><th>Aufträge</th><th>Offen</th><th>Überfällig</th><th>Überfällige ACKs</th><th>Uncertain</th></tr></thead>
     <tbody>
       {% for label, jobs in [('SMS', runtime.sms_jobs), ('Druck', runtime.print_jobs)] %}
       <tr><td>{{ label }}</td><td>{{ jobs.open }}</td><td>{{ jobs.overdue }}</td><td>{{ jobs.overdue_acks }}</td>
-        <td><span class="badge {{ 'badge--warn' if jobs.uncertain else 'badge--active' }}">{{ jobs.uncertain }}</span></td></tr>
+        <td><span class="sys-pill {{ 'sys-status--warn' if jobs.uncertain else 'sys-status--ok' }}">{{ jobs.uncertain }}</span></td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 <p class="text-muted">Offen bedeutet noch nicht abgeschlossen. Eine Redis-Bestätigung ist kein Versand- oder Drucknachweis.
   Unklare Aufträge müssen vor einem Nachdruck oder erneuten SMS-Versand geprüft werden.</p>
-<div class="table-scroll">
-  <table class="table">
+<div class="sys-table-wrap">
+  <table class="sys-table">
     <thead><tr><th>Gateway</th><th>Typ</th><th>Verbindung</th><th>Letzter Heartbeat</th><th>Presence gültig bis</th></tr></thead>
     <tbody>
       {% for gateway in runtime.gateways %}
       <tr><td>{{ gateway.name }}</td><td>{{ {'sms': 'SMS', 'linux': 'Linux', 'windows_agent': 'Windows'}.get(gateway.kind, gateway.kind) }}</td>
-        <td><span class="badge {{ 'badge--active' if gateway.online else 'badge--closed' }}">{{ 'Online' if gateway.online else 'Offline' }}</span></td>
+        <td><span class="sys-pill {{ 'sys-status--ok' if gateway.online else 'sys-status--fail' }}">{{ status_dot('gruen' if gateway.online else 'rot', 'Online' if gateway.online else 'Offline') }} {{ 'Online' if gateway.online else 'Offline' }}</span></td>
         <td>{{ gateway.heartbeat_at|local_datetime if gateway.heartbeat_at else 'noch keiner' }}</td>
         <td>{{ gateway.expires_at|local_datetime if gateway.expires_at else '–' }}</td></tr>
       {% else %}<tr><td colspan="5">Keine Gateways eingerichtet.</td></tr>{% endfor %}
     </tbody>
   </table>
 </div>
+<div class="sys-table-wrap">
+  <table class="sys-table">
+    <thead><tr><th>Worker</th><th>Status</th><th>Rolle</th><th>Letzter Heartbeat</th><th>Redis-Subscriber</th></tr></thead>
+    <tbody>{% for worker in runtime.workers %}
+      <tr><td>{{ worker.worker_id }}</td><td><span class="sys-pill sys-status--ok">{{ status_dot('gruen', 'Worker online') }} Online</span></td>
+        <td>{{ 'Leader' if worker.leader else 'Worker' }}</td><td>{{ worker.heartbeat_at|local_datetime }}</td>
+        <td><span class="sys-pill {{ 'sys-status--ok' if worker.redis.subscriber_connected else 'sys-status--fail' }}">{{ status_dot('gruen' if worker.redis.subscriber_connected else 'rot', 'Redis-Verbindung') }} {{ 'verbunden' if worker.redis.subscriber_connected else 'getrennt' }}</span></td></tr>
+    {% else %}<tr><td colspan="5" class="sys-muted sys-table-empty">Keine aktiven Worker vorhanden.</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
 {% for worker in runtime.workers %}
-<details class="mt-4">
-  <summary style="overflow-wrap:anywhere">{{ worker.worker_id }} · {{ 'Leader' if worker.leader else 'Worker' }} · Heartbeat {{ worker.heartbeat_at|local_datetime }}</summary>
+<details class="sys-details">
+  <summary class="sys-token">{{ status_dot('gruen', 'Worker online') }} {{ worker.worker_id }} · {{ 'Leader' if worker.leader else 'Worker' }} · Heartbeat {{ worker.heartbeat_at|local_datetime }}</summary>
   {% if worker.leader_error %}<p class="alert alert--error">Leader-Lock nicht verfügbar: {{ worker.leader_error }}.</p>{% endif %}
   <p>Redis-Subscriber: {{ 'verbunden' if worker.redis.subscriber_connected else 'getrennt' }}.
     Publish-Fehler: {{ worker.redis.publish_failures or 0 }} · Subscriber-Abbrüche: {{ worker.redis.subscriber_failures or 0 }}.
     {% if worker.redis.last_error %}Letztes Ereignis: {{ worker.redis.last_error }} ({{ worker.redis.last_error_at|local_datetime }}).{% endif %}</p>
-  <div class="table-scroll"><table class="table">
+  <div class="sys-table-wrap"><table class="sys-table">
     <thead><tr><th>Hintergrund-Loop</th><th>Status</th><th>Letzter Erfolg</th><th>Letzter Fehler</th></tr></thead>
     <tbody>{% for entry in worker.loops %}<tr><td>{{ entry.name }}</td>
-      <td><span class="badge {{ 'badge--warn' if entry.overdue or entry.state == 'failed' else 'badge--active' }}">{{ 'überfällig' if entry.overdue else {'active': 'aktiv', 'running': 'läuft', 'ok': 'OK', 'stopped': 'beendet / deaktiviert', 'failed': 'Fehler'}.get(entry.state, entry.state) }}</span></td>
+      <td><span class="sys-pill {{ 'sys-status--fail' if entry.state == 'failed' else ('sys-status--warn' if entry.overdue else 'sys-status--ok') }}">{{ status_dot('rot' if entry.state == 'failed' else ('orange' if entry.overdue else 'gruen'), 'Loop-Zustand') }} {{ 'überfällig' if entry.overdue else {'active': 'aktiv', 'running': 'läuft', 'ok': 'OK', 'stopped': 'beendet / deaktiviert', 'failed': 'Fehler'}.get(entry.state, entry.state) }}</span></td>
       <td>{{ entry.last_success_at|local_datetime if entry.last_success_at else 'noch nicht bestätigt' }}</td>
       <td>{{ entry.last_failure_at|local_datetime if entry.last_failure_at else '–' }}</td></tr>
     {% else %}<tr><td colspan="4">Keine Loop-Diagnose vorhanden.</td></tr>{% endfor %}</tbody>

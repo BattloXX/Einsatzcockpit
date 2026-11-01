@@ -1,17 +1,22 @@
 {% extends "base.html" %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block title %}Reparatur freigeben{% endblock %}
 {% block content %}
-<div class="card" style="max-width:760px;margin:2rem auto;width:100%"><div class="card-body">
-  <h1>Reparatur freigeben</h1>
-  <p>Lauf {{ run.id }}: {{ run.aktion_id }} ({{ run.risiko }})</p>
-  <pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ run.vorschau|tojson(indent=2) }}</pre>
+<div class="sys-page sys-standalone sys-standalone--repair">
+<div class="sys-card">
+  <header class="sys-hero"><h1>{{ icon("shield") }} Reparatur freigeben</h1></header>
+  <p>Lauf {{ run.id }}: {{ run.aktion_id }} <span class="sys-pill {{ 'sys-status--warn' if run.risiko in ['LOW', 'MEDIUM'] else 'sys-status--fail' }}">{{ run.risiko }}</span></p>
+  <pre class="sys-codex sys-mono">{{ run.vorschau|tojson(indent=2) }}</pre>
   {% if error %}<p class="alert alert--error" role="alert">{{ error }}</p>{% endif %}
   {% if approval_token %}
-  <p>Einmalige Freigabe, 10 Minuten gueltig. Im MCP-Aufruf als approval_token angeben:</p>
-  <code style="overflow-wrap:anywhere">{{ approval_token }}</code>
+  <p>Einmalige Freigabe, 10 Minuten gültig. Im MCP-Aufruf als approval_token angeben:</p>
+  <code class="sys-token">{{ approval_token }}</code>
   {% else %}
-  <p>Die Freigabe gilt nur fuer diese Simulation. Neuen TOTP- oder unbenutzten Recovery-Code eingeben.</p>
-  <form method="post" action="/admin/reparatur/freigabe/{{ run.id }}">
+  <p>Die Freigabe gilt nur für diese Simulation. Neuen TOTP- oder unbenutzten Recovery-Code eingeben.</p>
+  <form class="sys-standalone-form" method="post" action="/admin/reparatur/freigabe/{{ run.id }}">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="simulation_hash" value="{{ run.simulation_hash }}">
     <label for="repair-code">TOTP- oder Recovery-Code</label>
