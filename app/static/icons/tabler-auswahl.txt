@@ -208,3 +208,9 @@ layout-grid
 brand-teams
 brand-wordpress
 road
+list-details
+antenna-bars-5
+activity
+plug-connected
+shield-lock
+send

@@ -2,16 +2,19 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Teams-Einsatzinfo{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Teams-Einsatzinfo'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
 {% with section_id='alarmierung' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <div>
-    <h1>Teams-Einsatzinfo</h1>
-    <p class="page-header__sub">Vollständige Alarmierung als Karte in Microsoft Teams — Basis-Modus (Webhook) und optionale Bot-Erweiterung mit Zusage/Absage</p>
-  </div>
-</div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("brand-teams") }} Teams-Einsatzinfo</h1>
+  <p class="sys-muted">Vollständige Alarmierung als Karte in Microsoft Teams &ndash; Basis-Modus (Webhook) und optionale Bot-Erweiterung mit Zusage/Absage.</p>
+</header>
 
 {% if flash == 'saved' %}
 <div class="alert alert--success mb-4">Einstellungen gespeichert.</div>
@@ -20,10 +23,10 @@
 {% endif %}
 
 {% if is_sysadmin and all_orgs %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:16px 20px">
-    <label style="font-weight:600;margin-bottom:6px;display:block">Organisation:</label>
-    <select class="form-control" style="max-width:320px"
+<section class="sys-card">
+  <div class="sys-stack">
+    <label class="sys-semibold" for="teams-org-select">Organisation:</label>
+    <select id="teams-org-select" class="form-control"
             onchange="location.href='/admin/teams-alarmierung?org_id='+this.value">
       <option value="">-- bitte wählen --</option>
       {% for o in all_orgs %}
@@ -45,61 +48,61 @@
   {% endif %}
 
   {# ── Master-Schalter + Inhalts-Bausteine ─────────────────────────────── #}
-  <section class="card mb-4">
-    <div class="card-header"><h2>Allgemein</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:14px">
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Allgemein</h2></div>
+    <div class="sys-stack">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="enabled" value="1"
                  {% if config and config.enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Teams-Einsatzinfo aktiviert
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Master-Schalter — ist dieser aus, wird für diese Organisation weder per Webhook noch per Bot gepostet.</p>
+        <p class="form-hint">Master-Schalter — ist dieser aus, wird für diese Organisation weder per Webhook noch per Bot gepostet.</p>
       </div>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="send_exercise" value="1"
                  {% if config and config.send_exercise %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Übungseinsätze auch senden
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Standardmäßig aus — Übungen lösen keine Teams-Karte aus, sofern nicht aktiviert.</p>
+        <p class="form-hint">Standardmäßig aus — Übungen lösen keine Teams-Karte aus, sofern nicht aktiviert.</p>
       </div>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="suppress_card_in_major_incident" value="1"
                  {% if config and config.suppress_card_in_major_incident %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Bei Großschadenslage nur eine Karte senden
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Standardmäßig aus. Ist eine Lage bereits ausgerufen und ein weiterer Einsatz wird ihr zugeordnet, sendet Teams normalerweise trotzdem für jeden Einsatz eine eigene Karte. Mit dieser Option wird bei einer laufenden Großschadenslage nur eine Karte für die gesamte Lage verschickt, nicht je zugeordnetem Einsatz. Der separate Großschadenslage-Sonderalarm (bei Ausrufung der Lage) ist davon nicht betroffen.</p>
+        <p class="form-hint">Standardmäßig aus. Ist eine Lage bereits ausgerufen und ein weiterer Einsatz wird ihr zugeordnet, sendet Teams normalerweise trotzdem für jeden Einsatz eine eigene Karte. Mit dieser Option wird bei einer laufenden Großschadenslage nur eine Karte für die gesamte Lage verschickt, nicht je zugeordnetem Einsatz. Der separate Großschadenslage-Sonderalarm (bei Ausrufung der Lage) ist davon nicht betroffen.</p>
       </div>
 
-      <div style="display:flex;gap:20px;flex-wrap:wrap;">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
+      <div class="sys-row">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="include_map" value="1" {% if not config or config.include_map %}checked{% endif %}>
           Kartenbild einbetten
         </label>
-        <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="include_gmaps_link" value="1" {% if not config or config.include_gmaps_link %}checked{% endif %}>
           Google-Maps-Link
         </label>
-        <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="include_qr_link" value="1" {% if not config or config.include_qr_link %}checked{% endif %}>
           Alarmübersicht-Link (QR)
         </label>
-        <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="include_board_link" value="1" {% if not config or config.include_board_link %}checked{% endif %}>
           Einsatz-Board-Link
         </label>
       </div>
-      <p class="form-hint" style="margin:4px 0 0 0">
+      <p class="form-hint">
         Der Einsatz-Board-Link führt direkt in den Einsatz (login-pflichtig, wie der
         Web-Push). Die Alarmübersicht bleibt bewusst der Link ohne Login.
       </p>
@@ -107,22 +110,22 @@
   </section>
 
   {# ── Basis-Modus: Webhook ─────────────────────────────────────────────── #}
-  <section class="card mb-4">
-    <div class="card-header"><h2>Einfacher Modus (Webhook)</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
-      <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("plug-connected") }} Einfacher Modus (Webhook)</h2></div>
+    <div class="sys-stack">
+      <p class="sys-muted sys-small sys-m-0">
         Funktioniert sofort, ohne Azure — in Teams pro Kanal einen „Incoming Webhook"-Connector
         anlegen und die URL hier eintragen. Ohne interaktive Zusage/Absage-Buttons (das kann ein
         Webhook technisch nicht). Details: <a href="https://github.com/BattloXX/Einsatzcockpit/wiki/Administration-Teams-Alarmierung" target="_blank" rel="noopener">Wiki-Anleitung</a>.
       </p>
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="webhook_url_alarm">Webhook-URL — Echtalarm</label>
         <input type="text" id="webhook_url_alarm" name="webhook_url_alarm"
                value="{{ config.webhook_url_alarm or '' if config else '' }}"
                placeholder="https://outlook.office.com/webhook/…"
                class="form-input" autocomplete="off">
       </div>
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="webhook_url_uebung">Webhook-URL — Übung</label>
         <input type="text" id="webhook_url_uebung" name="webhook_url_uebung"
                value="{{ config.webhook_url_uebung or '' if config else '' }}"
@@ -133,17 +136,17 @@
   </section>
 
   {# ── Bot-Erweiterung ───────────────────────────────────────────────────── #}
-  <section class="card mb-4">
-    <div class="card-header"><h2>Erweiterter Modus: Bot mit Zusage/Absage</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
-      <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("robot") }} Erweiterter Modus: Bot mit Zusage/Absage</h2></div>
+    <div class="sys-stack">
+      <p class="sys-muted sys-small sys-m-0">
         Erfordert eine einmalige Azure-Bot-Einrichtung durch einen M365-Admin — siehe
         <a href="https://github.com/BattloXX/Einsatzcockpit/wiki/Administration-Teams-Alarmierung" target="_blank" rel="noopener">Schritt-für-Schritt-Anleitung im Wiki</a>.
         Ohne diese Einrichtung (oder wenn hier deaktiviert) läuft der einfache Webhook-Modus oben unverändert weiter.
       </p>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="bot_enabled" value="1"
                  {% if config and config.bot_enabled %}checked{% endif %}
                  class="toggle-checkbox">
@@ -152,15 +155,15 @@
         </label>
       </div>
 
-      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
-        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+      <div class="sys-grid-2">
+        <div class="form-group sys-m-0">
           <label for="bot_app_id">Microsoft App-ID</label>
           <input type="text" id="bot_app_id" name="bot_app_id"
                  value="{{ config.bot_app_id or '' if config else '' }}"
                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                  class="form-input" autocomplete="off">
         </div>
-        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+        <div class="form-group sys-m-0">
           <label for="bot_tenant_id">Tenant-ID</label>
           <input type="text" id="bot_tenant_id" name="bot_tenant_id"
                  value="{{ config.bot_tenant_id or '' if config else '' }}"
@@ -169,17 +172,17 @@
         </div>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="bot_client_secret">Client-Secret</label>
         {% if config and config.bot_client_secret_enc %}
-        <div id="bot-secret-status" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="color:var(--color-success);font-size:.85rem">&#10003; Secret gesetzt</span>
+        <div id="bot-secret-status" class="sys-row">
+          <span class="sys-status--ok sys-small">{{ icon("check") }} Secret gesetzt</span>
           <button type="button" class="btn btn--ghost btn--sm"
                   onclick="document.getElementById('bot-secret-status').style.display='none';document.getElementById('bot-secret-replace').style.display='';document.getElementById('bot_secret_changed').value='1'">
             Ersetzen
           </button>
         </div>
-        <div id="bot-secret-replace" style="display:none">
+        <div id="bot-secret-replace" class="sys-secret-replace">
           <input type="password" id="bot_client_secret" name="bot_client_secret"
                  class="form-input" autocomplete="new-password" placeholder="Neues Secret eingeben">
         </div>
@@ -194,17 +197,17 @@
 
       {% if bindings %}
       <div>
-        <label style="font-weight:600;margin-bottom:6px;display:block;font-size:.9rem;">Erfasste Kanalbindungen</label>
-        <table class="table-admin">
-          <thead><tr><th>Ziel</th><th>Kanal</th><th>Erfasst am</th><th></th></tr></thead>
+        <h3 class="sys-section-title">Erfasste Kanalbindungen</h3>
+        <div class="sys-table-wrap"><table class="sys-table sys-table--responsive">
+          <thead><tr><th>Ziel</th><th>Kanal</th><th>Erfasst am</th><th><span class="sr-only">Aktion</span></th></tr></thead>
           <tbody>
             {% for b in bindings %}
             <tr>
-              <td>{{ 'Übung' if b.target == 'uebung' else 'Echtalarm' }}</td>
-              <td>{{ b.channel_name or b.conversation_id }}</td>
-              <td>{{ b.captured_at|local_datetime }}</td>
-              <td>
-                <form method="post" action="/admin/teams-alarmierung/kanalbindung/{{ b.id }}/loeschen" style="display:inline">
+              <td data-label="Ziel">{{ 'Übung' if b.target == 'uebung' else 'Echtalarm' }}</td>
+              <td data-label="Kanal">{{ b.channel_name or b.conversation_id }}</td>
+              <td data-label="Erfasst am">{{ b.captured_at|local_datetime }}</td>
+              <td data-label="Aktion">
+                <form method="post" action="/admin/teams-alarmierung/kanalbindung/{{ b.id }}/loeschen" class="sys-inline-form">
                   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                   {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
                   <button type="submit" class="btn btn--ghost btn--xs">Entfernen</button>
@@ -213,24 +216,24 @@
             </tr>
             {% endfor %}
           </tbody>
-        </table>
+        </table></div>
       </div>
       {% else %}
-      <p class="text-muted" style="font-size:.85rem;">Noch keine Kanalbindung erfasst — der Bot muss zuerst gemäß Wiki-Anleitung dem Ziel-Kanal in Teams hinzugefügt werden.</p>
+      <p class="sys-muted sys-small sys-m-0">Noch keine Kanalbindung erfasst — der Bot muss zuerst gemäß Wiki-Anleitung dem Ziel-Kanal in Teams hinzugefügt werden.</p>
       {% endif %}
     </div>
   </section>
 
-  <div style="display:flex;gap:10px;margin-bottom:24px;">
+  <div class="sys-actions">
     <button type="submit" class="btn btn--primary">Speichern</button>
   </div>
 </form>
 
 {# ── Stichworte: welche Alarmtypen lösen die Teams-Karte aus? ────────────── #}
-<section class="card mb-4">
-  <div class="card-header"><h2>Stichworte</h2></div>
-  <div class="card-body" style="padding:16px 20px">
-    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0 0 12px;line-height:1.6">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("tag") }} Stichworte</h2></div>
+  <div class="sys-stack">
+    <p class="sys-muted sys-small sys-m-0">
       Welche Einsatzstichwörter lösen die Teams-Karte aus? Standardmäßig alle aktiv.
     </p>
     {% if alarm_types %}
@@ -239,9 +242,9 @@
       {% if is_sysadmin and org %}
       <input type="hidden" name="target_org_id" value="{{ org.id }}">
       {% endif %}
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+      <div class="sys-row">
         {% for at in alarm_types %}
-        <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="alarm_type_id" value="{{ at.id }}" {% if at.teams_alarm_enabled %}checked{% endif %}>
           {{ at.code }}{% if at.label %} – {{ at.label }}{% endif %}
         </label>
@@ -250,20 +253,20 @@
       <button type="submit" class="btn btn--primary">Speichern</button>
     </form>
     {% else %}
-    <p class="text-muted" style="font-size:.85rem;">Noch keine Alarmtypen angelegt.</p>
+    <p class="sys-muted sys-small sys-m-0">Noch keine Alarmtypen angelegt.</p>
     {% endif %}
   </div>
 </section>
 
-<section class="card mb-4">
-  <div class="card-header"><h2>Testkarte senden</h2></div>
-  <div class="card-body" style="padding:16px 20px">
-    <p style="font-size:.85rem;color:var(--color-text-muted);margin-bottom:12px;">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("send") }} Testkarte senden</h2></div>
+  <div class="sys-stack">
+    <p class="sys-muted sys-small sys-m-0">
       Sendet eine einfache Testkarte über den konfigurierten Webhook des gewählten Ziels
       (funktioniert unabhängig von der Bot-Erweiterung).
     </p>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <select id="teams-test-target" class="form-select" style="width:160px;">
+    <div class="sys-row">
+      <select id="teams-test-target" class="form-select">
         <option value="alarm">Ziel: Echtalarm</option>
         <option value="uebung">Ziel: Übung</option>
       </select>
@@ -275,9 +278,10 @@
         Testkarte senden
       </button>
     </div>
-    <div id="teams-test-result" style="font-size:.85rem;margin-top:8px;"></div>
+    <div id="teams-test-result" class="sys-small"></div>
   </div>
 </section>
 
 {% endif %}
+</div>
 {% endblock %}

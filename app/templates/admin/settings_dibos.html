@@ -2,16 +2,19 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}DIBOS / Elvis-Anbindung{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'DIBOS / Elvis-Anbindung'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
 {% with section_id='schnittstellen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <div>
-    <h1>DIBOS / Elvis-Anbindung</h1>
-    <p class="page-header__sub">Verbindung zum DIBOS EventHub (Landeswarnzentrale Vorarlberg, Elvis-Client) konfigurieren &mdash; rein lesendes Tracing, kein automatischer Einsatz-Import</p>
-  </div>
-</div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("antenna-bars-5") }} DIBOS / Elvis-Anbindung</h1>
+  <p class="sys-muted">Verbindung zum DIBOS EventHub (Landeswarnzentrale Vorarlberg, Elvis-Client) konfigurieren &ndash; rein lesendes Tracing, kein automatischer Einsatz-Import.</p>
+</header>
 
 {% if flash == 'saved' %}
 <div class="alert alert--success mb-4">Einstellungen gespeichert.</div>
@@ -27,10 +30,10 @@
 {% endif %}
 
 {% if is_sysadmin and all_orgs %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:16px 20px">
-    <label style="font-weight:600;margin-bottom:6px;display:block">Organisation:</label>
-    <select class="form-control" style="max-width:320px"
+<section class="sys-card">
+  <div class="sys-stack">
+    <label class="sys-semibold" for="dibos-org-select">Organisation:</label>
+    <select id="dibos-org-select" class="form-control"
             onchange="location.href='/admin/dibos?org_id='+this.value">
       <option value="">-- bitte wählen --</option>
       {% for o in all_orgs %}
@@ -45,10 +48,10 @@
 <div class="alert alert--info">Bitte eine Organisation auswählen.</div>
 {% else %}
 
-<section class="card mb-4">
-  <div class="card-header"><h2>Hinweis</h2></div>
-  <div class="card-body" style="padding:16px 20px">
-    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("info-circle") }} Hinweis</h2></div>
+  <div class="sys-stack">
+    <p class="sys-muted sys-small sys-m-0">
       DIBOS EventHub ist eine eigenständige, einfachere Schnittstelle als LIS/IPR (siehe
       <a href="/admin/lis">LIS-Anbindung</a>) — die Antworten sind JSON statt SOAP-XML. Diese
       Seite liest primär mit: es wird NIE ein Einsatz angelegt. Optional (Schalter unten,
@@ -61,10 +64,10 @@
   </div>
 </section>
 
-<section class="card mb-4">
-  <div class="card-header"><h2>Einsatz-Infos</h2></div>
-  <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6;max-width:640px">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("list-details") }} Einsatz-Infos</h2></div>
+  <div class="sys-row sys-between">
+    <p class="sys-muted sys-small sys-m-0 sys-readable">
       Übersicht je Einsatz, was DIBOS zusätzlich beigetragen hat (Einsatzcode/Diagnose, BMA-Nr.,
       Kommentar, Anzahl übernommener Meldungen) — unabhängig davon, ob gerade eine Aufzeichnung läuft.
     </p>
@@ -78,65 +81,65 @@
   <input type="hidden" name="target_org_id" value="{{ org.id }}">
   {% endif %}
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Verbindung</h2></div>
-    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("plug-connected") }} Verbindung</h2></div>
+    <div class="sys-stack">
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="enabled" value="1"
                  {% if config and config.enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           DIBOS-Erkennung aktiviert
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Schaltet den leichten Hintergrund-Erkennungs-Loop für diese Organisation ein (fragt nur GetCurrentEvents ab)</p>
+        <p class="form-hint">Schaltet den leichten Hintergrund-Erkennungs-Loop für diese Organisation ein (fragt nur GetCurrentEvents ab)</p>
       </div>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="sync_external_units" value="1"
                  {% if config and config.sync_external_units %}checked{% endif %} class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Externe DIBOS-Einheiten übernehmen
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Legt fremde Einheiten als schreibgeschützte Platzhalter an und übernimmt deren S4/S5-Status nur im LIS-Ausfall-Fallback.</p>
+        <p class="form-hint">Legt fremde Einheiten als schreibgeschützte Platzhalter an und übernimmt deren S4/S5-Status nur im LIS-Ausfall-Fallback.</p>
       </div>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="auto_trace_on_event" value="1"
                  {% if config and config.auto_trace_on_event %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Voll-Tracing automatisch bei eigenem Einsatz starten
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Sobald der Erkennungs-Loop einen eigenen aktiven Einsatz sieht, startet automatisch eine vollständige Rohdaten-Aufzeichnung (siehe Diagnose-Sektion unten) — spart den manuellen Klick genau während des Einsatzfensters.</p>
+        <p class="form-hint">Sobald der Erkennungs-Loop einen eigenen aktiven Einsatz sieht, startet automatisch eine vollständige Rohdaten-Aufzeichnung (siehe Diagnose-Sektion unten) — spart den manuellen Klick genau während des Einsatzfensters.</p>
       </div>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="enrich_incidents" value="1"
                  {% if config and config.enrich_incidents %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Laufenden Einsatz mit DIBOS-Infos anreichern
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Ergänzt einen bereits bestehenden, aktiven Einsatz (per Einsatznummer zugeordnet) um Einsatzort, Einsatzcode/Diagnose, BMA-Nr., Zu-/Absagen und das sichtbare Meldungsprotokoll aus DIBOS. Unabhängig von "Voll-Tracing automatisch starten" nutzbar — läuft über den leichten Erkennungs-Loop (kein Rohdaten-Mitschnitt, geringere Speicherlast). Läuft zusätzlich ein Voll-Tracing, übernimmt dessen Poll-Zyklus die Anreicherung.</p>
+        <p class="form-hint">Ergänzt einen bereits bestehenden, aktiven Einsatz (per Einsatznummer zugeordnet) um Einsatzort, Einsatzcode/Diagnose, BMA-Nr., Zu-/Absagen und das sichtbare Meldungsprotokoll aus DIBOS. Unabhängig von "Voll-Tracing automatisch starten" nutzbar — läuft über den leichten Erkennungs-Loop (kein Rohdaten-Mitschnitt, geringere Speicherlast). Läuft zusätzlich ein Voll-Tracing, übernimmt dessen Poll-Zyklus die Anreicherung.</p>
       </div>
 
-      <div class="form-group" style="margin:0">
-        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div class="form-group sys-m-0">
+        <label class="toggle-label sys-check">
           <input type="checkbox" name="create_incidents" value="1"
                  {% if config and config.create_incidents %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
           Einsätze aus DIBOS anlegen
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Legt einen neuen Einsatz an, wenn kein passender existiert (Matching über Leitstellennummer, sonst Alarmstichwort+Adresse im Zeitfenster) — für den Übergang, bis die LIS/IPR-Anbindung abgeschaltet wird. Unabhängig von der Anreicherung oben aktivierbar; bis dahin können beide Anbindungen parallel laufen.</p>
+        <p class="form-hint">Legt einen neuen Einsatz an, wenn kein passender existiert (Matching über Leitstellennummer, sonst Alarmstichwort+Adresse im Zeitfenster) — für den Übergang, bis die LIS/IPR-Anbindung abgeschaltet wird. Unabhängig von der Anreicherung oben aktivierbar; bis dahin können beide Anbindungen parallel laufen.</p>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="base_url">Basis-URL</label>
         <input type="text" id="base_url" name="base_url"
                value="{{ config.base_url or '' if config else 'https://dibos.lwz-vorarlberg.at/Z_EventHub' }}"
@@ -145,35 +148,35 @@
         <p class="form-hint">Ohne abschließenden Schrägstrich</p>
       </div>
 
-      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
-        <div class="form-group" style="margin:0;width:180px">
+      <div class="sys-grid-3">
+        <div class="form-group sys-m-0">
           <label for="host">Host-Kennung</label>
           <input type="text" id="host" name="host"
                  value="{{ config.host if config else 'einsatzcockpit' }}"
                  class="form-input" autocomplete="off">
           <p class="form-hint">Frei wählbare Client-Kennung (z.B. Rechnername im Original-Client)</p>
         </div>
-        <div class="form-group" style="margin:0;width:120px">
+        <div class="form-group sys-m-0">
           <label for="ag">Agentur</label>
           <input type="text" id="ag" name="ag"
                  value="{{ config.ag if config else 'FW' }}"
                  class="form-input">
           <p class="form-hint">z.B. FW</p>
         </div>
-        <div class="form-group" style="margin:0;width:240px">
+        <div class="form-group sys-m-0">
           <label for="wache_unid">Eigene Wache-Kennung (unid)</label>
           <input type="text" id="wache_unid" name="wache_unid"
                  value="{{ config.wache_unid or '' if config else '' }}"
                  class="form-input" autocomplete="off" placeholder="z.B. fw_wolfu">
           <p class="form-hint">Im Diagnose-Trace in GetCurrentUnits nach unitType: "wache" suchen. Leer übernimmt alle Wachen des Einsatzes.</p>
         </div>
-        <div class="form-group" style="margin:0;width:160px">
+        <div class="form-group sys-m-0">
           <label for="poll_interval_seconds">Poll-Intervall (Sek.)</label>
           <input type="number" id="poll_interval_seconds" name="poll_interval_seconds" min="5" max="3600"
                  value="{{ config.poll_interval_seconds if config else 5 }}"
                  class="form-input">
         </div>
-        <div class="form-group" style="margin:0;width:180px">
+        <div class="form-group sys-m-0">
           <label for="auto_trace_duration_minutes">Auto-Trace-Dauer (Min.)</label>
           <input type="number" id="auto_trace_duration_minutes" name="auto_trace_duration_minutes" min="5" max="480"
                  value="{{ config.auto_trace_duration_minutes if config else 120 }}"
@@ -181,7 +184,7 @@
         </div>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="gateway_user">Gateway-Benutzername</label>
         <input type="text" id="gateway_user" name="gateway_user"
                value="{{ config.gateway_user or '' if config else '' }}"
@@ -189,17 +192,17 @@
         <p class="form-hint">HTTP-Basic-Konto, vom Betreiber (LWZ) vergeben, unabhängig von der Org</p>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="gateway_password">Gateway-Passwort</label>
         {% if config and config.gateway_password_enc %}
-        <div id="gateway-secret-status" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="color:var(--color-success);font-size:.85rem">&#10003; Passwort gesetzt</span>
+        <div id="gateway-secret-status" class="sys-row">
+          <span class="sys-status--ok sys-small">{{ icon("check") }} Passwort gesetzt</span>
           <button type="button" class="btn btn--ghost btn--sm"
                   onclick="document.getElementById('gateway-secret-status').style.display='none';document.getElementById('gateway-secret-replace').style.display='';document.getElementById('gateway_secret_changed').value='1'">
             Ersetzen
           </button>
         </div>
-        <div id="gateway-secret-replace" style="display:none">
+        <div id="gateway-secret-replace" class="sys-secret-replace">
           <input type="password" id="gateway_password" name="gateway_password"
                  class="form-input" autocomplete="new-password" placeholder="Neues Passwort eingeben">
         </div>
@@ -212,7 +215,7 @@
         <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="service_user">Servicekonto-Benutzername</label>
         <input type="text" id="service_user" name="service_user"
                value="{{ config.service_user or '' if config else '' }}"
@@ -221,17 +224,17 @@
         <p class="form-hint">Eigenes Org-Servicekonto (WS-Security-UsernameToken im SOAP-Header)</p>
       </div>
 
-      <div class="form-group" style="margin:0">
+      <div class="form-group sys-m-0">
         <label for="service_password">Servicekonto-Passwort</label>
         {% if config and config.service_password_enc %}
-        <div id="service-secret-status" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="color:var(--color-success);font-size:.85rem">&#10003; Passwort gesetzt</span>
+        <div id="service-secret-status" class="sys-row">
+          <span class="sys-status--ok sys-small">{{ icon("check") }} Passwort gesetzt</span>
           <button type="button" class="btn btn--ghost btn--sm"
                   onclick="document.getElementById('service-secret-status').style.display='none';document.getElementById('service-secret-replace').style.display='';document.getElementById('service_secret_changed').value='1'">
             Ersetzen
           </button>
         </div>
-        <div id="service-secret-replace" style="display:none">
+        <div id="service-secret-replace" class="sys-secret-replace">
           <input type="password" id="service_password" name="service_password"
                  class="form-input" autocomplete="new-password" placeholder="Neues Passwort eingeben">
         </div>
@@ -244,7 +247,7 @@
         <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
       </div>
 
-      <div style="display:flex;gap:10px">
+      <div class="sys-actions">
         <button type="submit" class="btn btn--primary">Speichern</button>
         <button type="button" class="btn btn--ghost"
                 hx-post="/admin/dibos/test"
@@ -254,16 +257,16 @@
           Verbindung testen
         </button>
       </div>
-      <div id="dibos-test-result" style="font-size:.85rem"></div>
+      <div id="dibos-test-result" class="sys-small"></div>
     </div>
   </section>
 </form>
 
 {% if is_sysadmin %}
-<section class="card mb-4">
-  <div class="card-header"><h2>Diagnose: Live mitlesen</h2></div>
-  <div class="card-body" style="padding:16px 20px">
-    <p style="font-size:.85rem;color:var(--color-text-muted);margin-bottom:12px;line-height:1.6">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("activity") }} Diagnose: Live mitlesen</h2></div>
+  <div class="sys-stack">
+    <p class="sys-muted sys-small sys-m-0">
       Zeichnet für eine begrenzte Zeit echte DIBOS-Antworten auf (eigene Einsätze,
       regionale Einsätze, Fahrzeuge, Funkgeräte) und zeigt daneben eine laufend
       aktualisierte, lesbare Übersicht. <strong>Enthält Personenbezug</strong>
@@ -273,9 +276,9 @@
     <form hx-post="/admin/dibos/trace/start"
           hx-vals='{"_csrf": "{{ request.state.csrf_token }}", "target_org_id": "{{ org.id }}"}'
           hx-target="#dibos-traces" hx-swap="outerHTML"
-          style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
-      <div class="form-group" style="margin:0;width:160px">
-        <label for="duration_minutes" style="font-size:.8rem">Dauer (Minuten)</label>
+          class="sys-toolbar">
+      <div class="form-group sys-m-0">
+        <label for="duration_minutes" class="sys-small">Dauer (Minuten)</label>
         <input type="number" id="duration_minutes" name="duration_minutes" min="5" max="480" value="120" class="form-input">
       </div>
       <button type="submit" class="btn btn--primary btn--sm">Aufzeichnung starten</button>
@@ -283,10 +286,11 @@
 
     {% include "admin/_dibos_traces.html" %}
 
-    <div id="dibos-live" style="margin-top:18px"></div>
+    <div id="dibos-live"></div>
   </div>
 </section>
 {% endif %}
 
 {% endif %}
+</div>
 {% endblock %}

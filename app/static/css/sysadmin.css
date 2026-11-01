@@ -274,3 +274,21 @@
 }
 .sys-form-grid > :is(.sys-card, [data-settings-panel], h3, .sys-row, .sys-notice) { grid-column: 1 / -1; }
 .sys-form-grid > :is(.form-actions, .sys-map-picker, .sys-token-link, .form-group.sys-row) { grid-column: 1 / -1; }
+
+/* Integrationen (SSO, DIBOS, LIS, Teams, GSL-Einstellungen). */
+.sys-between { justify-content: space-between; }
+.sys-readable { max-width: 40rem; }
+.sys-copy-url { flex: 1 1 18rem; min-width: 0; overflow-wrap: anywhere; color: var(--on-surface); background: var(--surface-low); }
+.sys-form-grid--map { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
+.sys-action-col { width: 4rem; }
+.sys-danger { color: var(--red); }
+.sys-nowrap { white-space: nowrap; }
+.sys-block { display: block; }
+.sys-span-all { grid-column: 1 / -1; }
+.sys-actions--end { justify-content: flex-end; }
+.sys-option { padding: .5rem .75rem; border: 1px solid var(--border); border-radius: .5rem; }
+.sys-preview { white-space: pre-wrap; min-height: 90px; margin: 0; }
+.sys-card > .sys-stack, .sys-card > form.sys-stack { min-width: 0; }
+@media (max-width: 760px) {
+  .sys-form-grid--map { grid-template-columns: 1fr; }
+}

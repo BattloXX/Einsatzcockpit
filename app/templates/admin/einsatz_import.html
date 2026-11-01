@@ -1,9 +1,15 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Einsatz-Import – Verwaltung{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-header">
-  <div><h1>{{ icon("inbox", size="md") }} Einsatz-Import</h1><p class="muted">Historische Leitstellen-Exporte einlesen</p></div>
-</div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("inbox") }} Einsatz-Import</h1>
+  <p class="sys-muted">Historische Leitstellen-Exporte einlesen.</p>
+</header>
 
 {% if org_missing or request.query_params.get('error') == 'org_missing' %}
 <div class="alert alert--error">Bitte als Org-Admin einer Feuerwehr importieren. Ihrem Konto ist keine Organisation zugeordnet.</div>
@@ -32,12 +38,12 @@
 {% endif %}
 {% endif %}
 
-<section class="card" style="max-width:760px;">
-  <h2>Excel-Datei hochladen</h2>
-  <p>Unterstützt werden die Fahrzeug-Liste (eine Zeile je Fahrzeug) und die Detail-Liste
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("upload") }} Excel-Datei hochladen</h2></div>
+  <p class="sys-muted">Unterstützt werden die Fahrzeug-Liste (eine Zeile je Fahrzeug) und die Detail-Liste
      (eine Zeile je Einsatz). Laden Sie beide Dateien nacheinander in beliebiger Reihenfolge hoch.
      Zusammengeführt wird über die Leitstellen-Nummer; bestehende Angaben werden nicht überschrieben.</p>
-  <form method="post" action="/admin/einsatz-import" enctype="multipart/form-data">
+  <form method="post" action="/admin/einsatz-import" enctype="multipart/form-data" class="sys-stack">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="form-group">
       <label for="einsatz-import-file">Excel-Datei</label>
@@ -48,4 +54,5 @@
     <button type="submit" class="btn btn--primary" {% if org_missing %}disabled{% endif %}>Importieren</button>
   </form>
 </section>
+</div>
 {% endblock %}

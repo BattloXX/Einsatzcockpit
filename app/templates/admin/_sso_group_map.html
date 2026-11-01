@@ -1,35 +1,35 @@
 {% if not config or not config.group_mappings %}
-<p style="color:var(--color-text-muted);font-size:.85rem">Noch keine Gruppen-Mappings konfiguriert.</p>
+<p class="sys-muted sys-small sys-m-0">Noch keine Gruppen-Mappings konfiguriert.</p>
 {% else %}
-<table class="table table--compact" style="margin-bottom:0">
+<div class="sys-table-wrap"><table class="sys-table sys-table--responsive">
   <thead>
     <tr>
       <th>Group Object ID</th>
       <th>Bezeichnung</th>
       <th>Rolle</th>
-      <th style="width:60px"></th>
+      <th class="sys-action-col"><span class="sr-only">Aktion</span></th>
     </tr>
   </thead>
   <tbody>
     {% for gm in config.group_mappings %}
     <tr>
-      <td><code style="font-size:.82rem">{{ gm.entra_group_id }}</code></td>
-      <td>{{ gm.label or '–' }}</td>
-      <td><span class="badge">{{ gm.role.label if gm.role else gm.role_id }}</span></td>
-      <td>
+      <td data-label="Group Object ID"><code class="sys-small">{{ gm.entra_group_id }}</code></td>
+      <td data-label="Bezeichnung">{{ gm.label or '–' }}</td>
+      <td data-label="Rolle"><span class="sys-pill">{{ gm.role.label if gm.role else gm.role_id }}</span></td>
+      <td data-label="Aktion">
         <form hx-post="/admin/sso/group-map/{{ gm.id }}/delete"
               {% if org_id %}hx-vals='{"target_org_id": "{{ org_id }}"}'{% endif %}
               hx-headers='{"X-CSRFToken": "{{ request.state.csrf_token if request is defined else "" }}"}'
               hx-target="#sso-group-map-table"
               hx-swap="innerHTML"
-              hx-confirm="Mapping loschen?">
+              hx-confirm="Mapping löschen?">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token if request is defined else '' }}">
           <button type="submit" class="btn btn--ghost btn--sm btn--danger"
-                  title="Loschen">&#128465;</button>
+                  title="Löschen" aria-label="Löschen">{{ icon("trash") }}</button>
         </form>
       </td>
     </tr>
     {% endfor %}
   </tbody>
-</table>
+</table></div>
 {% endif %}

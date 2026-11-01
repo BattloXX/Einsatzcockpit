@@ -25,6 +25,7 @@ HTMX_FRAGMENTE = {
         "gateway/_alarmempfang_detail.html",
         "gateway/_alarmempfang_parser.html",
     ],
+    "admin/settings_dibos.html": ["admin/_dibos_live.html"],
     "admin/systemdiagnose/index.html": [
         "admin/systemdiagnose/_panel.html",
         "admin/systemdiagnose/_finding.html",
