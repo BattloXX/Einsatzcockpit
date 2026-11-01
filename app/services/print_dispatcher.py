@@ -1197,12 +1197,13 @@ def _jobs_for_rule(
                          objekt_id=objekt_id, artifact_ref=str(seite.id))
     if "bsp_overlay" in objekt_elements and DOC_BSP_OVERLAY in erlaubte_typen:
         from app.models.objekt import ObjektBspOverlay
-        from app.services.objekt_bsp_overlay_service import overlay_ist_auslieferbar
+        from app.services.objekt_bsp_overlay_service import nur_neueste_je_plan, overlay_ist_auslieferbar
 
         for objekt_id in _resolve_objekt_ids(db, context):
             overlays = db.query(ObjektBspOverlay).filter_by(
                 org_id=rule.org_id, objekt_id=objekt_id, autodruck=True,
             ).order_by(ObjektBspOverlay.id).all()
+            auslieferbar = []
             for overlay in overlays:
                 if not overlay_ist_auslieferbar(db, overlay):
                     logger.warning(
@@ -1210,6 +1211,8 @@ def _jobs_for_rule(
                         overlay.id, rule.id, overlay.status,
                     )
                     continue
+                auslieferbar.append(overlay)
+            for overlay in nur_neueste_je_plan(auslieferbar):
                 for printer_id in printer_ids:
                     _add(printer_id=printer_id, document_type=DOC_BSP_OVERLAY,
                          objekt_id=objekt_id, artifact_ref=f"{overlay.id}:{overlay.freigabe_nr}")

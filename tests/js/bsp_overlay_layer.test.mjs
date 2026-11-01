@@ -117,10 +117,10 @@ test('Einsatzvorgabe sendet CSRF-POST, persoenliche Vorgabe bleibt vorrangig', a
 test('Rasterfehler entfernt Ebene still, Objektwechsel entfernt alte Overlays', async () => {
   const f = fixture({liste: [overlay(1), overlay(2)]}); await flush();
   f.created[0].events.error();
-  assert.equal(f.active.size, 1);
+  assert.equal(f.active.size, 0);
   assert.match(f.el('lft-bsp-hinweis').textContent, /nicht verfügbar/);
   await f.controller.reload();
-  assert.equal(f.active.size, 1);
+  assert.equal(f.active.size, 0);
   f.setListe([]);
   await f.controller.handleEvent({type: 'objektgefahren'});
   assert.equal(f.active.size, 0);
@@ -191,4 +191,42 @@ test('Verwalter-Hinweis bleibt ohne auslieferbare Ebene sichtbar und verschwinde
   assert.equal(f.el('lft-bsp-bedienung').hidden, false);
   assert.equal(f.active.size, 1);
   assert.equal(f.el('lft-bsp-lokal').textContent, 'Objektvorgabe aktiv.');
+});
+
+test('hoechstens eine Ebene: Planwechsel entfernt die vorherige, schnelle Wechsel erzeugen keine Duplikate', async () => {
+  const f = fixture({liste: [overlay(1), overlay(2), overlay(3)]}); await flush();
+  assert.equal(f.active.size, 1);
+  for (const id of ['2', '3', '1', '2']) {
+    f.el('lft-bsp-auswahl').value = id;
+    f.event('lft-bsp-auswahl', 'change');
+    assert.equal(f.active.size, 1);
+  }
+  assert.equal([...f.active][0].url, '/raster/2');
+  await f.controller.reload(); await f.controller.reload();
+  assert.equal(f.active.size, 1);
+});
+
+test('Deaktivierung blendet sofort aus, bleibt nach Reload und Planwechsel aus', async () => {
+  const storage = new Map();
+  const f = fixture({liste: [overlay(1), overlay(2)], nurLokal: true, storage}); await flush();
+  f.el('lft-layer-bsp').checked = false;
+  f.event('lft-layer-bsp', 'change');
+  assert.equal(f.active.size, 0);
+  f.el('lft-bsp-auswahl').value = '2';
+  f.event('lft-bsp-auswahl', 'change');
+  assert.equal(f.active.size, 0);
+  await f.controller.handleEvent({type: 'objektgefahren'});
+  assert.equal(f.active.size, 0);
+  const neu = fixture({liste: [overlay(1), overlay(2)], nurLokal: true, storage}); await flush();
+  assert.equal(neu.active.size, 0);
+});
+
+test('Server-Deaktivierung wird nicht von persoenlicher Ueberschreibung verdeckt', async () => {
+  const f = fixture(); await flush();
+  f.el('lft-bsp-scope').value = 'lokal'; f.event('lft-bsp-scope', 'change');
+  f.el('lft-layer-bsp').checked = true; f.event('lft-layer-bsp', 'change');
+  f.el('lft-bsp-scope').value = 'alle'; f.event('lft-bsp-scope', 'change');
+  f.setListe([overlay(1, {sichtbarkeit: 'OFF'})]);
+  f.el('lft-layer-bsp').checked = false; f.event('lft-layer-bsp', 'change'); await flush(); await flush();
+  assert.equal(f.active.size, 0);
 });

@@ -51,26 +51,37 @@
     function entfernen(id) {
       if (layers[id]) { karte.removeLayer(layers[id].layer); delete layers[id]; }
     }
+    function auswahlKey() { return "ecp.bsp-auswahl:" + opts.listUrl; }
+    function auswahlMerken() {
+      try { window.localStorage.setItem(auswahlKey(), String(auswahl)); } catch (e) { /* nur Komfort */ }
+    }
+    function auswahlLesen() {
+      try { return Number(window.localStorage.getItem(auswahlKey())) || null; } catch (e) { return null; }
+    }
     function render() {
+      // Hoechstens eine BSP-Ebene: alles ausser der gewaehlten und sichtbaren Ebene wird entfernt.
+      var aktiv = gewaehlt();
       Object.keys(layers).forEach(function (id) {
-        if (!overlays.some(function (o) { return String(o.id) === id; })) { entfernen(id); }
+        if (!aktiv || String(aktiv.id) !== id || !aufloesen(aktiv, lokal(aktiv.id)).sichtbar ||
+            layers[id].url !== aktiv.raster_url) { entfernen(id); }
       });
-      overlays.forEach(function (o) {
+      if (aktiv) {
+        var o = aktiv;
         var zustand = aufloesen(o, lokal(o.id));
-        if (!zustand.sichtbar || (layers[o.id] && layers[o.id].url !== o.raster_url)) { entfernen(o.id); }
-        if (!zustand.sichtbar || fehlgeschlagen[o.id] === o.raster_url) { return; }
-        if (!layers[o.id]) {
-          var layer = bildLayer(karte, o, zustand.deckkraft);
-          layers[o.id] = {layer: layer, url: o.raster_url};
-          layer.on("error", function () {
-            if (!layers[o.id] || layers[o.id].layer !== layer) { return; }
-            fehlgeschlagen[o.id] = o.raster_url;
-            entfernen(o.id);
-            hinweis("Ein Brandschutzplan ist derzeit nicht verfügbar.");
-          });
-          layer.addTo(karte);
-        } else { layers[o.id].layer.setOpacity(zustand.deckkraft); }
-      });
+        if (zustand.sichtbar && fehlgeschlagen[o.id] !== o.raster_url) {
+          if (!layers[o.id]) {
+            var layer = bildLayer(karte, o, zustand.deckkraft);
+            layers[o.id] = {layer: layer, url: o.raster_url};
+            layer.on("error", function () {
+              if (!layers[o.id] || layers[o.id].layer !== layer) { return; }
+              fehlgeschlagen[o.id] = o.raster_url;
+              entfernen(o.id);
+              hinweis("Ein Brandschutzplan ist derzeit nicht verfügbar.");
+            });
+            layer.addTo(karte);
+          } else { layers[o.id].layer.setOpacity(zustand.deckkraft); }
+        }
+      }
       if (root) { root.hidden = !overlays.length && !pruefen; }
       if (el("lft-bsp-bedienung")) { el("lft-bsp-bedienung").hidden = !overlays.length; }
       if (el("lft-bsp-pruefen")) {
@@ -118,7 +129,11 @@
         if (nr !== folge) { return; }
         overlays = antwort.liste;
         pruefen = antwort.pruefen;
-        if (!gewaehlt()) { auswahl = overlays.length ? overlays[0].id : null; }
+        if (!gewaehlt()) {
+          var gemerkt = auswahlLesen();
+          auswahl = overlays.some(function (o) { return o.id === gemerkt; }) ? gemerkt :
+            (overlays.length ? overlays[0].id : null);
+        }
         listeRendern(); render();
       }).catch(function () {
         if (nr !== folge) { return; }
@@ -143,12 +158,24 @@
           deckkraft: reset ? null : wert.deckkraft})
       }).then(function (r) {
         if (!r.ok) { throw new Error("Speichern fehlgeschlagen"); }
+        // Persoenliche Ueberschreibung wuerde die gespeicherte Einsatzvorgabe sonst verdecken.
+        lokalSpeichern(o.id, null);
         return reload();
       }).catch(function () { hinweis("Einsatzvorgabe konnte nicht gespeichert werden."); })
         .finally(function () { speichern = false; render(); });
     }
     if (root) {
-      el("lft-bsp-auswahl").addEventListener("change", function () { auswahl = Number(this.value); render(); });
+      el("lft-bsp-auswahl").addEventListener("change", function () {
+        // War die Ebene ausgeblendet, bleibt auch der neue Plan ausgeblendet (kein Wiedereinblenden).
+        var vorher = gewaehlt();
+        var warAus = vorher && !aufloesen(vorher, lokal(vorher.id)).sichtbar;
+        auswahl = Number(this.value); auswahlMerken();
+        var neu = gewaehlt();
+        if (warAus && neu) {
+          lokalSpeichern(neu.id, {sichtbar: false, deckkraft: aufloesen(neu, lokal(neu.id)).deckkraft});
+        }
+        render();
+      });
       if (!opts.nurLokal) {
         el("lft-bsp-scope").addEventListener("change", function () { scope = this.value; render(); });
       }
