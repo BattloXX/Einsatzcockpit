@@ -28,6 +28,14 @@ HTMX_FRAGMENTE = {
     "gateway/druckregeln.html": ["gateway/_druckregel_simulation.html"],
     "admin/settings_dibos.html": ["admin/_dibos_live.html"],
     "admin/sms_send.html": ["admin/_sms_log_details.html"],
+    "verleih/artikel_list.html": ["verleih/_artikel_row.html"],
+    "planspiel/admin/einstellungen.html": [
+        "planspiel/admin/_pool_liste.html",
+        "planspiel/admin/_pool_zeile.html",
+        "planspiel/admin/_pool_ergebnis.html",
+        "planspiel/admin/_osm_laeuft.html",
+    ],
+    "planspiel/admin/szenarien.html": ["planspiel/admin/_szenario_zeile.html"],
     "admin/systemdiagnose/index.html": [
         "admin/systemdiagnose/_panel.html",
         "admin/systemdiagnose/_finding.html",

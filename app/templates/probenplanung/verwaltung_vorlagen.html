@@ -1,31 +1,39 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Checklisten-Vorlagen - Probenplanung{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="pt-page">
-<header class="pt-header">
-  <div><p class="pt-header__eyebrow">Probenplanung · Stammdaten</p><h1>Checklisten-Vorlagen</h1><p class="pt-header__sub">Versionierte Vorlagen für die Probenvorbereitung</p></div>
-  <form method="post" action="/admin/probenplanung/vorlagen/standard-import">
-    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <button class="btn btn--secondary" type="submit">Standardvorlage importieren</button>
-  </form>
+<div class="sys-page">
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div><p class="sys-eyebrow">Probenplanung · Stammdaten</p><h1>{{ icon("clipboard-list") }} Checklisten-Vorlagen</h1><p class="sys-muted">Versionierte Vorlagen für die Probenvorbereitung</p></div>
+    <form method="post" action="/admin/probenplanung/vorlagen/standard-import">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button class="btn btn--secondary" type="submit">Standardvorlage importieren</button>
+    </form>
+  </div>
 </header>
 {% with active_tab="vorlagen" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
-<section class="pt-card">
-  <div class="pt-card__head"><span aria-hidden="true">{{ icon("clipboard-list", size="md") }}</span><h2>Neue Vorlage</h2></div>
-  <form method="post" action="/admin/probenplanung/vorlagen" class="pt-form">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("plus") }} Neue Vorlage</h2></div>
+  <form method="post" action="/admin/probenplanung/vorlagen" class="sys-form-grid">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="form-group"><label for="vorlage-name">Name</label><input class="form-input" id="vorlage-name" name="name" maxlength="150" required></div>
     <div class="form-group"><label for="vorlage-beschreibung">Beschreibung</label><textarea class="form-input form-input--textarea" id="vorlage-beschreibung" name="beschreibung"></textarea></div>
     <div class="form-actions"><button class="btn btn--primary" type="submit">Vorlage anlegen</button></div>
   </form>
 </section>
-<div class="pt-table-card">
-  <table class="pt-table"><thead><tr><th>Name</th><th>Status</th><th></th></tr></thead><tbody>
+<section class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive"><thead><tr><th>Name</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead><tbody>
   {% for template in vorlagen %}
-    <tr><td class="pt-table__name">{{ template.name }}</td><td><span class="pt-badge {% if template.aktiv %}pt-badge--active{% else %}pt-badge--inactive{% endif %}">{{ "Aktiv" if template.aktiv else "Inaktiv" }}</span></td>
-      <td><a class="btn btn--secondary btn--sm" href="/admin/probenplanung/vorlagen/{{ template.id }}">Öffnen</a></td></tr>
-  {% else %}<tr><td colspan="3">Noch keine Checklisten-Vorlagen vorhanden.</td></tr>{% endfor %}
+    <tr><td data-label="Name"><strong>{{ template.name }}</strong></td><td data-label="Status"><span class="sys-pill">{% if template.aktiv %}{{ status_dot("gruen", "Aktiv") }}{% else %}{{ status_dot("grau", "Inaktiv") }}{% endif %} {{ "Aktiv" if template.aktiv else "Inaktiv" }}</span></td>
+      <td data-label="Aktionen"><a class="btn btn--secondary btn--sm" href="/admin/probenplanung/vorlagen/{{ template.id }}">Öffnen</a></td></tr>
+  {% else %}<tr><td colspan="3" class="sys-muted sys-table-empty">Noch keine Checklisten-Vorlagen vorhanden.</td></tr>{% endfor %}
   </tbody></table>
-</div>
+  </div>
+</section>
 </div>
 {% endblock %}

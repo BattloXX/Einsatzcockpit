@@ -3,15 +3,21 @@
 {% block title %}Neues Szenario{% endblock %}
 {% block head_extra %}
 {{ super() }}
+  <link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
   {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
 {% block admin_content %}
+<div class="sys-page" x-data="{ tab: 'grund' }">
 {% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<section class="ps-page ps-page--narrow" x-data="{ tab: 'grund' }">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": "Neu", "href": none}]) }}
-  <div class="ps-header"><div><a href="/admin/settings/planspiele/szenarien" class="btn btn--ghost btn--sm">← Katalog</a><div class="planspiel-title"><h1>Neues Szenario</h1><span class="ps-status ps-status--gray">Entwurf</span></div></div></div>
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div class="sys-row"><h1>{{ icon("plus") }} Neues Szenario</h1><span class="sys-pill">{{ status_dot("grau", "Entwurf") }} Entwurf</span></div>
+      <a href="/admin/settings/planspiele/szenarien" class="btn btn--ghost btn--sm">{{ icon("arrow-left", size="sm") }} Katalog</a>
+    </div>
+  </header>
   <nav class="subtabnav" aria-label="Szenario-Bereiche">
     {% for key, label in [('grund', 'Grunddaten'), ('alarm', 'Alarmierung'), ('ort', 'Standortregeln'), ('meldungen', 'Folgemeldungen'), ('lernziele', 'Lernziele'), ('zufall', 'Varianten & Zufall')] %}
     <button class="subtabnav__item" type="button" @click="tab = '{{ key }}'" :class="tab === '{{ key }}' && 'subtabnav__item--active'">{{ label }}</button>
@@ -21,5 +27,5 @@
   <p class="form-error">{{ fehler }}</p>
   {% endif %}
   {% include "planspiel/admin/_formular.html" %}
-</section>
+</div>
 {% endblock %}

@@ -1,50 +1,70 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Öffentlicher Probenplan{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="pt-page">
-<header class="pt-header">
-  <div><p class="pt-header__eyebrow">Probenplanung · Veröffentlichung</p><h1>Öffentlicher Plan</h1><p class="pt-header__sub">Freigegebene Proben sicher lesbar und abonnierbar machen.</p></div>
+<div class="sys-page">
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div><p class="sys-eyebrow">Probenplanung · Veröffentlichung</p><h1>{{ icon("world") }} Öffentlicher Plan</h1><p class="sys-muted">Freigegebene Proben sicher lesbar und abonnierbar machen.</p></div>
+  </div>
 </header>
 {% with active_tab="oeffentlich" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
-<section class="pt-card pt-card--info"><div class="pt-card__head"><span aria-hidden="true">{{ icon("world", size="md") }}</span><h2>Freigabe</h2></div>
-<p>Jeder mit diesem Link kann freigegebene Proben ohne Anmeldung lesen und abonnieren. Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p>
-<form method="post" action="/admin/probenplanung/oeffentlich/freigabe" class="pt-inline-form">
-<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-<div class="form-group form-group--checkbox"><label for="public-aktiv"><input type="checkbox" id="public-aktiv" name="public_aktiv" value="1" {% if public_aktiv %}checked{% endif %}> Öffentliche Auslieferung aktivieren</label></div>
-<button class="btn btn--primary">Freigabe speichern</button>
-</form>
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("world") }} Freigabe</h2></div>
+  <p class="sys-muted">Jeder mit diesem Link kann freigegebene Proben ohne Anmeldung lesen und abonnieren. Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p>
+  <form method="post" action="/admin/probenplanung/oeffentlich/freigabe" class="sys-stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label class="sys-check" for="public-aktiv"><input type="checkbox" id="public-aktiv" name="public_aktiv" value="1" {% if public_aktiv %}checked{% endif %}> Öffentliche Auslieferung aktivieren</label>
+    <div class="sys-actions sys-m-0"><button class="btn btn--primary">Freigabe speichern</button></div>
+  </form>
 </section>
 {% if public_url %}
-<section class="pt-card pt-card--success">
-<h2>Neue Links – nur jetzt sichtbar</h2>
-<p>Diese Links jetzt kopieren. Sie werden nicht im Klartext gespeichert.</p>
-<p>Leseansicht: <a href="{{ public_url }}">{{ public_url }}</a></p>
-<p>Kalender-Abo: <a href="{{ ics_url }}">{{ ics_url }}</a></p>
-<p>Webcal: <a href="{{ webcal_url }}">{{ webcal_url }}</a></p>
+<section class="sys-card sys-card--accent">
+  <div class="sys-card__head"><h2>{{ icon("link") }} Neue Links – nur jetzt sichtbar</h2></div>
+  <p>Diese Links jetzt kopieren. Sie werden nicht im Klartext gespeichert.</p>
+  <dl class="sys-kv">
+    <div><dt>Leseansicht</dt><dd><a href="{{ public_url }}">{{ public_url }}</a></dd></div>
+    <div><dt>Kalender-Abo</dt><dd><a href="{{ ics_url }}">{{ ics_url }}</a></dd></div>
+    <div><dt>Webcal</dt><dd><a href="{{ webcal_url }}">{{ webcal_url }}</a></dd></div>
+  </dl>
 </section>
 {% endif %}
-<section class="pt-card"><div class="pt-card__head"><span aria-hidden="true">{{ icon("link", size="md") }}</span><h2>Neuen Link erzeugen</h2></div><form method="post" action="/admin/probenplanung/oeffentlich" class="pt-inline-form">
-<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-<div class="form-group"><label for="token-bezeichnung">Bezeichnung</label><input class="form-input" id="token-bezeichnung" name="bezeichnung" maxlength="150"></div>
-<button class="btn btn--primary">Link erzeugen</button>
-</form></section>
-<section class="pt-token-list" aria-label="Öffentliche Links">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("link") }} Neuen Link erzeugen</h2></div>
+  <form method="post" action="/admin/probenplanung/oeffentlich" class="sys-form-grid">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group"><label for="token-bezeichnung">Bezeichnung</label><input class="form-input" id="token-bezeichnung" name="bezeichnung" maxlength="150"></div>
+    <button class="btn btn--primary">Link erzeugen</button>
+  </form>
+</section>
+<section class="sys-stack" aria-label="Öffentliche Links">
 {% for entry in tokens %}{% set token = entry.token %}
-<article class="pt-token">
-<div><strong>{{ token.bezeichnung or "Probenplan" }}</strong><span class="pt-badge {% if token.is_active %}pt-badge--active{% else %}pt-badge--inactive{% endif %}">{{ "Aktiv" if token.is_active else "Widerrufen" }}</span>
-{% if token.is_active and entry.url %}<div class="pt-link-list"><label>Öffentliche Ansicht <span><input class="form-input pt-link" value="{{ entry.url }}" readonly aria-label="Öffentlicher Link {{ token.bezeichnung or 'Probenplan' }}"><button class="btn btn--secondary btn--sm" type="button" data-copy-url="{{ entry.url }}">Kopieren</button></span></label><label>Kalender-Abo <span><input class="form-input pt-link" value="{{ entry.ics_url }}" readonly aria-label="Kalender-Link {{ token.bezeichnung or 'Probenplan' }}"><button class="btn btn--secondary btn--sm" type="button" data-copy-url="{{ entry.ics_url }}">Kopieren</button></span></label></div>{% elif token.is_active %}<p class="text-muted">Dieser ältere Link wurde nur gehasht gespeichert und kann nicht erneut angezeigt werden. Bitte neu generieren.</p>{% endif %}</div>
-<div class="pt-token__actions">
-{% if token.is_active %}
-<form method="post" action="/admin/probenplanung/oeffentlich/{{ token.id }}/widerrufen">
-<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-<button class="btn btn--danger">Widerrufen</button>
-</form>
-{% endif %}
-<form method="post" action="/admin/probenplanung/oeffentlich/{{ token.id }}/regenerieren">
-<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-<button class="btn btn--secondary">Neu generieren (alten Link widerrufen)</button>
-</form>
-</div>
+<article class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ token.bezeichnung or "Probenplan" }}</h2>
+    <span class="sys-pill">{% if token.is_active %}{{ status_dot("gruen", "Aktiv") }}{% else %}{{ status_dot("grau", "Widerrufen") }}{% endif %} {{ "Aktiv" if token.is_active else "Widerrufen" }}</span>
+  </div>
+  {% if token.is_active and entry.url %}
+  <div class="sys-stack">
+    <label class="sys-field">Öffentliche Ansicht <span class="sys-row"><input class="form-input sys-copy-url" value="{{ entry.url }}" readonly aria-label="Öffentlicher Link {{ token.bezeichnung or 'Probenplan' }}"><button class="btn btn--secondary btn--sm" type="button" data-copy-url="{{ entry.url }}">Kopieren</button></span></label>
+    <label class="sys-field">Kalender-Abo <span class="sys-row"><input class="form-input sys-copy-url" value="{{ entry.ics_url }}" readonly aria-label="Kalender-Link {{ token.bezeichnung or 'Probenplan' }}"><button class="btn btn--secondary btn--sm" type="button" data-copy-url="{{ entry.ics_url }}">Kopieren</button></span></label>
+  </div>
+  {% elif token.is_active %}<p class="sys-muted">Dieser ältere Link wurde nur gehasht gespeichert und kann nicht erneut angezeigt werden. Bitte neu generieren.</p>{% endif %}
+  <div class="sys-actions">
+    {% if token.is_active %}
+    <form method="post" action="/admin/probenplanung/oeffentlich/{{ token.id }}/widerrufen">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button class="btn btn--danger">Widerrufen</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/admin/probenplanung/oeffentlich/{{ token.id }}/regenerieren">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button class="btn btn--secondary">Neu generieren (alten Link widerrufen)</button>
+    </form>
+  </div>
 </article>
 {% endfor %}
 </section>

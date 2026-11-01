@@ -475,3 +475,43 @@
   .sys-page .sys-toolbar-search { flex: none; max-width: none; }
   .sys-toolbar > .form-group { width: 100%; min-width: 0; }
 }
+
+/* Fachbereiche (V6): Förderstrecke, Verleih, Probenplanung, Planspiel, Objekt-Infoscreen. */
+.sys-ml-auto { margin-left: auto; }
+.sys-lead { margin: 0 0 1rem; }
+.sys-push-bottom { margin-top: auto; }
+.sys-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.sys-tpl-grid > .sys-card { margin: 0; }
+.sys-card--col { display: flex; flex-direction: column; gap: .75rem; }
+.sys-card--accent { border-left: 4px solid var(--yellow); }
+.sys-kl-stage { margin-bottom: .75rem; padding: .75rem; border: 1px solid var(--border); border-radius: .5rem; }
+.sys-kl-hdr { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; }
+.sys-kl-rpm { flex: 1 1 120px; min-width: 110px; max-width: 200px; }
+.sys-kl-tbl { width: 100%; font-size: .85rem; table-layout: fixed; border-collapse: collapse; }
+.sys-kl-tbl th, .sys-kl-tbl td { padding: 3px 4px; text-align: left; }
+.sys-kl-tbl th:last-child, .sys-kl-tbl td:last-child { width: 44px; text-align: center; }
+.sys-kl-tbl input.form-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.sys-link-ul { color: inherit; text-decoration: underline; }
+.sys-plain-list { margin: 0; padding: 0; list-style: none; }
+.sys-item-line { display: flex; align-items: baseline; gap: .4rem; margin-bottom: .15rem; }
+.sys-item-qty { min-width: 1.5rem; font-weight: 600; text-align: right; }
+.sys-dim { opacity: .4; }
+.sys-w-60 { width: 4.5rem; }
+dialog.modal.sys-dialog-wide { max-width: 720px; }
+.sys-page .sys-check-row input[type="checkbox"] { min-height: 0; }
+.sys-ps-map { height: 360px; margin: .75rem 0; border: 1px solid var(--border); border-radius: .5rem; }
+.sys-ps-map--small { height: 240px; }
+.sys-ps-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .4rem .75rem; }
+.sys-ps-checks label, .sys-ps-inline { font-size: .8rem; font-weight: 400; text-transform: none; letter-spacing: normal; }
+.sys-ps-inline { display: inline-flex; align-items: center; gap: .25rem; margin: .15rem .5rem .15rem 0; }
+.sys-form-grid > .sys-field { align-self: start; }
+.planspiel-osm-status { display: flex; align-items: flex-start; gap: .75rem; margin: .75rem 0; }
+.planspiel-osm-status__spinner { flex: none; width: 1.25rem; height: 1.25rem; margin-top: .1rem; border: 3px solid var(--border); border-top-color: var(--yellow); border-radius: 50%; animation: planspiel-spin .9s linear infinite; }
+@keyframes planspiel-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .planspiel-osm-status__spinner { animation: none; } }
+.planspiel-pool-wrap { overflow-x: auto; max-width: 100%; }
+.planspiel-pagination { display: flex; align-items: center; gap: .75rem; margin-top: .75rem; }
+@media (max-width: 760px) {
+  .sys-ps-map { height: 280px; }
+  .sys-ps-map--small { height: 240px; }
+}

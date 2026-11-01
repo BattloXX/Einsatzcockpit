@@ -3,16 +3,21 @@
 {% block title %}Stichwort-Referenz{% endblock %}
 {% block head_extra %}
 {{ super() }}
+  <link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
   {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<section class="ps-page">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Stichwort-Referenz", "href": none}]) }}
-  <div class="ps-header"><h1>Stichwort-Referenz</h1></div>
-  <div class="ps-card ps-table-wrap"><table class="ps-table"><thead><tr><th>Code</th><th>Bezeichnung</th><th>Beschreibung</th><th>in Org vorhanden</th><th>Szenarien (aktiv)</th></tr></thead><tbody>{% for item, vorhanden, count, gewicht in rows %}<tr><td><a href="/admin/settings/planspiele/szenarien?stichwort={{ item.code }}"><span class="ps-badge ps-badge--gray">{{ item.code }}</span></a></td><td>{{ item.bezeichnung }}</td><td>{{ item.beschreibung }}</td><td>{{ vorhanden or 'nein' }}</td><td>{{ count }} / Gewicht {{ gewicht }}</td></tr>{% endfor %}</tbody></table></div>
-  <p>Quelle: {{ quelle }}<br>Revision: {{ revision }}</p>
-</section>
+  <header class="sys-hero">
+    <div class="sys-hero__head"><h1>{{ icon("list-details") }} Stichwort-Referenz</h1></div>
+  </header>
+  <section class="sys-card">
+  <div class="sys-table-wrap"><table class="sys-table sys-table--responsive"><thead><tr><th>Code</th><th>Bezeichnung</th><th>Beschreibung</th><th>in Org vorhanden</th><th>Szenarien (aktiv)</th></tr></thead><tbody>{% for item, vorhanden, count, gewicht in rows %}<tr><td data-label="Code"><a href="/admin/settings/planspiele/szenarien?stichwort={{ item.code }}"><span class="sys-pill sys-mono">{{ item.code }}</span></a></td><td data-label="Bezeichnung">{{ item.bezeichnung }}</td><td data-label="Beschreibung">{{ item.beschreibung }}</td><td data-label="in Org vorhanden">{{ vorhanden or 'nein' }}</td><td data-label="Szenarien (aktiv)">{{ count }} / Gewicht {{ gewicht }}</td></tr>{% endfor %}</tbody></table></div>
+  <p class="sys-muted sys-mt-2 sys-m-0">Quelle: {{ quelle }}<br>Revision: {{ revision }}</p>
+  </section>
+</div>
 {% endblock %}

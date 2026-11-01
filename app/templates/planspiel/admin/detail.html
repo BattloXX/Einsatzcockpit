@@ -3,15 +3,21 @@
 {% block title %}{{ szenario.code }}{% endblock %}
 {% block head_extra %}
 {{ super() }}
+  <link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
   {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
 {% block admin_content %}
+<div class="sys-page" x-data="{ tab: 'grund' }">
 {% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<section class="ps-page ps-page--narrow" x-data="{ tab: 'grund' }">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": szenario.code, "href": none}]) }}
-  <div class="ps-header"><div><a href="/admin/settings/planspiele/szenarien" class="btn btn--ghost btn--sm">← Katalog</a><div class="planspiel-title"><h1>{{ szenario.code }}: {{ version.titel }}</h1><span class="ps-status {% if archiviert %}ps-status--gray{% elif szenario.aktiv %}ps-status--green{% else %}ps-status--amber{% endif %}">{{ 'archiviert' if archiviert else ('aktiv' if szenario.aktiv else 'deaktiviert') }}</span></div></div></div>
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div class="sys-row"><h1>{{ icon("clipboard-list") }} {{ szenario.code }}: {{ version.titel }}</h1><span class="sys-pill">{% if archiviert %}{{ status_dot("grau", "archiviert") }}{% elif szenario.aktiv %}{{ status_dot("gruen", "aktiv") }}{% else %}{{ status_dot("gelb", "deaktiviert") }}{% endif %} {{ 'archiviert' if archiviert else ('aktiv' if szenario.aktiv else 'deaktiviert') }}</span></div>
+      <a href="/admin/settings/planspiele/szenarien" class="btn btn--ghost btn--sm">{{ icon("arrow-left", size="sm") }} Katalog</a>
+    </div>
+  </header>
   {% if fehler %}
   <p class="form-error">{{ fehler }}</p>
   {% endif %}
@@ -26,38 +32,38 @@
   {% if not archiviert %}
   {% include "planspiel/admin/_formular.html" %}
   {% endif %}
-  <section class="ps-box" x-show="tab === 'vorschau'">
-    <div class="ps-box__head"><h2 class="ps-box__title">Vorschau</h2></div>
-    <h3>Alarmtext</h3>
+  <section class="sys-card" x-show="tab === 'vorschau'">
+    <div class="sys-card__head"><h2>{{ icon("eye") }} Vorschau</h2></div>
+    <h3 class="sys-subhead">Alarmtext</h3>
     <p>{{ rendern(version.alarmtext_template, werte) }}</p>
-    <h3>Folgemeldungen</h3>
+    <h3 class="sys-subhead">Folgemeldungen</h3>
     {% for event in ereignisse %}
     <p>{{ rendern(event.payload_template, werte) }}</p>
     {% else %}
     <p>Keine Folgemeldungen.</p>
     {% endfor %}
   </section>
-  <section class="ps-box" x-show="tab === 'versionen'">
-    <div class="ps-box__head"><h2 class="ps-box__title">Versionen</h2></div>
-    <ul>
+  <section class="sys-card" x-show="tab === 'versionen'">
+    <div class="sys-card__head"><h2>{{ icon("history") }} Versionen</h2></div>
+    <ul class="sys-list">
       {% for row in versions %}
       <li>Version {{ row.version }}, {{ row.veroeffentlicht_at|local_datetime }}</li>
       {% endfor %}
     </ul>
     {% if systemdiff %}
-    <div class="ps-card ps-table-wrap">
-      <table class="ps-table">
+    <div class="sys-table-wrap sys-mt-2">
+      <table class="sys-table sys-table--responsive">
         <thead><tr><th>Feld</th><th>aktuell</th><th>System</th></tr></thead>
-        <tbody>{% for field, current, system in systemdiff %}<tr><td>{{ field }}</td><td>{{ current }}</td><td>{{ system }}</td></tr>{% endfor %}</tbody>
+        <tbody>{% for field, current, system in systemdiff %}<tr><td data-label="Feld">{{ field }}</td><td data-label="aktuell">{{ current }}</td><td data-label="System">{{ system }}</td></tr>{% endfor %}</tbody>
       </table>
     </div>
     {% endif %}
   </section>
   {% if not archiviert %}
-  <div class="ps-actions">
-  <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/duplizieren">
+  <div class="sys-actions">
+  <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/duplizieren" class="sys-row">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <label>Code der Kopie<input class="form-input" name="code" required></label>
+    <label class="sys-field">Code der Kopie<input class="form-input" name="code" required></label>
     <button class="btn btn--secondary btn--sm" type="submit">Duplizieren</button>
   </form>
   {% if szenario.herkunft == 'system' %}
@@ -72,5 +78,5 @@
   </form>
   </div>
   {% endif %}
-</section>
+</div>
 {% endblock %}

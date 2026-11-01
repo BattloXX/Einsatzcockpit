@@ -1,27 +1,37 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Probearten - Probenplanung{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="pa-page">
-<header class="pa-header">
-  <div><p class="pa-header__eyebrow">Probenplanung · Stammdaten</p><h1>Probearten</h1><p class="pa-header__sub">Probearten und deren Grundeinstellungen</p></div>
-  <a class="btn btn--primary" href="/admin/probenplanung/probearten/neu">Probeart anlegen</a>
+<div class="sys-page">
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div><p class="sys-eyebrow">Probenplanung · Stammdaten</p><h1>{{ icon("clipboard-list") }} Probearten</h1><p class="sys-muted">Probearten und deren Grundeinstellungen</p></div>
+    <a class="btn btn--primary" href="/admin/probenplanung/probearten/neu">{{ icon("plus", size="sm") }} Probeart anlegen</a>
+  </div>
 </header>
 {% with active_tab="probearten" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
-<div class="pa-table-card">
-  <table class="pa-table">
-    <thead><tr><th>Farbe</th><th>Name</th><th>Kurz</th><th>Typ</th><th>Dauer</th><th>Status</th><th></th></tr></thead>
+<section class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive">
+    <thead><tr><th>Farbe</th><th>Name</th><th>Kurz</th><th>Typ</th><th>Dauer</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>
     {% for p in probearten %}
       <tr>
-        <td><span class="pa-color" style="background:{{ p.farbe }}" aria-label="Farbe {{ p.farbe }}"></span></td>
-        <td class="pa-table__name">{{ p.name }}</td><td><span class="pa-code">{{ p.kurz }}</span></td><td>{{ "Übung" if p.termin_typ == "uebung" else "Veranstaltung" }}</td>
-        <td class="pa-table__duration">{{ p.standarddauer_minuten or "-" }}{% if p.standarddauer_minuten %} min{% endif %}</td>
-        <td><span class="pa-badge {% if p.aktiv %}pa-badge--active{% else %}pa-badge--inactive{% endif %}">{{ "Aktiv" if p.aktiv else "Inaktiv" }}</span></td>
-        <td><a class="btn btn--secondary btn--sm" href="/admin/probenplanung/probearten/{{ p.id }}/bearbeiten">Bearbeiten</a></td>
+        <td data-label="Farbe"><span class="pa-color" style="background:{{ p.farbe }}" aria-label="Farbe {{ p.farbe }}"></span></td>
+        <td data-label="Name"><strong>{{ p.name }}</strong></td>
+        <td data-label="Kurz"><span class="sys-pill sys-mono">{{ p.kurz }}</span></td>
+        <td data-label="Typ">{{ "Übung" if p.termin_typ == "uebung" else "Veranstaltung" }}</td>
+        <td data-label="Dauer">{{ p.standarddauer_minuten or "–" }}{% if p.standarddauer_minuten %} min{% endif %}</td>
+        <td data-label="Status"><span class="sys-pill">{% if p.aktiv %}{{ status_dot("gruen", "Aktiv") }}{% else %}{{ status_dot("grau", "Inaktiv") }}{% endif %} {{ "Aktiv" if p.aktiv else "Inaktiv" }}</span></td>
+        <td data-label="Aktionen"><a class="btn btn--secondary btn--sm" href="/admin/probenplanung/probearten/{{ p.id }}/bearbeiten">Bearbeiten</a></td>
       </tr>
-    {% else %}<tr><td colspan="7">Noch keine Probearten vorhanden.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="7" class="sys-muted sys-table-empty">Noch keine Probearten vorhanden.</td></tr>{% endfor %}
     </tbody>
   </table>
-</div>
+  </div>
+</section>
 </div>
 {% endblock %}

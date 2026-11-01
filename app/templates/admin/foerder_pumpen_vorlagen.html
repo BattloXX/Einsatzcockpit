@@ -1,42 +1,48 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Pumpen-Vorlagen – Förderstrecke – Admin{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-content">
+<div class="sys-page">
   {% include "admin/_foerder_tabs.html" %}
 
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
       <h1>{{ icon("clipboard-list", size="md") }} Pumpen-Vorlagen</h1>
-      <p class="page-header__sub">Vorlage übernehmen → editierbare Kopie in deinem Katalog</p>
+      <p class="sys-muted">Vorlage übernehmen → editierbare Kopie in deinem Katalog</p>
     </div>
     <a class="btn btn--secondary" href="/admin/foerderpumpen">{{ icon("chevron-left", size="sm") }} Zurück zu meinen Pumpen</a>
-  </div>
+   </div>
+  </header>
 
-  <p class="text-muted" style="font-size:.85rem;margin-top:-4px;max-width:760px;">
+  <p class="sys-muted sys-small sys-readable sys-lead">
     Diese Vorlagen sind Startpunkte mit vorbefüllten Kennlinien. „Übernehmen" legt eine
     Kopie in deiner Organisation an und öffnet sie direkt zum Anpassen — die Vorlage selbst
     bleibt unverändert. Kennlinienwerte vor Produktivnutzung bzw. über einen Nassbewerb kalibrieren.
   </p>
 
-  <div class="card-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;">
+  <div class="sys-tpl-grid">
     {% for key, v in vorlagen.items() %}
-    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+    <section class="sys-card sys-card--col">
       <div>
-        <h3 style="margin:0 0 4px;font-size:1.02rem;">{{ v.name }}</h3>
-        <p class="text-muted" style="font-size:.82rem;margin:0;">{{ v.beschreibung }}</p>
+        <h3 class="sys-subhead">{{ v.name }}</h3>
+        <p class="sys-muted sys-small sys-m-0">{{ v.beschreibung }}</p>
       </div>
-      <div style="font-size:.8rem;color:var(--text-muted);">
+      <div class="sys-muted sys-text-xs">
         {% set f = v.felder %}
         Druck {{ f.druck_anschluss_dn }} mm ×{{ f.druck_parallel_max }} ·
         Saug {{ f.saug_anschluss_dn }} mm ×{{ f.saug_parallel_max }}
         {% if f.tank_l %}· Tank {{ f.tank_l }} l{% endif %}
       </div>
-      <form method="post" action="/admin/foerderpumpen/aus-vorlage/{{ key }}" style="margin-top:auto;">
+      <form method="post" action="/admin/foerderpumpen/aus-vorlage/{{ key }}" class="sys-push-bottom">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="btn btn--primary btn--sm" style="width:100%;">Übernehmen &amp; anpassen</button>
+        <button type="submit" class="btn btn--primary btn--sm sys-w-full">Übernehmen &amp; anpassen</button>
       </form>
-    </div>
+    </section>
     {% endfor %}
   </div>
 </div>
