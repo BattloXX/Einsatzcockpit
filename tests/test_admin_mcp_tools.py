@@ -38,7 +38,7 @@ def call(client, token, name, arguments=None):
     return payload(admin_call(client, token, "tools/call", {"name": name, "arguments": arguments or {}}))
 
 
-def test_all_seven_schemas_audit_and_no_org_contents(client, admin_env, monkeypatch):
+def test_all_read_schemas_audit_and_no_org_contents(client, admin_env, monkeypatch):
     from app import log_buffer
     sentinel = "GEHEIMER-EINSATZ-KONTAKT-MITGLIED-OBJEKT"
     with SessionLocal() as db:
@@ -55,11 +55,14 @@ def test_all_seven_schemas_audit_and_no_org_contents(client, admin_env, monkeypa
     values = tokens(client, admin_env)
     correlations = set()
     for name in READ_TOOLS:
-        answer = call(client, values["access_token"], name)
+        answer = call(client, values["access_token"], name,
+                      {"geraet_id": 2147483647} if name == "admin_geraet_details" else {})
         expected = {"zeitpunkt", "status", "modul", "schweregrad", "evidenz",
                     "ursachenhypothese", "empfehlung", "korrelations_id"}
         if name == "admin_system_uebersicht":
             expected.add("github_zugang")
+        if name == "admin_system_uebersicht":
+            assert not {"admin_geraete_pruefen", "admin_geraet_details"} & set(answer["evidenz"]["teilchecks"])
         assert set(answer) == expected
         assert answer["status"] in ("ok", "warn", "fail", "unbekannt")
         assert datetime.fromisoformat(answer["zeitpunkt"]).utcoffset().total_seconds() == 0
@@ -67,7 +70,7 @@ def test_all_seven_schemas_audit_and_no_org_contents(client, admin_env, monkeypa
         correlations.add(answer["korrelations_id"])
         forbidden = (sentinel, "SECRETPASSWORD", "alice@example.com", "+436641234567")
         assert not any(v in json.dumps(answer) for v in forbidden)
-    assert len(correlations) == 7
+    assert len(correlations) == len(READ_TOOLS)
     answer = call(client, values["access_token"], "admin_dienste_pruefen")
     assert answer["evidenz"]["dienste"]["alarm_seriell"]["ok"] >= 2
     logs = call(client, values["access_token"], "admin_logs_analysieren", {"suchtext": sentinel, "limit": 200})
@@ -165,3 +168,29 @@ def test_admin_oauth_never_in_org_export():
     tables = {"admin_mcp_oauth_client", "admin_mcp_oauth_code", "admin_mcp_oauth_token"}
     assert tables <= EXCLUDE_TABLES
     assert not tables & set(scope_rules())
+
+
+def test_geraete_catalog_details_and_audit(client, admin_env, monkeypatch):
+    from app.models.admin_security import utcnow
+    from app.models.app_geraet import AppGeraet
+    from app.services import app_geraet_auswertung
+
+    monkeypatch.setattr(app_geraet_auswertung, "soll_version", lambda: None)
+    values = tokens(client, admin_env)
+    listed = admin_call(client, values["access_token"], "tools/list")
+    assert "admin_geraete_pruefen" in listed.text and "admin_geraet_details" in listed.text
+    with SessionLocal() as db:
+        now = utcnow()
+        row = AppGeraet(user_id=admin_env["id"], install_id=str(uuid4()),
+                       first_seen_at=now, last_seen_at=now, last_report_at=now, webview_version="130")
+        db.add(row)
+        db.commit()
+        ident = row.id
+    answer = call(client, values["access_token"], "admin_geraet_details", {"geraet_id": ident})
+    assert answer["modul"] == "app" and answer["evidenz"]["geraet_id"] == ident
+    assert answer["evidenz"]["version"]["soll_version"] is None
+    with SessionLocal() as db:
+        audit = db.query(AuditLog).filter(AuditLog.action == "admin_mcp.tool").order_by(AuditLog.id.desc()).first()
+        data = json.loads(audit.payload_json)
+        assert data["tool"] == "admin_geraet_details" and data["korrelations_id"] == answer["korrelations_id"]
+        assert data["argumente"] == {"geraet_id": "[MASKIERT]"}

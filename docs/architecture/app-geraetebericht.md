@@ -92,3 +92,24 @@ somit: kumulierte Anzahl >= 5 und zuletzt innerhalb der letzten 7 Tage gemeldet;
 eine exakte Anzahl einzelner Fehler innerhalb des Zeitfensters ist mit Schema 1
 nicht rekonstruierbar. Dienstaktiv bedeutet: verknuepftes, nicht widerrufenes
 DeviceToken mit `duty_active=true`. Die 12-Monatsgrenze nutzt Kalendermonate.
+
+## Admin-MCP (B4)
+
+Unter `/mcp/admin` lesen `admin_geraete_pruefen` und `admin_geraet_details` die
+zentrale Auswertung, ohne eigene Gesundheitsregeln oder Schreibaktionen.
+Die Liste akzeptiert `org_id`, `nur_probleme`, `sdk_max`, `limit` (1..100,
+Standard 50); Aggregate und Status beziehen sich auf die gesamte gefilterte
+Auswahl. Verteilungen und Cluster sind auf `limit`, Geraetelisten und
+Cluster-/Berechtigungs-IDs zusaetzlich auf `MAX_IDS=50` begrenzt. Gesamtzahlen
+und Begrenzungsflags bleiben erhalten. Details zeigen alle gemeldeten
+Einstellungen nur lesend und die neuesten 50 maskierten Fehler samt Befunden.
+Eine unbekannte positive Integer-ID liefert `geraet: null`; Bool-IDs sind ungueltig.
+
+Die Tools verwenden den bestehenden Admin-Audit-/Korrelationspfad und behalten
+den expliziten Tenant-Kontext der Session. Nur IDs werden referenziert, keine
+Benutzer-/Organisationsnamen, Installations-UUIDs oder frei vergebenen Geraetenamen.
+Freitexte werden nochmals mit `admin_mcp.masking` maskiert. Ein GitHub-Ausfall
+liefert Soll-Version `null` mit Hinweis, ohne Versionsbefund. Die Tools sind
+in `ADMIN_TOOLS` und `READ_TOOLS`, aber explizit von Systemuebersicht und
+Gesamtzustand-Panels ausgeschlossen. Vertrag und Grenzen siehe
+[Admin-MCP](../wiki/Administration-System-Admin-MCP.md#app-geraete).

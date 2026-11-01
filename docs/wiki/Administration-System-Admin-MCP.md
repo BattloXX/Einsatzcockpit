@@ -47,6 +47,8 @@ beruecksichtigt. Die Login-Seite erklaert diese Grenze, Fehler verraten keine Ko
 | `admin_gateway_pruefen` | Gateway-/SMS-Presence, W&T-Dienstmonitor und offene/ueberfaellige Druck-/SMS-Jobs |
 | `admin_logs_analysieren` | Lokale, gefilterte und deduplizierte Log-Gruppen mit Level, Signatur und Anzahl |
 | `admin_push_pruefen` | FCM-Konfiguration, Token-Faehigkeiten je Org und letzte Push-Zustellungen mit Empfangsbestaetigung; optional `org_id`, `quelle` (Push-Quelle) und `limit` (1 bis 50, Standard 20) |
+| `admin_geraete_pruefen` | App-Geraeteflotte: Anzahl, Soll-Version, Verteilungen, veraltete Geraete, Berechtigungsluecken, Fehler-Cluster und seit >48 h fehlende Meldungen; optional `org_id`, `nur_probleme`, `sdk_max`, `limit` (1 bis 100, Standard 50) |
+| `admin_geraet_details` | Einzelgeraet per `geraet_id`: Versionsampel, Eigenschaften, alle gemeldeten Einstellungen (nur lesend), Berechtigungen, Dienste, maskierte Fehler und gemeinsame Befunde |
 
 Logs: `level` ist DEBUG, INFO, WARNING (Default), ERROR oder CRITICAL;
 `limit` liegt zwischen 1 und 200 (Default 100); `suchtext` ist optional und
@@ -549,3 +551,27 @@ Passwort-/TOTP-/Token-Flow lokal ohne Netz. Ob eine konkrete produktive
 ChatGPT-Verbindung funktioniert, haengt auch von HTTPS, Proxy, oeffentlicher
 Basisadresse und der tatsaechlichen Client-Anfrage ab; diese werden damit nicht
 live verifiziert.
+
+### App-Geraete
+
+Beide App-Tools sind rein lesend und verwenden dieselbe Auswertung wie die
+Systemdiagnose (`app_geraet_auswertung`). Sie werden separat aufgerufen und
+fliessen nicht in die Systemuebersicht oder Gesamtzustand-Panels ein.
+`org_id`, `sdk_max` und `geraet_id` muessen positive Integer sein (keine Bool-Werte).
+Eine unbekannte ID ergibt `status=ok`, `evidenz={"geraet": null}`.
+
+Filter gelten fuer Anzahl, Status und alle Aggregate der ausgewaehlten Flotte;
+`limit` begrenzt Verteilungsgruppen und Fehler-Cluster. Geraetelisten und IDs
+sind zusaetzlich auf `MAX_IDS=50` begrenzt, Details auf 50 Fehler (neueste zuerst).
+Gesamtzahlen und `*_begrenzt` zeigen Kuerzungen an. Ohne Meldung >48 h wird auch
+bei inaktivem Dienst aufgelistet; der gemeinsame Gesundheitsbefund dazu gilt
+weiterhin nur fuer aktive Dienste. Der Status folgt den gemeinsamen Befunden.
+Die Fehleranzahl ist die Summe der kumulierten App-Zaehler, kein Zeitfensterzaehler.
+
+Bei GitHub-Ausfall bleibt die Soll-Version `null`, die Versionsampel unbekannt;
+ein Hinweis erklaert den fehlenden Vergleich. Andere Befunde bleiben wirksam.
+Ausgaben enthalten nur numerische Referenz-IDs, keine Benutzernamen, E-Mails,
+Organisationsnamen oder Installations-UUIDs. Frei vergebene Geraetenamen werden
+ausgelassen, Diagnosetexte mit der Admin-MCP-Maskierung behandelt. Einstellungen
+werden ausschliesslich gelesen; es gibt keinen Rueckkanal an die App.
+Audit und Korrelations-ID entsprechen den anderen Admin-MCP-Tools.

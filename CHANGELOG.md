@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Admin-MCP / App-Geraete:** Zwei rein lesende Tools `admin_geraete_pruefen` und `admin_geraet_details` mit gemeinsamer Gesundheitsauswertung, Flottenfiltern, begrenzten Aggregaten/IDs, maskierten Details und Einstellungen ohne Rueckkanal. GitHub-Ausfall mit unbekannter Soll-Version; separat von Gesamtzustand-Panels.
+
 - Systemdiagnose: lesende App-Geraeteflotte mit Filtern, Release-Ampel, Detailansicht und gemeinsamem Gesundheitscheck `app.geraete`.
 
 - **App-Geraetebericht:** Neuer Endpunkt `POST /api/v1/device/diagnose-report` nimmt den Geraetebericht der Android-App entgegen (Version, Geraete-/Display-/Android-Eigenschaften, WebView, Einstellungen, Berechtigungen, Dienstzustand, strukturierte Fehler). Whitelist-Validierung, Maskierung, 64 KB und 30 Berichte/Stunde, 90 Tage Aufbewahrung; kein Rueckkanal fuer Einstellungen. Migration 0339.
