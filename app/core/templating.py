@@ -140,6 +140,18 @@ def ms_to_kmh(value: float | None) -> float | None:
 
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["icon"] = render_icon
+
+
+def _standort_veraltet(token) -> bool:
+    """Android-Geraet ohne Positionsmessung in den letzten 24 Stunden."""
+    from datetime import UTC, datetime
+
+    from app.services.geraet_standort import zustand
+
+    return token.platform == "android" and zustand(token, datetime.now(UTC).replace(tzinfo=None))["veraltet"]
+
+
+templates.env.globals["standort_veraltet"] = _standort_veraltet
 templates.env.globals["merkmal_icon"] = merkmal_icon
 templates.env.globals["cross_marker_icon"] = cross_marker_icon
 templates.env.globals["modul_icon"] = modul_icon

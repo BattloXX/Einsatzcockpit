@@ -151,6 +151,9 @@
             {% if dt.last_lat and dt.last_lng %}
             <span style="font-size:.75rem;color:var(--color-success);" title="Letzter Standort vorhanden">{{ icon("map-pin", size="sm") }}</span>
             {% endif %}
+            {% if standort_veraltet(dt) %}
+            <span style="font-size:.75rem;color:var(--color-danger);" title="Keine Standortmessung in den letzten 24 Stunden">{{ icon("alert-triangle", size="sm") }}</span>
+            {% endif %}
             <br><small class="text-muted" style="font-family:monospace;">{{ dt.user.username if dt.user else '—' }}</small>
           </td>
           <td>

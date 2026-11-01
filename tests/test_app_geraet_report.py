@@ -266,3 +266,48 @@ def test_migration_uebernimmt_mariadb_fk_typ(monkeypatch, typ):
         get_columns=lambda _: [{"name": "id", "type": pk_typ}]))
     for tabelle in ("user", "device_token", "fire_dept"):
         assert module._fk_typ(tabelle).compile(dialect=mysql.dialect()) == pk_typ.compile(dialect=mysql.dialect())
+
+
+LOC = "/api/v1/device/location"
+
+
+@pytest.fixture
+def geraet(client, konto):
+    with SessionLocal() as db:
+        db.add(DeviceToken(user_id=konto, label="standort", token_hash=hash_api_key(f"standort-{konto}"),
+                           platform="android"))
+        db.commit()
+    client.cookies.clear()
+    return {"Authorization": f"Bearer standort-{konto}"}, konto
+
+
+def _zustand(konto):
+    with SessionLocal() as db:
+        t = db.query(DeviceToken).filter_by(user_id=konto, label="standort").one()
+        return t.last_lat, t.last_location_at, t.last_location_status, t.last_location_error, t.last_location_source
+
+
+def test_standort_ueber_bearer_ohne_einsatz_mit_messzeit(client, geraet):
+    headers, konto = geraet
+    gemessen = (datetime.now(UTC) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    r = client.post(LOC, headers=headers, json={"lat": 47.5, "lng": 9.7, "accuracy": 20, "measured_at": gemessen,
+                                                 "source": "periodic", "status": "ok"})
+    assert r.status_code == 200
+    lat, at, status, _, quelle = _zustand(konto)
+    assert lat == 47.5 and status == "ok" and quelle == "periodic"
+    assert abs((datetime.now(UTC).replace(tzinfo=None) - at).total_seconds() - 7200) < 120  # Messzeit, nicht Empfang
+
+
+def test_standort_fehlstatus_und_ungueltige_eingabe(client, geraet):
+    headers, konto = geraet
+    assert client.post(LOC, headers=headers, json={"status": "permission_denied", "source": "periodic"}).status_code == 200
+    assert _zustand(konto)[2:4] == ("permission_denied", None)
+    assert client.post(LOC, headers=headers, json={"lat": 200, "lng": 0}).status_code == 400
+    assert client.post(LOC, headers=headers, json={"lat": 1, "lng": 1, "measured_at": "kaputt"}).status_code == 400
+    assert client.post(LOC, json={"lat": 1, "lng": 1}).status_code in (401, 403)
+
+
+def test_standort_migration_spalten_existieren():
+    cols = {c["name"] for c in sa.inspect(SessionLocal().get_bind()).get_columns("device_token")}
+    assert {"last_location_received_at", "last_location_attempt_at", "last_location_status",
+            "last_location_error", "last_location_source", "last_location_accuracy_m"} <= cols

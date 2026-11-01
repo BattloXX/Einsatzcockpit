@@ -43,6 +43,18 @@
 
     <div class="chart-box">
       <h3 style="margin-bottom:10px;">Letzter Standort</h3>
+      <table class="data-table" style="margin-bottom:10px;">
+        <tr><th>Standortstatus</th><td>
+          {% if standort.veraltet %}<span style="color:var(--color-danger);">Veraltet (keine Messung innerhalb von 24 Stunden)</span>
+          {% else %}<span style="color:var(--color-success);">Aktuell</span>{% endif %}
+          &middot; {{ standort.status_text }}</td></tr>
+        <tr><th>Letzte Messung</th><td>{% if standort.letzte_messung_at %}{{ standort.letzte_messung_at|local_datetime_sec }}
+          ({{ (standort.alter_s // 60)|int }} Min. alt){% else %}noch keine{% endif %}</td></tr>
+        <tr><th>Zuletzt empfangen</th><td>{% if standort.letzter_empfang_at %}{{ standort.letzter_empfang_at|local_datetime_sec }}{% else %}noch nie{% endif %}</td></tr>
+        <tr><th>Letzter Versuch</th><td>{% if standort.letzter_versuch_at %}{{ standort.letzter_versuch_at|local_datetime_sec }}
+          {% if standort.quelle %}({{ standort.quelle }}){% endif %}{% else %}noch keiner{% endif %}</td></tr>
+        {% if standort.fehler %}<tr><th>Fehler</th><td>{{ standort.fehler }}</td></tr>{% endif %}
+      </table>
       {% if dt.last_lat and dt.last_lng %}
       <p style="font-size:.85rem;color:var(--color-text-muted);margin-bottom:8px;">
         {{ icon("map-pin", size="sm") }} <strong>{{ '%.6f'|format(dt.last_lat) }}, {{ '%.6f'|format(dt.last_lng) }}</strong>

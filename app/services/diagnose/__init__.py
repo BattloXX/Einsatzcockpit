@@ -10,6 +10,7 @@ from app.services.diagnose import (  # noqa: F401
     objekte,
     osm,
     redis,
+    standort,
     suche,
     worker,
 )
