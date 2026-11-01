@@ -134,6 +134,8 @@ class Settings(BaseSettings):
     FCM_PROJECT_ID: str = ""
     # Pfad zur Service-Account-JSON-Datei (außerhalb des Repos!)
     FCM_CREDENTIALS_PATH: str = ""
+    # Apple Developer Team-ID, 10 Zeichen; leer = AASA nicht ausgeliefert
+    APPLE_TEAM_ID: str = ""
     # Erst nach Freigabe der Critical-Alerts-Berechtigung durch Apple aktivieren.
     IOS_CRITICAL_ALERTS_ENABLED: bool = False
 
