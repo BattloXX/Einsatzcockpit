@@ -5,6 +5,7 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 ## Unreleased
 
 - **Admin-MCP / App-Geraete:** Zwei rein lesende Tools `admin_geraete_pruefen` und `admin_geraet_details` mit gemeinsamer Gesundheitsauswertung, Flottenfiltern, begrenzten Aggregaten/IDs, maskierten Details und Einstellungen ohne Rueckkanal. GitHub-Ausfall mit unbekannter Soll-Version; separat von Gesamtzustand-Panels.
+- **BSP-Overlays:** Die Karte zeigt hoechstens eine Brandschutzplan-Ebene gleichzeitig (Planwechsel entfernt die vorherige, die Auswahl wird gemerkt). Ausblenden wirkt sofort und bleibt nach Neuladen und Planwechsel bestehen; eine gespeicherte Einsatz-/Objektvorgabe wird nicht mehr von einer alten persoenlichen Ueberschreibung verdeckt. Die Auswahlliste und der Autodruck enthalten je logischem Plan nur die zuletzt freigegebene auslieferbare Ebene.
 
 - Systemdiagnose: lesende App-Geraeteflotte mit Filtern, Release-Ampel, Detailansicht und gemeinsamem Gesundheitscheck `app.geraete`.
 

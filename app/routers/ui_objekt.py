@@ -2761,7 +2761,9 @@ def bsp_overlays_json(
         from app.models.objekt import ObjektBspOverlay
 
         # Keine Entwurfsdaten oder Raster-URLs ausliefern; Listenformat bleibt stabil.
-        auslieferbar = {overlay["id"] for overlay in daten}
+        from app.services.objekt_bsp_overlay_service import ersetzte_overlay_ids
+
+        auslieferbar = {overlay["id"] for overlay in daten} | ersetzte_overlay_ids(db, objekt)
         anzahl = sum(
             overlay.id not in auslieferbar
             for overlay in db.query(ObjektBspOverlay).filter(

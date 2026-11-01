@@ -393,3 +393,19 @@ def test_polygon_raster_alpha_box_und_druck_weiss(umgebung):
         assert druck.size == (320, 160)
         assert druck.getpixel((20, 20)) == (255, 0, 0, 255)
         assert druck.getpixel((300, 140)) == (255, 255, 255, 255)
+
+
+def test_nur_neueste_freigabe_je_logischem_plan():
+    from datetime import datetime
+
+    def o(id, name="Lageplan", freigegeben=None, dok=1, seite=1):
+        return ObjektBspOverlay(id=id, objekt_id=1, dokument_id=dok, seite=seite, name=name,
+                                geschoss="EG", bereich="", freigegeben_am=freigegeben)
+
+    alt, neu = o(1, freigegeben=datetime(2026, 10, 1)), o(2, name=" lageplan ", freigegeben=datetime(2026, 10, 2))
+    anderer, andere_seite = o(3, name="Keller"), o(4, seite=2)
+    ergebnis = bsp.nur_neueste_je_plan([alt, neu, anderer, andere_seite])
+    assert [x.id for x in ergebnis] == [2, 3, 4]
+    # Gleicher Stand: hoehere ID gewinnt, Reihenfolge der Eingabe ist egal.
+    gleich = bsp.nur_neueste_je_plan([o(6), o(5)])
+    assert [x.id for x in gleich] == [6]
