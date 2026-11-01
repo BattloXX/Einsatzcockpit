@@ -732,10 +732,12 @@ async def _session_mit_kontext(request: Request, call_next):
                 if user is not None and fcm_token:
                     from app.services.push_service import upsert_fcm_token
 
+                    fcm_platform = (request.query_params.get("fcm_platform") or "").strip().lower()
                     upsert_fcm_token(
                         db,
                         user_id=user.id,
                         token=fcm_token,
+                        platform=fcm_platform if fcm_platform in {"android", "ios"} else None,
                         device_token_id=device_token_id if is_device else None,
                     )
                     # request.state.user bleibt nach db.close() in den Routen

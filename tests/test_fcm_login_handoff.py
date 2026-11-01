@@ -1,3 +1,5 @@
+import pytest
+
 from app.core.security import hash_api_key, hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -140,5 +142,50 @@ def test_fcm_token_wird_bei_erneutem_login_aktualisiert_nicht_dupliziert(client,
         assert rows[0].user_id == second_user_id
         assert rows[0].user_id != first_user_id
         assert rows[0].device_token_id is None
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [("ios", "ios"), (" IOS ", "ios"), ("android", "android"), ("windows", "android")],
+)
+def test_session_fcm_platform_beim_anlegen(client, setup_db, platform, expected):
+    username = f"fcm_platform_new_{platform.strip()}"
+    token = f"fcm-platform-new-{platform.strip()}"
+    user_id = _make_user(username)
+    assert _post_login(client, username, "").status_code == 302
+
+    response = client.get("/", params={"fcm_token": token, "fcm_platform": platform})
+    assert response.status_code == 200
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(FcmToken).filter_by(token=token).one()
+        assert row.user_id == user_id
+        assert row.platform == expected
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("platform", [None, "windows"])
+def test_session_fcm_ohne_gueltige_platform_behaelt_ios(client, setup_db, platform):
+    username = f"fcm_platform_existing_{platform}"
+    _make_user(username)
+    assert _post_login(client, username, "").status_code == 302
+    token = f"fcm-platform-existing-{platform}"
+    assert client.get("/", params={"fcm_token": token, "fcm_platform": "ios"}).status_code == 200
+
+    params = {"fcm_token": token}
+    if platform is not None:
+        params["fcm_platform"] = platform
+    assert client.get("/", params=params).status_code == 200
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(FcmToken).filter_by(token=token).one()
+        assert row.platform == "ios"
     finally:
         db.close()
