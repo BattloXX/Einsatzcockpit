@@ -175,7 +175,7 @@ def test_non_native_browser_keeps_client_side_status_check():
 
 
 def _sub_count(html: str) -> int:
-    m = re.search(r'badge-pill--gray"[^>]*>\s*(\d+)\s*Geräte?', html)
+    m = re.search(r'badge-pill--gray[^"]*"[^>]*>\s*(\d+)\s*Geräte?', html)
     assert m, "Abonnenten-Zähler nicht gefunden"
     return int(m.group(1))
 

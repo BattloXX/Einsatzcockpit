@@ -2,20 +2,24 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Gruppen – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Gruppen'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
 {% with section_id='personal' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>Gruppen</h1>
-      <p class="page-header__sub">Benannte Empfaengergruppen verwalten (werden fuer SMS-Versand, Benachrichtigungen und andere Funktionen verwendet).</p>
-    </div>
-    <div style="display:flex;gap:8px;">
+<div class="sys-page">
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div>
+        <h1>{{ icon("users-group") }} Gruppen</h1>
+        <p class="sys-muted">Benannte Empfängergruppen verwalten (werden für SMS-Versand, Benachrichtigungen und andere Funktionen verwendet).</p>
+      </div>
       <button class="btn btn--secondary" data-ec-action="open-dialog" data-ec-dialog="gruppenImportModal">Excel importieren</button>
     </div>
-  </div>
+  </header>
 
   {% if saved %}
   <div class="alert alert--success">
@@ -24,19 +28,19 @@
     {{ request.query_params.get('groups_created') }} Gruppe(n) angelegt,
     {{ request.query_params.get('members_created') }} Mitglied(er) neu angelegt,
     {{ request.query_params.get('members_updated', '0') }} aktualisiert,
-    {{ request.query_params.get('memberships_added', '0') }} Mitgliedschaften hinzugefuegt.
+    {{ request.query_params.get('memberships_added', '0') }} Mitgliedschaften hinzugefügt.
     {% if request.query_params.get('skipped') and request.query_params.get('skipped') != '0' %}
-    {{ request.query_params.get('skipped') }} Zeile(n) uebersprungen.
+    {{ request.query_params.get('skipped') }} Zeile(n) übersprungen.
     {% endif %}
     {% if request.query_params.get('row_errors') and request.query_params.get('row_errors') != '0' %}
-    <br><strong>{{ request.query_params.get('row_errors') }} Zeile(n) mit Fehlern</strong> wurden uebersprungen.
+    <br><strong>{{ request.query_params.get('row_errors') }} Zeile(n) mit Fehlern</strong> wurden übersprungen.
     {% endif %}
     {% endif %}
   </div>
   {% endif %}
   {% if request.query_params.get('error') == 'missing_columns' %}
   <div class="alert alert--error">
-    Excel-Datei ungueltig: Pflicht-Spalten nicht erkannt.
+    Excel-Datei ungültig: Pflicht-Spalten nicht erkannt.
     {% if request.query_params.get('error_detail') %}
     {{ request.query_params.get('error_detail') }}
     {% else %}
@@ -44,7 +48,7 @@
     {% endif %}
   </div>
   {% elif request.query_params.get('error') == 'invalid_excel' %}
-  <div class="alert alert--error">Ungueltige Excel-Datei. Bitte .xlsx-Format verwenden.</div>
+  <div class="alert alert--error">Ungültige Excel-Datei. Bitte .xlsx-Format verwenden.</div>
   {% elif request.query_params.get('error') == 'empty_sheet' %}
   <div class="alert alert--error">Excel-Datei ist leer – keine Kopfzeile gefunden.</div>
   {% elif request.query_params.get('error') == 'empty_file' %}
@@ -52,22 +56,22 @@
   {% elif request.query_params.get('error') == 'openpyxl_missing' %}
   <div class="alert alert--error">Excel-Modul (openpyxl) nicht installiert. Admin kontaktieren.</div>
   {% elif request.query_params.get('error') == 'invalid_group' %}
-  <div class="alert alert--error">Ungueltiger Gruppen-Parameter. Bitte eine Gruppe aus der Liste auswaehlen.</div>
+  <div class="alert alert--error">Ungültiger Gruppen-Parameter. Bitte eine Gruppe aus der Liste auswählen.</div>
   {% elif request.query_params.get('error') == 'empty' %}
   <div class="alert alert--error">Name darf nicht leer sein.</div>
   {% elif request.query_params.get('error') %}
   <div class="alert alert--error">Fehler: {{ request.query_params.get('error') }}</div>
   {% endif %}
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;align-items:start;">
+  <div class="sys-grid-2 sys-grid-2--cards">
 
     <!-- Neue Gruppe anlegen -->
-    <div class="chart-box">
-      <h3 style="margin-bottom:16px;">Neue Gruppe anlegen</h3>
-      <form method="post" action="/admin/gruppen/neu">
+    <section class="sys-card">
+      <div class="sys-card__head"><h2>{{ icon("plus") }} Neue Gruppe anlegen</h2></div>
+      <form method="post" action="/admin/gruppen/neu" class="sys-stack">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <div class="form-group">
-          <label class="form-label">Name <span style="color:var(--color-danger)">*</span></label>
+          <label class="form-label">Name <span class="sys-danger">*</span></label>
           <input type="text" name="name" class="form-input" required maxlength="150"
                  placeholder="z.B. Kommando, Atemschutz, Alle">
         </div>
@@ -76,50 +80,50 @@
           <input type="text" name="description" class="form-input" maxlength="500"
                  placeholder="Optional – kurze Beschreibung">
         </div>
-        <div style="margin-top:16px;">
+        <div class="sys-row">
           <button type="submit" class="btn btn--primary">Anlegen</button>
         </div>
       </form>
-    </div>
+    </section>
 
     <!-- Gruppen-Liste -->
-    <div>
+    <div class="sys-stack">
       {% if not groups %}
-      <p class="text-muted">Noch keine Gruppen angelegt.</p>
+      <p class="sys-muted">Noch keine Gruppen angelegt.</p>
       {% endif %}
       {% for grp in groups %}
-      <div class="chart-box" style="margin-bottom:18px;" id="gruppe-{{ grp.id }}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div>
-            <strong style="font-size:1.05rem;">{{ grp.name }}</strong>
+      <section class="sys-card sys-m-0" id="gruppe-{{ grp.id }}">
+        <div class="sys-card__head">
+          <div class="sys-row">
+            <strong>{{ grp.name }}</strong>
             {% if grp.description %}
-            <span class="text-muted" style="font-size:.85rem;margin-left:8px;">{{ grp.description }}</span>
+            <span class="sys-muted sys-small">{{ grp.description }}</span>
             {% endif %}
-            <span class="badge-pill badge-pill--gray" style="font-size:.75rem;margin-left:8px;">
+            <span class="badge-pill badge-pill--gray sys-small">
               {{ grp.members|length }} Mitglied{{ 'er' if grp.members|length != 1 else '' }}
             </span>
           </div>
-          <div style="display:flex;gap:6px;">
+          <div class="sys-row">
             <button type="button" class="btn btn--ghost btn--xs"
                     onclick="toggleEdit({{ grp.id }})">Bearbeiten</button>
             <form method="post" action="/admin/gruppen/{{ grp.id }}/loeschen"
-                  onsubmit="return confirm('Gruppe \'{{ grp.name }}\' wirklich loeschen?')">
+                  onsubmit="return confirm('Gruppe \'{{ grp.name }}\' wirklich löschen?')">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button type="submit" class="btn btn--danger btn--xs">Loeschen</button>
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
             </form>
           </div>
         </div>
 
         <!-- Name bearbeiten (ausgeklappt) -->
-        <div id="edit-{{ grp.id }}" style="display:none;margin-bottom:12px;padding:12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">
-          <form method="post" action="/admin/gruppen/{{ grp.id }}/edit" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+        <div id="edit-{{ grp.id }}" class="sys-option sys-mb-2" style="display:none">
+          <form method="post" action="/admin/gruppen/{{ grp.id }}/edit" class="sys-toolbar">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <div class="form-group" style="flex:1;min-width:160px;margin:0;">
-              <label class="form-label" style="font-size:.8rem;">Name</label>
+            <div class="form-group sys-grow sys-m-0">
+              <label class="form-label sys-small">Name</label>
               <input type="text" name="name" class="form-input" value="{{ grp.name }}" required maxlength="150">
             </div>
-            <div class="form-group" style="flex:2;min-width:200px;margin:0;">
-              <label class="form-label" style="font-size:.8rem;">Beschreibung</label>
+            <div class="form-group sys-grow sys-m-0">
+              <label class="form-label sys-small">Beschreibung</label>
               <input type="text" name="description" class="form-input"
                      value="{{ grp.description or '' }}" maxlength="500">
             </div>
@@ -129,31 +133,30 @@
 
         <!-- Mitglieder-Auswahl -->
         {% set grp_member_ids = grp.members|map(attribute='member_id')|list %}
-        <form method="post" action="/admin/gruppen/{{ grp.id }}/mitglieder">
+        <form method="post" action="/admin/gruppen/{{ grp.id }}/mitglieder" class="sys-stack">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <div style="margin-bottom:8px;font-size:.85rem;font-weight:600;color:var(--text-muted);">MITGLIEDER ZUWEISEN</div>
+          <div class="sys-eyebrow">MITGLIEDER ZUWEISEN</div>
           {% if members %}
-          <div style="display:flex;flex-wrap:wrap;gap:2px 16px;max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px;">
+          <div class="sys-option sys-scroll-box sys-scroll-box--cols">
             {% for m in members %}
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 0;min-width:180px;flex:1 1 180px;">
+            <label class="sys-check">
               <input type="checkbox" name="member_id" value="{{ m.id }}"
-                     {% if m.id in grp_member_ids %}checked{% endif %}
-                     style="flex-shrink:0;">
-              <span style="font-size:.9rem;">{{ m.lastname }}, {{ m.firstname }}
-                {% if not m.phone %}<span class="text-muted" style="font-size:.75rem;">(keine Tel.)</span>{% endif %}
+                     {% if m.id in grp_member_ids %}checked{% endif %}>
+              <span class="sys-small">{{ m.lastname }}, {{ m.firstname }}
+                {% if not m.phone %}<span class="sys-muted sys-small">(keine Tel.)</span>{% endif %}
               </span>
             </label>
             {% endfor %}
           </div>
-          <div style="margin-top:10px;">
+          <div class="sys-row">
             <button type="submit" class="btn btn--primary btn--xs">Mitglieder speichern</button>
           </div>
           {% else %}
-          <p class="text-muted" style="font-size:.85rem;">Keine aktiven Mitglieder vorhanden.
+          <p class="sys-muted sys-small">Keine aktiven Mitglieder vorhanden.
             <a href="/admin/mitglieder">Mitglieder verwalten</a></p>
           {% endif %}
         </form>
-      </div>
+      </section>
       {% endfor %}
     </div>
 
@@ -170,14 +173,14 @@
     </div>
     <div class="modal__body">
       <div class="form-group">
-        <label class="form-label">Zielgruppe <span style="color:var(--color-danger)">*</span></label>
+        <label class="form-label">Zielgruppe <span class="sys-danger">*</span></label>
         <select name="target_group_id" class="form-input" required>
-          <option value="">-- Gruppe auswaehlen --</option>
+          <option value="">-- Gruppe auswählen --</option>
           {% for grp in groups %}
           <option value="{{ grp.id }}">{{ grp.name }}</option>
           {% endfor %}
         </select>
-        <p style="margin-top:4px;font-size:.8rem;color:var(--text-muted);">
+        <p class="form-hint">
           Alle importierten Personen werden dieser Gruppe zugeordnet.
         </p>
       </div>
@@ -185,15 +188,15 @@
         <label class="form-label">Excel-Datei (.xlsx)</label>
         <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                class="form-input" required>
-        <p style="margin-top:4px;font-size:.8rem;color:var(--text-muted);">
+        <p class="form-hint">
           Erwartet: Spalten <strong>Zuname/Nachname</strong> und <strong>Vorname</strong>,
           optional <strong>Telefon</strong> und <strong>E-Mail</strong>.
         </p>
       </div>
-      <ul style="margin:8px 0 0 0;padding-left:18px;font-size:.82rem;color:var(--text-muted);line-height:1.7;">
+      <ul class="sys-list sys-muted sys-small">
         <li><strong>Fehlende Mitglieder</strong> werden automatisch angelegt.</li>
         <li><strong>Bestehende Mitglieder</strong> (gleicher Name) werden bei Bedarf mit Telefon/E-Mail aktualisiert.</li>
-        <li><strong>Mitgliedschaften</strong> werden additiv hinzugefuegt – bestehende Zuweisungen bleiben erhalten.</li>
+        <li><strong>Mitgliedschaften</strong> werden additiv hinzugefügt – bestehende Zuweisungen bleiben erhalten.</li>
       </ul>
     </div>
     <div class="modal__footer">

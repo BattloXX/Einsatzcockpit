@@ -2,54 +2,55 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}SMS-Einsatzinfo – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SMS-Einsatzinfo'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
-<div class="page-content">
-  {% include "admin/_sms_tabs.html" %}
-  <div class="page-header">
-    <div>
-      <h1>SMS-Einsatzinfo</h1>
-      <p class="page-header__sub">
-        Konfiguriere, wer bei einem Alarm automatisch eine SMS erhaelt, und welchen Text sie enthaelt.
-      </p>
-    </div>
-  </div>
+{% include "admin/_sms_tabs.html" %}
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("message-share") }} SMS-Einsatzinfo</h1>
+    <p class="sys-muted">
+      Konfiguriere, wer bei einem Alarm automatisch eine SMS erhält, und welchen Text sie enthält.
+    </p>
+  </header>
 
   {% if saved %}
   <div class="alert alert--success">Einstellungen gespeichert.</div>
   {% endif %}
 
   <!-- ── Allgemeine Einstellungen ─────────────────────────────────────────── -->
-  <div class="admin-section-title">Allgemeine Einstellungen</div>
-  <div class="chart-box" style="margin-bottom:24px;">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Allgemeine Einstellungen</h2></div>
     <form method="post" action="/admin/einsatzinfo-sms/einstellungen">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
-        <div>
+      <div class="sys-grid-2">
+        <div class="sys-stack">
           <div class="form-group">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <label class="sys-check">
               <input type="checkbox" name="enabled" value="true"
                      {% if org_settings and org_settings.einsatzinfo_sms_enabled %}checked{% endif %}>
               <span><strong>SMS-Einsatzinfo aktiviert</strong><br>
-              <small class="text-muted">Bei jedem Alarm automatisch SMS versenden (falls Gateway verbunden).</small></span>
+              <small class="sys-muted">Bei jedem Alarm automatisch SMS versenden (falls Gateway verbunden).</small></span>
             </label>
           </div>
-          <div class="form-group" style="margin-top:12px;">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <div class="form-group">
+            <label class="sys-check">
               <input type="checkbox" name="send_exercise" value="true"
                      {% if org_settings and org_settings.einsatzinfo_sms_send_exercise %}checked{% endif %}>
-              <span>Auch bei <strong>Uebungen</strong> senden
-              <small class="text-muted">(mit [UEBUNG]-Prafix)</small></span>
+              <span>Auch bei <strong>Übungen</strong> senden
+              <small class="sys-muted">(mit [UEBUNG]-Präfix)</small></span>
             </label>
-            <small class="text-muted">GK-SMS: eigener Schalter in den GSL-Einstellungen.</small>
+            <small class="sys-muted">GK-SMS: eigener Schalter in den GSL-Einstellungen.</small>
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">Org-Standard-Vorlage</label>
-          <textarea name="template" class="form-input" rows="3" maxlength="500"
-                    placeholder="{{ default_template }}"
-                    style="resize:vertical;font-family:monospace;font-size:.88rem;">{{ (org_settings.einsatzinfo_sms_template if org_settings and org_settings.einsatzinfo_sms_template) or '' }}</textarea>
-          <div class="form-help" style="margin-top:4px;font-size:.8rem;color:var(--text-muted);">
+          <textarea name="template" class="form-input sys-resize-y sys-mono sys-small" rows="3" maxlength="500"
+                    placeholder="{{ default_template }}">{{ (org_settings.einsatzinfo_sms_template if org_settings and org_settings.einsatzinfo_sms_template) or '' }}</textarea>
+          <div class="form-hint">
             Platzhalter:
             <code>{stichwort}</code> <code>{adresse}</code> <code>{ort}</code>
             <code>{meldung}</code> <code>{einsatzgrund}</code>
@@ -62,195 +63,186 @@
           </div>
         </div>
       </div>
-      <div style="margin-top:16px;">
+      <div class="sys-actions">
         <button type="submit" class="btn btn--primary">Einstellungen speichern</button>
       </div>
     </form>
-  </div>
+  </section>
 
-  <div class="admin-section-title">Vorschau: SMS bei einer Änderung (Nachalarmierung)</div>
-  <div class="chart-box" style="margin-bottom:24px;min-width:0;">
-    <p class="text-muted">Die letzten fünf echten Einsätze (ohne Übungen): Erstalarm und letzte Nachalarmierung im Vergleich.
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("eye") }} Vorschau: SMS bei einer Änderung (Nachalarmierung)</h2></div>
+    <p class="sys-muted">Die letzten fünf echten Einsätze (ohne Übungen): Erstalarm und letzte Nachalarmierung im Vergleich.
       Beispiele verwenden die aktuelle Vorlage und den Einsatzbeginn als Zeitpunkt.
       Ohne Zusatzcodes wird "Beispiel-Code" eingesetzt. Die Anzeige löst keinen Versand aus.</p>
     {% for einsatz in sms_vorschau %}
-    <details style="margin-top:16px;min-width:0;"{% if loop.first %} open{% endif %}>
-      <summary style="cursor:pointer;overflow-wrap:anywhere;">
+    <details class="sys-details"{% if loop.first %} open{% endif %}>
+      <summary class="sys-summary">
         Einsatz {{ einsatz.nummer }} | {{ einsatz.zeit|local_datetime }} | {{ einsatz.stichwort }}
       </summary>
-      <div class="sms-vorschau-texte">
+      <div class="sys-grid-2">
         {% for titel, sms in [('Erste Alarm-SMS', einsatz.erstalarm), ('Änderungs-SMS (Nachalarmierung)', einsatz.nachalarm)] %}
-        <div style="min-width:0;">
-          <h3 style="font-size:.95rem;margin-bottom:4px;">{{ titel }}</h3>
-          <small class="text-muted">{{ sms.herkunft }}</small>
-          <pre class="sms-vorschau-text">{{ sms.text }}</pre>
-          <small class="text-muted">{{ sms.zeichen }} Zeichen | {{ sms.segmente }} SMS-Segmente | {{ sms.zeichensatz }}</small>
+        <div class="sys-vorschau-block">
+          <h3 class="sys-vorschau-title">{{ titel }}</h3>
+          <small class="sys-muted">{{ sms.herkunft }}</small>
+          <pre class="sys-vorschau-text">{{ sms.text }}</pre>
+          <small class="sys-muted">{{ sms.zeichen }} Zeichen | {{ sms.segmente }} SMS-Segmente | {{ sms.zeichensatz }}</small>
         </div>
         {% endfor %}
       </div>
-      <h3 style="font-size:.95rem;margin:12px 0 4px;">Elemente der Vorlage</h3>
-      <table class="sms-vorschau-elemente">
+      <h3 class="sys-vorschau-title sys-mt-2">Elemente der Vorlage</h3>
+      <div class="sys-table-wrap">
+      <table class="sys-table">
         <thead><tr><th>Platzhalter</th><th>Inhalt</th><th>In Vorlage</th></tr></thead>
         <tbody>
           {% for name, wert, verwendet in einsatz.elemente %}
           <tr>
             <td><code>{{ '{' ~ name ~ '}' }}</code></td>
-            <td>{% if wert %}{{ wert }}{% else %}<span class="text-muted">(leer)</span>{% endif %}</td>
-            <td>{% if verwendet %}ja{% else %}<span class="text-muted">nein</span>{% endif %}</td>
+            <td>{% if wert %}{{ wert }}{% else %}<span class="sys-muted">(leer)</span>{% endif %}</td>
+            <td>{% if verwendet %}ja{% else %}<span class="sys-muted">nein</span>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </details>
     {% else %}
-    <p class="text-muted">Noch keine Einsätze für diese Organisation vorhanden.</p>
+    <p class="sys-muted sys-m-0">Noch keine Einsätze für diese Organisation vorhanden.</p>
     {% endfor %}
-  </div>
-  <style>
-    .sms-vorschau-texte { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
-    .sms-vorschau-text { white-space:pre-wrap; overflow-wrap:anywhere; font-family:monospace; font-size:.88rem; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:4px; }
-    .sms-vorschau-elemente { width:100%; border-collapse:collapse; font-size:.88rem; }
-    .sms-vorschau-elemente th, .sms-vorschau-elemente td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); overflow-wrap:anywhere; vertical-align:top; }
-    @media (max-width:760px) { .sms-vorschau-texte { grid-template-columns:minmax(0,1fr); gap:12px; } }
-  </style>
+  </section>
 
   <!-- ── Basis-Verteiler ──────────────────────────────────────────────────── -->
-  <div class="admin-section-title" style="margin-top:24px;">
-    Basis-Verteiler
-    <small style="font-weight:400;color:var(--text-muted)">(gilt fuer alle Stichworte)</small>
-  </div>
-  <div class="chart-box" style="margin-bottom:24px;">
+  <section class="sys-card">
+    <div class="sys-card__head">
+      <h2>{{ icon("users-group") }} Basis-Verteiler <small class="sys-muted">(gilt für alle Stichworte)</small></h2>
+    </div>
     <form method="post" action="/admin/einsatzinfo-sms/basis-verteiler">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;">
+      <div class="sys-grid-2">
         <!-- Gruppen -->
         <div>
-          <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px;">GRUPPEN</div>
+          <div class="sys-eyebrow">GRUPPEN</div>
           {% if groups %}
-          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;">
+          <div class="sys-option">
             {% for grp in groups %}
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
+            <label class="sys-check sys-small">
               <input type="checkbox" name="group_id" value="{{ grp.id }}"
                      {% if grp.id in basis_group_ids %}checked{% endif %}>
               <span>{{ grp.name }}
-                <span class="badge-pill badge-pill--gray" style="font-size:.7rem;">{{ grp.members|length }}</span>
+                <span class="badge-pill badge-pill--gray sys-small">{{ grp.members|length }}</span>
               </span>
             </label>
             {% endfor %}
           </div>
           {% else %}
-          <p class="text-muted" style="font-size:.85rem;">Keine Gruppen. <a href="/admin/gruppen">Gruppen anlegen</a></p>
+          <p class="sys-muted sys-small">Keine Gruppen. <a href="/admin/gruppen">Gruppen anlegen</a></p>
           {% endif %}
         </div>
         <!-- Einzelne Mitglieder -->
         <div>
-          <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px;">EINZELNE MITGLIEDER</div>
+          <div class="sys-eyebrow">EINZELNE MITGLIEDER</div>
           {% if members %}
-          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;max-height:200px;overflow-y:auto;">
+          <div class="sys-option sys-scroll-box">
             {% for m in members %}
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0;font-size:.88rem;">
+            <label class="sys-check sys-small">
               <input type="checkbox" name="member_id" value="{{ m.id }}"
                      {% if m.id in basis_member_ids %}checked{% endif %}>
               {{ m.lastname }}, {{ m.firstname }}
-              {% if not m.phone %}<span class="text-muted" style="font-size:.75rem;">(keine Tel.)</span>{% endif %}
+              {% if not m.phone %}<span class="sys-muted sys-small">(keine Tel.)</span>{% endif %}
             </label>
             {% endfor %}
           </div>
           {% else %}
-          <p class="text-muted" style="font-size:.85rem;">Keine aktiven Mitglieder.</p>
+          <p class="sys-muted sys-small">Keine aktiven Mitglieder.</p>
           {% endif %}
         </div>
       </div>
-      <div style="margin-top:16px;">
+      <div class="sys-actions">
         <button type="submit" class="btn btn--primary">Basis-Verteiler speichern</button>
       </div>
     </form>
-  </div>
+  </section>
 
   <!-- ── Je-Stichwort-Konfiguration ──────────────────────────────────────── -->
-  <div class="admin-section-title" style="margin-top:8px;">
-    Stichwort-spezifischer Verteiler
-    <small style="font-weight:400;color:var(--text-muted)">(optional – ergaenzt den Basis-Verteiler)</small>
-  </div>
+  <h2 class="sys-section-title">{{ icon("list-details") }} Stichwort-spezifischer Verteiler
+    <small class="sys-muted">(optional – ergänzt den Basis-Verteiler)</small></h2>
 
   {% if not alarm_types %}
-  <div class="chart-box" style="margin-bottom:16px;">
-    <p class="text-muted">Keine Alarmtypen vorhanden. <a href="/admin/alarmtypen">Alarmtypen konfigurieren</a></p>
-  </div>
+  <section class="sys-card">
+    <p class="sys-muted sys-m-0">Keine Alarmtypen vorhanden. <a href="/admin/alarmtypen">Alarmtypen konfigurieren</a></p>
+  </section>
   {% endif %}
 
   {% for at in alarm_types %}
   {% set at_data = stichwort_recipients.get(at.id, {}) %}
   {% set at_group_ids = at_data.get('group_ids') or [] %}
   {% set at_member_ids = at_data.get('member_ids') or [] %}
-  <div class="chart-box" style="margin-bottom:14px;" id="stichwort-{{ at.id }}">
+  <section class="sys-card" id="stichwort-{{ at.id }}">
     <details>
-      <summary style="cursor:pointer;display:flex;align-items:center;gap:12px;list-style:none;user-select:none;">
-        <span style="font-size:1rem;">&#9656;</span>
-        <span class="badge-pill" style="font-size:.82rem;background:var(--surface);border:1px solid var(--border);">
+      <summary class="sys-summary">
+        {{ icon("chevron-right") }}
+        <span class="sys-pill sys-mono">
           {{ at.code }}
         </span>
-        <span style="font-weight:600;">{{ at.label or at.code }}</span>
+        <span class="sys-semibold">{{ at.label or at.code }}</span>
         {% if at_group_ids or at_member_ids %}
-        <span class="badge-pill badge-pill--green" style="font-size:.72rem;">
+        <span class="badge-pill badge-pill--green sys-small">
           {{ (at_group_ids|length) + (at_member_ids|length) }} Empf.
         </span>
         {% endif %}
         {% if at.einsatzinfo_sms_template %}
-        <span class="badge-pill badge-pill--gray" style="font-size:.72rem;">eigene Vorlage</span>
+        <span class="badge-pill badge-pill--gray sys-small">eigene Vorlage</span>
         {% endif %}
       </summary>
-      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
-        <form method="post" action="/admin/einsatzinfo-sms/stichwort/{{ at.id }}">
+      <div class="sys-divider">
+        <form method="post" action="/admin/einsatzinfo-sms/stichwort/{{ at.id }}" class="sys-stack">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <div class="form-group">
-            <label class="form-label" style="font-size:.85rem;">Vorlagen-Override (leer = Org-Standard verwenden)</label>
-            <textarea name="template_override" class="form-input" rows="2" maxlength="500"
-                      style="resize:vertical;font-family:monospace;font-size:.85rem;"
-                      placeholder="Leer lassen fuer Org-Standard-Vorlage">{{ at.einsatzinfo_sms_template or '' }}</textarea>
+            <label class="form-label">Vorlagen-Override (leer = Org-Standard verwenden)</label>
+            <textarea name="template_override" class="form-input sys-resize-y sys-mono sys-small" rows="2" maxlength="500"
+                      placeholder="Leer lassen für Org-Standard-Vorlage">{{ at.einsatzinfo_sms_template or '' }}</textarea>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:12px;">
+          <div class="sys-grid-2">
             <div>
-              <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px;">GRUPPEN</div>
+              <div class="sys-eyebrow">GRUPPEN</div>
               {% if groups %}
-              <div style="border:1px solid var(--border);border-radius:4px;padding:6px;">
+              <div class="sys-option">
                 {% for grp in groups %}
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0;font-size:.88rem;">
+                <label class="sys-check sys-small">
                   <input type="checkbox" name="group_id" value="{{ grp.id }}"
                          {% if grp.id in at_group_ids %}checked{% endif %}>
-                  {{ grp.name }} <span class="badge-pill badge-pill--gray" style="font-size:.7rem;">{{ grp.members|length }}</span>
+                  {{ grp.name }} <span class="badge-pill badge-pill--gray sys-small">{{ grp.members|length }}</span>
                 </label>
                 {% endfor %}
               </div>
               {% else %}
-              <p class="text-muted" style="font-size:.82rem;">Keine Gruppen. <a href="/admin/gruppen">Anlegen</a></p>
+              <p class="sys-muted sys-small">Keine Gruppen. <a href="/admin/gruppen">Anlegen</a></p>
               {% endif %}
             </div>
             <div>
-              <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px;">MITGLIEDER</div>
+              <div class="sys-eyebrow">MITGLIEDER</div>
               {% if members %}
-              <div style="border:1px solid var(--border);border-radius:4px;padding:6px;max-height:160px;overflow-y:auto;">
+              <div class="sys-option sys-scroll-box sys-scroll-box--sm">
                 {% for m in members %}
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:2px 0;font-size:.85rem;">
+                <label class="sys-check sys-small">
                   <input type="checkbox" name="member_id" value="{{ m.id }}"
                          {% if m.id in at_member_ids %}checked{% endif %}>
                   {{ m.lastname }}, {{ m.firstname }}
-                  {% if not m.phone %}<span class="text-muted" style="font-size:.73rem;">(keine Tel.)</span>{% endif %}
+                  {% if not m.phone %}<span class="sys-muted sys-small">(keine Tel.)</span>{% endif %}
                 </label>
                 {% endfor %}
               </div>
               {% else %}
-              <p class="text-muted" style="font-size:.82rem;">Keine aktiven Mitglieder.</p>
+              <p class="sys-muted sys-small">Keine aktiven Mitglieder.</p>
               {% endif %}
             </div>
           </div>
-          <div style="margin-top:12px;">
+          <div class="sys-row">
             <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
           </div>
         </form>
       </div>
     </details>
-  </div>
+  </section>
   {% endfor %}
 
 </div>

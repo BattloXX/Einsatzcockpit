@@ -2,20 +2,26 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}SMS-Versandweg - Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{"label": "SMS-Versandweg"}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-content">
-  {% include "admin/_sms_tabs.html" %}
-  <div class="page-header"><div><h1>SMS-Versandweg</h1>
-    <p class="page-header__sub">Primaeren Provider und optionalen Fallback festlegen.</p></div></div>
+{% include "admin/_sms_tabs.html" %}
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("message-share") }} SMS-Versandweg</h1>
+    <p class="sys-muted">Primären Provider und optionalen Fallback festlegen.</p>
+  </header>
   {% if saved %}<div class="alert alert--success">Konfiguration gespeichert.</div>{% endif %}
-  {% if error == "base_url" %}<div class="alert alert--error">Die EUS-Serveradresse ist ungueltig.</div>{% endif %}
-  {% if error == "provider" %}<div class="alert alert--error">Die Provider-Auswahl ist ungueltig.</div>{% endif %}
-  {% if error == "retention" %}<div class="alert alert--error">Die Aufbewahrungswerte muessen nicht-negative ganze Zahlen sein.</div>{% endif %}
+  {% if error == "base_url" %}<div class="alert alert--error">Die EUS-Serveradresse ist ungültig.</div>{% endif %}
+  {% if error == "provider" %}<div class="alert alert--error">Die Provider-Auswahl ist ungültig.</div>{% endif %}
+  {% if error == "retention" %}<div class="alert alert--error">Die Aufbewahrungswerte müssen nicht-negative ganze Zahlen sein.</div>{% endif %}
   <form method="post" action="/admin/sms-provider/speichern" x-data="{ secretChanged: false }">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="secret_changed" :value="secretChanged ? '1' : ''">
-    <div class="chart-box" style="margin-bottom:20px;"><h3>Versandweg</h3>
-      <div class="form-group"><label class="form-label">Primaerer Provider</label>
+    <section class="sys-card"><div class="sys-card__head"><h2>{{ icon("route") }} Versandweg</h2></div><div class="sys-stack">
+      <div class="form-group"><label class="form-label">Primärer Provider</label>
         <select class="form-input" name="primary_provider">
           <option value="gateway" {% if not config or config.primary_provider == "gateway" %}selected{% endif %}>SMS-Gateway</option>
           <option value="eus" {% if config and config.primary_provider == "eus" %}selected{% endif %}>EUS Message Send API</option>
@@ -26,45 +32,45 @@
           <option value="gateway" {% if config and config.fallback_provider == "gateway" %}selected{% endif %}>SMS-Gateway</option>
           <option value="eus" {% if config and config.fallback_provider == "eus" %}selected{% endif %}>EUS Message Send API</option>
         </select></div>
-      <div class="alert alert--info">EUS wird nur verwendet, wenn der Zugang vollstaendig ausgefuellt und aktiviert ist.</div>
-    </div>
-    <div class="chart-box" style="margin-bottom:20px;"><h3>EUS-Zugangsdaten</h3>
-      <label><input type="checkbox" name="eus_enabled" value="1" {% if config and config.eus_enabled %}checked{% endif %}> EUS aktivieren</label>
+      <div class="alert alert--info">EUS wird nur verwendet, wenn der Zugang vollständig ausgefüllt und aktiviert ist.</div>
+    </div></section>
+    <section class="sys-card"><div class="sys-card__head"><h2>{{ icon("key") }} EUS-Zugangsdaten</h2></div><div class="sys-stack">
+      <label class="sys-check"><input type="checkbox" name="eus_enabled" value="1" {% if config and config.eus_enabled %}checked{% endif %}> EUS aktivieren</label>
       <div class="form-group"><label class="form-label">Serveradresse</label>
         <input class="form-input" name="eus_base_url" type="url" value="{{ config.eus_base_url or '' if config else '' }}" placeholder="https://eus.example.at"></div>
       <div class="form-group"><label class="form-label">Authentifizierung</label>
-        <label><input type="radio" name="eus_auth_mode" value="oauth" {% if not config or config.eus_auth_mode == "oauth" %}checked{% endif %}> OAuth 2.0 (empfohlen)</label>
-        <label><input type="radio" name="eus_auth_mode" value="basic" {% if config and config.eus_auth_mode == "basic" %}checked{% endif %}> Basic Auth</label></div>
+        <label class="sys-check"><input type="radio" name="eus_auth_mode" value="oauth" {% if not config or config.eus_auth_mode == "oauth" %}checked{% endif %}> OAuth 2.0 (empfohlen)</label>
+        <label class="sys-check"><input type="radio" name="eus_auth_mode" value="basic" {% if config and config.eus_auth_mode == "basic" %}checked{% endif %}> Basic Auth</label></div>
       <div class="form-group"><label class="form-label">Client ID</label>
         <input class="form-input" name="eus_client_id" value="{{ config.eus_client_id or '' if config else '' }}"></div>
       <div class="form-group"><label class="form-label">Client Secret</label>
-        <input class="form-input" name="eus_client_secret" type="password" placeholder="unveraendert" @input="secretChanged = true"></div>
+        <input class="form-input" name="eus_client_secret" type="password" placeholder="unverändert" @input="secretChanged = true"></div>
       <div class="form-group"><label class="form-label">Timeout (Sekunden)</label>
         <input class="form-input" name="eus_timeout" type="number" min="1" max="120" value="{{ config.eus_timeout if config else 15 }}"></div>
       <button class="btn btn--primary" type="submit">Speichern</button>
     </div>
-    <div class="chart-box" style="margin-bottom:20px;"><h3>Versandprotokoll</h3>
-      <div class="form-group"><label class="form-label">Protokoll aufbewahren fuer (Tage), 0 = unbegrenzt</label>
+    <section class="sys-card"><div class="sys-card__head"><h2>{{ icon("list-details") }} Versandprotokoll</h2></div><div class="sys-stack">
+      <div class="form-group"><label class="form-label">Protokoll aufbewahren für (Tage), 0 = unbegrenzt</label>
         <input class="form-input" name="log_retention_days" type="number" min="0"
                value="{{ config.log_retention_days if config else 90 }}"></div>
-      <div class="form-group"><label class="form-label">Maximale Anzahl Protokolleintraege, 0 = unbegrenzt</label>
+      <div class="form-group"><label class="form-label">Maximale Anzahl Protokolleinträge, 0 = unbegrenzt</label>
         <input class="form-input" name="log_retention_max_count" type="number" min="0"
                value="{{ config.log_retention_max_count if config else 500 }}"></div>
-      <p class="text-muted">Wenn beide Grenzen gesetzt sind, gilt die zuerst erreichte Grenze.</p>
+      <p class="sys-muted sys-m-0">Wenn beide Grenzen gesetzt sind, gilt die zuerst erreichte Grenze.</p>
       <button class="btn btn--primary" type="submit">Speichern</button>
-    </div>
+    </div></section>
   </form>
-  <div class="chart-box" style="margin-bottom:20px;"><h3>Verbindungstest</h3>
-    <div class="form-group">
+  <section class="sys-card"><div class="sys-card__head"><h2>{{ icon("plug-connected") }} Verbindungstest</h2></div>
+    <div class="sys-row">
       <input class="form-input" type="tel" id="eus-test-recipient" placeholder="+43 660 1234567">
       <button class="btn btn--secondary" type="button" onclick="einsatzcockpitEusSmsTest()">Test-SMS senden</button>
     </div>
-    <div id="eus-test-result" style="margin-top:12px;"></div>
-  </div>
-  <div class="chart-box"><h3>Einrichtung im EUS</h3>
-    <p>Im EUS-Geraete-Login ein Geraetelogin vom Typ <code>MessageSendApi</code> anlegen.
-      Ueber das Schluesselsymbol Client ID und Client Secret kopieren. Das Secret ist nur einmal sichtbar.</p>
-  </div>
+    <div id="eus-test-result" class="sys-mt-1"></div>
+  </section>
+  <section class="sys-card"><div class="sys-card__head"><h2>{{ icon("info-circle") }} Einrichtung im EUS</h2></div>
+    <p class="sys-m-0">Im EUS-Geräte-Login ein Gerätelogin vom Typ <code>MessageSendApi</code> anlegen.
+      Über das Schlüsselsymbol Client ID und Client Secret kopieren. Das Secret ist nur einmal sichtbar.</p>
+  </section>
 </div>
 <script>
 function einsatzcockpitEusSmsTest() {

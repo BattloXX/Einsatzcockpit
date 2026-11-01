@@ -1,21 +1,29 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Alarmtypen – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='alarmstichwoerter' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>Alarmtypen</h1>
-      <p class="page-header__sub">Bekannte Einsatzstichwörter und ihre Eigenschaften</p>
+<div class="sys-page">
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div>
+        <h1>{{ icon("bell") }} Alarmtypen</h1>
+        <p class="sys-muted">Bekannte Einsatzstichwörter und ihre Eigenschaften</p>
+      </div>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newAtModal">{{ icon("plus", size="sm") }} Alarmtyp anlegen</button>
     </div>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newAtModal">{{ icon("plus", size="sm") }} Alarmtyp anlegen</button>
-  </div>
+  </header>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
 
-  <table class="table-admin table-admin--cards">
+  <section class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive">
     <thead>
       <tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>WordPress-Einsatzart</th><th>Nur Erstausr.</th><th>Nachalarm.</th><th>Großschadenslage</th><th>Aktionen</th></tr>
     </thead>
@@ -26,23 +34,25 @@
         <td data-label="Kategorie">{{ at.category }}</td>
         <td data-label="Bezeichnung">{{ at.label }}</td>
         <td data-label="WordPress-Einsatzart">{{ at.wp_einsatzart or '–' }}</td>
-        <td data-label="Nur Erstausr.">{% if at.default_first_train_only %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
-        <td data-label="Nachalarm.">{% if at.notify_neighbors %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
-        <td data-label="Großschadenslage">{% if at.triggers_major_incident %}<span class="badge-pill badge-pill--amber">Ja</span>{% else %}–{% endif %}</td>
-        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
+        <td data-label="Nur Erstausr.">{% if at.default_first_train_only %}<span class="sys-pill sys-status--ok">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Nachalarm.">{% if at.notify_neighbors %}<span class="sys-pill sys-status--ok">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Großschadenslage">{% if at.triggers_major_incident %}<span class="sys-pill sys-status--warn">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Aktionen"><div class="sys-row">
           <button class="btn btn--ghost btn--xs"
                   onclick='openEditAt({{ at.code|tojson }}, {{ at.category|tojson }}, {{ at.label|tojson }}, {{ (at.wp_einsatzart or "")|tojson }}, {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }}, {{ at.triggers_major_incident|lower }})'>
             Bearbeiten
           </button>
-          <form method="post" action="/admin/alarmtypen/{{ at.code }}/loeschen" style="display:inline"
+          <form method="post" action="/admin/alarmtypen/{{ at.code }}/loeschen" class="sys-inline-form"
                 onsubmit="return confirm('Alarmtyp {{ at.code }} löschen? Nur möglich wenn keine Einsätze damit existieren.')">
             <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
           </form>
-        </td>
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </section>
 </div>
 
 <dialog class="modal" id="newAtModal">

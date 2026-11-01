@@ -3,61 +3,69 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Lage-Hinweise – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Lage-Hinweise'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
-<div class="page-content">
-  {% include "admin/_einsatzvorlagen_tabs.html" %}
-  <div class="page-header">
-    <div>
-      <h1>Lage-Hinweise</h1>
-      <p class="page-header__sub">Hinweis anlegen, dann Alarmstichwörter zuweisen. Ohne Zuweisung erscheint ein Hinweis bei jedem Alarmstichwort.</p>
+{% include "admin/_einsatzvorlagen_tabs.html" %}
+<div class="sys-page">
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div>
+        <h1>{{ icon("alert-triangle") }} Lage-Hinweise</h1>
+        <p class="sys-muted">Hinweis anlegen, dann Alarmstichwörter zuweisen. Ohne Zuweisung erscheint ein Hinweis bei jedem Alarmstichwort.</p>
+      </div>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newHintModal">{{ icon("plus", size="sm") }} Hinweis</button>
     </div>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newHintModal">{{ icon("plus", size="sm") }} Hinweis</button>
-  </div>
+  </header>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if error == 'duplicate' %}<div class="alert alert--error">Ein Hinweis mit diesem Text existiert bereits.</div>{% endif %}
 
   <!-- ── Alle Hinweise ────────────────────────────────────────────── -->
-  <div class="admin-section-title">Alle Hinweise <small style="font-weight:400;color:var(--color-text-muted)">({{ hints|length }})</small></div>
-  <table class="table-admin" style="margin-bottom:24px;">
+  <section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("alert-triangle") }} Alle Hinweise <small class="sys-muted">({{ hints|length }})</small></h2></div>
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive">
     <thead>
       <tr>
         <th>Text</th>
         <th>Alarmstichwörter</th>
         <th>Reihenf.</th>
-        <th style="width:200px;">Aktionen</th>
+        <th>Aktionen</th>
       </tr>
     </thead>
     <tbody>
       {% for h in hints %}
       {% set codes = h.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type.code') | list %}
-      <tr{% if edit_hint and edit_hint.id == h.id %} style="background:var(--color-bg-highlight,#f0f7ff);"{% endif %}>
-        <td>{{ h.text }}</td>
-        <td>
+      <tr{% if edit_hint and edit_hint.id == h.id %} class="sys-row-active"{% endif %}>
+        <td data-label="Text">{{ h.text }}</td>
+        <td data-label="Alarmstichwörter">
           {% if codes %}
             {% for code in codes %}
-              <span class="badge-pill badge-pill--gray" style="margin:2px;font-size:.75rem;">{{ code }}</span>
+              <span class="badge-pill badge-pill--gray sys-small">{{ code }}</span>
             {% endfor %}
           {% else %}
-            <span class="text-muted" title="Erscheint bei allen Alarmstichwörtern">global</span>
+            <span class="sys-muted" title="Erscheint bei allen Alarmstichwörtern">global</span>
           {% endif %}
         </td>
-        <td>
-          <form method="post" action="/admin/lage-hinweise/{{ h.id }}/order/up" style="display:inline">
+        <td data-label="Reihenf.">
+          <form method="post" action="/admin/lage-hinweise/{{ h.id }}/order/up" class="sys-inline-form">
             <button class="btn btn--ghost btn--xs" type="submit" aria-label="Nach oben">{{ icon("chevron-up", size="xs") }}</button>
           </form>
-          <form method="post" action="/admin/lage-hinweise/{{ h.id }}/order/down" style="display:inline">
+          <form method="post" action="/admin/lage-hinweise/{{ h.id }}/order/down" class="sys-inline-form">
             <button class="btn btn--ghost btn--xs" type="submit" aria-label="Nach unten">{{ icon("chevron-down", size="xs") }}</button>
           </form>
         </td>
-        <td>
+        <td data-label="Aktionen">
           <button class="btn btn--ghost btn--xs"
                   onclick="openEditHint({{ h.id }}, '{{ h.text|replace("'","\\'")|e }}')"
                   {{ tip('Text bearbeiten') }}>Text</button>
           <a href="/admin/lage-hinweise?edit={{ h.id }}" class="btn btn--ghost btn--xs"
              {{ tip('Alarmstichwörter zuweisen') }}>Stichwörter</a>
-          <form method="post" action="/admin/lage-hinweise/{{ h.id }}/loeschen" style="display:inline"
+          <form method="post" action="/admin/lage-hinweise/{{ h.id }}/loeschen" class="sys-inline-form"
                 onsubmit="return confirm('Löschen?')">
             <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
           </form>
@@ -66,23 +74,27 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </section>
 
   {% if edit_hint %}
   <!-- ── Stichwort-Zuweisung ──────────────────────────────────────── -->
-  <div id="hintEditSection" class="admin-section-title">
-    Stichwörter zuweisen: <em>{{ edit_hint.text[:70] }}{% if edit_hint.text|length > 70 %}…{% endif %}</em>
+  <section class="sys-card">
+  <div id="hintEditSection" class="sys-card__head">
+    <h2>{{ icon("list-details") }} Stichwörter zuweisen: <em>{{ edit_hint.text[:70] }}{% if edit_hint.text|length > 70 %}…{% endif %}</em></h2>
   </div>
-  <p class="form-hint" style="margin-bottom:10px;">
+  <p class="form-hint">
     Haken setzen = Hinweis erscheint bei diesem Stichwort. Ohne Haken erscheint der Hinweis bei <strong>jedem</strong> Stichwort (global).
     Reihenfolge per Drag-Drop am {{ icon("grip-vertical", size="sm") }} ändern.
   </p>
   <form method="post" action="/admin/lage-hinweise/{{ edit_hint.id }}/alarms"
-        id="hintAlarmForm" style="max-width:620px;">
-    <table class="table-admin" id="hintAlarmTable">
+        id="hintAlarmForm" class="sys-form-wide">
+    <div class="sys-table-wrap">
+    <table class="sys-table" id="hintAlarmTable">
       <thead>
         <tr>
-          <th style="width:40px;"></th>
-          <th style="width:50px;">Ein</th>
+          <th class="sys-action-col"></th>
+          <th class="sys-action-col">Ein</th>
           <th>Alarmstichwort</th>
         </tr>
       </thead>
@@ -90,23 +102,24 @@
         {% for code in edit_assigned_codes %}
         {% for atype in alarm_types if atype.code == code %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
+          <td class="drag-handle sys-drag-handle">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox" checked></td>
-          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
+          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="sys-muted"> – {{ atype.label }}</span>{% endif %}</td>
         </tr>
         {% endfor %}
         {% endfor %}
         {% for atype in alarm_types if atype.code not in edit_assigned_codes %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
+          <td class="drag-handle sys-drag-handle">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox"></td>
-          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
+          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="sys-muted"> – {{ atype.label }}</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
     <div id="hintHiddenInputs"></div>
-    <div style="margin-top:14px;display:flex;gap:8px;">
+    <div class="sys-actions">
       <button type="submit" class="btn btn--primary" onclick="serializeHintAlarms()">Speichern</button>
       <a href="/admin/lage-hinweise" class="btn btn--ghost">Schließen</a>
     </div>
@@ -143,15 +156,17 @@
     });
   };
   </script>
+  </section>
   {% endif %}
 
   <!-- ── Übersicht nach Alarmstichwort ───────────────────────────── -->
-  <div class="admin-section-title" style="margin-top:32px;">Übersicht nach Alarmstichwort</div>
-  <div style="overflow-x:auto; margin-bottom:24px;">
-    <table class="table-admin" style="min-width:500px;">
+  <section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("table") }} Übersicht nach Alarmstichwort</h2></div>
+  <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead>
         <tr>
-          <th style="width:130px;">Alarmstichwort</th>
+          <th>Alarmstichwort</th>
           <th>Zugewiesene Hinweise</th>
         </tr>
       </thead>
@@ -159,17 +174,17 @@
         {% for atype in alarm_types %}
         {% set row = assignments_by_alarm.get(atype.code, []) %}
         <tr>
-          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<br><small class="text-muted">{{ atype.label }}</small>{% endif %}</td>
-          <td>
+          <td data-label="Alarmstichwort"><strong>{{ atype.code }}</strong>{% if atype.label %}<br><small class="sys-muted">{{ atype.label }}</small>{% endif %}</td>
+          <td data-label="Zugewiesene Hinweise">
             {% if row %}
               {% for a in row[:5] %}
-                <span class="badge-pill badge-pill--gray" style="margin:2px;font-size:.75rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;">
+                <span class="badge-pill badge-pill--gray sys-small sys-badge-ellipsis">
                   {{ a.hint.text[:50] }}{% if a.hint.text|length > 50 %}…{% endif %}
                 </span>
               {% endfor %}
-              {% if row|length > 5 %}<small class="text-muted"> +{{ row|length - 5 }} weitere</small>{% endif %}
+              {% if row|length > 5 %}<small class="sys-muted"> +{{ row|length - 5 }} weitere</small>{% endif %}
             {% else %}
-              <span class="text-muted">–</span>
+              <span class="sys-muted">–</span>
             {% endif %}
           </td>
         </tr>
@@ -177,6 +192,7 @@
       </tbody>
     </table>
   </div>
+  </section>
 </div>
 
 <!-- Neuer Hinweis -->

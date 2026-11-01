@@ -292,3 +292,56 @@
 @media (max-width: 760px) {
   .sys-form-grid--map { grid-template-columns: 1fr; }
 }
+
+/* Alarmierung und Nachrichten (SMS, Push, Mail, Vorlagen, KI-Prompts). */
+.sys-grid-2--cards, .sys-grid-3--cards { align-items: start; }
+.sys-grid-2--cards > .sys-card, .sys-grid-3--cards > .sys-card { margin-bottom: 0; }
+.sys-gap-sm { gap: .4rem; }
+.sys-mr-1 { margin-right: .5rem; }
+.sys-ml-1 { margin-left: .5rem; }
+.sys-left { text-align: left; }
+.sys-indent { margin-left: 1.25rem; }
+.sys-select-narrow { width: auto; max-width: 17.5rem; }
+.sys-input-sm { width: 6rem; }
+.sys-status-area { min-height: 2.25rem; }
+.sys-cell-text { max-width: 20rem; }
+.sys-cell-ellipsis { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.sys-badge-ellipsis { display: inline-block; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.sys-eyebrow { margin-bottom: .5rem; color: var(--text-muted); font-size: .82rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.sys-row > .sys-eyebrow { margin-bottom: 0; }
+.sys-scroll-box { max-height: 14rem; overflow-y: auto; }
+.sys-scroll-box--sm { max-height: 10rem; }
+.sys-scroll-box--cols { display: flex; flex-wrap: wrap; gap: .15rem 1rem; max-height: 17rem; }
+.sys-scroll-box--cols > label { flex: 1 1 11rem; min-width: 0; }
+.sys-option > .sys-check + .sys-check { margin-top: .15rem; }
+.sys-row-active, .sys-row-active:hover { background: var(--surface-high); }
+.sys-form-wide { max-width: 51rem; }
+.sys-drag-handle { cursor: grab; text-align: center; color: var(--text-muted); }
+.sys-pill--warn { color: var(--yellow); }
+.sys-vehicle-pill { display: inline-block; padding: .15rem .5rem; border-radius: .25rem; color: #fff; font-size: .8rem; font-weight: 600; white-space: nowrap; }
+.sys-vehicle-pill__ext { margin-left: .2rem; font-size: .65rem; opacity: .75; }
+.sys-vehicle-label { padding-left: .4rem; border-left: 4px solid var(--border); }
+#dispatchEditTbody tr:hover { background: var(--surface-high); }
+.sys-vorschau-block { min-width: 0; }
+.sys-vorschau-title { margin: .75rem 0 .25rem; font-size: .95rem; }
+.sys-vorschau-text { margin: .5rem 0; padding: .75rem; border: 1px solid var(--border); border-radius: .25rem; background: var(--surface); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .88rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sys-fixed-part { margin-top: .4rem; padding: .75rem 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); color: var(--text-muted); font: .82rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sys-prompt-input { min-height: 5rem; width: 100%; margin-top: .4rem; line-height: 1.55; }
+.sys-mail-result--ok { color: var(--green); }
+.sys-mail-result--warten, .sys-mail-result--achtung { color: var(--yellow); }
+.sys-mail-result--fehler { color: var(--red); }
+.sys-mail-new td { font-weight: 700; }
+.sys-timeline { margin-left: .5rem; padding-left: 1.1rem; border-left: 2px solid var(--border); }
+.sys-timeline__item { margin: 0 0 1rem; }
+.sys-frame { display: block; width: 100%; min-height: 18rem; border: 1px solid var(--border); border-radius: .4rem; background: #fff; }
+.sys-frame--mail { min-height: 38rem; }
+.sys-split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); align-items: start; gap: 1rem; }
+.sys-split > .sys-card { margin-bottom: 0; }
+@media (max-width: 760px) {
+  .sys-split { grid-template-columns: minmax(0, 1fr); }
+  .sys-frame--mail { min-height: 30rem; }
+  .sys-select-narrow { width: 100%; max-width: none; }
+  .sys-cell-text, .sys-cell-ellipsis { max-width: none; white-space: normal; }
+}
+.sys-frame--tall { min-height: 56rem; }
+.sys-page .sys-check input[type="radio"] { min-height: 0; width: 1.1rem; height: 1.1rem; flex: 0 0 auto; }
