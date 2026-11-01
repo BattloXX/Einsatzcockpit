@@ -103,7 +103,7 @@ def send_fcm(
     *,
     extra_data: dict[str, str] | None = None,
 ) -> tuple[bool, str | None]:
-    """Sendet einen nativen Alarm oder eine Wake- und optional eine Display-Nachricht."""
+    """Sendet iOS per APNs, Android als nativen Alarm oder Wake/Display-Paar."""
     app = _get_fcm_app(cfg)
     if app is None:
         return False, "fcm_not_configured"
@@ -151,6 +151,53 @@ def send_fcm(
         except Exception as exc:
             log.warning("FCM fehlgeschlagen fuer Token %s (%s): %s", fcm_token_row.id, kind, exc)
             return False, "unknown", False
+
+    if fcm_token_row.platform == "ios":
+        is_alarm = channel_id == "einsatz_alarm"
+        expiration = str(int(datetime.now(UTC).timestamp()) + (600 if is_alarm else 3600))
+        if wake_only:
+            ios_message = messaging.Message(
+                data=dict(data, silent="1"),
+                apns=messaging.APNSConfig(
+                    headers={
+                        "apns-priority": "5",
+                        "apns-push-type": "background",
+                        "apns-expiration": expiration,
+                    },
+                    payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+                ),
+                token=fcm_token_row.token,
+            )
+        else:
+            sound: Any = "default"
+            interruption_level = "time-sensitive" if is_alarm else "active"
+            if is_alarm and settings.IOS_CRITICAL_ALERTS_ENABLED:
+                sound = messaging.CriticalSound(name="default", critical=True, volume=1.0)
+                interruption_level = "critical"
+            ios_message = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data=data,
+                apns=messaging.APNSConfig(
+                    headers={
+                        "apns-priority": "10",
+                        "apns-push-type": "alert",
+                        "apns-expiration": expiration,
+                    },
+                    payload=messaging.APNSPayload(aps=messaging.Aps(
+                        sound=sound,
+                        thread_id=channel_id or "ecp",
+                        custom_data={"interruption-level": interruption_level},
+                    )),
+                ),
+                token=fcm_token_row.token,
+            )
+        kind = "Wake" if wake_only else "Display"
+        ok, error, _token_invalid = _send(ios_message, kind.lower())
+        if delivery is not None:
+            delivery.success = ok
+            delivery.error_code = error
+            delivery.error_detail = f"{kind}-Nachricht fehlgeschlagen ({error or 'unknown'})" if not ok else None
+        return ok, error
 
     if channel_id == "einsatz_alarm" and not wake_only and fcm_token_has_capability(fcm_token_row, "native_alarm"):
         alarm_message = messaging.Message(

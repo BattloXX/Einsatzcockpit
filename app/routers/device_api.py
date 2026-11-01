@@ -274,7 +274,7 @@ def test_fcm_alarm(request: Request, db: Session = Depends(get_db)):
         letzter_at = letzter[0].astimezone(UTC).replace(tzinfo=None) if letzter[0].tzinfo else letzter[0]
         if jetzt - letzter_at < _FCM_ALARM_TEST_SPERRE:
             return JSONResponse({"detail": "Bitte 20 Sekunden warten"}, status_code=429)
-    native_alarm = push_service.fcm_token_has_capability(row, "native_alarm")
+    native_alarm = row.platform != "ios" and push_service.fcm_token_has_capability(row, "native_alarm")
     title = "Testalarm"
     body = "Probealarm – so klingt ein Einsatzalarm"
     push_log = push_service._log_push(
