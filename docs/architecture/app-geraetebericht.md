@@ -113,3 +113,27 @@ liefert Soll-Version `null` mit Hinweis, ohne Versionsbefund. Die Tools sind
 in `ADMIN_TOOLS` und `READ_TOOLS`, aber explizit von Systemuebersicht und
 Gesamtzustand-Panels ausgeschlossen. Vertrag und Grenzen siehe
 [Admin-MCP](../wiki/Administration-System-Admin-MCP.md#app-geraete).
+
+## Standortmeldung der Geraete (24-h-Ziel)
+
+`POST /api/v1/device/location` (Session oder Bearer-Geraetetoken) nimmt zwei Arten von Meldungen an:
+
+- **Live-Tracking im Einsatz** (WebView, Background-Geolocation-Watcher) und
+- **Periodische Meldung ohne Einsatz** (Android-App, WorkManager `location-report-periodic`, alle 6 h mit 2 h Flex,
+  Netzwerk-Constraint; zusaetzlich einmalig bei Einsatzbeginn und per Knopf in der Einstellungsseite).
+
+Felder: `lat`, `lng`, `accuracy`, `measured_at` (UTC-Messzeit), `source` (`live|periodic|incident|manual`),
+`status` (`ok|permission_denied|background_permission_missing|location_disabled|no_fix|stale_fix|mock_location|error`),
+`error` (maskiert). Ohne `lat/lng` wird nur der Status festgehalten (verstaendliche Meldung statt Schweigen).
+
+Regeln (`app/services/geraet_standort.py`):
+
+- `last_location_at` ist die **Messzeit**, `last_location_received_at` der Empfang. Eine erfolgreich uebertragene alte
+  Position gilt nie als frisch: aelter als 24 h wird sie verworfen (`stale_fix`), aelter als 15 min erzeugt sie weder
+  Fahrzeughistorie noch WebSocket-Broadcast.
+- Zukunftszeiten werden auf den Empfang begrenzt, aeltere Messungen ueberschreiben neuere nicht.
+- Veraltet = keine gueltige Messung in 24 h. Sichtbar im Geraete-Login (Liste: Warnsymbol, Detail: Standortstatus,
+  Messalter, Empfang, letzter Versuch, Fehler) und im Diagnose-Check `app.standort` (`standort_veraltet`,
+  `standort_blockiert`); aeltere Clients ohne `measured_at` funktionieren unveraendert (Messzeit = Empfang).
+- Android-Seite: gemeinsam mit dem Geraetetoken; ohne Token keine Ortung; Retry mit Backoff (max. 3 Versuche je Lauf),
+  Neustart-fest durch WorkManager plus Boot-/Push-Aufrufe von `ensureScheduled`.

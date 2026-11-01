@@ -112,6 +112,9 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
             redis.update(connected=False, publish_failures=3)
         elif check_id == "app.geraete":
             insert(db, "app_geraet", user_id=99999, sdk_int=23)
+        elif check_id == "app.standort":
+            insert(db, "device_token", label="x", token_hash="h" * 64, user_id=99999, platform="android",
+                   last_used_at=utcnow(), created_at=utcnow(), fail_count=0, duty_active=False)
         elif check_id == "gateway.jobs":
             insert(db, "incident_alarm_job", incident_id=99999, org_id=org, channel="sms",
                    next_attempt_at=utcnow() - timedelta(minutes=10), status="pending", context={})

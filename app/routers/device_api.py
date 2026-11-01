@@ -429,30 +429,36 @@ async def create_native_link(request: Request):
 def update_location(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Aktualisiert den Gerätestandort.
 
-    Wird von der App nur bei aktivem Einsatz/Dienst aufgerufen (alle 10–30 s).
-    Die Position erscheint auf der Lagekarte anstatt des Scatter-Punkts.
+    Live-Tracking im Einsatz (alle 10–30 s) und periodische Meldung ausserhalb von
+    Einsaetzen (WorkManager, mindestens alle 24 h). Optional: measured_at (Messzeit, UTC),
+    source, status und error; ohne lat/lng wird nur der Status (z. B. permission_denied)
+    festgehalten. Eine alte Position gilt nie als frische Messung.
     """
     user = getattr(request.state, "user", None)
     if not user:
+        # Periodische Meldung des Hintergrund-Workers: Bearer-Gerätetoken ohne Cookie.
+        user = _resolve_user_via_bearer_token(request, db)
+    if not user:
         raise _unauthorized(request)
     data = run_async(request.json)
-    try:
-        lat = float(data["lat"])
-        lng = float(data["lng"])
-    except (KeyError, TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="lat/lng fehlen oder ungültig")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="JSON-Objekt erwartet")
 
     device_token = _get_device_token(user.id, db, request)
     if not device_token:
         raise HTTPException(status_code=404, detail="Kein registriertes Gerät")
 
-    now = datetime.now(UTC)
-    device_token.last_lat = lat
-    device_token.last_lng = lng
-    device_token.last_location_at = now
+    from app.services import geraet_standort
 
-    # Positionshistorie schreiben wenn einem Fahrzeug zugeordnet
-    if device_token.vehicle_master_id:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        ergebnis = geraet_standort.verarbeite(device_token, data, now)
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="lat/lng fehlen oder ungültig")
+    lat, lng = device_token.last_lat, device_token.last_lng
+
+    # Positionshistorie nur fuer neue, frische Messungen eines zugeordneten Fahrzeugs
+    if ergebnis["position"] and ergebnis["frisch"] and device_token.vehicle_master_id:
         # Aktive GSL-Lage für dieses Fahrzeug ermitteln
         from app.models.major_incident import LageEinheit, MajorIncident, MajorIncidentStatus, VehiclePosition
         active_lage = (
@@ -479,7 +485,7 @@ def update_location(request: Request, background_tasks: BackgroundTasks, db: Ses
             lon=lng,
             accuracy_m=accuracy,
             source="gps",
-            recorded_at=now,
+            recorded_at=device_token.last_location_at,
             received_at=now,
             reported_by=user.id,
         ))
@@ -496,7 +502,7 @@ def update_location(request: Request, background_tasks: BackgroundTasks, db: Ses
                 "lat": lat,
                 "lng": lng,
                 "source": "gps",
-                "ts": now.isoformat(),
+                "ts": (device_token.last_location_at or now).isoformat(),
             })
 
     db.commit()

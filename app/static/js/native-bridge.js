@@ -502,20 +502,43 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  function _sendLocation(lat, lng, accuracy) {
-    // Nur senden wenn >= 10 m Abstand zur letzten Übermittlung
-    if (_lastSentLat !== null && _gpsDistance(lat, lng, _lastSentLat, _lastSentLng) < 10) return;
-    _lastSentLat = lat;
-    _lastSentLng = lng;
-    if (_accessInvalid) return;
-    fetch('/api/v1/device/location', {
+  // Nicht zugestellte Position: bleibt erhalten und wird beim naechsten Tick bzw. bei
+  // wiederkehrendem Netz erneut gesendet (nur die neueste, Messzeit bleibt erhalten).
+  let _pendingLocation = null;
+
+  function _postLocation(p) {
+    return fetch('/api/v1/device/location', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, _deviceHeaders()),
-      body: JSON.stringify({ lat, lng, accuracy }),
+      body: JSON.stringify({
+        lat: p.lat, lng: p.lng, accuracy: p.accuracy, source: 'live',
+        measured_at: new Date(p.time).toISOString(),
+      }),
     }).then((resp) => {
       const invalid = _authErrorCode(resp);
-      if (invalid) _handleAccessInvalid(invalid);
+      if (invalid) { _handleAccessInvalid(invalid); _pendingLocation = null; return; }
+      // 5xx/429: spaeter erneut; 4xx (ausser 429) ist endgueltig, kein Dauer-Retry
+      if (resp.ok || (resp.status < 500 && resp.status !== 429)) {
+        if (_pendingLocation === p) _pendingLocation = null;
+        if (resp.ok) { _lastSentLat = p.lat; _lastSentLng = p.lng; }
+      }
     }).catch(() => {});
+  }
+
+  function _retryPendingLocation() {
+    if (_pendingLocation && !_accessInvalid) _postLocation(_pendingLocation);
+  }
+
+  function _sendLocation(lat, lng, accuracy, time) {
+    // Nur senden wenn >= 10 m Abstand zur letzten erfolgreichen Uebermittlung
+    if (_lastSentLat !== null && !_pendingLocation
+        && _gpsDistance(lat, lng, _lastSentLat, _lastSentLng) < 10) return;
+    if (_accessInvalid) return;
+    // Messzeit des GPS-Fixes; ohne Angabe oder aus der Zukunft gilt "jetzt"
+    const now = Date.now();
+    const t = (typeof time === 'number' && time > 0 && time <= now + 60000) ? time : now;
+    _pendingLocation = { lat, lng, accuracy, time: t };
+    _postLocation(_pendingLocation);
   }
 
   function startLocation() {
@@ -535,7 +558,7 @@
         _locationWatcherOptions(),
         function callback(loc, err) {
           if (err) return;
-          _sendLocation(loc.latitude, loc.longitude, loc.accuracy);
+          _sendLocation(loc.latitude, loc.longitude, loc.accuracy, loc.time);
         },
       ).then((id) => { _locationWatch = id; }).catch((err) => {
         _isTracking = false;
@@ -548,10 +571,11 @@
         _periodicGpsInterval = setInterval(() => {
           if (!_locationWatch) return;
           navigator.geolocation.getCurrentPosition(
-            (pos) => _sendLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+            (pos) => _sendLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.timestamp),
             () => {},
             { timeout: 10000, maximumAge: 30000 },
           );
+          _retryPendingLocation();
         }, _effectiveGpsInterval());
       }
     } catch (e) {
@@ -569,6 +593,7 @@
     }
     _lastSentLat = null;
     _lastSentLng = null;
+    _pendingLocation = null;
 
     // Bildschirmsperre im Sparmodus freigeben – kein Tracking mehr aktiv
     if (_isNative() && _batterySaver) keepAwake(false);
@@ -679,7 +704,7 @@
 
     // Sofort neu pollen wenn Netzwerk wiederkehrt (z. B. nach Tunnelausfahrt)
     window.addEventListener('online', () => {
-      if (_isNative()) { _pollDutyState(); _registerFcmToken(); }
+      if (_isNative()) { _pollDutyState(); _registerFcmToken(); _retryPendingLocation(); }
     });
 
     // Sofort neu pollen wenn App aus dem Hintergrund kommt - deckt auch den Fall

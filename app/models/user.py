@@ -183,7 +183,14 @@ class DeviceToken(Base):
     # Standort-Tracking (A2)
     last_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Messzeit der letzten gueltigen Position (nicht der Empfangszeitpunkt).
     last_location_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_location_received_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_location_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_location_accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_location_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    last_location_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_location_error: Mapped[str | None] = mapped_column(String(200), nullable=True)
     duty_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # einheit|fuehrung|NULL = Altbestand/bisheriges Verhalten
     gsl_profil: Mapped[str | None] = mapped_column(String(12), nullable=True)

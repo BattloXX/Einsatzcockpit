@@ -7,6 +7,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 - **Admin-MCP / App-Geraete:** Zwei rein lesende Tools `admin_geraete_pruefen` und `admin_geraet_details` mit gemeinsamer Gesundheitsauswertung, Flottenfiltern, begrenzten Aggregaten/IDs, maskierten Details und Einstellungen ohne Rueckkanal. GitHub-Ausfall mit unbekannter Soll-Version; separat von Gesamtzustand-Panels.
 - **BSP-Overlays:** Die Karte zeigt hoechstens eine Brandschutzplan-Ebene gleichzeitig (Planwechsel entfernt die vorherige, die Auswahl wird gemerkt). Ausblenden wirkt sofort und bleibt nach Neuladen und Planwechsel bestehen; eine gespeicherte Einsatz-/Objektvorgabe wird nicht mehr von einer alten persoenlichen Ueberschreibung verdeckt. Die Auswahlliste und der Autodruck enthalten je logischem Plan nur die zuletzt freigegebene auslieferbare Ebene.
 
+- **Geraete-Standort:** `POST /api/v1/device/location` kennt Messzeit (`measured_at`), Quelle und Status (Migration 0340). Eine alte Position gilt nie als frisch; Geraete ohne Messung in 24 h sind im Geraete-Login und im neuen Diagnose-Check `app.standort` erkennbar. Der Endpunkt akzeptiert zusaetzlich Bearer-Geraetetoken (periodische Meldung der Android-App ohne Einsatz).
+
 - Systemdiagnose: lesende App-Geraeteflotte mit Filtern, Release-Ampel, Detailansicht und gemeinsamem Gesundheitscheck `app.geraete`.
 
 - **App-Geraetebericht:** Neuer Endpunkt `POST /api/v1/device/diagnose-report` nimmt den Geraetebericht der Android-App entgegen (Version, Geraete-/Display-/Android-Eigenschaften, WebView, Einstellungen, Berechtigungen, Dienstzustand, strukturierte Fehler). Whitelist-Validierung, Maskierung, 64 KB und 30 Berichte/Stunde, 90 Tage Aufbewahrung; kein Rueckkanal fuer Einstellungen. Migration 0339.
