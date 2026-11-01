@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
+from app.models.master import FireDept
 from app.models.user import User
 
 router = APIRouter(prefix="/admin/systemstatus", tags=["dienst-monitor-ui"])
@@ -24,7 +25,7 @@ def _org_id(user: User, target_org_id: int | None = None) -> int:
 
 def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
     from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorLog, DienstMonitorToken, DienstStatus
-    from app.models.master import FireDept, OrgSettings, SystemSettings
+    from app.models.master import OrgSettings, SystemSettings
     from app.services.dienst_monitor_service import alarmempfang_warnungen, dienst_zustand, pruefe_dienste
     from app.services.worker_monitor import snapshot
 
@@ -71,6 +72,7 @@ def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
         .limit(50)
         .all(),
         "target_org_id": org_id if has_role(user, "system_admin") else None,
+        "all_orgs": db.query(FireDept).order_by(FireDept.name).all() if has_role(user, "system_admin") else [],
     }
     ctx.update(extra)
     return ctx
@@ -83,6 +85,11 @@ def seite(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
+    if has_role(user, "system_admin") and not org_id and not user.org_id:
+        # Organisationsloser Systemadmin: erste Organisation vorwaehlen statt Fehler 400.
+        erste = db.query(FireDept).order_by(FireDept.name).first()
+        if erste is not None:
+            return RedirectResponse(f"/admin/systemstatus?org_id={erste.id}", status_code=303)
     return templates.TemplateResponse(
         request, "admin/systemstatus.html", _context(request, db, user, _org_id(user, org_id))
     )

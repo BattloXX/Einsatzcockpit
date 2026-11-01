@@ -12,6 +12,14 @@
 
 <div class="page-content sys-page">
   <div class="sys-hero"><div><h1>{{ icon("traffic-lights") }} Systemstatus</h1><p class="sys-muted">Überwachung technischer Dienste und externe Statusabfrage. Letzter Monitorlauf: {{ loop_letzter_lauf_dt|local_datetime if loop_letzter_lauf_dt else "noch nie" }}</p></div></div>
+  {% if all_orgs %}
+  <section class="sys-card">
+    <label class="sys-semibold sys-mb-1" for="status-org">Organisation wählen:</label>
+    <select id="status-org" class="form-control" onchange="location.href='/admin/systemstatus?org_id='+this.value">
+      {% for o in all_orgs %}<option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+    </select>
+  </section>
+  {% endif %}
   {% if gespeichert %}<div class="alert alert--success mb-4">Einstellungen gespeichert.</div>{% endif %}
   {% if test_ergebnis is defined %}<div class="alert mb-4">Testversand: {{ "erfolgreich" if test_ergebnis else "fehlgeschlagen" }}</div>{% endif %}
 
