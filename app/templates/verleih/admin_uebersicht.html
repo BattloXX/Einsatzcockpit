@@ -1,74 +1,79 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Geräteverleih – Aktive Ausleihen{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='verleih' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
-      <h1>Geräteverleih – Aktive Ausleihen</h1>
-      <p class="page-header__sub">Einsatzübergreifende Übersicht über alle noch nicht zurückgegebenen Geräte.</p>
+      <h1>{{ icon("package") }} Geräteverleih – Aktive Ausleihen</h1>
+      <p class="sys-muted">Einsatzübergreifende Übersicht über alle noch nicht zurückgegebenen Geräte.</p>
     </div>
-    <div style="display:flex;gap:8px;">
+    <div class="sys-row">
       <a href="/admin/verleih-stuecklisten" class="btn btn--ghost">Stücklisten</a>
       <a href="/admin/verleih-artikel" class="btn btn--ghost">Artikel</a>
     </div>
-  </div>
+   </div>
+  </header>
 
   {% if ausleihen %}
-  <div style="margin-bottom:10px;font-size:.85rem;color:var(--text-muted);">
-    {{ ausleihen|length }} aktive Ausleihe(n) einsatzübergreifend
-  </div>
-
-  <table class="table-admin">
+  <section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("list-details") }} Ausleihen</h2><span class="sys-pill">{{ ausleihen|length }} aktiv</span></div>
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive sys-table--wide">
     <thead>
       <tr>
-        <th style="width:80px;">Nr.</th>
+        <th class="sys-col-90">Nr.</th>
         <th>Ausleiher</th>
         <th>Einsatz</th>
         <th>Material</th>
-        <th style="width:130px;">Seit</th>
-        <th style="width:80px;"></th>
+        <th class="sys-col-130">Seit</th>
+        <th class="sys-col-90"><span class="sr-only">Aktion</span></th>
       </tr>
     </thead>
     <tbody>
       {% for a in ausleihen %}
       {% set lage = lagen.get(a.lage_id) %}
       <tr>
-        <td>
-          <code style="font-size:.8rem;">VL-{{ a.id }}</code>
+        <td data-label="Nr.">
+          <code class="sys-text-xs">VL-{{ a.id }}</code>
         </td>
-        <td>
+        <td data-label="Ausleiher">
           <strong>{{ a.name }}</strong>
-          {% if a.telefon %}<br><span style="font-size:.78rem;color:var(--text-muted);">{{ a.telefon }}</span>{% endif %}
-          {% if a.adresse %}<br><span style="font-size:.78rem;color:var(--text-muted);">{{ a.adresse }}</span>{% endif %}
+          {% if a.telefon %}<br><span class="sys-muted sys-text-xs">{{ a.telefon }}</span>{% endif %}
+          {% if a.adresse %}<br><span class="sys-muted sys-text-xs">{{ a.adresse }}</span>{% endif %}
         </td>
-        <td>
+        <td data-label="Einsatz">
           {% if lage %}
-          <a href="/lage/{{ lage.id }}/verleih" style="color:inherit;text-decoration:underline;">{{ lage.name }}</a>
+          <a href="/lage/{{ lage.id }}/verleih" class="sys-link-ul">{{ lage.name }}</a>
           {% else %}
-          <span style="color:var(--text-muted);">Einsatz #{{ a.lage_id }}</span>
+          <span class="sys-muted">Einsatz #{{ a.lage_id }}</span>
           {% endif %}
         </td>
-        <td>
-          <ul style="margin:0;padding:0;list-style:none;font-size:.83rem;">
+        <td data-label="Material">
+          <ul class="sys-plain-list sys-small">
             {% for p in a.positionen %}
             {% if p.status.value == 'ausgeliehen' %}
-            <li style="display:flex;gap:6px;align-items:baseline;margin-bottom:2px;">
-              <span style="font-weight:600;min-width:24px;text-align:right;">{{ p.menge }}&times;</span>
+            <li class="sys-item-line">
+              <span class="sys-item-qty">{{ p.menge }}&times;</span>
               <span>{{ p.bezeichnung }}</span>
-              {% if p.artikel_nr %}<code style="font-size:.75rem;color:var(--text-muted);">{{ p.artikel_nr }}</code>{% endif %}
+              {% if p.artikel_nr %}<code class="sys-muted sys-text-xs">{{ p.artikel_nr }}</code>{% endif %}
             </li>
             {% endif %}
             {% endfor %}
           </ul>
         </td>
-        <td style="font-size:.82rem;white-space:nowrap;">
+        <td data-label="Seit" class="sys-small sys-nowrap">
           {{ (a.ausgeliehen_at|local).strftime('%d.%m.%Y') }}<br>
-          <span style="color:var(--text-muted);">{{ (a.ausgeliehen_at|local).strftime('%H:%M') }} Uhr</span>
+          <span class="sys-muted">{{ (a.ausgeliehen_at|local).strftime('%H:%M') }} Uhr</span>
         </td>
-        <td>
+        <td data-label="Aktion">
           {% if lage %}
           <a href="/lage/{{ lage.id }}/verleih" class="btn btn--ghost btn--xs">Öffnen</a>
           {% endif %}
@@ -77,11 +82,12 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </section>
 
   {% else %}
-  <div style="padding:48px 0;text-align:center;color:var(--text-muted);">
-    <div style="font-size:2rem;margin-bottom:12px;">{{ icon("check", size="lg") }}</div>
-    <p>Keine aktiven Ausleihen – alles zurückgegeben.</p>
+  <div class="sys-empty">
+    {{ icon("check", size="lg") }} <p class="sys-m-0">Keine aktiven Ausleihen – alles zurückgegeben.</p>
   </div>
   {% endif %}
 </div>

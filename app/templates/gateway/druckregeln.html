@@ -1,10 +1,14 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Druckregeln - {{ gw.name }} - {{ brand }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% include "gateway/_gwx_style.html" %}
 
-<div class="gwx">
-  <div class="gwx-bar">
+<div class="gwx sys-page">
+  <div class="gwx-bar sys-hero">
     <div class="gwx-brand">
       <div class="gwx-brand__icon">{{ icon("printer", size="lg") }}</div>
       <div>
@@ -14,61 +18,61 @@
     </div>
     <div class="gwx-pills">
       {% if gw.status == 'online' and connected %}
-      <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
+      <span class="sys-pill sys-status--ok"><span class="sys-indicator"></span>Online</span>
       {% elif not gw.is_paired %}
-      <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
+      <span class="sys-pill"><span class="sys-indicator"></span>Nicht gekoppelt</span>
       {% else %}
-      <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
+      <span class="sys-pill sys-status--fail"><span class="sys-indicator"></span>Offline</span>
       {% endif %}
       {% if gw.is_paired %}
         {% if gw.serial_connected %}
-        <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Alarmleitung</span>
+        <span class="sys-pill sys-status--ok"><span class="sys-indicator"></span>Alarmleitung</span>
         {% else %}
-        <span class="gwx-pill gwx-pill--warn"><span class="gwx-pill__d"></span>Alarmleitung getrennt</span>
+        <span class="sys-pill sys-status--warn"><span class="sys-indicator"></span>Alarmleitung getrennt</span>
         {% endif %}
       {% endif %}
-      {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
+      {% if gw.version %}<span class="sys-pill">v{{ gw.version }}</span>{% endif %}
     </div>
     <div class="gwx-spacer"></div>
-    <a href="/gateway" class="gwx-btn">&larr; Übersicht</a>
+    <a href="/gateway" class="btn btn--secondary">&larr; Übersicht</a>
   </div>
   {% from "gateway/_tabs.html" import gwtabs %}
   {{ gwtabs(gw.id, "regeln") }}
   <div class="gwx-body">
     {% set q = request.query_params %}
-    {% if q.get('rule_saved') %}<div class="gwx-alert gwx-alert--ok">Gespeichert.</div>{% endif %}
-    {% if q.get('rule_created') %}<div class="gwx-alert gwx-alert--ok">Regel angelegt – jetzt konfigurieren.</div>{% endif %}
-    {% if q.get('error') == 'rule_dup' %}<div class="gwx-alert gwx-alert--err">Regelname bereits vergeben.</div>{% endif %}
-    {% if q.get('error') == 'rule_documents' %}<div class="gwx-alert gwx-alert--err">Die gewählten Dokumente passen nicht zum Auslöser.</div>{% endif %}
+    {% if q.get('rule_saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+    {% if q.get('rule_created') %}<div class="alert alert--success">Regel angelegt – jetzt konfigurieren.</div>{% endif %}
+    {% if q.get('error') == 'rule_dup' %}<div class="alert alert--error">Regelname bereits vergeben.</div>{% endif %}
+    {% if q.get('error') == 'rule_documents' %}<div class="alert alert--error">Die gewählten Dokumente passen nicht zum Auslöser.</div>{% endif %}
     {% set test_art_labels = {'einsatz': 'Einsatz', 'gsl': 'Großschadenslage', 'gsl_einheit': 'Einheit', 'verleih': 'Verleihschein', 'alarm': 'Alarm'} %}
-    {% if q.get('test_ok') %}<div class="gwx-alert gwx-alert--ok">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} an die Zieldrucker gesendet.</div>{% endif %}
-    {% if q.get('test_err') == 'printer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Der Regel ist kein Zieldrucker zugewiesen.</div>{% endif %}
-    {% if q.get('test_err') == 'gateway' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es ist kein gekoppeltes Gateway verfügbar.</div>{% endif %}
-    {% if q.get('test_err') == 'einsatz' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Einsatz zum Testen.</div>{% endif %}
-    {% if q.get('test_err') == 'gsl' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keine Großschadenslage zum Testen.</div>{% endif %}
-    {% if q.get('test_err') == 'gsl_einheit' %}<div class="gwx-alert gwx-alert--err">Testdruck braucht eine vorhandene Einheit.</div>{% endif %}
-    {% if q.get('test_err') == 'verleih' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Verleihschein zum Testen.</div>{% endif %}
-    {% if q.get('test_err') == 'alarm' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen seriellen Alarm zum Testen.</div>{% endif %}
-    {% if q.get('test_err') == 'leer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} entstanden keine Druckaufträge – prüfen Sie Dokumente und Objekt-Elemente der Regel, z. B. Objektblatt ohne verknüpftes Objekt.</div>{% endif %}
+    {% if q.get('test_ok') %}<div class="alert alert--success">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} an die Zieldrucker gesendet.</div>{% endif %}
+    {% if q.get('test_err') == 'printer' %}<div class="alert alert--error">Testdruck: Der Regel ist kein Zieldrucker zugewiesen.</div>{% endif %}
+    {% if q.get('test_err') == 'gateway' %}<div class="alert alert--error">Testdruck: Es ist kein gekoppeltes Gateway verfügbar.</div>{% endif %}
+    {% if q.get('test_err') == 'einsatz' %}<div class="alert alert--error">Testdruck: Es gibt noch keinen Einsatz zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'gsl' %}<div class="alert alert--error">Testdruck: Es gibt noch keine Großschadenslage zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'gsl_einheit' %}<div class="alert alert--error">Testdruck braucht eine vorhandene Einheit.</div>{% endif %}
+    {% if q.get('test_err') == 'verleih' %}<div class="alert alert--error">Testdruck: Es gibt noch keinen Verleihschein zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'alarm' %}<div class="alert alert--error">Testdruck: Es gibt noch keinen seriellen Alarm zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'leer' %}<div class="alert alert--error">Testdruck: Für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} entstanden keine Druckaufträge – prüfen Sie Dokumente und Objekt-Elemente der Regel, z. B. Objektblatt ohne verknüpftes Objekt.</div>{% endif %}
     <div class="gwx-grid">
       {# ── Druckregeln ── #}
       <div class="gwx-col-12">
-        <div class="gwx-panel" id="regeln">
-          <div class="gwx-panel__hd">
+        <div class="sys-card" id="regeln">
+          <div class="sys-card__head">
             <div>
               <div class="gwx-panel__t">{{ icon("settings", size="md") }} Druckregeln</div>
               <div class="gwx-panel__sub">Was wird bei welchem Auslöser auf welchem Drucker automatisch gedruckt?</div>
             </div>
           </div>
           <div class="gwx-panel__bd">
-            <form method="post" action="/gateway/rules/create" class="gwx-inline" style="margin-bottom:14px;">
+            <form method="post" action="/gateway/rules/create" class="sys-row sys-mb-2">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="gw" value="{{ gw.id }}">
-              <input class="gwx-input" style="width:auto;" type="text" name="name" placeholder="Regelname" required>
-              <select name="trigger" style="width:auto;">
+              <input class="form-input sys-w-auto" type="text" name="name" placeholder="Regelname" required>
+              <select class="sys-w-auto" name="trigger">
                 {% for key, label in trigger_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
               </select>
-              <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Regel</button>
+              <button class="btn btn--primary btn--sm" type="submit">+ Regel</button>
             </form>
 
             <div class="gwx-overview" x-data="{ open: {{ 'true' if matrix.spalten else 'false' }}, tab: 'matrix' }">
@@ -78,15 +82,15 @@
               </button>
               <div x-show="open" x-cloak class="gwx-overview__body">
                 <div class="gwx-overview__tabs">
-                  <button type="button" class="gwx-btn gwx-btn--sm" :class="{ 'gwx-btn--primary': tab === 'matrix' }" @click="tab = 'matrix'">Matrix</button>
-                  <button type="button" class="gwx-btn gwx-btn--sm" :class="{ 'gwx-btn--primary': tab === 'simulation' }" @click="tab = 'simulation'">Durchspielen</button>
+                  <button type="button" class="btn btn--secondary btn--sm" :class="{ 'btn--primary': tab === 'matrix' }" @click="tab = 'matrix'">Matrix</button>
+                  <button type="button" class="btn btn--secondary btn--sm" :class="{ 'btn--primary': tab === 'simulation' }" @click="tab = 'simulation'">Durchspielen</button>
                 </div>
 
                 <div x-show="tab === 'matrix'">
                   {% if not matrix.spalten %}
-                  <div class="gwx-help">Keine Einsatz-Regeln vorhanden.</div>
+                  <div class="form-hint">Keine Einsatz-Regeln vorhanden.</div>
                   {% elif not matrix.zeilen %}
-                  <div class="gwx-help">Noch kein Alarmtyp-Katalog. <a href="/admin/alarmtypen">Alarmtypen pflegen</a></div>
+                  <div class="form-hint">Noch kein Alarmtyp-Katalog. <a href="/admin/alarmtypen">Alarmtypen pflegen</a></div>
                   {% else %}
                   <div class="gwx-matrix-wrap">
                     <table class="gwx-matrix">
@@ -97,9 +101,9 @@
                           <th class="{{ 'gwx-matrix__inaktiv' if not spalte.aktiv }}">
                             <a href="#regel-{{ spalte.rule.id }}">{{ spalte.titel }}</a>
                             <small>{{ spalte.trigger_label }}</small>
-                            {% for hinweis in spalte.hinweise %}<span class="gwx-chip">{{ hinweis }}</span>{% endfor %}
-                            {% if spalte.ohne_drucker %}<span class="gwx-chip gwx-chip--warn">{{ icon("alert-triangle", size="sm") }} ohne Drucker</span>{% endif %}
-                            {% if not spalte.aktiv %}<span class="gwx-chip">aus</span>{% endif %}
+                            {% for hinweis in spalte.hinweise %}<span class="sys-pill">{{ hinweis }}</span>{% endfor %}
+                            {% if spalte.ohne_drucker %}<span class="sys-pill sys-status--warn">{{ icon("alert-triangle", size="sm") }} ohne Drucker</span>{% endif %}
+                            {% if not spalte.aktiv %}<span class="sys-pill">aus</span>{% endif %}
                           </th>
                           {% endfor %}
                         </tr>
@@ -107,7 +111,7 @@
                       <tbody>
                         {% for zeile in matrix.zeilen %}
                         <tr>
-                          <th class="gwx-matrix__stufe"><span class="gwx-mono">{{ zeile.code }}</span><small>{{ zeile.label }}</small></th>
+                          <th class="gwx-matrix__stufe"><span class="sys-mono">{{ zeile.code }}</span><small>{{ zeile.label }}</small></th>
                           {% for zelle in zeile.zellen %}
                           <td class="{{ 'gwx-matrix__abweichung' if zelle.abweichung }} {{ 'gwx-matrix__leer' if not zelle.greift }}">
                             {{ zelle.kurz if zelle.greift else '–' }}
@@ -118,27 +122,27 @@
                       </tbody>
                     </table>
                   </div>
-                  <div class="gwx-help">– greift nicht · fett = Abweichung je Stufe · Hinweise oben = zusätzliche Bedingungen</div>
+                  <div class="form-hint">– greift nicht · fett = Abweichung je Stufe · Hinweise oben = zusätzliche Bedingungen</div>
                   {% endif %}
                 </div>
 
                 <div x-show="tab === 'simulation'" x-cloak>
-                  <form id="gwx-sim-form" class="gwx-formgrid gwx-simulation-form"
+                  <form id="gwx-sim-form" class="sys-form-grid gwx-simulation-form"
                         hx-get="/gateway/{{ gw.id }}/druckregeln/simulation"
                         hx-target="#gwx-sim-ergebnis"
                         hx-trigger="change, input delay:400ms from:input[name=stichwort], load"
                         hx-include="#gwx-sim-form">
-                    <div class="gwx-field"><label class="gwx-label">Auslöser</label>
+                    <div class="sys-field"><label class="form-label">Auslöser</label>
                       <select name="trigger">{% for key in ('einsatz_created', 'einsatz_created_gsl', 'einsatz_updated') %}<option value="{{ key }}">{{ trigger_labels[key] }}</option>{% endfor %}</select></div>
-                    <div class="gwx-field"><label class="gwx-label">Alarmstufe</label>
+                    <div class="sys-field"><label class="form-label">Alarmstufe</label>
                       <select name="alarm_code">{% for alarm in alarmstufen_katalog %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></div>
-                    <div class="gwx-field"><label class="gwx-label">Einsatzart</label>
+                    <div class="sys-field"><label class="form-label">Einsatzart</label>
                       <select name="uebung"><option value="echt">Echt</option><option value="uebung">Übung</option></select></div>
                     <label class="gwx-check"><input type="checkbox" name="bma" value="1"> BMA</label>
-                    <div class="gwx-field"><label class="gwx-label">Uhrzeit</label>
-                      <input class="gwx-input gwx-input--mono" type="time" name="uhrzeit" value="{{ simulation_default_uhrzeit }}"></div>
-                    <div class="gwx-field"><label class="gwx-label">Stichwort</label>
-                      <input class="gwx-input" type="text" name="stichwort" placeholder="z. B. BMA"></div>
+                    <div class="sys-field"><label class="form-label">Uhrzeit</label>
+                      <input class="form-input sys-mono" type="time" name="uhrzeit" value="{{ simulation_default_uhrzeit }}"></div>
+                    <div class="sys-field"><label class="form-label">Stichwort</label>
+                      <input class="form-input" type="text" name="stichwort" placeholder="z. B. BMA"></div>
                   </form>
                   <div id="gwx-sim-ergebnis"></div>
                 </div>
@@ -148,7 +152,7 @@
             {% if not rules %}
             <div class="gwx-empty">Noch keine Druckregel. Automatischer Verleihschein-Druck wird über eine Regel mit Auslöser "Verleihschein angelegt" abgebildet.</div>
             {% else %}
-            <p style="font-size:.76rem;color:var(--g-dim);margin:0 0 10px;">⠿ Ziehen ändert die Reihenfolge – obere Regeln werden zuerst ausgewertet.</p>
+            <p class="sys-text-xs sys-muted sys-mb-1">⠿ Ziehen ändert die Reihenfolge – obere Regeln werden zuerst ausgewertet.</p>
             <div id="gwx-rule-list" data-gw="{{ gw.id }}">
             {% for r in rules %}
             {% set f = r.filters or {} %}{% set o = r.options or {} %}{% set fenster = f.get('zeitfenster') or {} %}
@@ -160,11 +164,11 @@
                  x-data="{ open: {{ 'true' if q.get('rule_created')|string == r.id|string else 'false' }} }">
               <div class="gwx-rule__hd" @click="open=!open">
                 <span class="gwx-drag" title="Ziehen zum Sortieren" @click.stop>⠿</span>
-                <span x-cloak x-show="open">{{ icon("chevron-down", size="sm") }}</span><span x-cloak x-show="!open" class="gwx-mono" style="color:var(--g-dim);">{{ icon("chevron-right", size="sm") }}</span>
-                <div style="flex:1;min-width:0;">
+                <span x-cloak x-show="open">{{ icon("chevron-down", size="sm") }}</span><span x-cloak x-show="!open" class="sys-mono sys-muted">{{ icon("chevron-right", size="sm") }}</span>
+                <div class="sys-grow-1 sys-min-0">
                   <div class="gwx-rule__name">{{ r.name }}
-                    {% if r.aktiv %}<span class="gwx-chip gwx-chip--ok" style="margin-left:6px;">{{ status_dot("gruen", "aktiv") }}aktiv</span>
-                    {% else %}<span class="gwx-chip" style="margin-left:6px;">{{ status_dot("grau", "aus") }}aus</span>{% endif %}
+                    {% if r.aktiv %}<span class="sys-pill sys-status--ok sys-ml-1">{{ status_dot("gruen", "aktiv") }}aktiv</span>
+                    {% else %}<span class="sys-pill sys-ml-1">{{ status_dot("grau", "aus") }}aus</span>{% endif %}
                   </div>
                   <div class="gwx-rule__sum">
                     {{ r.trigger_label }} ·
@@ -172,8 +176,8 @@
                     {{ (r.printer_ids or [])|length }} Drucker ·
                     {{ o.get('copies', 1) }}×
                     {% if f.get('stichwort') %} · Stichwort: {{ f.get('stichwort')|join(', ') }}{% endif %}
-                    {% if f.get('uebung') == 'nur_echt' %} · <span class="gwx-chip">nur Echteinsätze</span>{% endif %}
-                    {% if f.get('uebung') == 'nur_uebung' %} · <span class="gwx-chip">nur Übungen</span>{% endif %}
+                    {% if f.get('uebung') == 'nur_echt' %} · <span class="sys-pill">nur Echteinsätze</span>{% endif %}
+                    {% if f.get('uebung') == 'nur_uebung' %} · <span class="sys-pill">nur Übungen</span>{% endif %}
                     {% if fenster.get('von') %} · {{ fenster.get('von') }}–{{ fenster.get('bis') }}{% endif %}
                     {% if einsatz_trigger and alarmstufen %}
                       · {{ alarmstufen[:6]|join(', ') }}{% if alarmstufen|length > 6 %} +{{ alarmstufen|length - 6 }}{% endif %}
@@ -191,17 +195,17 @@
                   </div>
                   <div class="gwx-rule__description">{{ regel_beschreibungen[r.id] }}</div>
                 </div>
-                <div class="gwx-inline" @click.stop>
+                <div class="sys-row" @click.stop>
                   <form method="post" action="/gateway/rules/{{ r.id }}/test"
                         onsubmit="return confirm('Diese Regel jetzt als Testdruck gegen den letzten Einsatz ausfuehren?')">
                     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                     <input type="hidden" name="gw" value="{{ gw.id }}">
-                    <button class="gwx-btn gwx-btn--sm" type="submit" title="Regel gegen den letzten Einsatz testen">{{ icon("flask", size="xs") }} Testdruck</button>
+                    <button class="btn btn--secondary btn--sm" type="submit" title="Regel gegen den letzten Einsatz testen">{{ icon("flask", size="xs") }} Testdruck</button>
                   </form>
                   <form method="post" action="/gateway/rules/{{ r.id }}/toggle">
                     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                     <input type="hidden" name="gw" value="{{ gw.id }}">
-                    <button class="gwx-btn gwx-btn--sm" type="submit">{{ 'Deaktivieren' if r.aktiv else 'Aktivieren' }}</button>
+                    <button class="btn btn--secondary btn--sm" type="submit">{{ 'Deaktivieren' if r.aktiv else 'Aktivieren' }}</button>
                   </form>
                 </div>
               </div>
@@ -226,16 +230,16 @@
                   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                   <input type="hidden" name="gw" value="{{ gw.id }}">
 
-                  <div class="gwx-formgrid">
-                    <div class="gwx-field"><label class="gwx-label">Regelname</label>
-                      <input class="gwx-input" type="text" name="name" value="{{ r.name }}"></div>
-                    <div class="gwx-field"><label class="gwx-label">Auslöser</label>
+                  <div class="sys-form-grid">
+                    <div class="sys-field"><label class="form-label">Regelname</label>
+                      <input class="form-input" type="text" name="name" value="{{ r.name }}"></div>
+                    <div class="sys-field"><label class="form-label">Auslöser</label>
                       <select name="trigger" x-model="trigger">
                         {% for key, label in trigger_labels.items() %}
                         <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}</option>{% endfor %}
                       </select></div>
                   </div>
-                  <div class="gwx-help">Bei Aktualisierungen druckt die Regel nur Inhalte, die für diesen Einsatz oder diese Großschadenslage noch nicht gedruckt wurden.</div>
+                  <div class="form-hint">Bei Aktualisierungen druckt die Regel nur Inhalte, die für diesen Einsatz oder diese Großschadenslage noch nicht gedruckt wurden.</div>
 
                   <div class="gwx-sechd">{{ icon("file-text", size="md") }} Inhalte (Dokumente)</div>
                   <div class="gwx-checks">
@@ -253,17 +257,17 @@
                   </div>
 
                   <div class="gwx-sechd" x-show="trigger === 'gsl_stelle_disponiert'">Einsatzstellen-Optionen</div>
-                  <div class="gwx-formgrid" x-show="trigger === 'gsl_stelle_disponiert'">
+                  <div class="sys-form-grid" x-show="trigger === 'gsl_stelle_disponiert'">
                     <label class="gwx-check"><input type="checkbox" name="stelle_nur_erste_disposition" value="1" {{ 'checked' if f.get('stelle_nur_erste_disposition') }}> Nur bei erster Disposition der Einsatzstelle</label>
-                    <div class="gwx-field"><label class="gwx-label">Auftragsart</label><select name="stelle_auftragsart"><option value="alle" {{ 'selected' if f.get('stelle_auftragsart', 'alle') == 'alle' }}>alle</option><option value="erkundung" {{ 'selected' if f.get('stelle_auftragsart') == 'erkundung' }}>nur Erkundung</option><option value="abarbeitung" {{ 'selected' if f.get('stelle_auftragsart') == 'abarbeitung' }}>nur Abarbeitung</option></select></div>
+                    <div class="sys-field"><label class="form-label">Auftragsart</label><select name="stelle_auftragsart"><option value="alle" {{ 'selected' if f.get('stelle_auftragsart', 'alle') == 'alle' }}>alle</option><option value="erkundung" {{ 'selected' if f.get('stelle_auftragsart') == 'erkundung' }}>nur Erkundung</option><option value="abarbeitung" {{ 'selected' if f.get('stelle_auftragsart') == 'abarbeitung' }}>nur Abarbeitung</option></select></div>
                   </div>
 
                   <div class="gwx-sechd" x-show="trigger === 'mail_eingang'">{{ icon("mail", size="md") }} E-Mail-Optionen</div>
-                  <div class="gwx-formgrid" x-show="trigger === 'mail_eingang'">
+                  <div class="sys-form-grid" x-show="trigger === 'mail_eingang'">
                     <label class="gwx-check"><input type="checkbox" name="mail_nur_zugeordnet" value="1" {{ 'checked' if f.get('mail_nur_zugeordnet') }}> Nur zugeordnete Mails</label>
                     <label class="gwx-check"><input type="checkbox" name="mail_nur_freigegeben" value="1" {{ 'checked' if f.get('mail_nur_freigegeben') }}> Nur freigegebene Absender</label>
                     <label class="gwx-check"><input type="checkbox" name="mail_attachments" value="1" {{ 'checked' if o.get('mail_attachments', true) }}> Druckbare Anhänge drucken</label>
-                    <div class="gwx-field"><label class="gwx-label">Max. Anhangseiten</label><input class="gwx-input gwx-input--mono" type="number" min="1" max="200" name="mail_max_pages" value="{{ o.get('mail_max_pages', 50) }}"></div>
+                    <div class="sys-field"><label class="form-label">Max. Anhangseiten</label><input class="form-input sys-mono" type="number" min="1" max="200" name="mail_max_pages" value="{{ o.get('mail_max_pages', 50) }}"></div>
                   </div>
 
                   <div class="gwx-sechd">{{ icon("building", size="md") }} Objekt-Elemente (bei zugeordnetem Objekt)</div>
@@ -275,12 +279,12 @@
                   </div>
 
                   {% if request.state.objekt_enabled %}
-                  <p class="gwx-help">BSP-Ausschnitte beachten die Farbeinstellung der Regel und die Druckervorgabe. Bei S/W können farbige Planzeichen schwerer lesbar sein.</p>
+                  <p class="form-hint">BSP-Ausschnitte beachten die Farbeinstellung der Regel und die Druckervorgabe. Bei S/W können farbige Planzeichen schwerer lesbar sein.</p>
                   {% endif %}
 
                   <div class="gwx-sechd">{{ icon("printer", size="md") }} Zieldrucker</div>
                   {% if not printers %}
-                  <p style="font-size:.82rem;color:var(--g-dim);">Erst Drucker hinzufügen.</p>
+                  <p class="sys-small sys-muted">Erst Drucker hinzufügen.</p>
                   {% else %}
                   <div class="gwx-checks">
                     {% for p in printers %}
@@ -288,37 +292,37 @@
                       {{ 'checked' if p.id in (r.printer_ids or []) }}> {{ p.name }}</label>
                     {% endfor %}
                   </div>
-                  <div class="gwx-formgrid" style="margin-top:10px;">
-                    <div class="gwx-field"><label class="gwx-label">Fallback-Drucker (wenn Ziel offline)</label>
+                  <div class="sys-form-grid sys-mt-2">
+                    <div class="sys-field"><label class="form-label">Fallback-Drucker (wenn Ziel offline)</label>
                       <select name="fallback_printer_id">
                         <option value="">– keiner –</option>
                         {% for p in printers %}
                         <option value="{{ p.id }}" {{ 'selected' if r.fallback_printer_id==p.id }}>{{ p.name }}</option>{% endfor %}
                       </select>
-                      <div class="gwx-help">Greift erst, wenn das Gateway den Auftrag nach eigenen Wiederholungsversuchen endgültig aufgibt, nicht sofort.</div></div>
+                      <div class="form-hint">Greift erst, wenn das Gateway den Auftrag nach eigenen Wiederholungsversuchen endgültig aufgibt, nicht sofort.</div></div>
                   </div>
                   {% endif %}
 
                   <div class="gwx-sechd">{{ icon("printer", size="md") }} Druckoptionen</div>
-                  <div class="gwx-formgrid">
-                    <div class="gwx-field"><label class="gwx-label">Exemplare</label>
-                      <input class="gwx-input gwx-input--mono" type="number" min="1" name="copies" value="{{ o.get('copies', 1) }}"></div>
-                    <div class="gwx-field"><label class="gwx-label">Seiten (z. B. 1-2, leer = alle)</label>
-                      <input class="gwx-input gwx-input--mono" type="text" name="page_range" value="{{ o.get('page_range','') }}" placeholder="alle"></div>
-                    <div class="gwx-field"><label class="gwx-label">Duplex</label>
+                  <div class="sys-form-grid">
+                    <div class="sys-field"><label class="form-label">Exemplare</label>
+                      <input class="form-input sys-mono" type="number" min="1" name="copies" value="{{ o.get('copies', 1) }}"></div>
+                    <div class="sys-field"><label class="form-label">Seiten (z. B. 1-2, leer = alle)</label>
+                      <input class="form-input sys-mono" type="text" name="page_range" value="{{ o.get('page_range','') }}" placeholder="alle"></div>
+                    <div class="sys-field"><label class="form-label">Duplex</label>
                       <select name="duplex">
                         <option value="" {{ 'selected' if not o.get('duplex') }}>Druckervorgabe</option>
                         <option value="off" {{ 'selected' if o.get('duplex')=='off' }}>Einseitig</option>
                         <option value="long" {{ 'selected' if o.get('duplex')=='long' }}>Duplex (lang)</option>
                         <option value="short" {{ 'selected' if o.get('duplex')=='short' }}>Duplex (kurz)</option>
                       </select></div>
-                    <div class="gwx-field"><label class="gwx-label">Farbe</label>
+                    <div class="sys-field"><label class="form-label">Farbe</label>
                       <select name="color">
                         <option value="" {{ 'selected' if not o.get('color') }}>Druckervorgabe</option>
                         <option value="color" {{ 'selected' if o.get('color')=='color' }}>Farbe</option>
                         <option value="monochrome" {{ 'selected' if o.get('color')=='monochrome' }}>S/W</option>
                       </select></div>
-                    <div class="gwx-field"><label class="gwx-label">Format (A3 nur, wenn Drucker es kann)</label>
+                    <div class="sys-field"><label class="form-label">Format (A3 nur, wenn Drucker es kann)</label>
                       <select name="media">
                         <option value="" {{ 'selected' if not o.get('media') }}>Druckervorgabe</option>
                         <option value="A4" {{ 'selected' if o.get('media')=='A4' }}>A4</option>
@@ -327,35 +331,35 @@
                   </div>
 
                   <div class="gwx-sechd">{{ icon("target", size="md") }} Filter (optional – wann greift die Regel?)</div>
-                  <div class="gwx-formgrid">
-                    <div class="gwx-field"><label class="gwx-label">Einsatzart</label>
+                  <div class="sys-form-grid">
+                    <div class="sys-field"><label class="form-label">Einsatzart</label>
                       <select name="filter_uebung">
                         <option value="alle" {{ 'selected' if f.get('uebung', 'alle') == 'alle' }}>Alle Einsätze</option>
                         <option value="nur_echt" {{ 'selected' if f.get('uebung') == 'nur_echt' }}>Nur Echteinsätze</option>
                         <option value="nur_uebung" {{ 'selected' if f.get('uebung') == 'nur_uebung' }}>Nur Übungen</option>
                       </select></div>
-                    <div class="gwx-field" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)"><label class="gwx-label">Stichwort enthält (Komma-getrennt)</label>
-                      <input class="gwx-input" type="text" name="stichwort" value="{{ (f.get('stichwort') or [])|join(', ') }}" placeholder="z. B. B, T, BMA"></div>
-                    <div class="gwx-field"><label class="gwx-label">Nur ab</label>
-                      <input class="gwx-input gwx-input--mono" type="time" name="zeit_von" value="{{ fenster.get('von','') }}"></div>
-                    <div class="gwx-field"><label class="gwx-label">bis</label>
-                      <input class="gwx-input gwx-input--mono" type="time" name="zeit_bis" value="{{ fenster.get('bis','') }}"></div>
-                    <div class="gwx-field" style="justify-content:end;" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)">
-                      <label class="gwx-check" style="border:none;background:none;padding:0;">
+                    <div class="sys-field" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)"><label class="form-label">Stichwort enthält (Komma-getrennt)</label>
+                      <input class="form-input" type="text" name="stichwort" value="{{ (f.get('stichwort') or [])|join(', ') }}" placeholder="z. B. B, T, BMA"></div>
+                    <div class="sys-field"><label class="form-label">Nur ab</label>
+                      <input class="form-input sys-mono" type="time" name="zeit_von" value="{{ fenster.get('von','') }}"></div>
+                    <div class="sys-field"><label class="form-label">bis</label>
+                      <input class="form-input sys-mono" type="time" name="zeit_bis" value="{{ fenster.get('bis','') }}"></div>
+                    <div class="sys-field sys-actions--end" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)">
+                      <label class="gwx-check sys-bare">
                         <input type="checkbox" name="nur_bma" value="1" {{ 'checked' if f.get('nur_bma') }}> Nur BMA-Alarme</label></div>
                   </div>
 
-                  <div class="gwx-field" style="margin-top:12px;"
+                  <div class="sys-field sys-mt-2"
                        x-show="['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)">
-                    <label class="gwx-label">Alarmstufen</label>
+                    <label class="form-label">Alarmstufen</label>
                     {% set brand_stufen = alarmstufen_katalog|selectattr('gruppe', 'equalto', 'F')|list %}
                     {% set technik_stufen = alarmstufen_katalog|selectattr('gruppe', 'equalto', 'T')|list %}
                     {% set sonstige_stufen = alarmstufen_katalog|selectattr('gruppe', 'equalto', 'S')|list %}
                     {% if alarmstufen_katalog %}
                     <div class="gwx-alarm-actions">
-                      {% if brand_stufen %}<button class="gwx-btn gwx-btn--sm" type="button" @click="waehleGruppe({{ brand_stufen|map(attribute='code')|list|tojson|forceescape }})">Alle F</button>{% endif %}
-                      {% if technik_stufen %}<button class="gwx-btn gwx-btn--sm" type="button" @click="waehleGruppe({{ technik_stufen|map(attribute='code')|list|tojson|forceescape }})">Alle T</button>{% endif %}
-                      <button class="gwx-btn gwx-btn--sm" type="button" @click="leereAlarmstufen()">Keine (= alle Stufen)</button>
+                      {% if brand_stufen %}<button class="btn btn--secondary btn--sm" type="button" @click="waehleGruppe({{ brand_stufen|map(attribute='code')|list|tojson|forceescape }})">Alle F</button>{% endif %}
+                      {% if technik_stufen %}<button class="btn btn--secondary btn--sm" type="button" @click="waehleGruppe({{ technik_stufen|map(attribute='code')|list|tojson|forceescape }})">Alle T</button>{% endif %}
+                      <button class="btn btn--secondary btn--sm" type="button" @click="leereAlarmstufen()">Keine (= alle Stufen)</button>
                     </div>
                     <div class="gwx-alarm-groups">
                       {% for gruppenname, gruppen_icon, stufen in [('Brand (F)', 'flame', brand_stufen), ('Technik (T)', 'tool', technik_stufen), ('Sonstige', none, sonstige_stufen)] %}
@@ -383,12 +387,12 @@
                       </label>
                       {% endfor %}
                     </div>
-                    <div class="gwx-help">Keine Auswahl = Regel greift bei jeder Alarmstufe.</div>
+                    <div class="form-hint">Keine Auswahl = Regel greift bei jeder Alarmstufe.</div>
                     {% else %}
-                    <div class="gwx-help">Noch keine Alarmtypen vorhanden. <a href="/admin/alarmtypen">Alarmtypen pflegen</a></div>
+                    <div class="form-hint">Noch keine Alarmtypen vorhanden. <a href="/admin/alarmtypen">Alarmtypen pflegen</a></div>
                     {% endif %}
                     {% if f.get('min_alarmstufe') and not alarmstufen %}
-                    <div class="gwx-help">Bisher: ab Stufe {{ f.get('min_alarmstufe') }} (alt)</div>
+                    <div class="form-hint">Bisher: ab Stufe {{ f.get('min_alarmstufe') }} (alt)</div>
                     <input type="hidden" name="min_alarmstufe" value="{{ f.get('min_alarmstufe') }}">
                     {% endif %}
                   </div>
@@ -398,9 +402,9 @@
                     {{ icon("chart-bar", size="sm") }} Abweichungen je Alarmstufe (optional)
                   </div>
                   <div x-show="['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)">
-                    <div class="gwx-help">Leer = wie oben. Hier z. B. bei F14 3 Kopien in A3 mit Brandschutzplan.</div>
+                    <div class="form-hint">Leer = wie oben. Hier z. B. bei F14 3 Kopien in A3 mit Brandschutzplan.</div>
                     <div class="gwx-alarm-table-wrap">
-                      <table class="gwx-table gwx-alarm-table">
+                      <table class="sys-table gwx-alarm-table">
                         <thead>
                           <tr>
                             <th>Stufe</th>
@@ -414,8 +418,8 @@
                           {% for s in alarmstufen_katalog %}
                           {% set stufen_option = abweichungen.get(s.code) or {} %}
                           <tr x-show="alarmstufeSichtbar('{{ s.code }}', {{ 'true' if stufen_option else 'false' }})">
-                            <td data-label="Stufe" class="gwx-mono" title="{{ s.label }}">{{ s.code }}</td>
-                            <td data-label="Kopien"><input class="gwx-input gwx-input--mono" type="number" min="1" max="20"
+                            <td data-label="Stufe" class="sys-mono" title="{{ s.label }}">{{ s.code }}</td>
+                            <td data-label="Kopien"><input class="form-input sys-mono" type="number" min="1" max="20"
                               name="stufe_{{ s.code }}_copies" value="{{ stufen_option.get('copies', '') }}" placeholder="{{ o.get('copies', 1) }}"></td>
                             <td data-label="Format"><select name="stufe_{{ s.code }}_media">
                               <option value="">wie oben</option>
@@ -434,7 +438,7 @@
                             </td>
                             {% endfor %}
                             <td data-label="Objekt-Inhalte"><details {{ 'open' if 'objekt_elements' in stufen_option }}>
-                              <summary><label class="gwx-check" style="display:inline-flex;" @click.stop>
+                              <summary><label class="gwx-check sys-inline-flex" @click.stop>
                                 <input type="checkbox" name="stufe_{{ s.code }}_custom_elements" value="1"
                                   {{ 'checked' if 'objekt_elements' in stufen_option }}> abweichend
                               </label></summary>
@@ -449,11 +453,11 @@
                           {% endfor %}
                           {% for code, stufen_option in abweichungen.items() if code not in katalog_codes %}
                           <tr x-show="alarmstufeSichtbar('{{ code }}', true)">
-                            <td data-label="Stufe" class="gwx-mono">
-                              {{ code }} <span class="gwx-help">(nicht im Katalog)</span>
+                            <td data-label="Stufe" class="sys-mono">
+                              {{ code }} <span class="form-hint">(nicht im Katalog)</span>
                             </td>
                             <td data-label="Kopien">
-                              <input class="gwx-input gwx-input--mono" type="number" min="1" max="20"
+                              <input class="form-input sys-mono" type="number" min="1" max="20"
                                 name="stufe_{{ code }}_copies" value="{{ stufen_option.get('copies', '') }}"
                                 placeholder="{{ o.get('copies', 1) }}">
                             </td>
@@ -478,7 +482,7 @@
                             {% endfor %}
                             <td data-label="Objekt-Inhalte">
                               <details open>
-                                <summary><label class="gwx-check" style="display:inline-flex;" @click.stop>
+                                <summary><label class="gwx-check sys-inline-flex" @click.stop>
                                   <input type="checkbox" name="stufe_{{ code }}_custom_elements" value="1"
                                     {{ 'checked' if 'objekt_elements' in stufen_option }}> abweichend
                                 </label></summary>
@@ -499,10 +503,10 @@
                     </div>
                   </div>
 
-                  <div class="gwx-btnrow" style="margin-top:16px;">
-                    <button class="gwx-btn gwx-btn--primary" type="submit">Regel speichern</button>
+                  <div class="sys-actions sys-mt-2">
+                    <button class="btn btn--primary" type="submit">Regel speichern</button>
                     <span class="gwx-spacer"></span>
-                    <button class="gwx-btn gwx-btn--danger gwx-btn--sm" type="submit"
+                    <button class="btn btn--danger btn--sm" type="submit"
                             formaction="/gateway/rules/{{ r.id }}/delete"
                             onclick="return confirm('Diese Regel loeschen?')">Löschen</button>
                   </div>

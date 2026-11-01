@@ -1,9 +1,13 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Alarmempfang - {{ gw.name }} - {{ brand }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% include "gateway/_gwx_style.html" %}
-<div class="gwx gwx-reception">
-  <div class="gwx-bar">
+<div class="gwx gwx-reception sys-page">
+  <div class="gwx-bar sys-hero">
     <div class="gwx-brand">
       <div class="gwx-brand__icon">{{ icon("printer", size="lg") }}</div>
       <div>
@@ -13,53 +17,53 @@
     </div>
     <div class="gwx-pills">
       {% if gw.status == 'online' and connected %}
-      <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
+      <span class="sys-pill sys-status--ok"><span class="sys-indicator"></span>Online</span>
       {% elif not gw.is_paired %}
-      <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
+      <span class="sys-pill"><span class="sys-indicator"></span>Nicht gekoppelt</span>
       {% else %}
-      <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
+      <span class="sys-pill sys-status--fail"><span class="sys-indicator"></span>Offline</span>
       {% endif %}
       {% if gw.is_paired %}
         {% if gw.serial_connected %}
-        <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Alarmleitung</span>
+        <span class="sys-pill sys-status--ok"><span class="sys-indicator"></span>Alarmleitung</span>
         {% else %}
-        <span class="gwx-pill gwx-pill--warn"><span class="gwx-pill__d"></span>Alarmleitung getrennt</span>
+        <span class="sys-pill sys-status--warn"><span class="sys-indicator"></span>Alarmleitung getrennt</span>
         {% endif %}
       {% endif %}
-      {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
+      {% if gw.version %}<span class="sys-pill">v{{ gw.version }}</span>{% endif %}
     </div>
     <div class="gwx-spacer"></div>
-    <a href="/gateway" class="gwx-btn">&larr; Übersicht</a>
+    <a href="/gateway" class="btn btn--secondary">&larr; Übersicht</a>
   </div>
   {% from "gateway/_tabs.html" import gwtabs %}
   {{ gwtabs(gw.id, "alarmempfang") }}
   <div class="gwx-body"><div class="gwx-grid">
-    <section class="gwx-panel gwx-col-12">
-    <div class="gwx-panel__hd"><div>
+    <section class="sys-card gwx-col-12">
+    <div class="sys-card__head"><div>
       <h2 class="gwx-panel__t">{{ icon('filter', size='md') }} Alarmempfang · Filter</h2>
       <div class="gwx-panel__sub">Empfänge nach Status, Zeitraum und Leitstellennummer eingrenzen.</div>
     </div></div>
     <div class="gwx-panel__bd">
-    <form class="gwx-formgrid" id="alarm-filter" hx-get="/gateway/{{ gw.id }}/alarmempfang" hx-target="#alarm-liste" hx-swap="outerHTML" hx-trigger="change, submit">
-      <label class="gwx-field"><span class="gwx-label">Status</span> <select name="status">
+    <form class="sys-form-grid" id="alarm-filter" hx-get="/gateway/{{ gw.id }}/alarmempfang" hx-target="#alarm-liste" hx-swap="outerHTML" hx-trigger="change, submit">
+      <label class="sys-field"><span class="form-label">Status</span> <select name="status">
         {% for wert in ['alle', 'error', 'needs_review', 'stored', 'processing', 'applied'] %}
         <option value="{{ wert }}" {{ 'selected' if status == wert else '' }}>{{ wert }}</option>
         {% endfor %}
       </select></label>
-      <label class="gwx-field"><span class="gwx-label">Zeitraum</span> <select name="zeitraum">
+      <label class="sys-field"><span class="form-label">Zeitraum</span> <select name="zeitraum">
         {% for wert, text in [('heute', 'Heute'), ('7', '7 Tage'), ('30', '30 Tage')] %}
         <option value="{{ wert }}" {{ 'selected' if zeitraum == wert else '' }}>{{ text }}</option>
         {% endfor %}
       </select></label>
-      <label class="gwx-field"><span class="gwx-label">Leitstellennummer</span> <input class="gwx-input" name="nummer" value="{{ nummer }}" maxlength="40"></label>
-      <button class="gwx-btn gwx-btn--primary" type="submit">{{ icon("filter", size="sm") }} Filtern</button>
+      <label class="sys-field"><span class="form-label">Leitstellennummer</span> <input class="form-input" name="nummer" value="{{ nummer }}" maxlength="40"></label>
+      <button class="btn btn--primary" type="submit">{{ icon("filter", size="sm") }} Filtern</button>
     </form></div></section>
     {% include "gateway/_alarmempfang_liste.html" %}
-    <section id="alarm-detail" class="gwx-col-12" aria-live="polite"><div class="gwx-panel"><div class="gwx-panel__hd"><div>
+    <section id="alarm-detail" class="gwx-col-12" aria-live="polite"><div class="sys-card"><div class="sys-card__head"><div>
       <h2 class="gwx-panel__t">{{ icon('file-text', size='md') }} Detail</h2>
       <div class="gwx-panel__sub">Einen Empfang in der Tabelle öffnen.</div>
     </div></div><div class="gwx-panel__bd gwx-empty">Noch kein Alarmempfang ausgewählt.</div></div></section>
-    <section class="gwx-panel gwx-col-12" id="alarm-parser" hx-get="/gateway/{{ gw.id }}/alarmempfang/parser" hx-trigger="load" hx-swap="outerHTML" aria-live="polite"><div class="gwx-panel__hd"><div>
+    <section class="sys-card gwx-col-12" id="alarm-parser" hx-get="/gateway/{{ gw.id }}/alarmempfang/parser" hx-trigger="load" hx-swap="outerHTML" aria-live="polite"><div class="sys-card__head"><div>
       <h2 class="gwx-panel__t">{{ icon('code', size='md') }} Parser</h2>
       <div class="gwx-panel__sub">Regelsätze und Testfälle verwalten.</div>
     </div></div><div class="gwx-panel__bd gwx-empty">Parser wird geladen</div></section>

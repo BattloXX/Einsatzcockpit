@@ -2,6 +2,10 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Posteingang{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Posteingang'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='schnittstellen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 {% include "admin/_mail_eingang_content.html" %}{% endblock %}

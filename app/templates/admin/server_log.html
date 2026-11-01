@@ -1,29 +1,33 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block title %}Server-Log – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Server-Log'}]) }}{% endblock %}
 
 {% block admin_content %}
 {% with section_id='systemstatus' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
+<div class="page-content sys-page">
+  <div class="sys-hero">
     <div>
-      <h1>Server-Log</h1>
-      <p class="page-header__sub">
+      <h1>{{ icon("file-text") }} Server-Log</h1>
+      <p class="sys-muted">
         In-Memory-Ringpuffer der letzten Lognachrichten dieses Server-Prozesses.
-        <span id="workerNote" class="text-muted" style="font-size:.82rem;"{% if not worker_note %} hidden{% endif %}>{{ worker_note or "" }}</span>
+        <span id="workerNote" class="sys-muted sys-small"{% if not worker_note %} hidden{% endif %}>{{ worker_note or "" }}</span>
       </p>
     </div>
   </div>
 
   {# ── Steuerleiste ────────────────────────────────────────────────────────── #}
-  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px;">
+  <div class="sys-card sys-toolbar sys-log-toolbar">
 
     {# Level-Filter #}
-    <div style="display:flex;align-items:center;gap:6px;">
-      <label style="font-size:.85rem;font-weight:600;white-space:nowrap;">Mindest-Level:</label>
-      <select id="levelSelect" class="form-input form-input--sm" style="width:120px;"
+    <div class="sys-log-filter">
+      <label class="form-label">Mindest-Level:</label>
+      <select id="levelSelect" class="form-input form-input--sm"
               onchange="applyFilter()">
         {% for lv in ['DEBUG','INFO','WARNING','ERROR','CRITICAL'] %}
         <option value="{{ lv }}" {% if lv == level %}selected{% endif %}>{{ lv }}</option>
@@ -32,9 +36,9 @@
     </div>
 
     {# Zeilen-Anzahl #}
-    <div style="display:flex;align-items:center;gap:6px;">
-      <label style="font-size:.85rem;font-weight:600;white-space:nowrap;">Letzte Zeilen:</label>
-      <select id="nSelect" class="form-input form-input--sm" style="width:100px;"
+    <div class="sys-log-filter">
+      <label class="form-label">Letzte Zeilen:</label>
+      <select id="nSelect" class="form-input form-input--sm"
               onchange="applyFilter()">
         {% for cnt in [100, 200, 500, 1000, 2000] %}
         <option value="{{ cnt }}" {% if cnt == n %}selected{% endif %}>{{ cnt }}</option>
@@ -43,9 +47,9 @@
     </div>
 
     {# Auto-Refresh #}
-    <div style="display:flex;align-items:center;gap:6px;">
-      <label style="font-size:.85rem;font-weight:600;white-space:nowrap;">Auto-Refresh:</label>
-      <select id="refreshInterval" class="form-input form-input--sm" style="width:110px;"
+    <div class="sys-log-filter">
+      <label class="form-label">Auto-Refresh:</label>
+      <select id="refreshInterval" class="form-input form-input--sm"
               onchange="startAutoRefresh()">
         <option value="0">Aus</option>
         <option value="5">5 s</option>
@@ -56,14 +60,14 @@
     </div>
 
     {# Manuell aktualisieren #}
-    <button class="btn btn--ghost btn--sm" onclick="fetchLog()">{{ icon("refresh", size="xs") }} Aktualisieren</button>
+    <button class="btn btn--ghost btn--sm" onclick="fetchLog()">{{ icon("refresh") }} Aktualisieren</button>
 
     {# Trennlinie #}
-    <div style="flex:1;"></div>
+    <div class="sys-grow"></div>
 
     {# Copy #}
     <button class="btn btn--ghost btn--sm" id="copyBtn" onclick="copyLog()">
-      {{ icon("clipboard-list", size="xs") }} Kopieren
+      {{ icon("clipboard-list") }} Kopieren
     </button>
 
     {# Download #}
@@ -71,26 +75,20 @@
        href="/admin/system/server-log/raw?n={{ n }}&level={{ level }}"
        class="btn btn--ghost btn--sm"
        download="server-log.txt">
-      {{ icon("download", size="xs") }} Download
+      {{ icon("download") }} Download
     </a>
 
   </div>
 
   {# Status-Zeile #}
-  <div style="display:flex;justify-content:space-between;align-items:center;
-              font-size:.8rem;color:var(--color-text-muted);margin-bottom:6px;">
+  <div class="sys-log-status sys-muted sys-small">
     <span id="statusLine">{{ total }} Einträge geladen</span>
     <span id="lastRefresh">Stand: jetzt</span>
   </div>
 
   {# Log-Ausgabe #}
-  <div style="position:relative;">
-    <pre id="logOutput"
-         style="background:var(--color-bg-dark,#1a1a2e);color:#d4d4d4;
-                padding:14px 16px;border-radius:6px;overflow:auto;
-                max-height:70vh;font-size:.78rem;line-height:1.5;
-                white-space:pre-wrap;word-break:break-all;
-                font-family:'Courier New',Courier,monospace;margin:0;">{% for e in entries %}<span class="ll-{{ e.level }}">{{ e.msg | forceescape }}</span>
+  <div class="sys-card sys-log-card">
+    <pre id="logOutput" class="sys-log-output">{% for e in entries %}<span class="ll-{{ e.level }}">{{ e.msg | forceescape }}</span>
 {% endfor %}</pre>
   </div>
 
@@ -98,13 +96,6 @@
 {% endblock %}
 
 {% block scripts %}
-<style>
-  .ll-DEBUG    { color: #858585; }
-  .ll-INFO     { color: #9cdcfe; }
-  .ll-WARNING  { color: #dcdcaa; }
-  .ll-ERROR    { color: #f48771; }
-  .ll-CRITICAL { color: #ff3333; font-weight: bold; }
-</style>
 <script>
 let _refreshTimer = null;
 

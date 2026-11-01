@@ -7,24 +7,30 @@
 {{ form.get(feld) if form.get(feld) is not none else (modell_attr if modell_attr is not none else '') }}
 {%- endmacro %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-content">
+<div class="sys-page">
   {% include "admin/_foerder_tabs.html" %}
 
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
-      <h1>{{ 'Pumpe bearbeiten' if pumpe else 'Neue Pumpe' }}</h1>
+      <h1>{{ icon("settings", size="md") }} {{ 'Pumpe bearbeiten' if pumpe else 'Neue Pumpe' }}</h1>
       {% if pumpe and pumpe.quelle == 'vorlage' and pumpe.vorlage_key %}
-      <p class="page-header__sub">Basiert auf Vorlage <code>{{ pumpe.vorlage_key }}</code> — frei anpassbar</p>
+      <p class="sys-muted">Basiert auf Vorlage <code>{{ pumpe.vorlage_key }}</code> — frei anpassbar</p>
       {% endif %}
     </div>
     <a class="btn btn--secondary" href="/admin/foerderpumpen">{{ icon("chevron-left", size="sm") }} Zurück</a>
-  </div>
+   </div>
+  </header>
 
   {% if fehler %}
   <div class="alert alert--error">
     <strong>Bitte korrigieren:</strong>
-    <ul style="margin:.4rem 0 0;padding-left:1.1rem;">
+    <ul class="sys-list-tight sys-mt-1">
       {% for f in fehler %}<li>{{ f }}</li>{% endfor %}
     </ul>
   </div>
@@ -40,15 +46,16 @@
     <input type="hidden" name="verbrauch_json" value="{{ form.get('verbrauch_json') if form.get('verbrauch_json') is not none else (pumpe.verbrauch_json if pumpe else '') }}">
     <input type="hidden" name="npshr_json" value="{{ form.get('npshr_json') if form.get('npshr_json') is not none else (pumpe.npshr_json if pumpe else '') }}">
 
-    <div class="card" style="padding:18px;margin-bottom:14px;">
-      <div class="form-group">
+    <section class="sys-card">
+     <div class="sys-card__head"><h2>{{ icon("settings") }} Pumpendaten</h2></div>
+     <div class="sys-form-grid">
+      <div class="form-group sys-span-all">
         <label class="form-label">Name</label>
         <input type="text" name="name" class="form-input" required maxlength="150"
                value="{{ form.get('name') if form.get('name') is not none else (pumpe.name if pumpe else '') }}"
                placeholder="z. B. TS 1600 (FOX 3)">
       </div>
 
-      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Druckabgang Nennweite (mm)</label>
           <input type="number" name="druck_anschluss_dn" class="form-input" min="0"
@@ -59,9 +66,7 @@
           <input type="number" name="druck_parallel_max" class="form-input" min="1"
                  value="{{ form.get('druck_parallel_max') if form.get('druck_parallel_max') is not none else (pumpe.druck_parallel_max if pumpe else 1) }}">
         </div>
-      </div>
 
-      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Sauganschluss Nennweite (mm)</label>
           <input type="number" name="saug_anschluss_dn" class="form-input" min="0"
@@ -72,9 +77,7 @@
           <input type="number" name="saug_parallel_max" class="form-input" min="1"
                  value="{{ form.get('saug_parallel_max') if form.get('saug_parallel_max') is not none else (pumpe.saug_parallel_max if pumpe else 1) }}">
         </div>
-      </div>
 
-      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Max. Ansaughöhe (m)</label>
           <input type="text" name="max_ansaughoehe_m" class="form-input"
@@ -90,9 +93,7 @@
           <input type="text" name="max_ausgangsdruck_bar" class="form-input"
                  value="{{ form.get('max_ausgangsdruck_bar') if form.get('max_ausgangsdruck_bar') is not none else (pumpe.max_ausgangsdruck_bar if (pumpe and pumpe.max_ausgangsdruck_bar is not none) else '') }}">
         </div>
-      </div>
 
-      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Tankinhalt (l, optional)</label>
           <input type="number" name="tank_l" class="form-input" min="0"
@@ -108,41 +109,33 @@
             {% endfor %}
           </select>
         </div>
-      </div>
 
-      <div class="form-group">
+      <div class="form-group sys-span-all">
         <label class="form-label">Hinweise (optional)</label>
         <textarea name="hinweise" class="form-input" rows="2"
                   placeholder="z. B. nur mit WLF zustellbar; Kennlinie kalibrieren">{{ form.get('hinweise') if form.get('hinweise') is not none else (pumpe.hinweise if pumpe else '') }}</textarea>
       </div>
-    </div>
+     </div>
+    </section>
 
     {# ── Kennlinien-Editor ── #}
-    <div class="card" style="padding:18px;margin-bottom:14px;">
-      <h3 style="margin:0 0 4px;font-size:1rem;">Kennlinie(n)</h3>
-      <p class="text-muted" style="font-size:.82rem;margin:0 0 12px;">
+    <section class="sys-card">
+      <div class="sys-card__head"><h2>{{ icon("chart-line") }} Kennlinie(n)</h2></div>
+      <p class="sys-muted sys-small sys-mb-2">
         Je Drehzahlstufe (rpm oder Bezeichnung wie <code>nenn</code>) eine Punktliste
         Fördermenge Q [l/min] → Förderhöhe H [m]. H entspricht ≈ 10·Druck [bar].
         Punkte werden nach Q sortiert; H sollte mit steigendem Q fallen.
       </p>
 
-      <style>
-        .kl-stage-hdr { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
-        .kl-stage-hdr .kl-rpm { flex:1 1 120px; min-width:110px; max-width:200px; }
-        .kl-tbl { width:100%; font-size:.85rem; table-layout:fixed; border-collapse:collapse; }
-        .kl-tbl th, .kl-tbl td { padding:3px 4px; text-align:left; }
-        .kl-tbl th:last-child, .kl-tbl td:last-child { width:40px; text-align:center; }
-        .kl-tbl input.form-input { width:100%; min-width:0; box-sizing:border-box; }
-      </style>
       <template x-for="(stage, si) in stages" :key="si">
-        <div style="border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px;">
-          <div class="kl-stage-hdr">
-            <label class="form-label" style="margin:0;">Drehzahlstufe</label>
-            <input type="text" class="form-input kl-rpm" x-model="stage.rpm" placeholder="2000 oder nenn">
-            <button type="button" class="btn btn--ghost btn--xs" style="margin-left:auto;"
+        <div class="sys-kl-stage">
+          <div class="sys-kl-hdr">
+            <label class="form-label sys-m-0">Drehzahlstufe</label>
+            <input type="text" class="form-input sys-kl-rpm" x-model="stage.rpm" placeholder="2000 oder nenn">
+            <button type="button" class="btn btn--ghost btn--xs sys-ml-auto"
                     @click="removeStage(si)">Stufe entfernen</button>
           </div>
-          <table class="kl-tbl">
+          <table class="sys-kl-tbl">
             <thead>
               <tr><th>Q [l/min]</th><th>H [m]</th><th></th></tr>
             </thead>
@@ -156,14 +149,14 @@
               </template>
             </tbody>
           </table>
-          <button type="button" class="btn btn--ghost btn--xs" style="margin-top:6px;" @click="addPoint(si)">{{ icon("plus", size="xs") }} Punkt</button>
+          <button type="button" class="btn btn--ghost btn--xs sys-mt-1" @click="addPoint(si)">{{ icon("plus", size="xs") }} Punkt</button>
         </div>
       </template>
 
       <button type="button" class="btn btn--secondary btn--sm" @click="addStage()">{{ icon("plus", size="xs") }} Drehzahlstufe</button>
-    </div>
+    </section>
 
-    <div style="display:flex;gap:8px;">
+    <div class="sys-row">
       <button type="submit" class="btn btn--primary">Speichern</button>
       <a class="btn btn--ghost" href="/admin/foerderpumpen">Abbrechen</a>
     </div>

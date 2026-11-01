@@ -1,37 +1,37 @@
 <tr{% if entry.is_running %} hx-get="/admin/sms-senden/{{ entry.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
-  <td style="white-space:nowrap;color:var(--color-text-muted);font-size:.83rem;">
+  <td class="sys-nowrap sys-muted sys-small" data-label="Zeit">
     {{ entry.sent_at|local_datetime if entry.sent_at else '-' }}
   </td>
-  <td>
+  <td data-label="Quelle">
     {% if entry.source == 'alarm' %}
-    <span class="badge-pill badge-pill--red" style="font-size:.73rem;">Alarm</span>
+    <span class="badge-pill badge-pill--red sys-small">Alarm</span>
     {% elif entry.source == 'gsl_alarm' %}
-    <span class="badge-pill badge-pill--red" style="font-size:.73rem;">GSL-Alarm</span>
+    <span class="badge-pill badge-pill--red sys-small">GSL-Alarm</span>
     {% elif entry.source == 'api' %}
-    <span class="badge-pill badge-pill--gray" style="font-size:.73rem;">API-Key</span>
+    <span class="badge-pill badge-pill--gray sys-small">API-Key</span>
     {% else %}
-    <span class="badge-pill badge-pill--gray" style="font-size:.73rem;">Manuell</span>
+    <span class="badge-pill badge-pill--gray sys-small">Manuell</span>
     {% endif %}
   </td>
-  <td style="font-size:.88rem;max-width:320px;">
+  <td class="sys-small sys-cell-text" data-label="Text">
     {{ entry.text[:80] }}{% if entry.text|length > 80 %}...{% endif %}
     {% if entry.is_running %}
-    <span class="badge-pill badge-pill--gray" style="font-size:.73rem;">Versand laeuft</span>
+    <span class="badge-pill badge-pill--gray sys-small">Versand läuft</span>
     {% endif %}
   </td>
-  <td style="font-size:.85rem;color:var(--color-text-muted);">{{ entry.alarm_type_code or '-' }}</td>
-  <td style="text-align:right;">
+  <td class="sys-small sys-muted" data-label="Alarmtyp">{{ entry.alarm_type_code or '-' }}</td>
+  <td class="sys-number" data-label="Erfolg">
     {% if entry.is_running %}
     <span>{{ entry.recipients|length }} von {{ entry.recipient_count }} bearbeitet</span>
     {% elif entry.success_count == entry.recipient_count %}
-    <span style="color:var(--green-light, #4ade80);">{{ entry.success_count }}</span>
-    <span class="text-muted">/{{ entry.recipient_count }}</span>
+    <span class="sys-status--ok">{{ entry.success_count }}</span>
+    <span class="sys-muted">/{{ entry.recipient_count }}</span>
     {% else %}
-    <span style="color:var(--red-light, #f87171);">{{ entry.success_count }}</span>
-    <span class="text-muted">/{{ entry.recipient_count }}</span>
+    <span class="sys-status--fail">{{ entry.success_count }}</span>
+    <span class="sys-muted">/{{ entry.recipient_count }}</span>
     {% endif %}
   </td>
-  <td style="text-align:right;">
+  <td class="sys-number" data-label="Details">
     <button type="button" class="btn btn--ghost btn--xs"
             hx-get="/admin/sms-senden/{{ entry.id }}/details"
             hx-target="#smsLogDetailsContent" hx-swap="innerHTML"

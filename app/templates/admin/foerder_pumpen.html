@@ -1,42 +1,50 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Pumpen – Förderstrecke – Admin{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-content">
+<div class="sys-page">
   {% include "admin/_foerder_tabs.html" %}
 
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
       <h1>{{ modul_icon("foerderstrecke", size="md") }} Pumpen (Förderstrecke)</h1>
-      <p class="page-header__sub">
+      <p class="sys-muted">
         {{ pumpen|length }} Pumpentyp{{ '' if pumpen|length == 1 else 'en' }} im Katalog dieser Organisation
       </p>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div class="sys-row">
       <a class="btn btn--secondary" href="/admin/foerderpumpen/vorlagen">{{ icon("clipboard-list", size="sm") }} Aus Vorlage</a>
       <a class="btn btn--primary" href="/admin/foerderpumpen/neu">{{ icon("plus", size="sm") }} Eigene Pumpe</a>
     </div>
-  </div>
+   </div>
+  </header>
 
-  <p class="text-muted" style="font-size:.85rem;margin-top:-4px;max-width:760px;">
+  <p class="sys-muted sys-small sys-readable sys-lead">
     Lege eigene Pumpen an und konfiguriere die Kennlinie selbst, oder starte von einer
     Vorlage (TS 1600, TS 1200, HLP 16.000/8.000, Fremdpumpe) und passe sie an. Vorlagen
     werden beim Übernehmen zu einer frei editierbaren Kopie deiner Organisation.
   </p>
 
   {% if not pumpen %}
-  <div class="card" style="padding:28px;text-align:center;color:var(--text-muted);">
-    Noch keine Pumpen. Lege eine <a href="/admin/foerderpumpen/neu">eigene Pumpe</a> an
-    oder übernimm eine <a href="/admin/foerderpumpen/vorlagen">Vorlage</a>.
+  <div class="sys-empty">
+    <span>{{ icon("info-circle") }} Noch keine Pumpen. Lege eine <a href="/admin/foerderpumpen/neu">eigene Pumpe</a> an
+    oder übernimm eine <a href="/admin/foerderpumpen/vorlagen">Vorlage</a>.</span>
   </div>
   {% else %}
-  <table class="table-admin table-admin--cards">
+  <section class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive sys-table--wide">
     <thead>
       <tr>
         <th>Name</th>
         <th>Kennlinie</th>
         <th>Druck / Saug</th>
-        <th style="text-align:right;">Ansaughöhe</th>
+        <th class="sys-number">Ansaughöhe</th>
         <th>Tank</th>
         <th>Herkunft</th>
         <th>Aktionen</th>
@@ -47,45 +55,47 @@
       <tr>
         <td data-label="Name">
           <strong>{{ p.name }}</strong>
-          {% if not p.aktiv %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}
-          {% if p.hinweise %}<div class="text-muted" style="font-size:.78rem;max-width:340px;">{{ p.hinweise }}</div>{% endif %}
+          {% if not p.aktiv %}<span class="sys-pill sys-pill--tiny">inaktiv</span>{% endif %}
+          {% if p.hinweise %}<div class="sys-muted sys-text-xs sys-cell-text">{{ p.hinweise }}</div>{% endif %}
         </td>
         <td data-label="Kennlinie">
           {% set stufen = p.drehzahlstufen %}
           {% if stufen %}
-            <span class="badge-pill badge-pill--green">{{ stufen|length }} Stufe{{ '' if stufen|length == 1 else 'n' }}</span>
-            <div class="text-muted" style="font-size:.78rem;">{{ stufen|join(', ') }}</div>
+            <span class="sys-pill">{{ status_dot("gruen", "Kennlinie vorhanden") }} {{ stufen|length }} Stufe{{ '' if stufen|length == 1 else 'n' }}</span>
+            <div class="sys-muted sys-text-xs">{{ stufen|join(', ') }}</div>
           {% else %}
-            <span class="badge-pill badge-pill--red">keine</span>
+            <span class="sys-pill sys-pill--warn">{{ status_dot("rot", "Keine Kennlinie") }} keine</span>
           {% endif %}
         </td>
-        <td data-label="Druck / Saug" style="font-size:.82rem;">
+        <td data-label="Druck / Saug" class="sys-small">
           Druck {{ p.druck_anschluss_dn or '?' }} mm ×{{ p.druck_parallel_max }}<br>
           Saug {{ p.saug_anschluss_dn or '?' }} mm ×{{ p.saug_parallel_max }}
         </td>
-        <td data-label="Ansaughöhe" style="text-align:right;font-variant-numeric:tabular-nums;">
+        <td data-label="Ansaughöhe" class="sys-number">
           {{ '%.1f'|format(p.max_ansaughoehe_m) }} m
         </td>
-        <td data-label="Tank">{% if p.tank_l %}{{ p.tank_l }} l{% else %}<span class="text-muted">–</span>{% endif %}</td>
+        <td data-label="Tank">{% if p.tank_l %}{{ p.tank_l }} l{% else %}<span class="sys-muted">–</span>{% endif %}</td>
         <td data-label="Herkunft">
           {% if p.quelle == 'vorlage' %}
-          <span class="badge-pill badge-pill--gray">aus Vorlage</span>
+          <span class="sys-pill">aus Vorlage</span>
           {% else %}
-          <span class="badge-pill badge-pill--gray">manuell</span>
+          <span class="sys-pill">manuell</span>
           {% endif %}
         </td>
-        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
+        <td data-label="Aktionen"><div class="sys-row">
           <a class="btn btn--ghost btn--xs" href="/admin/foerderpumpen/{{ p.id }}/bearbeiten">Bearbeiten</a>
-          <form method="post" action="/admin/foerderpumpen/{{ p.id }}/loeschen" style="display:inline;"
+          <form method="post" action="/admin/foerderpumpen/{{ p.id }}/loeschen" class="sys-inline-form"
                 onsubmit="return confirm('Diese Pumpe wirklich löschen?');">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="btn btn--ghost btn--xs">Löschen</button>
           </form>
-        </td>
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </section>
   {% endif %}
 </div>
 {% endblock %}

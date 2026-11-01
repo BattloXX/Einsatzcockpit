@@ -233,7 +233,7 @@ def test_einsaetze_page_lists_incident_with_dibos_fields():
     assert "009401" in r.text
     assert "Unterlinden" in r.text
     assert f"/einsatz/{incident_id}/info" in r.text
-    assert 'badge-pill--gray">2<' in r.text  # Meldungen-Zähler (2 LisSyncedObject-Einträge)
+    assert 'sys-pill">2<' in r.text  # Meldungen-Zähler (2 LisSyncedObject-Einträge)
 
 
 def test_einsaetze_page_reachable_by_org_admin_not_only_system_admin():

@@ -53,6 +53,10 @@ Im Verwaltungsmenü gibt es pro Fachgebiet **einen** Menüpunkt. Die zugehörige
 | Organisationen | Organisationsliste · Übersicht · Quotas · Medien |
 | Updates & Backups | System-Update · Stammdaten-Backup · Datenbank-Dumps |
 
+## Startseite der Verwaltung
+
+Die Startseite unter `/admin` zeigt Kennzahlen (aktive und alle Einsätze, Mitglieder, Ressourcen, Benutzer), eine Übersicht aller Hauptpunkte, die Ihre Rolle sehen darf, die empfohlene **Einrichtungsreihenfolge** mit Wiki-Verweisen, die Dokumentation nach Themen sowie die letzten Einsätze und Audit-Einträge. Systemadministratoren sehen zusätzlich den Schritt „Absichern“ und den Wiki-Bereich „Sicherheit und Betrieb“.
+
 ## Hinweise
 
 - Alle bisherigen Seiten und Adressen funktionieren weiter; es wurde nur das Menü zusammengefasst.

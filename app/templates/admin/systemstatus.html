@@ -1,18 +1,22 @@
 {% extends "admin/_layout.html" %}
 {% from "_tooltip.html" import tip %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block title %}Systemstatus – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Systemstatus'}]) }}{% endblock %}
 {% block admin_content %}
 {% with section_id='systemstatus' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header"><div><h1>Systemstatus</h1><p class="page-header__sub">Überwachung technischer Dienste und externe Statusabfrage. Letzter Monitorlauf: {{ loop_letzter_lauf_dt|local_datetime if loop_letzter_lauf_dt else "noch nie" }}</p></div></div>
+<div class="page-content sys-page">
+  <div class="sys-hero"><div><h1>{{ icon("traffic-lights") }} Systemstatus</h1><p class="sys-muted">Überwachung technischer Dienste und externe Statusabfrage. Letzter Monitorlauf: {{ loop_letzter_lauf_dt|local_datetime if loop_letzter_lauf_dt else "noch nie" }}</p></div></div>
   {% if gespeichert %}<div class="alert alert--success mb-4">Einstellungen gespeichert.</div>{% endif %}
   {% if test_ergebnis is defined %}<div class="alert mb-4">Testversand: {{ "erfolgreich" if test_ergebnis else "fehlgeschlagen" }}</div>{% endif %}
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Dienststatus</h2></div>
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("server") }} Dienststatus</h2></div>
     <div class="card-body">
       <div id="dienststatus-liste" hx-get="/admin/systemstatus/liste{% if target_org_id %}?org_id={{ target_org_id }}{% endif %}" hx-trigger="every 30s" hx-swap="innerHTML">
         {% include "admin/_systemstatus_liste.html" %}
@@ -20,13 +24,13 @@
     </div>
   </section>
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Benachrichtigungen</h2></div>
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("bell") }} Benachrichtigungen</h2></div>
     <div class="card-body">
-      <form hx-post="/admin/systemstatus/empfaenger" hx-target="body" hx-swap="innerHTML">
+      <form class="sys-form-grid" hx-post="/admin/systemstatus/empfaenger" hx-target="body" hx-swap="innerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         {% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}
-        <div class="form-group"><label class="form-label"><input type="checkbox" name="enabled" {% if org_settings and org_settings.dienst_monitor_enabled %}checked{% endif %}> Überwachung aktiv</label></div>
+        <div class="form-group"><label class="form-label sys-check"><input type="checkbox" name="enabled" {% if org_settings and org_settings.dienst_monitor_enabled %}checked{% endif %}> Überwachung aktiv</label></div>
         <div class="form-group"><label class="form-label" {{ tip('Empfängeradresse für Störungs- und Entwarnungsmeldungen.') }}>E-Mail</label><input class="form-input" type="text" name="mail" value="{{ org_settings.dienst_monitor_mail or '' }}"></div>
         <div class="form-group"><label class="form-label" {{ tip('HTTPS-Webhook eines Microsoft-Teams-Kanals.') }}>Teams-Webhook</label><input class="form-input" type="url" name="teams_webhook" value="{{ org_settings.dienst_monitor_teams_webhook_url or '' }}"></div>
         <div class="form-group"><label class="form-label" {{ tip('Mehrere Rufnummern mit Komma trennen.') }}>SMS-Nummern (kommagetrennt)</label><input class="form-input" type="text" name="sms" value="{{ org_settings.dienst_monitor_sms or '' }}"></div>
@@ -34,7 +38,7 @@
         <div class="form-group"><label class="form-label" {{ tip('Abstand der Erinnerungen bei anhaltender Störung.') }}>Wiederholung (Minuten)</label><input class="form-input" type="number" min="1" name="wiederholung_min" value="{{ org_settings.dienst_monitor_wiederholung_min or 60 }}"></div>
         <button class="btn btn--primary" type="submit">Speichern</button>
       </form>
-      <div class="button-row" style="margin-top:1rem">
+      <div class="sys-actions">
         {% for kanal, bezeichnung in [('mail', 'E-Mail testen'), ('teams', 'Teams testen'), ('sms', 'SMS testen')] %}
         <form hx-post="/admin/systemstatus/test/{{ kanal }}" hx-target="body" hx-swap="innerHTML">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -46,47 +50,47 @@
     </div>
   </section>
 
-  <section class="card mb-4">
-    <div class="card-header"><h2>Uptime-Anbindung</h2></div>
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("key") }} Uptime-Anbindung</h2></div>
     <div class="card-body">
       {% if neues_token %}
       <div class="alert alert--warn mb-4">
         <p><strong>Token und fertige URLs jetzt kopieren – der Token wird nur einmal angezeigt.</strong></p>
-        <p><code class="api-key-display">{{ request.base_url }}health</code> <span>ohne Token</span> <button onclick="navigator.clipboard.writeText('{{ request.base_url }}health')" class="btn btn--xs btn--ghost" type="button">Kopieren</button></p>
-        <p><code class="api-key-display">{{ request.base_url }}health/dienste?token={{ neues_token }}</code> <button onclick="navigator.clipboard.writeText('{{ request.base_url }}health/dienste?token={{ neues_token }}')" class="btn btn--xs btn--ghost" type="button">Kopieren</button></p>
-        {% for key in dienst_keys %}<p><code class="api-key-display">{{ request.base_url }}health/dienst/{{ key }}?token={{ neues_token }}</code> <button onclick="navigator.clipboard.writeText('{{ request.base_url }}health/dienst/{{ key }}?token={{ neues_token }}')" class="btn btn--xs btn--ghost" type="button">Kopieren</button></p>{% endfor %}
+        <p class="sys-token-link"><code class="api-key-display">{{ request.base_url }}health</code> <span>ohne Token</span> <button onclick="navigator.clipboard.writeText('{{ request.base_url }}health')" class="btn btn--xs btn--ghost" type="button">Kopieren</button></p>
+        <p class="sys-token-link"><code class="api-key-display">{{ request.base_url }}health/dienste?token={{ neues_token }}</code> <button onclick="navigator.clipboard.writeText('{{ request.base_url }}health/dienste?token={{ neues_token }}')" class="btn btn--xs btn--ghost" type="button">Kopieren</button></p>
+        {% for key in dienst_keys %}<p class="sys-token-link"><code class="api-key-display">{{ request.base_url }}health/dienst/{{ key }}?token={{ neues_token }}</code> <button onclick="navigator.clipboard.writeText('{{ request.base_url }}health/dienst/{{ key }}?token={{ neues_token }}')" class="btn btn--xs btn--ghost" type="button">Kopieren</button></p>{% endfor %}
       </div>
       {% endif %}
-      <form hx-post="/admin/systemstatus/token/neu" hx-target="body" hx-swap="innerHTML" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:1rem">
+      <form hx-post="/admin/systemstatus/token/neu" hx-target="body" hx-swap="innerHTML" class="sys-toolbar sys-token-form">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         {% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}
-        <div class="form-group" style="flex:1;min-width:200px"><label class="form-label">Bezeichnung</label><input class="form-input" type="text" name="label" placeholder="Uptime Kuma"></div>
+        <div class="form-group sys-grow"><label class="form-label">Bezeichnung</label><input class="form-input" type="text" name="label" placeholder="Uptime Kuma"></div>
         <button class="btn btn--primary" type="submit">Token anlegen</button>
       </form>
-      <table class="table"><thead><tr><th>Bezeichnung</th><th>Angelegt</th><th>Zuletzt genutzt</th><th>Status</th><th></th></tr></thead><tbody>
-        {% for token in tokens %}<tr><td>{{ token.label }}</td><td>{{ token.created_at|local_datetime }}</td><td>{{ token.last_used_at|local_datetime if token.last_used_at else '–' }}</td><td><span class="badge {% if token.revoked_at %}badge--closed{% else %}badge--active{% endif %}">{{ 'Widerrufen' if token.revoked_at else 'Aktiv' }}</span></td><td>{% if not token.revoked_at %}<form class="inline" hx-post="/admin/systemstatus/token/{{ token.id }}/widerrufen" hx-target="body" hx-swap="innerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}<button class="btn btn--danger btn--xs" type="submit">Widerrufen</button></form>{% endif %}</td></tr>{% endfor %}
-        {% if not tokens %}<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">Noch kein Token angelegt.</td></tr>{% endif %}
-      </tbody></table>
-      <h3 style="margin-top:1.5rem">Endpunkte als Referenz</h3>
-      <table class="table"><thead><tr><th>Zweck</th><th>URL</th><th>Token</th></tr></thead><tbody>
+      <div class="sys-table-wrap"><table class="sys-table"><thead><tr><th>Bezeichnung</th><th>Angelegt</th><th>Zuletzt genutzt</th><th>Status</th><th></th></tr></thead><tbody>
+        {% for token in tokens %}<tr><td>{{ token.label }}</td><td>{{ token.created_at|local_datetime }}</td><td>{{ token.last_used_at|local_datetime if token.last_used_at else '–' }}</td><td><span class="sys-pill {{ 'sys-status--fail' if token.revoked_at else 'sys-status--ok' }}">{{ 'Widerrufen' if token.revoked_at else 'Aktiv' }}</span></td><td>{% if not token.revoked_at %}<form class="inline" hx-post="/admin/systemstatus/token/{{ token.id }}/widerrufen" hx-target="body" hx-swap="innerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}<button class="btn btn--danger btn--xs" type="submit">Widerrufen</button></form>{% endif %}</td></tr>{% endfor %}
+        {% if not tokens %}<tr><td colspan="5" class="sys-muted sys-table-empty">Noch kein Token angelegt.</td></tr>{% endif %}
+      </tbody></table></div>
+      <h3 class="sys-section-title">Endpunkte als Referenz</h3>
+      <div class="sys-table-wrap"><table class="sys-table"><thead><tr><th>Zweck</th><th>URL</th><th>Token</th></tr></thead><tbody>
         <tr><td>Erreichbarkeit (App + Datenbank)</td><td><code class="api-key-display">{{ request.base_url }}health</code></td><td>nein</td></tr>
         <tr><td>Alle Dienste</td><td><code class="api-key-display">{{ request.base_url }}health/dienste?token=&lt;TOKEN&gt;</code></td><td>ja</td></tr>
         {% for key in dienst_keys %}<tr><td>Einzeldienst {{ labels.get(key, key) }}</td><td><code class="api-key-display">{{ request.base_url }}health/dienst/{{ key }}?token=&lt;TOKEN&gt;</code></td><td>ja</td></tr>{% endfor %}
-      </tbody></table>
+      </tbody></table></div>
       <p>Authentifizierung: <code>?token=&lt;TOKEN&gt;</code> oder <code>Authorization: Bearer &lt;TOKEN&gt;</code>.</p>
       <p><strong>200</strong> = erreichbar beziehungsweise alle Dienste vollständig OK oder nicht eingerichtet. <strong>207</strong> = mindestens ein Dienst arbeitet nur teilweise. <strong>503</strong> = mindestens ein Dienst fällt vollständig aus beziehungsweise die Datenbank ist bei <code>/health</code> nicht erreichbar. <strong>401</strong> = ungültiger oder widerrufener Token, nur bei den Token-Endpunkten. HTTP 207 und 503 können als Signale für Uptime Kuma verwendet werden.</p>
     </div>
   </section>
 
-  <section class="card mb-4"><div class="card-header"><h2>Letzte Meldungen</h2></div><div class="card-body" style="padding:0">
-    <table class="table"><thead><tr><th>Zeit</th><th>Dienst</th><th>Kanal</th><th>Status</th><th>Fehler</th></tr></thead><tbody>
+  <section class="sys-card"><div class="sys-card__head"><h2>{{ icon("history") }} Letzte Meldungen</h2></div><div class="card-body">
+    <div class="sys-table-wrap"><table class="sys-table"><thead><tr><th>Zeit</th><th>Dienst</th><th>Kanal</th><th>Status</th><th>Fehler</th></tr></thead><tbody>
       {% for log in logs %}<tr><td>{{ log.gesendet_am|local_datetime }}</td><td>{{ labels.get(log.key, log.key) }}</td><td>{{ log.kanal }}</td><td>{{ log.status }}</td><td>{{ log.fehlertext or "" }}</td></tr>{% endfor %}
-      {% if not logs %}<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">Noch keine Meldungen vorhanden.</td></tr>{% endif %}
-    </tbody></table>
+      {% if not logs %}<tr><td colspan="5" class="sys-muted sys-table-empty">Noch keine Meldungen vorhanden.</td></tr>{% endif %}
+    </tbody></table></div>
   </div></section>
 
-  <section class="card"><div class="card-header"><h2>Kurzanleitung</h2><a href="https://github.com/BattloXX/Einsatzcockpit/wiki/Administration-Dienstueberwachung" target="_blank" rel="noopener">Wiki öffnen</a></div><div class="card-body">
-    <ol style="line-height:2;padding-left:1.2rem"><li>Basis-Monitor auf <code>/health</code> anlegen – braucht keinen Token.</li><li>Überwachung aktivieren und mindestens einen Empfänger eintragen.</li><li>Karenz und Wiederholung festlegen.</li><li>Für jeden verwendeten Kanal einen Testversand auslösen.</li><li>Token anlegen und die jetzt angezeigte fertige URL kopieren.</li><li>In Uptime Kuma als HTTP(s)-Monitor eintragen: <strong>Accepted Status Codes 200</strong> alarmiert auch bei Teilausfall, <strong>200,207</strong> toleriert ihn.</li></ol>
+  <section class="sys-card"><div class="sys-card__head"><h2>{{ icon("book") }} Kurzanleitung</h2><a href="https://github.com/BattloXX/Einsatzcockpit/wiki/Administration-Dienstueberwachung" target="_blank" rel="noopener">Wiki öffnen</a></div><div class="card-body">
+    <ol class="sys-list"><li>Basis-Monitor auf <code>/health</code> anlegen – braucht keinen Token.</li><li>Überwachung aktivieren und mindestens einen Empfänger eintragen.</li><li>Karenz und Wiederholung festlegen.</li><li>Für jeden verwendeten Kanal einen Testversand auslösen.</li><li>Token anlegen und die jetzt angezeigte fertige URL kopieren.</li><li>In Uptime Kuma als HTTP(s)-Monitor eintragen: <strong>Accepted Status Codes 200</strong> alarmiert auch bei Teilausfall, <strong>200,207</strong> toleriert ihn.</li></ol>
   </div></section>
 </div>
 {% endblock %}

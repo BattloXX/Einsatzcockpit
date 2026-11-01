@@ -88,7 +88,7 @@ def test_fcm_settings_save_then_fresh_session_read(monkeypatch, request):
         "/admin/system-einstellungen",
         data={
             "_csrf": client.cookies.get("ec_csrf"),
-            "k_fcm_enabled": "true",
+            "k_fcm_enabled": ["false", "true"],
             "k_fcm_project_id": "einsatzleiter-cloud",
             "k_fcm_credentials_path": "/etc/einsatzleiter/fcm-service-account.json",
         },
@@ -122,3 +122,14 @@ def test_fcm_settings_save_then_fresh_session_read(monkeypatch, request):
     monkeypatch.setattr(push_service, "_fcm_unavailable", False)
 
     assert push_service._get_fcm_app(cfg) is fake_app
+
+    # An unchecked switch sends only its preceding hidden false field.
+    response = client.post(
+        "/admin/system-einstellungen",
+        data={"_csrf": client.cookies.get("ec_csrf"), "k_fcm_enabled": "false"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert push_service._push_cfg(db)["fcm_enabled"] is False

@@ -5,94 +5,76 @@
 
 {% block head_extra %}
 {{ super() }}
-<style>
-.mv-storage { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
-.mv-storage__bar { width:220px; height:8px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden; }
-.mv-storage__fill { height:100%; border-radius:4px; }
-.mv-filterbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
-.mv-filterbar select, .mv-filterbar input[type="text"], .mv-filterbar input[type="date"] {
-  padding:6px 9px; border:1px solid var(--border); border-radius:.35rem;
-  background:var(--surface); color:var(--on-surface); font-size:.85rem;
-}
-.mv-thumb { width:48px; height:48px; object-fit:cover; border-radius:4px; background:var(--surface-2,#1f2937); display:block; }
-.mv-thumb-placeholder {
-  width:48px; height:48px; border-radius:4px; background:var(--surface-2,#1f2937);
-  display:flex; align-items:center; justify-content:center; font-size:1.1rem;
-}
-th.sortable a { color:inherit; text-decoration:none; }
-th.sortable a:hover { text-decoration:underline; }
-</style>
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
 {% endblock %}
 
 {% block admin_content %}
 {% with section_id='organisationen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>{{ icon("photo", size="md") }} Medienverwaltung</h1>
-      <p class="page-header__sub">Alle hochgeladenen Medien der Organisation – Größe, Alter, Typ.</p>
-    </div>
-  </div>
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("photo") }} Medienverwaltung</h1>
+    <p class="sys-muted">Alle hochgeladenen Medien der Organisation – Größe, Alter, Typ.</p>
+  </header>
 
   {% if is_sysadmin and orgs_for_switch %}
-  <div class="form-group" style="max-width:320px;margin-bottom:14px;">
-    <label class="form-label">Organisation</label>
-    <select onchange="location.href='/admin/medien?org=' + this.value">
-      <option value="">— wählen —</option>
-      {% for o in orgs_for_switch %}
-      <option value="{{ o.id }}" {% if o.id == current_org_id %}selected{% endif %}>{{ o.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
+  <section class="sys-card">
+    <div class="sys-field sys-form-wide">
+      <label class="form-label" for="mv-org-select">Organisation</label>
+      <select id="mv-org-select" class="form-control" onchange="location.href='/admin/medien?org=' + this.value">
+        <option value="">— wählen —</option>
+        {% for o in orgs_for_switch %}
+        <option value="{{ o.id }}" {% if o.id == current_org_id %}selected{% endif %}>{{ o.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </section>
   {% endif %}
 
   {% if not current_org_id %}
-  <p class="text-muted">Bitte eine Organisation wählen.</p>
+  <div class="sys-empty">Bitte eine Organisation wählen.</div>
   {% else %}
 
-  <div class="mv-storage">
-    <div>
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);">{{ icon("device-floppy", size="sm") }} Speicher belegt</div>
-      <div style="font-size:.9rem;margin-top:2px;">
-        {{ storage.used_bytes|filesizeformat(true) }}
-        {% if storage.quota_bytes is not none %}
-          / {{ storage.quota_bytes|filesizeformat(true) }}
-        {% else %}
-          <span class="text-muted">/ unbegrenzt</span>
-        {% endif %}
-        <span class="text-muted">· {{ total }} Datei(en) in dieser Ansicht</span>
-      </div>
-      {% if storage.quota_bytes %}
-      {% set pct = ([100 * storage.used_bytes / storage.quota_bytes, 100]|min)|round|int %}
-      <div class="mv-storage__bar" style="margin-top:5px;">
-        <div class="mv-storage__fill" style="width:{{ pct }}%;background:{% if pct >= 90 %}#dc2626{% elif pct >= 75 %}#d97706{% else %}#16a34a{% endif %};"></div>
-      </div>
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("device-floppy") }} Speicher belegt</h2>
+      {% if is_sysadmin %}
+      <form method="post" action="/admin/system/quotas/{{ current_org_id }}/reconcile">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn--secondary btn--sm"
+                title="Speicher-Verbrauch aus allen Medientabellen neu berechnen">Speicher neu berechnen</button>
+      </form>
       {% endif %}
     </div>
-    {% if is_sysadmin %}
-    <form method="post" action="/admin/system/quotas/{{ current_org_id }}/reconcile">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--secondary btn--sm"
-              title="Speicher-Verbrauch aus allen Medientabellen neu berechnen">Speicher neu berechnen</button>
-    </form>
+    <div>
+      {{ storage.used_bytes|filesizeformat(true) }}
+      {% if storage.quota_bytes is not none %}
+        / {{ storage.quota_bytes|filesizeformat(true) }}
+      {% else %}
+        <span class="sys-muted">/ unbegrenzt</span>
+      {% endif %}
+      <span class="sys-muted">· {{ total }} Datei(en) in dieser Ansicht</span>
+    </div>
+    {% if storage.quota_bytes %}
+    {% set pct = ([100 * storage.used_bytes / storage.quota_bytes, 100]|min)|round|int %}
+    <progress class="sys-progress{% if pct >= 90 %} sys-progress--fail{% elif pct >= 75 %} sys-progress--warn{% endif %}" max="100" value="{{ pct }}" aria-label="Speicher belegt">{{ pct }}%</progress>
     {% endif %}
-  </div>
+  </section>
 
-  <form method="get" action="/admin/medien" class="mv-filterbar">
+  <section class="sys-card">
+  <form method="get" action="/admin/medien" class="sys-toolbar">
     <input type="hidden" name="org" value="{{ current_org_id }}">
     <input type="hidden" name="sort" value="{{ sort }}">
     <input type="hidden" name="dir" value="{{ dir }}">
-    <input type="text" name="q" value="{{ q }}" placeholder="Dateiname durchsuchen…">
-    <select name="typ">
+    <input type="text" name="q" value="{{ q }}" placeholder="Dateiname durchsuchen…" class="form-input sys-toolbar-search" aria-label="Dateiname durchsuchen">
+    <select name="typ" class="form-control sys-select-narrow" aria-label="Typ">
       <option value="" {% if not typ %}selected{% endif %}>Alle Typen</option>
       {% for k, label in kind_labels.items() %}
       <option value="{{ k }}" {% if typ == k %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-    <input type="date" name="von" value="{{ von }}" title="Von">
-    <input type="date" name="bis" value="{{ bis }}" title="Bis">
-    <label style="display:flex;align-items:center;gap:5px;font-size:.85rem;">
+    <input type="date" name="von" value="{{ von }}" title="Von" aria-label="Von" class="form-input sys-input-date">
+    <input type="date" name="bis" value="{{ bis }}" title="Bis" aria-label="Bis" class="form-input sys-input-date">
+    <label class="sys-check">
       <input type="checkbox" name="nur_bearbeitet" value="1" {% if nur_bearbeitet %}checked{% endif %}>
       nur bearbeitete Bilder
     </label>
@@ -101,6 +83,7 @@ th.sortable a:hover { text-decoration:underline; }
     <a href="/admin/medien?org={{ current_org_id }}" class="btn btn--ghost btn--sm">Zurücksetzen</a>
     {% endif %}
   </form>
+  </section>
 
   {% macro sort_link(col, label) %}
   {% set new_dir = 'asc' if (sort == col and dir == 'desc') else 'desc' %}
@@ -109,18 +92,19 @@ th.sortable a:hover { text-decoration:underline; }
   </a>
   {% endmacro %}
 
-  <div id="bulkBar" style="display:none;align-items:center;gap:10px;margin:8px 0;padding:8px 12px;background:var(--surface-2,#1f2937);border-radius:6px;">
+  <div id="bulkBar" class="sys-bulk-bar">
     <span><strong id="bulkCount">0</strong> ausgewählt</span>
     <button type="button" class="btn btn--danger btn--sm" onclick="mvBulkDelete()">Auswahl löschen</button>
     <button type="button" class="btn btn--ghost btn--sm" onclick="mvClearSelection()">Auswahl aufheben</button>
   </div>
-  <form id="mvBulkDeleteForm" method="post" action="/admin/medien/bulk-loeschen" style="display:none"></form>
+  <form id="mvBulkDeleteForm" method="post" action="/admin/medien/bulk-loeschen" class="sys-hidden"></form>
 
-  <div style="overflow-x:auto;">
-  <table class="table-admin">
+  <section class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive sys-table--wide">
     <thead>
       <tr>
-        <th style="width:32px"><input type="checkbox" id="mvSelectAll" onchange="mvToggleSelectAll(this)"></th>
+        <th class="sys-col-32"><input type="checkbox" id="mvSelectAll" onchange="mvToggleSelectAll(this)" aria-label="Alle auswählen"></th>
         <th>Vorschau</th>
         <th class="sortable">{{ sort_link('name', 'Dateiname') }}</th>
         <th>Typ</th>
@@ -135,22 +119,22 @@ th.sortable a:hover { text-decoration:underline; }
     <tbody>
       {% for r in rows %}
       <tr>
-        <td data-label="">
+        <td data-label="Auswahl">
           {% if r.deletable %}
           <input type="checkbox" class="mv-select" value="{{ r.typ }}:{{ r.id }}" onchange="mvUpdateBulkBar()">
           {% endif %}
         </td>
         <td data-label="Vorschau">
           {% if r.thumb_url %}
-          <img class="mv-thumb" loading="lazy" alt="{{ r.original_filename }}" src="{{ r.thumb_url }}">
+          <img class="sys-thumb" loading="lazy" alt="{{ r.original_filename }}" src="{{ r.thumb_url }}">
           {% else %}
-          <div class="mv-thumb-placeholder">{{ icon('file-text' if r.kind in ('pdf', 'datei') else 'movie', size='lg') }}</div>
+          <div class="sys-thumb sys-thumb--placeholder">{{ icon('file-text' if r.kind in ('pdf', 'datei') else 'movie', size='lg') }}</div>
           {% endif %}
         </td>
         <td data-label="Dateiname">{{ r.original_filename }}</td>
         <td data-label="Typ">
-          <span class="badge-pill">{{ kind_labels.get(r.kind, r.kind) }}</span>
-          <div class="text-muted" style="font-size:.72rem;">{{ typ_labels.get(r.typ, r.typ) }}</div>
+          <span class="sys-pill">{{ kind_labels.get(r.kind, r.kind) }}</span>
+          <div class="sys-muted sys-text-xs">{{ typ_labels.get(r.typ, r.typ) }}</div>
         </td>
         <td data-label="Größe">{{ r.bytes|filesizeformat(true) }}</td>
         <td data-label="Hochgeladen am">{{ r.created_at|local_datetime }}</td>
@@ -159,32 +143,33 @@ th.sortable a:hover { text-decoration:underline; }
         </td>
         <td data-label="Hochgeladen von">{{ r.uploader_name }}</td>
         <td data-label="Status">
-          {% if r.annotated %}<span class="badge-pill badge-pill--green" title="Bearbeitet">{{ icon("pencil", size="sm") }} bearbeitet</span>{% endif %}
+          {% if r.annotated %}<span class="sys-pill sys-status--ok" title="Bearbeitet">{{ icon("pencil", size="sm") }} bearbeitet</span>{% endif %}
         </td>
         <td data-label="Aktionen">
           <a href="{{ r.file_url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">Ansehen</a>
           {% if r.deletable %}
-          <form method="post" action="/admin/medien/{{ r.typ }}/{{ r.id }}/loeschen" style="display:inline;"
+          <form method="post" action="/admin/medien/{{ r.typ }}/{{ r.id }}/loeschen" class="sys-inline-form"
                 onsubmit="return confirm('Datei löschen?')">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="btn btn--danger btn--sm">Löschen</button>
           </form>
           {% elif r.hinweis %}
-          <div class="text-muted" style="font-size:.72rem;max-width:180px;">
+          <div class="sys-muted sys-text-xs sys-cell-hint">
             {{ icon("lock", size="sm") }} {{ r.hinweis }}{% if r.context_url %} – <a href="{{ r.context_url }}">im Objekt öffnen</a>{% endif %}
           </div>
           {% endif %}
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" class="text-muted">Keine Medien gefunden.</td></tr>
+      <tr><td colspan="10" class="sys-muted sys-table-empty">Keine Medien gefunden.</td></tr>
       {% endfor %}
     </tbody>
   </table>
   </div>
+  </section>
 
   {% if total_pages > 1 %}
-  <div style="display:flex;gap:8px;align-items:center;margin-top:14px;">
+  <div class="sys-row sys-mt-2">
     {% for p in range(1, total_pages + 1) %}
     <a href="/admin/medien?org={{ current_org_id }}&sort={{ sort }}&dir={{ dir }}&typ={{ typ|urlencode }}&q={{ q|urlencode }}&von={{ von|urlencode }}&bis={{ bis|urlencode }}&nur_bearbeitet={{ nur_bearbeitet }}&page={{ p }}"
        class="btn btn--sm {{ 'btn--primary' if p == page else 'btn--ghost' }}">{{ p }}</a>

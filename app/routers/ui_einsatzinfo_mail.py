@@ -187,10 +187,10 @@ def einsatzinfo_mail_preview(request: Request, subject_template: str = Form(""),
     rendered_html = einsatzinfo_mail_service.render_einsatzinfo_mail_html(view)
     return HTMLResponse(
         f'<div class="alert alert--info"><strong>{html.escape(subject)}</strong>'
-        f'<pre style="white-space:pre-wrap;margin:8px 0 0;">{html.escape(body)}</pre></div>'
+        f'<pre class="sys-preview sys-mt-1">{html.escape(body)}</pre></div>'
         f'<h2>So sieht die Mail aus</h2>'
         f'<iframe sandbox="" srcdoc="{html.escape(rendered_html, quote=True)}" '
-        f'style="width:100%;height:900px;border:1px solid var(--border);border-radius:6px;background:#fff"></iframe>'
+        f'class="sys-frame sys-frame--tall"></iframe>'
     )
 
 

@@ -2,35 +2,29 @@
 {% block title %}GSL-Einstellungen{% endblock %}
 {% block head_extra %}
 {{ super() }}
-<style>
-@media (max-width: 760px) {
-  .gk-zugang-zahlen { grid-template-columns: 1fr !important; }
-}
-</style>
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
 {% endblock %}
 
 {% block admin_content %}
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>GSL-Einstellungen</h1>
-      <p class="page-header__sub">Großschadenslage: Module, Lagemeldungs-Regelkreis, Geräteverleih je Organisation</p>
-    </div>
-  </div>
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("alert-triangle") }} GSL-Einstellungen</h1>
+    <p class="sys-muted">Großschadenslage: Module, Lagemeldungs-Regelkreis, Geräteverleih je Organisation.</p>
+  </header>
 
-  {% if saved %}<div class="alert alert--success" style="margin-bottom:16px;">Einstellungen gespeichert.</div>{% endif %}
-  {% if widerrufen_anzahl is not none %}<div class="alert alert--success" style="margin-bottom:16px;">{{ widerrufen_anzahl }} Zugänge widerrufen.</div>{% endif %}
+  {% if saved %}<div class="alert alert--success">Einstellungen gespeichert.</div>{% endif %}
+  {% if widerrufen_anzahl is not none %}<div class="alert alert--success">{{ widerrufen_anzahl }} Zugänge widerrufen.</div>{% endif %}
 
   <form method="post" action="/admin/gsl-einstellungen">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
     <!-- ── Module ─────────────────────────────────────────────────────────── -->
-    <div class="card" style="margin-bottom:20px;">
-      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <strong>Module</strong>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">Einzelne Module ein-/ausschalten (gültig nur wenn global aktiviert)</span>
+    <section class="sys-card">
+      <div class="sys-card__head">
+        <h2>{{ icon("apps") }} Module</h2>
+        <span class="sys-muted sys-small">Einzelne Module ein-/ausschalten (gültig nur wenn global aktiviert)</span>
       </div>
-      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="sys-grid-2">
         {% set flags = [
           ("mi_feature_stab", "Stab (SKKM-Besetzungstafel)", "users"),
           ("mi_feature_funkjournal", "Funkjournal", "radio"),
@@ -43,21 +37,21 @@
           ("mi_feature_geraeteverleih", "Geräteverleih", "package"),
         ] %}
         {% for key, label, icon_name in flags %}
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px;border-radius:8px;border:1px solid var(--border);">
-          <input type="checkbox" name="{{ key }}" value="1" {% if org_flags.get(key, True) %}checked{% endif %} style="width:18px;height:18px;">
+        <label class="sys-check sys-option">
+          <input type="checkbox" name="{{ key }}" value="1" {% if org_flags.get(key, True) %}checked{% endif %}>
           <span>{{ icon(icon_name, size="sm") }} {{ label }}</span>
         </label>
         {% endfor %}
       </div>
-    </div>
+    </section>
 
     <!-- ── Lagemeldungs-Regelkreis ─────────────────────────────────────── -->
-    <div class="card" style="margin-bottom:20px;">
-      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <strong>Lagemeldungs-Regelkreis (SKKM)</strong>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">NULL = Timer deaktiviert</span>
+    <section class="sys-card">
+      <div class="sys-card__head">
+        <h2>{{ icon("clock") }} Lagemeldungs-Regelkreis (SKKM)</h2>
+        <span class="sys-muted sys-small">NULL = Timer deaktiviert</span>
       </div>
-      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="sys-grid-2">
         <div class="form-group">
           <label class="form-label">Standard-Intervall (Minuten)</label>
           <input type="number" name="gsl_lagemeldung_interval_minutes" class="form-input" min="5" max="480"
@@ -70,120 +64,115 @@
                  value="{{ org_settings.gsl_lagemeldung_interval_sofort_minutes if org_settings and org_settings.gsl_lagemeldung_interval_sofort_minutes is not none else '' }}"
                  placeholder="leer = Standard verwenden">
         </div>
-        <div style="grid-column:1/-1;">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <div class="sys-span-all">
+          <label class="sys-check">
             <input type="checkbox" name="gsl_lagemeldung_auto_auftrag" value="1"
-                   {% if not org_settings or org_settings.gsl_lagemeldung_auto_auftrag %}checked{% endif %}
-                   style="width:18px;height:18px;">
+                   {% if not org_settings or org_settings.gsl_lagemeldung_auto_auftrag %}checked{% endif %}>
             <span>Automatischen Funkjournal-Auftrag bei Überfälligkeit erstellen</span>
           </label>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- ── Sonderalarm bei Ausrufung ──────────────────────────────────── -->
-    <div class="card" style="margin-bottom:20px;">
-      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <strong>Sonderalarm bei Ausrufung</strong>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">Einmaliger SMS- + Teams-Hinweis, wenn eine neue Großschadenslage ausgerufen wird — unabhängig von der stichwortbezogenen Einsatzinfo</span>
+    <section class="sys-card">
+      <div class="sys-card__head">
+        <h2>{{ icon("bell") }} Sonderalarm bei Ausrufung</h2>
+        <span class="sys-muted sys-small">Einmaliger SMS- + Teams-Hinweis, wenn eine neue Großschadenslage ausgerufen wird — unabhängig von der stichwortbezogenen Einsatzinfo</span>
       </div>
-      <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+      <div class="sys-stack">
+        <label class="sys-check">
           <input type="checkbox" name="gsl_alarm_enabled" value="1"
-                 {% if not org_settings or org_settings.gsl_alarm_enabled %}checked{% endif %}
-                 style="width:18px;height:18px;">
+                 {% if not org_settings or org_settings.gsl_alarm_enabled %}checked{% endif %}>
           <span>Sonderalarm senden (SMS + Teams, sofern jeweils aktiviert)</span>
         </label>
         <div class="form-group">
-          <label class="form-label">Text <span style="font-size:.72rem;color:var(--text-muted);">Platzhalter: {lage}</span></label>
+          <label class="form-label">Text <span class="sys-muted sys-small">Platzhalter: {lage}</span></label>
           <textarea name="gsl_alarm_text" class="form-input" rows="2"
                     placeholder="Grossschadenslage! Alle Mitglieder ruecken sofort ins Geraetehaus ein.">{{ org_settings.gsl_alarm_text if org_settings and org_settings.gsl_alarm_text else '' }}</textarea>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- ── Geräteverleih ──────────────────────────────────────────────── -->
-    <div class="card" style="margin-bottom:20px;">
-      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <strong>Geräteverleih</strong>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">SMS-Vorlagen und Erinnerungsfunktion</span>
+    <section class="sys-card">
+      <div class="sys-card__head">
+        <h2>{{ icon("package") }} Geräteverleih</h2>
+        <span class="sys-muted sys-small">SMS-Vorlagen und Erinnerungsfunktion</span>
       </div>
-      <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      <div class="sys-stack">
         <div class="form-group">
-          <label class="form-label">Auto-Erinnerung nach X Stunden <span style="font-size:.72rem;color:var(--text-muted);">(leer = deaktiviert)</span></label>
-          <input type="number" name="gsl_verleih_erinnerung_stunden" class="form-input" min="1" max="168" style="max-width:180px;"
+          <label class="form-label">Auto-Erinnerung nach X Stunden <span class="sys-muted sys-small">(leer = deaktiviert)</span></label>
+          <input type="number" name="gsl_verleih_erinnerung_stunden" class="form-input" min="1" max="168"
                  value="{{ org_settings.gsl_verleih_erinnerung_stunden if org_settings and org_settings.gsl_verleih_erinnerung_stunden else '' }}"
                  placeholder="z.B. 2">
         </div>
         <div class="form-group">
-          <label class="form-label">SMS-Vorlage: Ausleihe <span style="font-size:.72rem;color:var(--text-muted);">Platzhalter: {artikel}, {org}, {name}</span></label>
+          <label class="form-label">SMS-Vorlage: Ausleihe <span class="sys-muted sys-small">Platzhalter: {artikel}, {org}, {name}</span></label>
           <textarea name="gsl_verleih_sms_ausleih_text" class="form-input" rows="3"
                     placeholder="Das Material ({artikel}) wurde an Sie ausgeliehen. Bitte bringen Sie es schnellstmoeglich zurueck. - {org}">{{ org_settings.gsl_verleih_sms_ausleih_text if org_settings and org_settings.gsl_verleih_sms_ausleih_text else '' }}</textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">SMS-Vorlage: Erinnerung <span style="font-size:.72rem;color:var(--text-muted);">Platzhalter: {artikel}, {org}, {name}</span></label>
+          <label class="form-label">SMS-Vorlage: Erinnerung <span class="sys-muted sys-small">Platzhalter: {artikel}, {org}, {name}</span></label>
           <textarea name="gsl_verleih_sms_erinnerung_text" class="form-input" rows="3"
                     placeholder="Erinnerung: Bitte bringen Sie das ausgeliehene Material ({artikel}) umgehend zurueck. - {org}">{{ org_settings.gsl_verleih_sms_erinnerung_text if org_settings and org_settings.gsl_verleih_sms_erinnerung_text else '' }}</textarea>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- ── Allgemein ──────────────────────────────────────────────────── -->
     <!-- ── Gruppenkommandanten-Zugang ─────────────────────────────────── -->
-    <div class="card" style="margin-bottom:20px;" id="gk-zugang-einstellungen"
+    <section class="sys-card" id="gk-zugang-einstellungen"
          data-standard-nachricht='{{ gk_standardnachricht|tojson }}' data-auftrag-standard-nachricht='{{ gk_auftrag_standardnachricht|tojson }}' data-base-url="{{ gk_base_url }}">
-      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <strong>Gruppenkommandanten-Zugang</strong>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">Zugang zum Einheitenmodus per SMS-Link</span>
+      <div class="sys-card__head">
+        <h2>{{ icon("users-group") }} Gruppenkommandanten-Zugang</h2>
+        <span class="sys-muted sys-small">Zugang zum Einheitenmodus per SMS-Link</span>
       </div>
-      <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      <div class="sys-stack">
         {% if gk_error %}<div class="alert alert--error">{{ gk_error }}</div>{% endif %}
         {% if gk_warning %}<div class="alert alert--warn">{{ gk_warning }}</div>{% endif %}
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" name="gk_zugang_aktiv" value="1" {% if org_settings.gk_zugang_aktiv %}checked{% endif %}
-                 style="width:18px;height:18px;">
+        <label class="sys-check">
+          <input type="checkbox" name="gk_zugang_aktiv" value="1" {% if org_settings.gk_zugang_aktiv %}checked{% endif %}>
           <span>Gruppenkommandanten-Zugang aktivieren</span>
         </label>
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" name="gk_zugang_auto_sms" value="1" {% if org_settings.gk_zugang_auto_sms %}checked{% endif %}
-                 style="width:18px;height:18px;">
+        <label class="sys-check">
+          <input type="checkbox" name="gk_zugang_auto_sms" value="1" {% if org_settings.gk_zugang_auto_sms %}checked{% endif %}>
           <span>SMS bei Gruppenkommandanten-Zuweisung automatisch versenden</span>
         </label>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-top:-9px;">Nur wirksam, wenn der Gesamtschalter aktiviert ist.</span>
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" name="gk_sms_uebung" value="1" {% if org_settings.gk_sms_uebung %}checked{% endif %}
-                 style="width:18px;height:18px;">
+        <span class="sys-muted sys-small">Nur wirksam, wenn der Gesamtschalter aktiviert ist.</span>
+        <label class="sys-check">
+          <input type="checkbox" name="gk_sms_uebung" value="1" {% if org_settings.gk_sms_uebung %}checked{% endif %}>
           <span>SMS an Gruppenkommandanten auch bei Übungen senden</span>
         </label>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-top:-9px;">Unabhängig vom Einsatzinfo-SMS-Schalter.</span>
+        <span class="sys-muted sys-small">Unabhängig vom Einsatzinfo-SMS-Schalter.</span>
         <div class="form-group">
           <label class="form-label" for="gk-zugang-nachricht">Nachrichtenvorlage</label>
-          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Platzhalter: {lage}, {einheit}, {gruppenkommandant}, {link}</span>
+          <span class="sys-muted sys-small sys-block">Platzhalter: {lage}, {einheit}, {gruppenkommandant}, {link}</span>
           <textarea id="gk-zugang-nachricht" name="gk_zugang_nachricht" class="form-input" rows="6"
                     placeholder="{{ gk_standardnachricht }}">{{ org_settings.gk_zugang_nachricht or '' }}</textarea>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:7px;">
+          <div class="sys-row sys-mt-1">
             <button type="button" class="btn btn--secondary" id="gk-standard-wiederherstellen">Standard wiederherstellen</button>
-            <span id="gk-sms-zaehler" style="font-size:.82rem;color:var(--text-muted);"></span>
+            <span id="gk-sms-zaehler" class="sys-muted sys-small"></span>
           </div>
-          <div id="gk-sms-warnung" class="alert alert--warn" style="display:none;margin-top:8px;"></div>
+          <div id="gk-sms-warnung" class="alert alert--warn sys-initially-hidden"></div>
         </div>
-        <div style="border-top:1px solid var(--border);padding-top:14px;">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-            <input type="checkbox" name="gk_auto_sms_auftrag" value="1" {% if org_settings.gk_auto_sms_auftrag %}checked{% endif %} style="width:18px;height:18px;">
+        <div class="sys-divider">
+          <label class="sys-check">
+            <input type="checkbox" name="gk_auto_sms_auftrag" value="1" {% if org_settings.gk_auto_sms_auftrag %}checked{% endif %}>
             <span>Auftrags-SMS automatisch senden</span>
           </label>
-          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin:5px 0 10px;">Voraussetzung: bestätigte Mobilnummer des Gruppenkommandanten</span>
+          <span class="sys-muted sys-small sys-block">Voraussetzung: bestätigte Mobilnummer des Gruppenkommandanten</span>
           <label class="form-label" for="gk-auftrag-nachricht">Vorlage Auftrags-SMS</label>
-          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Platzhalter: {ereignis}, {gsl}, {einheit}, {einsatzstelle}, {auftrag}, {link}</span>
+          <span class="sys-muted sys-small sys-block">Platzhalter: {ereignis}, {gsl}, {einheit}, {einsatzstelle}, {auftrag}, {link}</span>
           <textarea id="gk-auftrag-nachricht" name="gk_auftrag_nachricht" class="form-input" rows="7" placeholder="{{ gk_auftrag_standardnachricht }}">{{ org_settings.gk_auftrag_nachricht or '' }}</textarea>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:7px;"><button type="button" class="btn btn--secondary" id="gk-auftrag-standard-wiederherstellen">Standard wiederherstellen</button><span id="gk-auftrag-sms-zaehler" style="font-size:.82rem;color:var(--text-muted);"></span></div>
-          <pre id="gk-auftrag-vorschau" class="form-input" style="white-space:pre-wrap;min-height:90px;margin-top:8px;"></pre>
+          <div class="sys-row sys-mt-1"><button type="button" class="btn btn--secondary" id="gk-auftrag-standard-wiederherstellen">Standard wiederherstellen</button><span id="gk-auftrag-sms-zaehler" class="sys-muted sys-small"></span></div>
+          <pre id="gk-auftrag-vorschau" class="form-input sys-preview sys-mt-1"></pre>
         </div>
         <div class="form-group">
           <label class="form-label">Vorschau</label>
-          <pre id="gk-nachricht-vorschau" class="form-input" style="white-space:pre-wrap;min-height:90px;margin:0;"></pre>
+          <pre id="gk-nachricht-vorschau" class="form-input sys-preview"></pre>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;" class="gk-zugang-zahlen">
+        <div class="sys-grid-3">
           <div class="form-group">
             <label class="form-label">Gültigkeit (Stunden)</label>
             <input type="number" name="gk_zugang_gueltigkeit_stunden" class="form-input" min="1" max="168"
@@ -200,51 +189,46 @@
                    value="{{ org_settings.gk_zugang_max_sitzungen }}">
           </div>
         </div>
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" name="gk_zugang_sms_pin" value="1" {% if org_settings.gk_zugang_sms_pin %}checked{% endif %}
-                 style="width:18px;height:18px;">
+        <label class="sys-check">
+          <input type="checkbox" name="gk_zugang_sms_pin" value="1" {% if org_settings.gk_zugang_sms_pin %}checked{% endif %}>
           <span>SMS-Bestätigungscode beim Öffnen</span>
         </label>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-top:-9px;">Empfohlen, wenn Links in Chatgruppen geteilt werden; benötigt einen SMS-Anbieter.</span>
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" name="gk_zugang_ressource_pflegen" value="1" {% if org_settings.gk_zugang_ressource_pflegen %}checked{% endif %}
-                 style="width:18px;height:18px;">
+        <span class="sys-muted sys-small">Empfohlen, wenn Links in Chatgruppen geteilt werden; benötigt einen SMS-Anbieter.</span>
+        <label class="sys-check">
+          <input type="checkbox" name="gk_zugang_ressource_pflegen" value="1" {% if org_settings.gk_zugang_ressource_pflegen %}checked{% endif %}>
           <span>Gruppenkommandant darf Personal/Ausstattung pflegen</span>
         </label>
-        <div style="border-top:1px solid var(--border);padding-top:14px;">
-          <strong style="display:block;margin-bottom:5px;">QR-Zugang (Ausdruck)</strong>
-          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:9px;">Standard: aus. Der PIN wird nie auf dem Ausdruck angezeigt.</span>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" name="gk_qr_aktiv" value="1" {% if org_settings.gk_qr_aktiv %}checked{% endif %} style="width:18px;height:18px;"><span>QR-Zugang aktivieren</span></label>
-          <label class="form-label" style="margin-top:10px;display:block;">Gültigkeit (Stunden)<input type="number" name="gk_qr_gueltigkeit_stunden" class="form-input" min="1" max="168" value="{{ org_settings.gk_qr_gueltigkeit_stunden }}"></label>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" name="gk_qr_pin" value="1" {% if org_settings.gk_qr_pin %}checked{% endif %} style="width:18px;height:18px;"><span>PIN beim QR-Zugang verlangen</span></label>
+        <div class="sys-divider">
+          <h3 class="sys-m-0">QR-Zugang (Ausdruck)</h3>
+          <span class="sys-muted sys-small sys-block">Standard: aus. Der PIN wird nie auf dem Ausdruck angezeigt.</span>
+          <label class="sys-check"><input type="checkbox" name="gk_qr_aktiv" value="1" {% if org_settings.gk_qr_aktiv %}checked{% endif %}><span>QR-Zugang aktivieren</span></label>
+          <label class="form-label sys-block">Gültigkeit (Stunden)<input type="number" name="gk_qr_gueltigkeit_stunden" class="form-input" min="1" max="168" value="{{ org_settings.gk_qr_gueltigkeit_stunden }}"></label>
+          <label class="sys-check"><input type="checkbox" name="gk_qr_pin" value="1" {% if org_settings.gk_qr_pin %}checked{% endif %}><span>PIN beim QR-Zugang verlangen</span></label>
         </div>
-        <div style="border-top:1px solid var(--border);padding-top:14px;">
-          <strong style="display:block;margin-bottom:5px;">Notbremse</strong>
-          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:9px;">Alle Zugänge dieser Organisation sofort widerrufen.</span>
+        <div class="sys-divider">
+          <h3 class="sys-m-0">Notbremse</h3>
+          <span class="sys-muted sys-small sys-block">Alle Zugänge dieser Organisation sofort widerrufen.</span>
           <button type="submit" class="btn btn--danger" formaction="/admin/gsl-einstellungen/zugaenge-widerrufen"
                   formmethod="post" onclick="return confirm('Wirklich alle Gruppenkommandanten-Zugänge widerrufen?');">
             Alle Zugänge dieser Organisation widerrufen
           </button>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- ── Allgemein ──────────────────────────────────────────────────── -->
-    <div class="card" style="margin-bottom:20px;">
-      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <strong>Allgemein</strong>
-      </div>
-      <div style="padding:16px;">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+    <section class="sys-card">
+      <div class="sys-card__head"><h2>{{ icon("settings") }} Allgemein</h2></div>
+      <div class="sys-stack">
+        <label class="sys-check">
           <input type="checkbox" name="mi_auto_adopt" value="1"
-                 {% if not org_settings or org_settings.mi_auto_adopt %}checked{% endif %}
-                 style="width:18px;height:18px;">
+                 {% if not org_settings or org_settings.mi_auto_adopt %}checked{% endif %}>
           <span>Einsätze automatisch als Einsatzstellen in aktiver GSL übernehmen (mi_auto_adopt)</span>
         </label>
       </div>
-    </div>
+    </section>
 
-    <div style="display:flex;justify-content:flex-end;padding-top:4px;">
+    <div class="sys-actions sys-actions--end">
       <button type="submit" class="btn btn--primary">Einstellungen speichern</button>
     </div>
   </form>

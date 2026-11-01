@@ -1,31 +1,38 @@
 {% extends "admin/_layout.html" %}
-{% block title %}Geraeteverleih &ndash; Stucklisten{% endblock %}
+{% block title %}Geräteverleih &ndash; Stücklisten{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='verleih' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
-      <h1>Geraeteverleih &ndash; Stucklisten</h1>
-      <p class="page-header__sub">Vorkonfigurierte Artikel-Kombinationen. Positionen mit Geraetetyp erzwingen beim Ausleihen die Auswahl eines konkreten Geraetes per Artikelnr.</p>
+      <h1>{{ icon("list-details") }} Geräteverleih &ndash; Stücklisten</h1>
+      <p class="sys-muted">Vorkonfigurierte Artikel-Kombinationen. Positionen mit Gerätetyp erzwingen beim Ausleihen die Auswahl eines konkreten Gerätes per Artikelnr.</p>
     </div>
-    <div style="display:flex;gap:8px;">
+    <div class="sys-row">
       <a href="/admin/verleih-uebersicht" class="btn btn--ghost">Aktive Ausleihen</a>
       <a href="/admin/verleih-artikel" class="btn btn--ghost">Artikel</a>
-      <a href="/admin/verleih-geraetetypen" class="btn btn--ghost">Geraetetypen</a>
-      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newSlModal">+ Stuckliste anlegen</button>
+      <a href="/admin/verleih-geraetetypen" class="btn btn--ghost">Gerätetypen</a>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newSlModal">{{ icon("plus", size="sm") }} Stückliste anlegen</button>
     </div>
-  </div>
+   </div>
+  </header>
 
-  {% if saved %}<div class="alert alert--success" style="margin-bottom:12px;">Gespeichert.</div>{% endif %}
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
 
   {% for sl in stuecklisten %}
-  <div class="card" style="margin-bottom:12px;" id="sl-{{ sl.id }}">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
-      <strong>{{ sl.bezeichnung }}</strong>
-      <div style="display:flex;gap:8px;">
-        <span style="font-size:.78rem;color:var(--text-muted);">{{ sl.positionen|length }} Position(en)</span>
+  <section class="sys-card" id="sl-{{ sl.id }}">
+    <div class="sys-card__head">
+      <h2>{{ icon("list-details") }} {{ sl.bezeichnung }}</h2>
+      <div class="sys-row">
+        <span class="sys-pill">{{ sl.positionen|length }} Position(en)</span>
         <button class="btn btn--ghost btn--xs"
                 data-ec-action="open-dialog" data-ec-dialog="editSlModal-{{ sl.id }}">
           Bearbeiten
@@ -34,38 +41,40 @@
                 hx-post="/admin/verleih-stuecklisten/{{ sl.id }}/loeschen"
                 hx-target="#sl-{{ sl.id }}"
                 hx-swap="outerHTML"
-                hx-confirm="Stuckliste '{{ sl.bezeichnung }}' deaktivieren?">
+                hx-confirm="Stückliste '{{ sl.bezeichnung }}' deaktivieren?">
           Deaktivieren
         </button>
       </div>
     </div>
-    {% if sl.notizen %}<p style="padding:8px 16px;font-size:.82rem;color:var(--text-muted);margin:0;">{{ sl.notizen }}</p>{% endif %}
-    <table class="table-admin" style="margin:0;">
+    {% if sl.notizen %}<p class="sys-muted sys-small sys-mb-2">{{ sl.notizen }}</p>{% endif %}
+    <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead><tr><th>Typ/Artikelnr</th><th>Bezeichnung</th><th>Menge</th></tr></thead>
       <tbody>
         {% for p in sl.positionen %}
         <tr>
-          <td>
+          <td data-label="Typ/Artikelnr">
             {% if p.geraetetyp %}
-            <span class="badge-pill badge-pill--blue" style="font-size:.72rem;">{{ p.geraetetyp.name }}</span>
+            <span class="sys-pill sys-pill--tiny">{{ p.geraetetyp.name }}</span>
             {% else %}
-            <code>{{ p.artikel_nr or (p.artikel.artikel_nr if p.artikel else '') or '&ndash;' }}</code>
+            <code>{{ p.artikel_nr or (p.artikel.artikel_nr if p.artikel else '') or '–' }}</code>
             {% endif %}
           </td>
-          <td>{{ p.bezeichnung or (p.artikel.bezeichnung if p.artikel else '&ndash;') }}</td>
-          <td>{{ p.menge }}</td>
+          <td data-label="Bezeichnung">{{ p.bezeichnung or (p.artikel.bezeichnung if p.artikel else '–') }}</td>
+          <td data-label="Menge">{{ p.menge }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-  </div>
+    </div>
+  </section>
 
-  <!-- Edit-Dialog fuer Stuckliste {{ sl.id }} -->
-  <dialog class="modal" id="editSlModal-{{ sl.id }}" style="max-width:720px;">
+  <!-- Edit-Dialog für Stückliste {{ sl.id }} -->
+  <dialog class="modal sys-dialog-wide" id="editSlModal-{{ sl.id }}">
     <div class="modal__content">
       <div class="modal__header">
-        <h3>Stuckliste bearbeiten</h3>
-        <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
+        <h3>Stückliste bearbeiten</h3>
+        <button type="button" data-ec-action="close-dialog" aria-label="Schließen" class="modal__close">{{ icon("x", size="sm") }}</button>
       </div>
       <form method="post" action="/admin/verleih-stuecklisten/{{ sl.id }}/bearbeiten"
             x-data="stuecklisteEditForm({{ sl.id }})"
@@ -96,18 +105,18 @@
             <textarea name="notizen" class="form-input" rows="2" maxlength="500">{{ sl.notizen or '' }}</textarea>
           </div>
 
-          <div style="margin-top:16px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-              <label class="form-label" style="margin:0;">Positionen</label>
-              <button type="button" class="btn btn--ghost btn--xs" @click="addRow()">+ Position</button>
+          <div class="sys-mt-2">
+            <div class="sys-row sys-between sys-mb-1">
+              <label class="form-label sys-m-0">Positionen</label>
+              <button type="button" class="btn btn--ghost btn--xs" @click="addRow()">{{ icon("plus", size="xs") }} Position</button>
             </div>
-            <table class="table-admin" style="margin:0;">
+            <div class="sys-table-wrap"><table class="sys-table">
               <thead>
                 <tr>
-                  <th style="width:36px;">Modus</th>
-                  <th>Artikel / Geraetetyp</th>
+                  <th class="sys-col-90">Modus</th>
+                  <th>Artikel / Gerätetyp</th>
                   <th>Artikelnr</th>
-                  <th style="width:70px;">Menge</th>
+                  <th class="sys-col-90">Menge</th>
                   <th></th>
                 </tr>
               </thead>
@@ -135,21 +144,21 @@
                             </option>
                             {% endfor %}
                           </select>
-                          <input type="text" class="form-input form-input--xs" style="margin-top:4px;"
+                          <input type="text" class="form-input form-input--xs sys-mt-1"
                                  :name="'positionen_bezeichnung[]'"
                                  x-model="row.bezeichnung"
                                  placeholder="Bezeichnung *" required>
-                          <!-- Hidden fuer Geraetetyp-Modus -->
+                          <!-- Hidden für Gerätetyp-Modus -->
                           <input type="hidden" :name="'positionen_geraetetyp_id[]'" value="">
                         </div>
                       </template>
-                      <!-- Geraetetyp-Modus -->
+                      <!-- Gerätetyp-Modus -->
                       <template x-if="row.modus === 'geraetetyp'">
                         <div>
                           <select class="form-select form-select--xs"
                                   :name="'positionen_geraetetyp_id[]'"
-                                  @change="onGeraetetypChange(idx, $event)">
-                            <option value="">-- Geraetetyp waehlen --</option>
+                                  @change="onGerätetypChange(idx, $event)">
+                            <option value="">-- Gerätetyp wählen --</option>
                             {% for gt in geraetetypen %}
                             <option value="{{ gt.id }}" data-name="{{ gt.name }}"
                                     :selected="row.geraetetyp_id == '{{ gt.id }}'">
@@ -157,11 +166,11 @@
                             </option>
                             {% endfor %}
                           </select>
-                          <input type="text" class="form-input form-input--xs" style="margin-top:4px;"
+                          <input type="text" class="form-input form-input--xs sys-mt-1"
                                  :name="'positionen_bezeichnung[]'"
                                  x-model="row.bezeichnung"
                                  placeholder="Bezeichnung *" required>
-                          <!-- Hidden fuer Artikel-Modus -->
+                          <!-- Hidden für Artikel-Modus -->
                           <input type="hidden" :name="'positionen_artikel_id[]'" value="">
                         </div>
                       </template>
@@ -169,42 +178,42 @@
                     <td>
                       <input type="text" class="form-input form-input--xs" :name="'positionen_artikel_nr[]'"
                              x-model="row.artikel_nr" maxlength="100"
-                             :placeholder="row.modus === 'geraetetyp' ? 'wird bei Ausleihe gewaehlt' : ''"
+                             :placeholder="row.modus === 'geraetetyp' ? 'wird bei Ausleihe gewählt' : ''"
                              :readonly="row.modus === 'geraetetyp'"
-                             :style="row.modus === 'geraetetyp' ? 'opacity:.4;' : ''">
+                             :class="row.modus === 'geraetetyp' ? 'sys-dim' : ''">
                     </td>
                     <td>
-                      <input type="number" class="form-input form-input--xs" :name="'positionen_menge[]'"
-                             x-model="row.menge" min="1" style="width:60px;">
+                      <input type="number" class="form-input form-input--xs sys-w-60" :name="'positionen_menge[]'"
+                             x-model="row.menge" min="1">
                     </td>
                     <td>
-                      <button type="button" class="btn btn--danger btn--xs" @click="removeRow(idx)">x</button>
+                      <button type="button" class="btn btn--danger btn--xs" aria-label="Position entfernen" @click="removeRow(idx)">{{ icon("x", size="xs") }}</button>
                     </td>
                   </tr>
                 </template>
               </tbody>
-            </table>
-            <button type="button" class="btn btn--ghost btn--xs" @click="addRow()" style="margin-top:6px;">+ Position</button>
+            </table></div>
+            <button type="button" class="btn btn--ghost btn--xs sys-mt-1" @click="addRow()">{{ icon("plus", size="xs") }} Position</button>
           </div>
         </div>
         <div class="modal__footer">
           <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
-          <button type="submit" class="btn btn--primary">Aenderungen speichern</button>
+          <button type="submit" class="btn btn--primary">Änderungen speichern</button>
         </div>
       </form>
     </div>
   </dialog>
   {% else %}
-  <p style="color:var(--text-muted);">Noch keine Stucklisten angelegt.</p>
+  <div class="sys-empty">{{ icon("info-circle") }} Noch keine Stücklisten angelegt.</div>
   {% endfor %}
 </div>
 
-<!-- ── Neue Stuckliste ─────────────────────────────────────────────────── -->
-<dialog class="modal" id="newSlModal" style="max-width:720px;">
+<!-- ── Neue Stückliste ─────────────────────────────────────────────────── -->
+<dialog class="modal sys-dialog-wide" id="newSlModal">
   <div class="modal__content">
     <div class="modal__header">
-      <h3>Neue Stuckliste</h3>
-      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
+      <h3>Neue Stückliste</h3>
+      <button type="button" data-ec-action="close-dialog" aria-label="Schließen" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/verleih-stuecklisten/neu"
           x-data="stuecklisteForm()">
@@ -212,25 +221,25 @@
       <div class="modal__body">
         <div class="form-group">
           <label class="form-label">Bezeichnung *</label>
-          <input type="text" name="bezeichnung" class="form-input" required maxlength="200" placeholder="z.B. Hochwasser-Grundausstattung">
+          <input type="text" name="bezeichnung" class="form-input" required maxlength="200" placeholder="z. B. Hochwasser-Grundausstattung">
         </div>
         <div class="form-group">
           <label class="form-label">Notizen</label>
           <textarea name="notizen" class="form-input" rows="2" maxlength="500"></textarea>
         </div>
 
-        <div style="margin-top:16px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <label class="form-label" style="margin:0;">Positionen</label>
-            <button type="button" class="btn btn--ghost btn--xs" @click="addRow()">+ Position</button>
+        <div class="sys-mt-2">
+          <div class="sys-row sys-between sys-mb-1">
+            <label class="form-label sys-m-0">Positionen</label>
+            <button type="button" class="btn btn--ghost btn--xs" @click="addRow()">{{ icon("plus", size="xs") }} Position</button>
           </div>
-          <table class="table-admin" style="margin:0;">
+          <div class="sys-table-wrap"><table class="sys-table">
             <thead>
               <tr>
-                <th style="width:36px;">Modus</th>
-                <th>Artikel / Geraetetyp</th>
+                <th class="sys-col-90">Modus</th>
+                <th>Artikel / Gerätetyp</th>
                 <th>Artikelnr</th>
-                <th style="width:70px;">Menge</th>
+                <th class="sys-col-90">Menge</th>
                 <th></th>
               </tr>
             </thead>
@@ -256,7 +265,7 @@
                           </option>
                           {% endfor %}
                         </select>
-                        <input type="text" class="form-input form-input--xs" style="margin-top:4px;"
+                        <input type="text" class="form-input form-input--xs sys-mt-1"
                                :name="'positionen_bezeichnung[]'"
                                x-model="row.bezeichnung"
                                placeholder="Bezeichnung *" required>
@@ -267,13 +276,13 @@
                       <div>
                         <select class="form-select form-select--xs"
                                 :name="'positionen_geraetetyp_id[]'"
-                                @change="onGeraetetypChange(idx, $event)">
-                          <option value="">-- Geraetetyp waehlen --</option>
+                                @change="onGerätetypChange(idx, $event)">
+                          <option value="">-- Gerätetyp wählen --</option>
                           {% for gt in geraetetypen %}
                           <option value="{{ gt.id }}" data-name="{{ gt.name }}">{{ gt.name }}</option>
                           {% endfor %}
                         </select>
-                        <input type="text" class="form-input form-input--xs" style="margin-top:4px;"
+                        <input type="text" class="form-input form-input--xs sys-mt-1"
                                :name="'positionen_bezeichnung[]'"
                                x-model="row.bezeichnung"
                                placeholder="Bezeichnung *" required>
@@ -284,27 +293,27 @@
                   <td>
                     <input type="text" class="form-input form-input--xs" :name="'positionen_artikel_nr[]'"
                            x-model="row.artikel_nr" maxlength="100"
-                           :placeholder="row.modus === 'geraetetyp' ? 'wird bei Ausleihe gewaehlt' : ''"
+                           :placeholder="row.modus === 'geraetetyp' ? 'wird bei Ausleihe gewählt' : ''"
                            :readonly="row.modus === 'geraetetyp'"
-                           :style="row.modus === 'geraetetyp' ? 'opacity:.4;' : ''">
+                           :class="row.modus === 'geraetetyp' ? 'sys-dim' : ''">
                   </td>
                   <td>
-                    <input type="number" class="form-input form-input--xs" :name="'positionen_menge[]'"
-                           x-model="row.menge" min="1" style="width:60px;">
+                    <input type="number" class="form-input form-input--xs sys-w-60" :name="'positionen_menge[]'"
+                           x-model="row.menge" min="1">
                   </td>
                   <td>
-                    <button type="button" class="btn btn--danger btn--xs" @click="removeRow(idx)">x</button>
+                    <button type="button" class="btn btn--danger btn--xs" aria-label="Position entfernen" @click="removeRow(idx)">{{ icon("x", size="xs") }}</button>
                   </td>
                 </tr>
               </template>
             </tbody>
-          </table>
-          <button type="button" class="btn btn--ghost btn--xs" @click="addRow()" style="margin-top:6px;">+ Position</button>
+          </table></div>
+          <button type="button" class="btn btn--ghost btn--xs sys-mt-1" @click="addRow()">{{ icon("plus", size="xs") }} Position</button>
         </div>
       </div>
       <div class="modal__footer">
         <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
-        <button type="submit" class="btn btn--primary">Stuckliste anlegen</button>
+        <button type="submit" class="btn btn--primary">Stückliste anlegen</button>
       </div>
     </form>
   </div>
@@ -335,7 +344,7 @@ function stuecklisteForm() {
         this.rows[idx].artikel_id = '';
       }
     },
-    onGeraetetypChange(idx, ev) {
+    onGerätetypChange(idx, ev) {
       var opt = ev.target.selectedOptions[0];
       if (opt && opt.value) {
         this.rows[idx].geraetetyp_id = opt.value;
@@ -386,7 +395,7 @@ function stuecklisteEditForm(slId) {
         this.rows[idx].artikel_id = '';
       }
     },
-    onGeraetetypChange(idx, ev) {
+    onGerätetypChange(idx, ev) {
       var opt = ev.target.selectedOptions[0];
       if (opt && opt.value) {
         this.rows[idx].geraetetyp_id = opt.value;

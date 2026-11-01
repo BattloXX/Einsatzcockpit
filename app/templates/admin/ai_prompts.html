@@ -1,19 +1,21 @@
 {% extends "admin/_layout.html" %}
 {% block title %}KI-Prompts – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='ki' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>{{ icon("sparkles", size="md") }} KI-Prompts</h1>
-      <p class="page-header__sub">
-        Jeder Prompt besteht aus einem <strong>festen Teil</strong> (Rolle, Datenintegrität, Ausgabeformat – nicht editierbar)
-        und einem <strong>variablen Teil</strong> (Stil, Länge, taktische Schwerpunkte – editierbar).
-        Die letzten 10 Versionen je Prompt werden aufbewahrt.
-      </p>
-    </div>
-  </div>
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("sparkles", size="md") }} KI-Prompts</h1>
+    <p class="sys-muted">
+      Jeder Prompt besteht aus einem <strong>festen Teil</strong> (Rolle, Datenintegrität, Ausgabeformat – nicht editierbar)
+      und einem <strong>variablen Teil</strong> (Stil, Länge, taktische Schwerpunkte – editierbar).
+      Die letzten 10 Versionen je Prompt werden aufbewahrt.
+    </p>
+  </header>
 
   {% if saved and saved not in ('error', 'empty') %}
   <div class="alert alert--success">
@@ -26,100 +28,96 @@
   {% endif %}
 
   {% for key, p in prompts.items() %}
-  <section class="card mb-4" id="{{ key }}">
-    <div class="card-header" style="display:flex; align-items:center; gap:12px;">
-      <h2 style="margin:0;">{{ p.label }}</h2>
-      <span style="font-size:.78rem; color:#6b7280; font-family:monospace;">prompt_key: {{ key }}</span>
+  <section class="sys-card sys-stack" id="{{ key }}">
+    <div class="sys-card__head">
+      <h2>{{ icon("sparkles") }} {{ p.label }}</h2>
+      <span class="sys-muted sys-small sys-mono">prompt_key: {{ key }}</span>
     </div>
-    <div class="card-body">
 
       {# ── Fester Präfix ──────────────────────────────────────────────── #}
-      <div style="margin-bottom:16px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-          <span style="font-size:.8rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.04em;">Fester Teil (Präfix)</span>
-          <span style="font-size:.75rem; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:4px; padding:1px 7px; color:#9ca3af;">nicht editierbar</span>
+      <div>
+        <div class="sys-row">
+          <span class="sys-eyebrow">Fester Teil (Präfix)</span>
+          <span class="sys-pill sys-small">nicht editierbar</span>
         </div>
-        <div style="background:#1e1e2e; border:1px solid #374151; border-radius:6px; padding:12px 14px;
-                    font-family:monospace; font-size:.8rem; color:#a3b0c9; white-space:pre-wrap; line-height:1.55;">{{ p.fixed_prefix }}</div>
+        <div class="sys-fixed-part">{{ p.fixed_prefix }}</div>
       </div>
 
       {# ── Variabler Teil (editierbar) ─────────────────────────────────── #}
-      <form method="post" action="/admin/ki-prompts/{{ key }}">
+      <form method="post" action="/admin/ki-prompts/{{ key }}" class="sys-stack">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <div style="margin-bottom:16px;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-            <span style="font-size:.8rem; font-weight:600; color:#a78bfa; text-transform:uppercase; letter-spacing:.04em;">Variabler Teil</span>
-            <span style="font-size:.75rem; background:rgba(139,92,246,.1); border:1px solid rgba(139,92,246,.3); border-radius:4px; padding:1px 7px; color:#a78bfa;">editierbar</span>
+        <div>
+          <div class="sys-row">
+            <span class="sys-eyebrow">Variabler Teil</span>
+            <span class="sys-pill sys-status--ok sys-small">editierbar</span>
           </div>
-          <textarea name="variable_part" class="form-input"
-                    style="min-height:80px; width:100%; resize:vertical; font-family:monospace; font-size:.85rem; line-height:1.55;"
+          <textarea name="variable_part" class="form-input sys-prompt-input sys-resize-y sys-mono sys-small"
                     required>{{ p.current_variable }}</textarea>
         </div>
 
         {# ── Fester Suffix ──────────────────────────────────────────────── #}
-        <div style="margin-bottom:20px;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-            <span style="font-size:.8rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.04em;">Fester Teil (Suffix)</span>
-            <span style="font-size:.75rem; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:4px; padding:1px 7px; color:#9ca3af;">nicht editierbar</span>
+        <div>
+          <div class="sys-row">
+            <span class="sys-eyebrow">Fester Teil (Suffix)</span>
+            <span class="sys-pill sys-small">nicht editierbar</span>
           </div>
-          <div style="background:#1e1e2e; border:1px solid #374151; border-radius:6px; padding:12px 14px;
-                      font-family:monospace; font-size:.8rem; color:#a3b0c9; white-space:pre-wrap; line-height:1.55;">{{ p.fixed_suffix }}</div>
+          <div class="sys-fixed-part">{{ p.fixed_suffix }}</div>
         </div>
 
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
-          <input type="text" name="note" class="form-input form-input--sm"
-                 placeholder="Notiz zur Änderung (optional)" style="width:280px;">
+        <div class="sys-row">
+          <input type="text" name="note" class="form-input form-input--sm sys-grow"
+                 placeholder="Notiz zur Änderung (optional)">
           <button type="submit" class="btn btn--primary btn--sm">Als neue Version speichern</button>
         </div>
       </form>
 
       {# ── Versionsverlauf ─────────────────────────────────────────────── #}
       {% if p.versions %}
-      <details style="margin-top:20px;" {% if p.versions|length == 1 %}{% endif %}>
-        <summary style="cursor:pointer; font-size:.85rem; font-weight:600; color:#6b7280; user-select:none; padding:4px 0;">
+      <details class="sys-details" {% if p.versions|length == 1 %}{% endif %}>
+        <summary class="sys-summary sys-muted">
           Versionsverlauf ({{ p.versions|length }} von max. 10)
         </summary>
-        <div style="margin-top:10px; overflow-x:auto;">
-          <table class="table-admin" style="font-size:.82rem;">
+        <div class="sys-table-wrap">
+          <table class="sys-table sys-table--responsive sys-small">
             <thead>
               <tr>
-                <th style="width:50px;">Ver.</th>
-                <th style="width:130px;">Gespeichert</th>
-                <th style="width:110px;">Benutzer</th>
+                <th>Ver.</th>
+                <th>Gespeichert</th>
+                <th>Benutzer</th>
                 <th>Inhalt (Vorschau)</th>
-                <th style="width:80px;">Notiz</th>
-                <th style="width:90px;"></th>
+                <th>Notiz</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {% for v in p.versions %}
-              <tr {% if loop.first %}style="background:rgba(139,92,246,.06);"{% endif %}>
-                <td>
-                  <span style="font-family:monospace; font-weight:600; {% if loop.first %}color:#a78bfa;{% endif %}">
+              <tr{% if loop.first %} class="sys-row-active"{% endif %}>
+                <td data-label="Version">
+                  <span class="sys-mono sys-semibold">
                     v{{ v.version }}
                   </span>
-                  {% if loop.first %}<span style="font-size:.72rem; color:#a78bfa; margin-left:4px;">aktiv</span>{% endif %}
+                  {% if loop.first %}<span class="sys-pill sys-status--ok sys-small">aktiv</span>{% endif %}
                 </td>
-                <td style="color:#6b7280;">
+                <td class="sys-muted" data-label="Gespeichert">
                   {{ (v.created_at|local).strftime('%d.%m.%y %H:%M') if v.created_at else '–' }}
                 </td>
-                <td style="color:#6b7280;">{{ v.created_by_username or '–' }}</td>
-                <td style="font-family:monospace; color:#374151; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                <td class="sys-muted" data-label="Benutzer">{{ v.created_by_username or '–' }}</td>
+                <td class="sys-mono sys-cell-ellipsis" data-label="Inhalt"
                     title="{{ v.variable_part }}">
                   {{ v.variable_part[:120] }}{% if v.variable_part|length > 120 %}…{% endif %}
                 </td>
-                <td style="color:#9ca3af; font-size:.78rem;">{{ v.note or '' }}</td>
-                <td>
+                <td class="sys-muted sys-small" data-label="Notiz">{{ v.note or '' }}</td>
+                <td data-label="Aktion">
                   {% if not loop.first %}
                   <form method="post" action="/admin/ki-prompts/{{ key }}/restore/{{ v.id }}"
                         onsubmit="return confirm('v{{ v.version }} als neue aktive Version wiederherstellen?')">
                     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                    <button type="submit" class="btn btn--ghost btn--sm" style="font-size:.78rem; padding:2px 8px;">
+                    <button type="submit" class="btn btn--ghost btn--sm">
                       Wiederherstellen
                     </button>
                   </form>
                   {% else %}
-                  <span style="font-size:.78rem; color:#a78bfa;">–</span>
+                  <span class="sys-muted">–</span>
                   {% endif %}
                 </td>
               </tr>
@@ -129,12 +127,11 @@
         </div>
       </details>
       {% else %}
-      <p class="text-muted" style="font-size:.82rem; margin-top:12px;">
+      <p class="sys-muted sys-small sys-m-0">
         Noch keine gespeicherte Version — aktuell wird der eingebaute Standardwert verwendet.
       </p>
       {% endif %}
 
-    </div>
   </section>
   {% endfor %}
 </div>

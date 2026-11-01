@@ -1,42 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Atemschutz-Geräteprüfung – Token / QR{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block content %}
-<div class="container" style="max-width:1280px;margin:0 auto;padding:1rem;">
+<div class="container sys-page sys-page-narrow">
 {% include "atemschutz_pruefung/_tabs.html" %}
 {% include "atemschutz_pruefung/_einstellungen_tabs.html" %}
-<div class="page-header">
-  <div>
-    <h1>Öffentlicher Link &amp; QR-Code</h1>
-    <p class="page-header__sub">Login-freie Erfassung der Prüfprotokolle am Tablet</p>
-  </div>
-</div>
+<header class="sys-hero">
+  <h1>{{ icon("link") }} Öffentlicher Link &amp; QR-Code</h1>
+  <p class="sys-muted">Login-freie Erfassung der Prüfprotokolle am Tablet</p>
+</header>
 
 {% if saved %}
-<div class="alert alert--success" style="margin-bottom:1rem;">Token wurde generiert/rotiert.</div>
+<div class="alert alert--success sys-mb-2">Token wurde generiert/rotiert.</div>
 {% endif %}
 
-<div class="card">
-  <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
-    <strong>Prüfformular-Link</strong>
-  </div>
-  <div style="padding:1rem;">
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("key") }} Prüfformular-Link</h2></div>
+  <div>
     {% if org and org.atemschutz_pruef_token %}
-    <div style="margin-bottom:1rem;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1;min-width:260px;">
-        <div class="form-label" style="margin-bottom:.4rem;">Aktueller Link</div>
-        <code style="word-break:break-all;font-size:.9rem;background:var(--surface-mid);padding:.4rem .6rem;border-radius:.3rem;display:block;">
+    <div class="sys-mb-2 sys-row sys-start">
+      <div class="sys-grow-1 sys-min-260">
+        <div class="form-label sys-mb-1">Aktueller Link</div>
+        <code class="sys-code-block">
           {{ base_url }}/ap/{{ org.atemschutz_pruef_token }}
         </code>
-        <p style="margin-top:.5rem;font-size:.85rem;color:var(--text-muted);">
+        <p class="sys-mt-1 sys-small sys-muted">
           Dieser Link ermöglicht das Erfassen der Atemschutzgeräteprüfung ohne Login — auf einem
           Tablet im Hochformat als Lesezeichen/Startseite hinterlegen.
         </p>
       </div>
-      <img src="/admin/atemschutz-pruefung/token/qr.png" alt="QR-Code" style="width:140px;height:140px;background:#fff;padding:8px;border-radius:.4rem;">
+      <img class="sys-qr-img sys-qr-img--sm" src="/admin/atemschutz-pruefung/token/qr.png" alt="QR-Code">
     </div>
     {% else %}
-    <div class="alert alert--warn" style="margin-bottom:1rem;">Noch kein Token generiert.</div>
+    <div class="alert alert--warn sys-mb-2">Noch kein Token generiert.</div>
     {% endif %}
     <form method="post" action="/admin/atemschutz-pruefung/token">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -45,11 +46,11 @@
       </button>
     </form>
     {% if org and org.atemschutz_pruef_token %}
-    <p style="margin-top:.6rem;font-size:.8rem;color:var(--red-light);">
-      &#9888; Token rotieren macht den alten Link ungültig — alle ausgegebenen Links/QR-Codes müssen neu verteilt werden.
+    <p class="sys-mt-1 sys-text-xs sys-danger">
+      {{ icon("alert-triangle", size="sm") }} Token rotieren macht den alten Link ungültig — alle ausgegebenen Links/QR-Codes müssen neu verteilt werden.
     </p>
     {% endif %}
   </div>
-</div>
+</section>
 </div>
 {% endblock %}

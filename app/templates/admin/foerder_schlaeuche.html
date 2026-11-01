@@ -1,30 +1,36 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Schläuche – Förderstrecke – Admin{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
-<div class="page-content">
+<div class="sys-page">
   {% include "admin/_foerder_tabs.html" %}
 
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
       <h1>{{ modul_icon("foerderstrecke", size="md") }} Schläuche (Förderstrecke)</h1>
-      <p class="page-header__sub">
+      <p class="sys-muted">
         {{ schlaeuche|length }} Schlauchtyp{{ '' if schlaeuche|length == 1 else 'en' }} im Katalog dieser Organisation
       </p>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div class="sys-row">
       <button type="button" class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="schlauchNeuModal">{{ icon("plus", size="sm") }} Eigener Schlauch</button>
     </div>
-  </div>
+   </div>
+  </header>
 
   {% if request.query_params.get('fehler') %}
   <div class="alert alert--error">{{ icon("alert-triangle", size="sm") }} Eingabe unvollständig oder ungültig (Kürzel, Durchmesser &gt; 0, k-Wert ≥ 0 erforderlich).</div>
   {% endif %}
 
   {# ── Vorlagen-Leiste ── #}
-  <div class="card" style="padding:14px;margin-bottom:14px;">
-    <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:8px;">{{ icon("clipboard-list", size="sm") }} Aus Vorlage übernehmen (editierbare Kopie):</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("clipboard-list") }} Aus Vorlage übernehmen</h2><span class="sys-muted sys-small">editierbare Kopie</span></div>
+    <div class="sys-row">
       {% for key, v in vorlagen.items() %}
       <form method="post" action="/admin/foerderschlaeuche/aus-vorlage/{{ key }}">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -32,23 +38,25 @@
       </form>
       {% endfor %}
     </div>
-  </div>
+  </section>
 
   {% if not schlaeuche %}
-  <div class="card" style="padding:28px;text-align:center;color:var(--text-muted);">
-    Noch keine Schläuche. Lege einen eigenen an oder übernimm eine Vorlage.
+  <div class="sys-empty">
+    {{ icon("info-circle") }} Noch keine Schläuche. Lege einen eigenen an oder übernimm eine Vorlage.
   </div>
   {% else %}
-  <table class="table-admin table-admin--cards">
+  <section class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive sys-table--wide">
     <thead>
       <tr>
         <th>Kürzel</th>
-        <th style="text-align:right;">Ø (mm)</th>
-        <th style="text-align:right;">k-Wert</th>
-        <th style="text-align:right;">Element</th>
-        <th style="text-align:right;">Betriebsdruck</th>
-        <th style="text-align:right;">Wasser/m</th>
-        <th style="text-align:right;">Vorrat</th>
+        <th class="sys-number">Ø (mm)</th>
+        <th class="sys-number">k-Wert</th>
+        <th class="sys-number">Element</th>
+        <th class="sys-number">Betriebsdruck</th>
+        <th class="sys-number">Wasser/m</th>
+        <th class="sys-number">Vorrat</th>
         <th>Aktionen</th>
       </tr>
     </thead>
@@ -56,26 +64,28 @@
       {% for s in schlaeuche %}
       <tr>
         <td data-label="Kürzel"><strong>{{ s.kuerzel }}</strong>
-          {% if s.quelle == 'vorlage' %}<span class="badge-pill badge-pill--gray">Vorlage</span>{% endif %}
+          {% if s.quelle == 'vorlage' %}<span class="sys-pill sys-pill--tiny">Vorlage</span>{% endif %}
         </td>
-        <td data-label="Ø" style="text-align:right;">{{ s.durchmesser_mm }}</td>
-        <td data-label="k-Wert" style="text-align:right;font-variant-numeric:tabular-nums;">{{ s.k_verlust }}</td>
-        <td data-label="Element" style="text-align:right;">{{ s.element_laenge_m }} m</td>
-        <td data-label="Betriebsdruck" style="text-align:right;">{% if s.max_betriebsdruck_bar %}{{ s.max_betriebsdruck_bar }} bar{% else %}<span class="text-muted">–</span>{% endif %}</td>
-        <td data-label="Wasser/m" style="text-align:right;">{% if s.wasserinhalt_l_m %}{{ s.wasserinhalt_l_m }} l{% else %}<span class="text-muted">–</span>{% endif %}</td>
-        <td data-label="Vorrat" style="text-align:right;">{% if s.vorrat_m %}{{ s.vorrat_m }} m{% else %}<span class="text-muted">–</span>{% endif %}</td>
-        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
+        <td data-label="Ø" class="sys-number">{{ s.durchmesser_mm }}</td>
+        <td data-label="k-Wert" class="sys-number">{{ s.k_verlust }}</td>
+        <td data-label="Element" class="sys-number">{{ s.element_laenge_m }} m</td>
+        <td data-label="Betriebsdruck" class="sys-number">{% if s.max_betriebsdruck_bar %}{{ s.max_betriebsdruck_bar }} bar{% else %}<span class="sys-muted">–</span>{% endif %}</td>
+        <td data-label="Wasser/m" class="sys-number">{% if s.wasserinhalt_l_m %}{{ s.wasserinhalt_l_m }} l{% else %}<span class="sys-muted">–</span>{% endif %}</td>
+        <td data-label="Vorrat" class="sys-number">{% if s.vorrat_m %}{{ s.vorrat_m }} m{% else %}<span class="sys-muted">–</span>{% endif %}</td>
+        <td data-label="Aktionen"><div class="sys-row">
           <button type="button" class="btn btn--ghost btn--xs" data-ec-action="open-dialog" data-ec-dialog="schlauchEdit{{ s.id }}">Bearbeiten</button>
-          <form method="post" action="/admin/foerderschlaeuche/{{ s.id }}/loeschen" style="display:inline;"
+          <form method="post" action="/admin/foerderschlaeuche/{{ s.id }}/loeschen" class="sys-inline-form"
                 onsubmit="return confirm('Diesen Schlauchtyp wirklich löschen?');">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="btn btn--ghost btn--xs">Löschen</button>
           </form>
-        </td>
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </section>
   {% endif %}
 </div>
 
@@ -118,7 +128,7 @@
           <input type="number" name="vorrat_m" class="form-input" min="0" placeholder="600">
         </div>
       </div>
-      <p class="text-muted" style="font-size:.78rem;margin:0;">Wasserinhalt je Meter wird automatisch aus dem Durchmesser berechnet.</p>
+      <p class="sys-muted sys-small sys-m-0">Wasserinhalt je Meter wird automatisch aus dem Durchmesser berechnet.</p>
     </div>
     <div class="modal__footer">
       <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>

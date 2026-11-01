@@ -1,14 +1,20 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Alarm-Infoscreen – Verwaltung{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
+<div class="sys-page">
 {% include "admin/_infoscreen_tabs.html" %}
-<div style="max-width:900px;">
-  <div class="page-header">
+  <header class="sys-hero">
+    <div class="sys-hero__head">
     <div>
       <h1>{{ icon("device-tv") }} Alarm-Infoscreen</h1>
-      <p class="text-muted">Wandmonitor im Gerätehaus: zeigt bei Alarm die Einsatzmeldung, Fahrzeuge, Objekt, Gefahren und Karte</p>
+      <p class="sys-muted">Wandmonitor im Gerätehaus: zeigt bei Alarm die Einsatzmeldung, Fahrzeuge, Objekt, Gefahren und Karte</p>
     </div>
-  </div>
+    </div>
+  </header>
 
   {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if request.query_params.get('saved_mit_neuem_wetter_token') %}
@@ -22,16 +28,15 @@
   {% if neuer_token %}
   <div class="alert alert--success">
     <strong>Neuer Token angelegt — jetzt notieren, er wird nur einmal angezeigt:</strong><br>
-    <code style="word-break:break-all;">{{ basis_url }}/infoscreen/alarm/{{ neuer_token }}</code>
+    <code class="sys-token">{{ basis_url }}/infoscreen/alarm/{{ neuer_token }}</code>
   </div>
   {% endif %}
 
-  <div class="card" style="padding:16px;margin-bottom:16px;">
-    <h3 style="margin-top:0;">Einstellungen</h3>
-    <form method="post" action="/infoscreen-alarm/verwaltung/einstellungen"
-          style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("settings") }} Einstellungen</h2></div>
+    <form method="post" action="/infoscreen-alarm/verwaltung/einstellungen" class="sys-form-grid">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div class="form-group" style="margin:0;">
+      <div class="form-group">
         <label class="form-label">Ruhezustand (ohne Alarm)</label>
         <select name="idle_modus" class="form-input">
           {% for code, label in idle_modi.items() %}
@@ -39,59 +44,57 @@
           {% endfor %}
         </select>
       </div>
-      <div class="form-group" style="margin:0;">
+      <div class="form-group">
         <label class="form-label">Alarmansicht anzeigen für (Minuten)</label>
         <input type="number" name="alarm_dauer_min" class="form-input" min="5" max="720"
                value="{{ einstellungen.alarm_infoscreen_alarm_dauer_min if einstellungen else 60 }}">
       </div>
-      <div class="form-group" style="margin:0;grid-column:1 / -1;">
+      <div class="form-group sys-span-all">
         <label class="form-label">Wetter-Infoscreen-URL (nur für Ruhezustand „Wetter")</label>
         <input type="text" name="wetter_url" class="form-input" maxlength="500"
                placeholder="{{ basis_url }}/wetter/infoscreen/…"
                value="{{ einstellungen.alarm_infoscreen_wetter_url or '' if einstellungen else '' }}">
         <p class="form-hint">Der Wetter-Token ist nur als Hash gespeichert — URL daher hier manuell hinterlegen. Monitore können „Wetter" als Rotationseintrag nutzen, ohne die URL erneut einzugeben.</p>
       </div>
-      <div class="form-group" style="margin:0;grid-column:1 / -1;">
-        <label class="checkbox-label">
+      <div class="form-group sys-span-all">
+        <label class="sys-check">
           <input type="checkbox" name="gsl_enabled" value="1"
                  {% if not einstellungen or einstellungen.alarm_infoscreen_gsl_enabled %}checked{% endif %}>
           Bei aktiver Großschadenslage eine Sonderansicht zeigen (bleibt, solange die Lage aktiv ist)
         </label>
       </div>
-      <div style="grid-column:1 / -1;display:flex;justify-content:flex-end;">
+      <div class="sys-actions sys-actions--end sys-span-all sys-m-0">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
-  </div>
+  </section>
 
   <!-- Rotations-URLs (Ruhezustand) -->
-  <div class="card" style="padding:16px;margin-bottom:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <h3 style="margin:0;">Rotations-URLs (Ruhezustand)</h3>
-    </div>
-    <p class="text-muted" style="margin-top:0;">Beliebige Webseiten, die im Ruhezustand rotierend angezeigt werden. Zuordnung zu einzelnen Monitoren unten in der Matrix.</p>
-    <form method="post" action="/infoscreen-alarm/verwaltung/url/neu"
-          style="display:grid;grid-template-columns:1fr 2fr auto auto;gap:8px;align-items:end;margin-bottom:12px;">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("refresh") }} Rotations-URLs (Ruhezustand)</h2></div>
+    <p class="sys-muted">Beliebige Webseiten, die im Ruhezustand rotierend angezeigt werden. Zuordnung zu einzelnen Monitoren unten in der Matrix.</p>
+    <form method="post" action="/infoscreen-alarm/verwaltung/url/neu" class="sys-toolbar sys-mb-2">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div class="form-group" style="margin:0;"><label class="form-label">Bezeichnung</label>
+      <div class="form-group sys-min-200"><label class="form-label">Bezeichnung</label>
         <input type="text" name="label" class="form-input" required maxlength="120" placeholder="z. B. Wetter ORF"></div>
-      <div class="form-group" style="margin:0;"><label class="form-label">URL</label>
+      <div class="form-group sys-grow"><label class="form-label">URL</label>
         <input type="text" name="url" class="form-input" required maxlength="500" placeholder="https://…"></div>
-      <div class="form-group" style="margin:0;"><label class="form-label">Verweildauer (s)</label>
-        <input type="number" name="dwell_sec" class="form-input" min="3" max="3600" value="30" style="width:90px;"></div>
-      <button type="submit" class="btn btn--primary">+ URL</button>
+      <div class="form-group"><label class="form-label">Verweildauer (s)</label>
+        <input type="number" name="dwell_sec" class="form-input sys-input-sm" min="3" max="3600" value="30"></div>
+      <button type="submit" class="btn btn--primary">{{ icon("plus", size="sm") }} URL</button>
     </form>
     {% if urls %}
-    <table class="table-admin">
+    <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead><tr><th>Bezeichnung</th><th>URL</th><th>Dauer</th><th></th></tr></thead>
       <tbody>
         {% for u in urls %}
         <tr>
-          <td><strong>{{ u.label }}</strong></td>
-          <td style="word-break:break-all;"><a href="{{ u.url }}" target="_blank" rel="noopener">{{ u.url }}</a></td>
-          <td>{{ u.dwell_sec }} s</td>
-          <td>
-            <form method="post" action="/infoscreen-alarm/verwaltung/url/{{ u.id }}/loeschen" style="display:inline"
+          <td data-label="Bezeichnung"><strong>{{ u.label }}</strong></td>
+          <td data-label="URL" class="sys-token"><a href="{{ u.url }}" target="_blank" rel="noopener">{{ u.url }}</a></td>
+          <td data-label="Dauer">{{ u.dwell_sec }} s</td>
+          <td data-label="Aktion">
+            <form method="post" action="/infoscreen-alarm/verwaltung/url/{{ u.id }}/loeschen" class="sys-inline-form"
                   onsubmit="return confirm('URL {{ u.label }} löschen?')">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
@@ -101,42 +104,44 @@
         {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="text-muted">Noch keine URLs angelegt.</p>{% endif %}
-  </div>
+    </div>
+    {% else %}<p class="sys-muted">Noch keine URLs angelegt.</p>{% endif %}
+  </section>
 
-  <div class="card" style="padding:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <h3 style="margin:0;">Zugangs-Tokens</h3>
-      <form method="post" action="/infoscreen-alarm/verwaltung/token/neu" style="display:flex;gap:8px;">
+  <section class="sys-card">
+    <div class="sys-card__head">
+      <h2>{{ icon("key") }} Zugangs-Tokens</h2>
+      <form method="post" action="/infoscreen-alarm/verwaltung/token/neu" class="sys-row">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="text" name="name" class="form-input" required maxlength="100"
-               placeholder="z. B. Monitor Fahrzeughalle" style="min-width:220px;">
-        <button type="submit" class="btn btn--primary">+ Token</button>
+               placeholder="z. B. Monitor Fahrzeughalle" aria-label="Name des Monitors">
+        <button type="submit" class="btn btn--primary">{{ icon("plus", size="sm") }} Token</button>
       </form>
     </div>
     {% if tokens %}
-    <table class="table-admin">
+    <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead><tr><th>Name</th><th>Monitor-URL (dauerhaft)</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for t in tokens %}
         <tr>
-          <td><strong>{{ t.name }}</strong><div class="text-muted" style="font-size:.8em;">{{ t.erstellt_am|local_datetime }}</div></td>
-          <td style="word-break:break-all;">
+          <td data-label="Name"><strong>{{ t.name }}</strong><div class="sys-muted sys-text-xs">{{ t.erstellt_am|local_datetime }}</div></td>
+          <td data-label="Monitor-URL" class="sys-token">
             {% if token_urls.get(t.id) %}
-            <code style="font-size:.8em;">{{ token_urls[t.id] }}</code>
+            <code class="sys-text-xs">{{ token_urls[t.id] }}</code>
             <button type="button" class="btn btn--ghost btn--xs" onclick="navigator.clipboard.writeText('{{ token_urls[t.id] }}')">Kopieren</button>
-            {% if strassensperren_aktiv %}<br><code style="font-size:.8em;">{{ strassensperren_urls[t.id] }}</code>{% endif %}
+            {% if strassensperren_aktiv %}<br><code class="sys-text-xs">{{ strassensperren_urls[t.id] }}</code>{% endif %}
             {% else %}
-            <span class="text-muted">nur einmalig bei Erstellung sichtbar — bei Verlust neu ausstellen</span>
+            <span class="sys-muted">nur einmalig bei Erstellung sichtbar — bei Verlust neu ausstellen</span>
             {% endif %}
           </td>
-          <td>
-            {% if t.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>
-            {% else %}<span class="badge-pill badge-pill--gray">deaktiviert</span>{% endif %}
+          <td data-label="Status">
+            {% if t.aktiv %}<span class="sys-pill">{{ status_dot("gruen", "aktiv") }} aktiv</span>
+            {% else %}<span class="sys-pill">{{ status_dot("grau", "deaktiviert") }} deaktiviert</span>{% endif %}
           </td>
-          <td>
+          <td data-label="Aktion">
             {% if t.aktiv %}
-            <form method="post" action="/infoscreen-alarm/verwaltung/token/{{ t.id }}/deaktivieren" style="display:inline"
+            <form method="post" action="/infoscreen-alarm/verwaltung/token/{{ t.id }}/deaktivieren" class="sys-inline-form"
                   onsubmit="return confirm('Token {{ t.name }} deaktivieren? Der Monitor verliert den Zugriff.')">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <button type="submit" class="btn btn--danger btn--xs">Deaktivieren</button>
@@ -147,40 +152,40 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
-    <p class="text-muted">Noch keine Tokens angelegt.</p>
+    <p class="sys-muted">Noch keine Tokens angelegt.</p>
     {% endif %}
-  </div>
+  </section>
 
   <!-- Monitor-Matrix: welche URLs zeigt welcher Monitor im Ruhezustand -->
   {% set aktive_tokens = tokens|selectattr('aktiv')|list %}
   {% if aktive_tokens and (urls or true) %}
-  <div class="card" style="padding:16px;margin-top:16px;">
-    <h3 style="margin-top:0;">Monitor-Konfiguration (Ruhezustand)</h3>
-    <p class="text-muted" style="margin-top:0;">Je Monitor auswählen, welche Rotations-URLs (und ob Wetter) im Ruhezustand angezeigt werden. Ohne Auswahl gilt der oben eingestellte Standard-Ruhezustand.</p>
-    <div style="display:flex;flex-direction:column;gap:14px;">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("device-tv") }} Monitor-Konfiguration (Ruhezustand)</h2></div>
+    <p class="sys-muted">Je Monitor auswählen, welche Rotations-URLs (und ob Wetter) im Ruhezustand angezeigt werden. Ohne Auswahl gilt der oben eingestellte Standard-Ruhezustand.</p>
+    <div class="sys-stack">
       {% for t in aktive_tokens %}
-      <form method="post" action="/infoscreen-alarm/verwaltung/token/{{ t.id }}/monitor"
-            style="border:1px solid var(--border);border-radius:8px;padding:12px;">
+      <form method="post" action="/infoscreen-alarm/verwaltung/token/{{ t.id }}/monitor" class="sys-option">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="sys-row sys-between sys-mb-1">
           <strong>{{ t.name }}</strong>
           <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px;">
+        <div class="sys-row">
           {% for u in urls %}
-          <label class="checkbox-label">
+          <label class="sys-check">
             <input type="checkbox" name="url_id" value="{{ u.id }}" {% if u.id in t.url_ids %}checked{% endif %}> {{ u.label }}
           </label>
           {% endfor %}
-          <label class="checkbox-label">
+          <label class="sys-check">
             <input type="checkbox" name="zeigt_wetter" value="1" {% if t.zeigt_wetter %}checked{% endif %}> {{ icon("cloud-rain") }} Wetter
           </label>
         </div>
       </form>
       {% endfor %}
     </div>
-  </div>
+  </section>
   {% endif %}
 </div>
 {% endblock %}

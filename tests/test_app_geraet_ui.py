@@ -38,7 +38,7 @@ def test_liste_detail_audit_und_keine_schreibroute(client, cockpit):  # noqa: F8
     response = client.get(BASE + f"/geraet/{ident}")
     assert response.status_code == 200, response.text
     assert "Automatische Updates" in response.text and "nein" in response.text
-    assert "Einstellungen koennen nur in der App geaendert werden" in response.text
+    assert "Einstellungen können nur in der App geändert werden" in response.text
     assert "hx-post" not in response.text and "<form" not in response.text
     assert response.headers["cache-control"] == "no-store"
     with SessionLocal() as db:

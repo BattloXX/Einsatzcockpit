@@ -3,54 +3,62 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Default-Meldungen – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Default-Meldungen'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
-<div class="page-content">
-  {% include "admin/_einsatzvorlagen_tabs.html" %}
-  <div class="page-header">
-    <div>
-      <h1>Default-Meldungen</h1>
-      <p class="page-header__sub">Meldung anlegen, dann Alarmstichwörter zuweisen und Fälligkeitszeit festlegen.</p>
+{% include "admin/_einsatzvorlagen_tabs.html" %}
+<div class="sys-page">
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div>
+        <h1>{{ icon("messages") }} Default-Meldungen</h1>
+        <p class="sys-muted">Meldung anlegen, dann Alarmstichwörter zuweisen und Fälligkeitszeit festlegen.</p>
+      </div>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newDmModal">{{ icon("plus", size="sm") }} Meldung</button>
     </div>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newDmModal">{{ icon("plus", size="sm") }} Meldung</button>
-  </div>
+  </header>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if error == 'duplicate' %}<div class="alert alert--error">Eine Meldung mit diesem Text existiert bereits.</div>{% endif %}
 
   <!-- ── Alle Meldungen ───────────────────────────────────────────── -->
-  <div class="admin-section-title">Alle Meldungen <small style="font-weight:400;color:var(--color-text-muted)">({{ messages|length }})</small></div>
-  <table class="table-admin" style="margin-bottom:24px;">
+  <section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("messages") }} Alle Meldungen <small class="sys-muted">({{ messages|length }})</small></h2></div>
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive">
     <thead>
       <tr>
         <th>Text</th>
         <th>Zugewiesen zu</th>
-        <th style="width:160px;">Aktionen</th>
+        <th>Aktionen</th>
       </tr>
     </thead>
     <tbody>
       {% for m in messages %}
       {% set codes = m.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type.code') | list %}
-      <tr{% if edit_message and edit_message.id == m.id %} style="background:var(--color-bg-highlight,#f0f7ff);"{% endif %}>
-        <td>{{ m.text }}</td>
-        <td>
+      <tr{% if edit_message and edit_message.id == m.id %} class="sys-row-active"{% endif %}>
+        <td data-label="Text">{{ m.text }}</td>
+        <td data-label="Zugewiesen zu">
           {% if codes %}
             {% for code in codes %}
               {% set a = m.alarm_assignments | selectattr('alarm_type.code', 'equalto', code) | first %}
-              <span class="badge-pill badge-pill--gray" style="margin:2px;font-size:.75rem;"
+              <span class="badge-pill badge-pill--gray sys-small"
                     {{ tip('Fällig nach ' ~ (a.due_after_sec // 60) ~ ' Min.') }}>{{ code }}</span>
             {% endfor %}
           {% else %}
-            <span class="text-muted">–</span>
+            <span class="sys-muted">–</span>
           {% endif %}
         </td>
-        <td>
+        <td data-label="Aktionen">
           <button class="btn btn--ghost btn--xs"
                   onclick="openEditDm({{ m.id }}, '{{ m.text|replace("'","\\'")|e }}')"
                   {{ tip('Text bearbeiten') }}>Text</button>
           <a href="/admin/default-meldungen?edit={{ m.id }}" class="btn btn--ghost btn--xs"
              {{ tip('Stichwörter und Fälligkeitszeiten zuweisen') }}>Stichwörter</a>
-          <form method="post" action="/admin/default-meldungen/{{ m.id }}/loeschen" style="display:inline"
+          <form method="post" action="/admin/default-meldungen/{{ m.id }}/loeschen" class="sys-inline-form"
                 onsubmit="return confirm('Meldung löschen? Sie wird aus allen Stichwörtern entfernt.')">
             <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
           </form>
@@ -59,50 +67,55 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </section>
 
   {% if edit_message %}
   <!-- ── Stichwort-Zuweisung ──────────────────────────────────────── -->
-  <div id="dmEditSection" class="admin-section-title">
-    Stichwörter zuweisen: <em>{{ edit_message.text[:70] }}{% if edit_message.text|length > 70 %}…{% endif %}</em>
+  <section class="sys-card">
+  <div id="dmEditSection" class="sys-card__head">
+    <h2>{{ icon("list-details") }} Stichwörter zuweisen: <em>{{ edit_message.text[:70] }}{% if edit_message.text|length > 70 %}…{% endif %}</em></h2>
   </div>
-  <p class="form-hint" style="margin-bottom:10px;">
+  <p class="form-hint">
     Haken setzen = Meldung erscheint bei diesem Stichwort. Fälligkeitszeit in Minuten angeben. Reihenfolge per Drag-Drop am {{ icon("grip-vertical", size="sm") }} ändern.
   </p>
   <form method="post" action="/admin/default-meldungen/{{ edit_message.id }}/alarms"
-        id="dmAlarmEditForm" style="max-width:820px;">
-    <table class="table-admin" id="dmAlarmEditTable">
+        id="dmAlarmEditForm" class="sys-form-wide">
+    <div class="sys-table-wrap">
+    <table class="sys-table" id="dmAlarmEditTable">
       <thead>
         <tr>
-          <th style="width:40px;"></th>
-          <th style="width:50px;">Ein</th>
+          <th class="sys-action-col"></th>
+          <th class="sys-action-col">Ein</th>
           <th>Alarmstichwort</th>
-          <th style="width:150px;">Fällig nach (Min.)</th>
+          <th>Fällig nach (Min.)</th>
         </tr>
       </thead>
       <tbody id="dmAlarmEditTbody">
         {% for code in edit_assigned_codes %}
         {% for atype in alarm_types if atype.code == code %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
+          <td class="drag-handle sys-drag-handle">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox" checked></td>
-          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
-          <td><input type="number" class="dm-due-min form-input" style="width:90px;"
+          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="sys-muted"> – {{ atype.label }}</span>{% endif %}</td>
+          <td><input type="number" class="dm-due-min form-input sys-input-sm"
                      min="1" value="{{ edit_due_by_code.get(atype.code, 300) // 60 }}"></td>
         </tr>
         {% endfor %}
         {% endfor %}
         {% for atype in alarm_types if atype.code not in edit_assigned_codes %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
+          <td class="drag-handle sys-drag-handle">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox"></td>
-          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
-          <td><input type="number" class="dm-due-min form-input" style="width:90px;" min="1" value="5"></td>
+          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="sys-muted"> – {{ atype.label }}</span>{% endif %}</td>
+          <td><input type="number" class="dm-due-min form-input sys-input-sm" min="1" value="5"></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
     <div id="dmAlarmHiddenInputs"></div>
-    <div style="margin-top:14px;display:flex;gap:8px;">
+    <div class="sys-actions">
       <button type="submit" class="btn btn--primary" onclick="serializeDmAlarms()">Speichern</button>
       <a href="/admin/default-meldungen" class="btn btn--ghost">Schließen</a>
     </div>
@@ -146,15 +159,17 @@
     });
   };
   </script>
+  </section>
   {% endif %}
 
   <!-- ── Übersicht Matrix ─────────────────────────────────────────── -->
-  <div class="admin-section-title" style="margin-top:32px;">Übersicht nach Alarmstichwort</div>
-  <div style="overflow-x:auto; margin-bottom:24px;">
-    <table class="table-admin" style="min-width:500px;">
+  <section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("table") }} Übersicht nach Alarmstichwort</h2></div>
+  <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead>
         <tr>
-          <th style="width:130px;">Alarmstichwort</th>
+          <th>Alarmstichwort</th>
           <th>Zugewiesene Meldungen</th>
         </tr>
       </thead>
@@ -162,18 +177,18 @@
         {% for atype in alarm_types %}
         {% set row = assignments_by_alarm.get(atype.code, []) %}
         <tr>
-          <td><strong>{{ atype.code }}</strong>{% if atype.label %}<br><small class="text-muted">{{ atype.label }}</small>{% endif %}</td>
-          <td>
+          <td data-label="Alarmstichwort"><strong>{{ atype.code }}</strong>{% if atype.label %}<br><small class="sys-muted">{{ atype.label }}</small>{% endif %}</td>
+          <td data-label="Zugewiesene Meldungen">
             {% if row %}
               {% for a in row[:5] %}
-                <span class="badge-pill badge-pill--gray" style="margin:2px;font-size:.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;"
+                <span class="badge-pill badge-pill--gray sys-small sys-badge-ellipsis"
                       {{ tip('Fällig nach ' ~ (a.due_after_sec // 60) ~ ' Min.') }}>
                   {{ a.message.text[:45] }}{% if a.message.text|length > 45 %}…{% endif %}
                 </span>
               {% endfor %}
-              {% if row|length > 5 %}<small class="text-muted"> +{{ row|length - 5 }} weitere</small>{% endif %}
+              {% if row|length > 5 %}<small class="sys-muted"> +{{ row|length - 5 }} weitere</small>{% endif %}
             {% else %}
-              <span class="text-muted">–</span>
+              <span class="sys-muted">–</span>
             {% endif %}
           </td>
         </tr>
@@ -181,6 +196,7 @@
       </tbody>
     </table>
   </div>
+  </section>
 </div>
 
 <!-- Neue Meldung -->

@@ -1,34 +1,34 @@
 <tr id="artikel-row-{{ a.id }}">
-  <td>
-    <input type="checkbox" style="width:15px;height:15px;"
+  <td data-label="Auswahl">
+    <input type="checkbox" aria-label="Artikel auswählen"
            :checked="selected.has({{ a.id }})"
            @change="toggleArtikel({{ a.id }}, $event.target.checked)">
   </td>
-  <td><code>{{ a.artikel_nr or '&ndash;' }}</code></td>
-  <td><strong>{{ a.bezeichnung }}</strong></td>
-  <td style="font-size:.82rem;color:var(--text-muted);">
+  <td data-label="Artikelnr"><code>{{ a.artikel_nr or '–' }}</code></td>
+  <td data-label="Bezeichnung"><strong>{{ a.bezeichnung }}</strong></td>
+  <td data-label="Gerätetyp" class="sys-muted sys-small">
     {% if a.geraetetyp %}{{ a.geraetetyp.name }}{% else %}&ndash;{% endif %}
   </td>
-  <td>
+  <td data-label="Typ">
     {% if a.ist_mengenartikel %}
-    <span class="badge-pill badge-pill--blue">Menge</span>
+    <span class="sys-pill">Menge</span>
     {% else %}
-    <span class="badge-pill badge-pill--green">Eindeutig</span>
+    <span class="sys-pill">Eindeutig</span>
     {% endif %}
   </td>
-  <td>
+  <td data-label="Status">
     {% if not a.ist_mengenartikel %}
       {% if a.verfuegbarkeit == 'ausgeliehen' %}
-      <span class="badge-pill" style="background:rgba(239,68,68,.15);color:#f87171;">ausgeliehen</span>
+      <span class="sys-pill sys-pill--warn">{{ status_dot("rot", "ausgeliehen") }} ausgeliehen</span>
       {% else %}
-      <span class="badge-pill" style="background:rgba(34,197,94,.12);color:#4ade80;">verfuegbar</span>
+      <span class="sys-pill">{{ status_dot("gruen", "verfügbar") }} verfügbar</span>
       {% endif %}
     {% else %}
-    <span style="color:var(--text-muted);font-size:.8rem;">&ndash;</span>
+    <span class="sys-muted sys-text-xs">&ndash;</span>
     {% endif %}
   </td>
-  <td>{{ a.lagerbestand if a.lagerbestand is not none else '&ndash;' }}</td>
-  <td style="white-space:nowrap;">
+  <td data-label="Lagerbestand">{{ a.lagerbestand if a.lagerbestand is not none else '–' }}</td>
+  <td data-label="Aktionen"><div class="sys-row">
     <button class="btn btn--ghost btn--xs" data-ec-action="open-dialog" data-ec-dialog="editArtikelModal-{{ a.id }}">Bearbeiten</button>
     {% if not a.ist_mengenartikel %}
     <button class="btn btn--ghost btn--xs"
@@ -46,5 +46,5 @@
             hx-confirm="Artikel '{{ a.bezeichnung }}' deaktivieren?">
       Deaktivieren
     </button>
-  </td>
+  </div></td>
 </tr>

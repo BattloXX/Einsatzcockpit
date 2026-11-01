@@ -4,6 +4,10 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Verwaltungs-Startseite:** Inhaltlich an das Wiki angepasst: Uebersicht aller fuer die Rolle sichtbaren Hauptpunkte aus dem Navigationskatalog, Einrichtungsreihenfolge mit Wiki-Verweisen und die Dokumentation nach Themen (Grundeinrichtung, Alarmierung, Module, GSL, Schnittstellen, Sicherheit und Betrieb fuer Systemadmins). Quelle: `app/services/admin_startseite.py`; ein Test prueft, dass alle Wiki-Seiten existieren.
+
+- **Sysadmin-Design:** Systemdiagnose, System-Einstellungen, Systemstatus, Server-Log, System-Update, Organisationen und Quotas im einheitlichen `sys-*`-Design (`app/static/css/sysadmin.css`): Reiter mit aktivem Zustand, Ampel-Kopf, Kennzahlkarten, Schluessel/Wert-Listen statt JSON, Sprungnavigation und Schalter in den System-Einstellungen, echte Umlaute. Danach alle weiteren Verwaltungsseiten (89 Seiten mit Admin-Layout: Organisations-Einstellungen, Integrationen, SMS/Push/Mail, Geraete/Gateway, Stammdaten, Foerderstrecke/Verleih/Probenplanung/Planspiel, Backups/Medien/Seiten) ohne statische Inline-Styles; ein Waechtertest sichert das ab. Nur Optik; Routen, Felder und Berechtigungen unveraendert. Plan: `docs/plans/sysadmin-design-plan.md`.
+
 - **Admin-MCP / App-Geraete:** Zwei rein lesende Tools `admin_geraete_pruefen` und `admin_geraet_details` mit gemeinsamer Gesundheitsauswertung, Flottenfiltern, begrenzten Aggregaten/IDs, maskierten Details und Einstellungen ohne Rueckkanal. GitHub-Ausfall mit unbekannter Soll-Version; separat von Gesamtzustand-Panels.
 - **BSP-Overlays:** Die Karte zeigt hoechstens eine Brandschutzplan-Ebene gleichzeitig (Planwechsel entfernt die vorherige, die Auswahl wird gemerkt). Ausblenden wirkt sofort und bleibt nach Neuladen und Planwechsel bestehen; eine gespeicherte Einsatz-/Objektvorgabe wird nicht mehr von einer alten persoenlichen Ueberschreibung verdeckt. Die Auswahlliste und der Autodruck enthalten je logischem Plan nur die zuletzt freigegebene auslieferbare Ebene.
 

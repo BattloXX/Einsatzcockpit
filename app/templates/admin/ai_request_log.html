@@ -1,12 +1,20 @@
 {% extends "admin/_layout.html" %}
 {% block title %}KI-Anfragen-Log - Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='ki' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <h2>KI-Anfragen-Log</h2>
-</div>
-<table class="table table--compact">
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("robot") }} KI-Anfragen-Log</h1>
+  <p class="sys-muted">Protokoll der KI-Anfragen mit Modell, Tokenverbrauch und Ergebnis.</p>
+</header>
+<section class="sys-card">
+<div class="sys-table-wrap">
+<table class="sys-table sys-table--responsive">
   <thead>
     <tr>
       <th>Zeit</th>
@@ -17,20 +25,23 @@
   <tbody>
     {% for e in entries %}
     <tr>
-      <td class="nowrap">{{ e.created_at|local_datetime }}</td>
-      {% if is_system_admin %}<td>{{ org_names.get(e.org_id, e.org_id or '-') }}</td>{% endif %}
-      <td>{{ feature_labels.get(e.feature, e.feature) }}</td>
-      <td>{{ e.model }}</td>
-      <td>{{ e.input_tokens }}</td><td>{{ e.output_tokens }}</td><td>{{ e.total_tokens }}</td>
-      <td>
-        {% if e.success %}<span class="badge badge--success">Erfolgreich</span>
-        {% else %}<span class="badge badge--error">Fehler</span>{% if e.error_message %}<br><small>{{ e.error_message }}</small>{% endif %}
+      <td class="sys-nowrap" data-label="Zeit">{{ e.created_at|local_datetime }}</td>
+      {% if is_system_admin %}<td data-label="Organisation">{{ org_names.get(e.org_id, e.org_id or '-') }}</td>{% endif %}
+      <td data-label="Funktion">{{ feature_labels.get(e.feature, e.feature) }}</td>
+      <td data-label="Modell">{{ e.model }}</td>
+      <td class="sys-number" data-label="Input">{{ e.input_tokens }}</td><td class="sys-number" data-label="Output">{{ e.output_tokens }}</td><td class="sys-number" data-label="Gesamt">{{ e.total_tokens }}</td>
+      <td data-label="Status">
+        {% if e.success %}<span class="sys-pill sys-status--ok">Erfolgreich</span>
+        {% else %}<span class="sys-pill sys-status--fail">Fehler</span>{% if e.error_message %}<br><small>{{ e.error_message }}</small>{% endif %}
         {% endif %}
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="{% if is_system_admin %}8{% else %}7{% endif %}" class="text-center text-muted">Keine Eintraege.</td></tr>
+    <tr><td colspan="{% if is_system_admin %}8{% else %}7{% endif %}" class="sys-muted sys-table-empty">Keine Einträge.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
+</section>
+</div>
 {% endblock %}

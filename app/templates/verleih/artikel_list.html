@@ -1,22 +1,28 @@
 {% extends "admin/_layout.html" %}
-{% block title %}Geraeteverleih &ndash; Artikelstammdaten{% endblock %}
+{% block title %}Geräteverleih &ndash; Artikelstammdaten{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
+<div class="sys-page" x-data="artikelDruck()">
 {% with section_id='verleih' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content" x-data="artikelDruck()">
-  <div class="page-header">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
-      <h1>Geraeteverleih &ndash; Artikel</h1>
-      <p class="page-header__sub">Org-weite Artikelstammdaten. Eindeutige Artikel (z.B. Pumpe 2) vs. Mengenartikel (z.B. C-Schlauch).</p>
+      <h1>{{ icon("package") }} Geräteverleih &ndash; Artikel</h1>
+      <p class="sys-muted">Org-weite Artikelstammdaten. Eindeutige Artikel (z. B. Pumpe 2) vs. Mengenartikel (z. B. C-Schlauch).</p>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <div class="sys-row">
       <a href="/admin/verleih-uebersicht" class="btn btn--ghost">Aktive Ausleihen</a>
-      <a href="/admin/verleih-stuecklisten" class="btn btn--ghost">Stucklisten</a>
-      <a href="/admin/verleih-geraetetypen" class="btn btn--ghost">Geraetetypen</a>
+      <a href="/admin/verleih-stuecklisten" class="btn btn--ghost">Stücklisten</a>
+      <a href="/admin/verleih-geraetetypen" class="btn btn--ghost">Gerätetypen</a>
       <!-- Etiketten-Druck -->
-      <div style="display:flex;gap:4px;align-items:center;">
-        <select x-model="vorlage" class="form-select" style="font-size:.8rem;padding:4px 8px;height:32px;">
+      <div class="sys-row sys-gap-sm">
+        <select x-model="vorlage" class="form-select sys-select-narrow" aria-label="Etikettenvorlage">
           <option value="standard">Standard A4</option>
           <option value="avery_l6011_8">AVERY L6011-8</option>
         </select>
@@ -26,28 +32,31 @@
           <span x-show="selected.size === 0">alle</span>
         </button>
       </div>
-      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newArtikelModal">+ Artikel anlegen</button>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newArtikelModal">{{ icon("plus", size="sm") }} Artikel anlegen</button>
     </div>
-  </div>
+   </div>
+  </header>
 
-  {% if saved %}<div class="alert alert--success" style="margin-bottom:12px;">Gespeichert.</div>{% endif %}
-  {% if error %}<div class="alert alert--error" style="margin-bottom:12px;">{{ error }}</div>{% endif %}
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+  {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
 
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:.83rem;color:var(--text-muted);">
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-      <input type="checkbox" @change="toggleAlle($event)" :checked="alleGewaehlt" style="width:15px;height:15px;">
-      Alle auswaehlen
+  <section class="sys-card">
+  <div class="sys-toolbar sys-mb-1">
+    <label class="sys-check sys-pointer">
+      <input type="checkbox" @change="toggleAlle($event)" :checked="alleGewaehlt">
+      Alle auswählen
     </label>
-    <span x-show="selected.size > 0" x-text="selected.size + ' Artikel ausgewaehlt'"></span>
+    <span class="sys-muted sys-small" x-show="selected.size > 0" x-text="selected.size + ' Artikel ausgewählt'"></span>
   </div>
 
-  <table class="table-admin">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive sys-table--wide">
     <thead>
       <tr>
-        <th style="width:30px;"></th>
+        <th class="sys-col-32"><span class="sr-only">Auswahl</span></th>
         <th>Artikelnr</th>
         <th>Bezeichnung</th>
-        <th>Geraetetyp</th>
+        <th>Gerätetyp</th>
         <th>Typ</th>
         <th>Status</th>
         <th>Lagerbestand</th>
@@ -56,61 +65,14 @@
     </thead>
     <tbody id="artikel-tbody">
       {% for a in artikel %}
-      <tr id="artikel-row-{{ a.id }}">
-        <td>
-          <input type="checkbox" style="width:15px;height:15px;"
-                 :checked="selected.has({{ a.id }})"
-                 @change="toggleArtikel({{ a.id }}, $event.target.checked)">
-        </td>
-        <td><code>{{ a.artikel_nr or '&ndash;' }}</code></td>
-        <td><strong>{{ a.bezeichnung }}</strong></td>
-        <td style="font-size:.82rem;color:var(--text-muted);">
-          {% if a.geraetetyp %}{{ a.geraetetyp.name }}{% else %}&ndash;{% endif %}
-        </td>
-        <td>
-          {% if a.ist_mengenartikel %}
-          <span class="badge-pill badge-pill--blue">Menge</span>
-          {% else %}
-          <span class="badge-pill badge-pill--green">Eindeutig</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if not a.ist_mengenartikel %}
-            {% if a.verfuegbarkeit == 'ausgeliehen' %}
-            <span class="badge-pill" style="background:rgba(239,68,68,.15);color:#f87171;">ausgeliehen</span>
-            {% else %}
-            <span class="badge-pill" style="background:rgba(34,197,94,.12);color:#4ade80;">verfuegbar</span>
-            {% endif %}
-          {% else %}
-          <span style="color:var(--text-muted);font-size:.8rem;">&ndash;</span>
-          {% endif %}
-        </td>
-        <td>{{ a.lagerbestand if a.lagerbestand is not none else '&ndash;' }}</td>
-        <td style="white-space:nowrap;">
-          <button class="btn btn--ghost btn--xs" data-ec-action="open-dialog" data-ec-dialog="editArtikelModal-{{ a.id }}">Bearbeiten</button>
-          {% if not a.ist_mengenartikel %}
-          <button class="btn btn--ghost btn--xs"
-                  hx-post="/admin/verleih-artikel/{{ a.id }}/status-toggle"
-                  hx-target="#artikel-row-{{ a.id }}"
-                  hx-swap="outerHTML"
-                  title="Status manuell umschalten">
-            {% if a.verfuegbarkeit == 'ausgeliehen' %}Freigeben{% else %}Sperren{% endif %}
-          </button>
-          {% endif %}
-          <button class="btn btn--danger btn--xs"
-                  hx-post="/admin/verleih-artikel/{{ a.id }}/loeschen"
-                  hx-target="#artikel-row-{{ a.id }}"
-                  hx-swap="outerHTML"
-                  hx-confirm="Artikel '{{ a.bezeichnung }}' deaktivieren?">
-            Deaktivieren
-          </button>
-        </td>
-      </tr>
+      {% include "verleih/_artikel_row.html" %}
       {% else %}
-      <tr><td colspan="8" style="color:var(--text-muted);text-align:center;padding:24px;">Noch keine Artikel angelegt.</td></tr>
+      <tr><td colspan="8" class="sys-muted sys-table-empty">Noch keine Artikel angelegt.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </section>
 </div>
 
 <!-- ── Neuer Artikel ───────────────────────────────────────────────────── -->
@@ -118,21 +80,21 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neuer Artikel</h3>
-      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" aria-label="Schließen" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/verleih-artikel/neu">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
         <div class="form-group">
           <label class="form-label">Bezeichnung *</label>
-          <input type="text" name="bezeichnung" class="form-input" required maxlength="200" placeholder="z.B. Pumpe Fussach 1">
+          <input type="text" name="bezeichnung" class="form-input" required maxlength="200" placeholder="z. B. Pumpe Fussach 1">
         </div>
         <div class="form-group">
-          <label class="form-label">Artikelnr / Inventarnummer <span style="font-size:.72rem;color:var(--text-muted);">(muss org-weit eindeutig sein)</span></label>
-          <input type="text" name="artikel_nr" class="form-input" maxlength="100" placeholder="z.B. P001">
+          <label class="form-label">Artikelnr / Inventarnummer <span class="sys-muted sys-text-xs">(muss org-weit eindeutig sein)</span></label>
+          <input type="text" name="artikel_nr" class="form-input" maxlength="100" placeholder="z. B. P001">
         </div>
         <div class="form-group">
-          <label class="form-label">Geraetetyp</label>
+          <label class="form-label">Gerätetyp</label>
           <select name="geraetetyp_id" class="form-select">
             <option value="">-- kein Typ --</option>
             {% for gt in geraetetypen %}
@@ -140,13 +102,13 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group" style="display:flex;align-items:center;gap:10px;">
-          <input type="checkbox" name="ist_mengenartikel" id="new_ist_menge" value="1" style="width:18px;height:18px;">
-          <label for="new_ist_menge" class="form-label" style="margin:0;">Mengenartikel (Stuckzahl frei waehlbar, z.B. C-Schlauch)</label>
+        <div class="form-group sys-check-row">
+          <input type="checkbox" name="ist_mengenartikel" id="new_ist_menge" value="1">
+          <label for="new_ist_menge" class="form-label sys-m-0">Mengenartikel (Stückzahl frei wählbar, z. B. C-Schlauch)</label>
         </div>
         <div class="form-group">
-          <label class="form-label">Lagerbestand (nur fuer Mengenartikel)</label>
-          <input type="number" name="lagerbestand" class="form-input" min="0" placeholder="z.B. 20">
+          <label class="form-label">Lagerbestand (nur für Mengenartikel)</label>
+          <input type="number" name="lagerbestand" class="form-input" min="0" placeholder="z. B. 20">
         </div>
         <div class="form-group">
           <label class="form-label">Notizen</label>
@@ -167,7 +129,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Artikel bearbeiten</h3>
-      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" aria-label="Schließen" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form hx-post="/admin/verleih-artikel/{{ a.id }}/bearbeiten"
           hx-target="#artikel-row-{{ a.id }}"
@@ -180,11 +142,11 @@
           <input type="text" name="bezeichnung" class="form-input" required maxlength="200" value="{{ a.bezeichnung }}">
         </div>
         <div class="form-group">
-          <label class="form-label">Artikelnr <span style="font-size:.72rem;color:var(--text-muted);">(muss org-weit eindeutig sein)</span></label>
+          <label class="form-label">Artikelnr <span class="sys-muted sys-text-xs">(muss org-weit eindeutig sein)</span></label>
           <input type="text" name="artikel_nr" class="form-input" maxlength="100" value="{{ a.artikel_nr or '' }}">
         </div>
         <div class="form-group">
-          <label class="form-label">Geraetetyp</label>
+          <label class="form-label">Gerätetyp</label>
           <select name="geraetetyp_id" class="form-select">
             <option value="">-- kein Typ --</option>
             {% for gt in geraetetypen %}
@@ -192,9 +154,9 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group" style="display:flex;align-items:center;gap:10px;">
-          <input type="checkbox" name="ist_mengenartikel" id="edit_menge_{{ a.id }}" value="1" {% if a.ist_mengenartikel %}checked{% endif %} style="width:18px;height:18px;">
-          <label for="edit_menge_{{ a.id }}" class="form-label" style="margin:0;">Mengenartikel</label>
+        <div class="form-group sys-check-row">
+          <input type="checkbox" name="ist_mengenartikel" id="edit_menge_{{ a.id }}" value="1" {% if a.ist_mengenartikel %}checked{% endif %}>
+          <label for="edit_menge_{{ a.id }}" class="form-label sys-m-0">Mengenartikel</label>
         </div>
         <div class="form-group">
           <label class="form-label">Lagerbestand</label>

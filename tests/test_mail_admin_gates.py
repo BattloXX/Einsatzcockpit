@@ -179,7 +179,7 @@ def test_invalid_resend_domain_does_not_block_saving_resend_enabled(request):
         "/admin/system-einstellungen",
         data={
             "_csrf": client.cookies.get("ec_csrf"),
-            "k_resend_enabled": "true",
+            "k_resend_enabled": ["false", "true"],
             "k_resend_from_domain": "not a valid domain",
         },
         follow_redirects=False,

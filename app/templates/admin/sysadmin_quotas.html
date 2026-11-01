@@ -3,61 +3,36 @@
 
 {% block head_extra %}
 {{ super() }}
-<style>
-.quota-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
-.quota-card {
-  background: var(--surface-low); border: 1px solid var(--border);
-  border-radius: .6rem; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px;
-}
-.quota-card__hdr { display: flex; align-items: center; gap: 8px; }
-.quota-card__dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
-.quota-card__name { font-weight: 700; font-size: 1rem; }
-.quota-block__label {
-  font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--text-muted); display: flex; justify-content: space-between; align-items: baseline;
-}
-.quota-block__usage { font-size: .82rem; color: var(--on-surface); margin: 3px 0 6px; }
-.quota-bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
-.quota-bar__fill { height: 100%; border-radius: 4px; transition: width .2s; }
-.quota-input-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
-.quota-input-row input {
-  width: 100%; padding: 6px 9px; border: 1px solid var(--border); border-radius: .35rem;
-  background: var(--surface); color: var(--on-surface); font-size: .9rem;
-}
-.quota-input-row .unit { font-size: .82rem; color: var(--text-muted); white-space: nowrap; }
-.quota-hint { font-size: .72rem; color: var(--text-muted); margin-top: 3px; }
-.quota-card__actions { display: flex; gap: 8px; margin-top: 4px; }
-.quota-card__actions form { display: inline; }
-</style>
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
 {% endblock %}
 
 {% block admin_content %}
 {% with section_id='organisationen' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
+<div class="page-content sys-page">
+<div class="sys-hero">
   <div>
-    <h1>System-Konsole: Quota-Verwaltung</h1>
-    <p class="page-header__sub">Speicher- und KI-Token-Kontingente je Organisation festlegen</p>
+    <h1>{{ icon("chart-bar") }} System-Konsole: Quota-Verwaltung</h1>
+    <p class="sys-muted">Speicher- und KI-Token-Kontingente je Organisation festlegen</p>
   </div>
-  <a href="/admin/system/orgs" class="btn btn--secondary">{{ icon("chevron-left", size="sm") }} System-Konsole</a>
+  <a href="/admin/system/orgs" class="btn btn--secondary">{{ icon("chevron-left") }} System-Konsole</a>
 </div>
 
 {% if saved %}
-<div style="background:rgba(22,163,74,.15);border:1px solid #16a34a;color:var(--on-surface);
-            padding:10px 14px;border-radius:.4rem;margin-bottom:16px;font-size:.88rem">
-  {{ icon("circle-check", size="sm") }} Quota gespeichert.
+<div class="alert alert--success" role="status">
+  {{ icon("circle-check") }} Quota gespeichert.
 </div>
 {% endif %}
 
-<div class="quota-grid">
+<div class="sys-grid">
   {% for row in rows %}
   {% set org = row.org %}
-  <div class="quota-card">
-    <div class="quota-card__hdr">
-      <span class="quota-card__dot" style="background:{{ org.color }}"></span>
-      <span class="quota-card__name">{{ org.name }}</span>
-      {% if org.short_code %}<code style="font-size:.72rem;opacity:.7">{{ org.short_code }}</code>{% endif %}
-      {% if org.is_home_org %}<span style="font-size:.62rem;background:var(--red);color:#fff;padding:1px 5px;border-radius:3px">Home</span>{% endif %}
+  <div class="sys-card">
+    <div class="sys-card__head">
+      <span class="sys-org-color" style="--sys-org-color:{{ org.color }}" aria-hidden="true"></span>
+      <h2>{{ org.name }}</h2>
+      {% if org.short_code %}<code class="sys-muted sys-small">{{ org.short_code }}</code>{% endif %}
+      {% if org.is_home_org %}<span class="sys-pill">Home</span>{% endif %}
     </div>
 
     <form method="post" action="/admin/system/quotas/{{ org.id }}">
@@ -65,13 +40,13 @@
 
       {# ── Speicher ─────────────────────────────────────────── #}
       <div>
-        <div class="quota-block__label">
-          <span>{{ icon("device-floppy", size="sm") }} Speicher</span>
+        <div class="sys-quota-label">
+          <span>{{ icon("device-floppy") }} Speicher</span>
           {% if row.storage_pct is not none %}
-            <span style="color:{% if row.storage_pct >= 90 %}var(--red-light,#f87171){% elif row.storage_pct >= 75 %}#d97706{% else %}var(--text-muted){% endif %}">{{ row.storage_pct }}%</span>
+            <span class="sys-pill {{ 'sys-status--fail' if row.storage_pct >= 90 else ('sys-status--warn' if row.storage_pct >= 75 else 'sys-status--ok') }}">{{ row.storage_pct }}%</span>
           {% endif %}
         </div>
-        <div class="quota-block__usage">
+        <div class="sys-small">
           {{ row.storage_used|filesizeformat(true) }}
           {% if row.storage_quota is not none %}
             / {{ row.storage_quota|filesizeformat(true) }}
@@ -80,28 +55,24 @@
           {% endif %}
         </div>
         {% if row.storage_pct is not none %}
-        <div class="quota-bar">
-          <div class="quota-bar__fill"
-               style="width:{{ [row.storage_pct, 100]|min }}%;
-                      background:{% if row.storage_pct >= 90 %}#dc2626{% elif row.storage_pct >= 75 %}#d97706{% else %}#16a34a{% endif %}"></div>
-        </div>
+        <progress class="sys-progress {{ 'sys-progress--fail' if row.storage_pct >= 90 else ('sys-progress--warn' if row.storage_pct >= 75 else '') }}" max="100" value="{{ [row.storage_pct, 100]|min }}" aria-label="Speicherauslastung">{{ row.storage_pct }}%</progress>
         {% endif %}
-        <div class="quota-input-row">
+        <div class="sys-quota-input">
           <input type="text" inputmode="decimal" name="storage_quota_gb"
                  value="{{ row.storage_quota_gb }}" placeholder="unbegrenzt">
-          <span class="unit">GB</span>
+          <span class="sys-muted sys-small">GB</span>
         </div>
       </div>
 
       {# ── KI-Token ─────────────────────────────────────────── #}
-      <div style="margin-top:14px">
-        <div class="quota-block__label">
-          <span>{{ icon("sparkles", size="sm") }} KI-Token ({{ row.ai_month }})</span>
+      <div class="sys-quota-block">
+        <div class="sys-quota-label">
+          <span>{{ icon("sparkles") }} KI-Token ({{ row.ai_month }})</span>
           {% if row.ai_pct is not none %}
-            <span style="color:{% if row.ai_pct >= 90 %}var(--red-light,#f87171){% elif row.ai_pct >= 75 %}#d97706{% else %}var(--text-muted){% endif %}">{{ row.ai_pct }}%</span>
+            <span class="sys-pill {{ 'sys-status--fail' if row.ai_pct >= 90 else ('sys-status--warn' if row.ai_pct >= 75 else 'sys-status--ok') }}">{{ row.ai_pct }}%</span>
           {% endif %}
         </div>
-        <div class="quota-block__usage">
+        <div class="sys-small">
           {{ '{:,}'.format(row.ai_used).replace(',', '.') }}
           {% if row.ai_quota is not none %}
             / {{ '{:,}'.format(row.ai_quota).replace(',', '.') }} Token
@@ -110,26 +81,22 @@
           {% endif %}
         </div>
         {% if row.ai_pct is not none %}
-        <div class="quota-bar">
-          <div class="quota-bar__fill"
-               style="width:{{ [row.ai_pct, 100]|min }}%;
-                      background:{% if row.ai_pct >= 90 %}#dc2626{% elif row.ai_pct >= 75 %}#d97706{% else %}#16a34a{% endif %}"></div>
-        </div>
+        <progress class="sys-progress {{ 'sys-progress--fail' if row.ai_pct >= 90 else ('sys-progress--warn' if row.ai_pct >= 75 else '') }}" max="100" value="{{ [row.ai_pct, 100]|min }}" aria-label="KI-Token-Auslastung">{{ row.ai_pct }}%</progress>
         {% endif %}
-        <div class="quota-input-row">
+        <div class="sys-quota-input">
           <input type="text" inputmode="numeric" name="ai_monthly_token_quota"
                  value="{{ row.ai_quota if row.ai_quota is not none else '' }}" placeholder="unbegrenzt">
-          <span class="unit">Token/Monat</span>
+          <span class="sys-muted sys-small">Token/Monat</span>
         </div>
-        <div class="quota-hint">Leer lassen = unbegrenzt.</div>
+        <div class="sys-muted sys-small">Leer lassen = unbegrenzt.</div>
       </div>
 
-      <div class="quota-card__actions">
+      <div class="sys-actions">
         <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
       </div>
     </form>
 
-    <div class="quota-card__actions" style="margin-top:0">
+    <div class="sys-actions">
       <form method="post" action="/admin/system/quotas/{{ org.id }}/reconcile">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <button type="submit" class="btn btn--secondary btn--sm"
@@ -142,8 +109,9 @@
   {% endfor %}
 </div>
 
-<p style="margin-top:16px;font-size:.82rem;color:var(--text-muted)">
+<p class="sys-muted sys-small">
   Die Speicher-Quota begrenzt Foto-/Medien-Uploads (413 bei Überschreitung).
   Die KI-Token-Quota begrenzt den monatlichen KI-Verbrauch je Organisation und wird zum Monatswechsel zurückgesetzt.
 </p>
+</div>
 {% endblock %}

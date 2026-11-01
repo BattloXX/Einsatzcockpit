@@ -1,44 +1,47 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Ausrückordnung – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% with section_id='alarmstichwoerter' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>Ausrückordnung</h1>
-      <p class="page-header__sub">
-        Matrix zeigt für jede Alarmstufe die Fahrzeuge in der definierten Reihenfolge.
-        Klick auf „Bearbeiten" → Liste mit Drag-Drop-Reihenfolge.
-      </p>
-    </div>
-  </div>
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("truck") }} Ausrückordnung</h1>
+    <p class="sys-muted">
+      Matrix zeigt für jede Alarmstufe die Fahrzeuge in der definierten Reihenfolge.
+      Klick auf „Bearbeiten“ {{ icon("arrow-right", size="sm") }} Liste mit Drag-Drop-Reihenfolge.
+    </p>
+  </header>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
 
-  <div class="dispatch-variant-tabs" role="group" aria-label="Ausrückordnungs-Variante">
+  <div class="sys-row" role="group" aria-label="Ausrückordnungs-Variante">
     <a href="/admin/ausrueckordnung?variant=standard"
        class="btn {% if variant == 'standard' %}btn--primary{% else %}btn--ghost{% endif %}">Standort</a>
     <a href="/admin/ausrueckordnung?variant=ausserorts"
-       class="btn {% if variant == 'ausserorts' %}btn--primary{% else %}btn--ghost{% endif %}">Ausserorts</a>
+       class="btn {% if variant == 'ausserorts' %}btn--primary{% else %}btn--ghost{% endif %}">Außerorts</a>
   </div>
   {% if variant == "ausserorts" %}
-  <p class="form-hint dispatch-variant-hint">
+  <p class="form-hint">
     Gilt für Einsätze, deren Adresse nicht in {{ org.city or 'Wolfurt' }} liegt.
     Ohne eigene Einträge wird die Standard-Ausrückordnung verwendet.
   </p>
   {% endif %}
 
   <!-- ── Matrix-Übersicht ─────────────────────────────────────────── -->
-  <div style="overflow-x:auto; margin-bottom:24px;">
-    <table class="table-admin" style="min-width:800px;">
+  <section class="sys-card">
+  <div class="sys-table-wrap">
+    <table class="sys-table">
       <thead>
         <tr>
-          <th style="width:120px;">Alarmstufe</th>
+          <th>Alarmstufe</th>
           {% for i in range(1, max_count + 1) %}
-          <th style="white-space:nowrap;">{{ i }}. Fahrzeug</th>
+          <th class="sys-nowrap">{{ i }}. Fahrzeug</th>
           {% endfor %}
-          <th style="width:90px;">Aktion</th>
+          <th>Aktion</th>
         </tr>
       </thead>
       <tbody>
@@ -47,7 +50,7 @@
           <td>
             <strong>{{ atype.code }}</strong>{% if atype.label %} <small>{{ atype.label }}</small>{% endif %}
             {% if variant == "standard" and atype.id in ausserorts_alarm_type_ids %}
-            <span class="dispatch-variant-badge">Ausserorts definiert</span>
+            <span class="sys-pill sys-small">Außerorts definiert</span>
             {% endif %}
           </td>
           {% set row_vehicles = dispatch_matrix.get(atype.code, []) %}
@@ -55,11 +58,10 @@
           <td>
             {% if i < row_vehicles|length and row_vehicles[i] %}
             {% set rv = row_vehicles[i] %}
-            <span class="vehicle-pill"
-                  style="background:{{ rv.dept.color or '#c62828' }};color:#fff;
-                         padding:2px 8px;border-radius:4px;font-size:.8rem;font-weight:600;">
+            <span class="sys-vehicle-pill"
+                  style="background:{{ rv.dept.color or '#c62828' }}">
               {{ rv.display_label }}
-              {% if rv.is_external %}<span style="font-size:.65rem;opacity:.75;margin-left:3px;">FREMD</span>{% endif %}
+              {% if rv.is_external %}<span class="sys-vehicle-pill__ext">FREMD</span>{% endif %}
             </span>
             {% endif %}
           </td>
@@ -73,24 +75,27 @@
       </tbody>
     </table>
   </div>
+  </section>
 
   {% if edit_alarm %}
   <!-- ── Edit-View ────────────────────────────────────────────────── -->
-  <div id="dispatchEditSection" class="admin-section-title">
-    Bearbeiten: {{ edit_alarm.label or edit_alarm.code }} ({{ edit_alarm.code }})
+  <section class="sys-card">
+  <div id="dispatchEditSection" class="sys-card__head">
+    <h2>{{ icon("list-details") }} Bearbeiten: {{ edit_alarm.label or edit_alarm.code }} ({{ edit_alarm.code }})</h2>
   </div>
-  <p class="form-hint" style="margin-bottom:10px;">
+  <p class="form-hint">
     Haken setzen = Fahrzeug rückt aus. Per Drag-Drop am Handle ({{ icon("grip-vertical", size="sm") }}) die Reihenfolge ändern.
   </p>
 
   <form method="post" action="/admin/ausrueckordnung/{{ edit_alarm.code }}?variant={{ variant }}"
-        id="dispatchEditForm" style="max-width:680px;">
+        id="dispatchEditForm" class="sys-form-wide">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <table class="table-admin" id="dispatchEditTable">
+    <div class="sys-table-wrap">
+    <table class="sys-table" id="dispatchEditTable">
       <thead>
         <tr>
-          <th style="width:40px;"></th>
-          <th style="width:50px;">Aus</th>
+          <th class="sys-action-col"></th>
+          <th class="sys-action-col">Aus</th>
           <th>Fahrzeug</th>
           <th>Abteilung</th>
         </tr>
@@ -101,12 +106,12 @@
         {% for vid in checked_ids %}
         {% for v in vehicles if v.id == vid %}
         <tr data-vid="{{ v.id }}">
-          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">{{ icon("grip-vertical", size="sm") }}</td>
+          <td class="drag-handle sys-drag-handle">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="dispatch-checkbox" checked></td>
           <td>
-            <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">
+            <span class="sys-vehicle-label" style="border-left-color:{{ v.dept.color }}">
               <strong>{{ v.display_label }}</strong>
-              {% if v.is_external %}<span style="font-size:.65rem;padding:1px 4px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;margin-left:4px;">FREMD</span>{% endif %}
+              {% if v.is_external %}<span class="sys-pill sys-pill--warn sys-small">FREMD</span>{% endif %}
               – {{ v.type or '' }}
             </span>
           </td>
@@ -117,12 +122,12 @@
         {# … dann die übrigen (unchecked) #}
         {% for v in vehicles if v.id not in checked_ids %}
         <tr data-vid="{{ v.id }}">
-          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">{{ icon("grip-vertical", size="sm") }}</td>
+          <td class="drag-handle sys-drag-handle">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="dispatch-checkbox"></td>
           <td>
-            <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">
+            <span class="sys-vehicle-label" style="border-left-color:{{ v.dept.color }}">
               <strong>{{ v.display_label }}</strong>
-              {% if v.is_external %}<span style="font-size:.65rem;padding:1px 4px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;margin-left:4px;">FREMD</span>{% endif %}
+              {% if v.is_external %}<span class="sys-pill sys-pill--warn sys-small">FREMD</span>{% endif %}
               – {{ v.type or '' }}
             </span>
           </td>
@@ -131,10 +136,11 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
 
     <div id="dispatchHiddenInputs"></div>
 
-    <div style="margin-top:14px; display:flex; gap:8px;">
+    <div class="sys-actions">
       <button type="submit" class="btn btn--primary" onclick="serializeDispatch()">
         Speichern
       </button>
@@ -184,17 +190,7 @@
     });
   };
   </script>
+  </section>
   {% endif %}
 </div>
-
-<style>
-.vehicle-pill { display:inline-block; white-space:nowrap; }
-.dispatch-variant-tabs { display:flex; gap:8px; margin-bottom:10px; }
-.dispatch-variant-hint { margin-bottom:16px; }
-.dispatch-variant-badge { display:block; width:max-content; margin-top:4px; padding:1px 5px;
-                          border-radius:4px; background:rgba(59,130,246,.16); color:#93c5fd;
-                          font-size:.65rem; font-weight:600; white-space:nowrap; }
-#dispatchEditTbody tr { transition: background .15s; }
-#dispatchEditTbody tr:hover { background: rgba(255,255,255,.04); }
-</style>
 {% endblock %}

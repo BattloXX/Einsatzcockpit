@@ -6,47 +6,57 @@
   {{ breadcrumb([{'label': 'Geräte-Login', 'url': '/admin/geraete-login'}, {'label': dt.label}]) }}
 {% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block admin_content %}
-<div class="page-content">
-  {% for g in app_geraete %}<p><a href="/admin/systemdiagnose?geraet={{ g.id }}">App-Geraet: {{ g.hersteller or '' }} {{ g.modell or '' }}</a></p>{% endfor %}
-  <div class="page-header">
-    <div>
-      <h1>{{ dt.label }}</h1>
-      <p class="page-header__sub">
-        {% if dt.is_active %}<span class="badge-pill badge-pill--green">Aktiv</span>
-        {% else %}<span class="badge-pill badge-pill--gray">Widerrufen</span>{% endif %}
-        &nbsp;{{ dt.user.username if dt.user else '–' }}
-      </p>
+<div class="sys-page">
+  {% for g in app_geraete %}<p><a href="/admin/systemdiagnose?geraet={{ g.id }}">App-Gerät: {{ g.hersteller or '' }} {{ g.modell or '' }}</a></p>{% endfor %}
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div>
+        <h1>{{ icon("device-mobile") }} {{ dt.label }}</h1>
+        <p class="sys-muted sys-row">
+          {% if dt.is_active %}<span class="sys-pill sys-status--ok">{{ icon("circle-check", size="sm") }} Aktiv</span>
+          {% else %}<span class="sys-pill">Widerrufen</span>{% endif %}
+          <span>{{ dt.user.username if dt.user else '–' }}</span>
+        </p>
+      </div>
+      <a href="/admin/geraete-login" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück</a>
     </div>
-    <a href="/admin/geraete-login" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück</a>
-  </div>
+  </header>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-    <div class="chart-box">
-      <h3 style="margin-bottom:10px;">Gerätedaten</h3>
-      <table style="width:100%;font-size:.9rem;border-collapse:collapse;">
-        <tr><td style="padding:4px 0;color:var(--color-text-muted);width:40%">Bezeichnung</td><td><strong>{{ dt.label }}</strong></td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Login-User</td><td>{{ dt.user.username if dt.user else '–' }}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Fahrzeug</td><td>{{ dt.vehicle.display_label if dt.vehicle else '–' }}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">App-Version</td><td>{{ dt.app_version or '–' }}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Gerät</td><td>{{ [dt.platform, dt.os_version, dt.device_model]|select|join(' · ') or '–' }}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Status</td><td>{% if dt.is_active %}Aktiv{% else %}Widerrufen{% if dt.revoked_at %} am {{ dt.revoked_at|local_datetime }}{% endif %}{% endif %}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Fehlversuche</td><td>{{ dt.fail_count or 0 }}{% if dt.last_failed_at %} (zuletzt {{ dt.last_failed_at|local_datetime }}){% endif %}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Rollen</td><td>{{ dt.user.roles|map(attribute='label')|join(', ') if dt.user else '–' }}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Erstellt</td><td>{{ (dt.created_at|local).strftime('%d.%m.%Y %H:%M') }}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Zuletzt genutzt</td>
+  <div class="sys-grid-2 sys-grid-2--cards sys-mb-2">
+    <section class="sys-card">
+      <div class="sys-card__head"><h2>{{ icon("info-circle") }} Gerätedaten</h2></div>
+      <div class="sys-table-wrap">
+      <table class="sys-table">
+        <tr><td class="sys-dl-label sys-w-40">Bezeichnung</td><td><strong>{{ dt.label }}</strong></td></tr>
+        <tr><td class="sys-dl-label">Login-User</td><td>{{ dt.user.username if dt.user else '–' }}</td></tr>
+        <tr><td class="sys-dl-label">Fahrzeug</td><td>{{ dt.vehicle.display_label if dt.vehicle else '–' }}</td></tr>
+        <tr><td class="sys-dl-label">App-Version</td><td>{{ dt.app_version or '–' }}</td></tr>
+        <tr><td class="sys-dl-label">Gerät</td><td>{{ [dt.platform, dt.os_version, dt.device_model]|select|join(' · ') or '–' }}</td></tr>
+        <tr><td class="sys-dl-label">Status</td><td>{% if dt.is_active %}Aktiv{% else %}Widerrufen{% if dt.revoked_at %} am {{ dt.revoked_at|local_datetime }}{% endif %}{% endif %}</td></tr>
+        <tr><td class="sys-dl-label">Fehlversuche</td><td>{{ dt.fail_count or 0 }}{% if dt.last_failed_at %} (zuletzt {{ dt.last_failed_at|local_datetime }}){% endif %}</td></tr>
+        <tr><td class="sys-dl-label">Rollen</td><td>{{ dt.user.roles|map(attribute='label')|join(', ') if dt.user else '–' }}</td></tr>
+        <tr><td class="sys-dl-label">Erstellt</td><td>{{ (dt.created_at|local).strftime('%d.%m.%Y %H:%M') }}</td></tr>
+        <tr><td class="sys-dl-label">Zuletzt genutzt</td>
             <td>{% if dt.last_used_at %}{{ (dt.last_used_at|local).strftime('%d.%m.%Y %H:%M') }}{% else %}<span class="text-muted">Nie</span>{% endif %}</td></tr>
-        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Dienst aktiv</td>
-            <td>{% if dt.duty_active %}<span style="color:var(--color-success)">Ja</span>{% else %}Nein{% endif %}</td></tr>
+        <tr><td class="sys-dl-label">Dienst aktiv</td>
+            <td>{% if dt.duty_active %}<span class="sys-ok">Ja</span>{% else %}Nein{% endif %}</td></tr>
       </table>
-    </div>
+      </div>
+    </section>
 
-    <div class="chart-box">
-      <h3 style="margin-bottom:10px;">Letzter Standort</h3>
-      <table class="data-table" style="margin-bottom:10px;">
+    <section class="sys-card">
+      <div class="sys-card__head"><h2>{{ icon("map-pin") }} Letzter Standort</h2></div>
+      <div class="sys-table-wrap sys-mb-1">
+      <table class="sys-table">
         <tr><th>Standortstatus</th><td>
-          {% if standort.veraltet %}<span style="color:var(--color-danger);">Veraltet (keine Messung innerhalb von 24 Stunden)</span>
-          {% else %}<span style="color:var(--color-success);">Aktuell</span>{% endif %}
+          {% if standort.veraltet %}<span class="sys-danger">Veraltet (keine Messung innerhalb von 24 Stunden)</span>
+          {% else %}<span class="sys-ok">Aktuell</span>{% endif %}
           &middot; {{ standort.status_text }}</td></tr>
         <tr><th>Letzte Messung</th><td>{% if standort.letzte_messung_at %}{{ standort.letzte_messung_at|local_datetime_sec }}
           ({{ (standort.alter_s // 60)|int }} Min. alt){% else %}noch keine{% endif %}</td></tr>
@@ -55,30 +65,32 @@
           {% if standort.quelle %}({{ standort.quelle }}){% endif %}{% else %}noch keiner{% endif %}</td></tr>
         {% if standort.fehler %}<tr><th>Fehler</th><td>{{ standort.fehler }}</td></tr>{% endif %}
       </table>
+      </div>
       {% if dt.last_lat and dt.last_lng %}
-      <p style="font-size:.85rem;color:var(--color-text-muted);margin-bottom:8px;">
+      <p class="sys-small sys-muted sys-mb-1">
         {{ icon("map-pin", size="sm") }} <strong>{{ '%.6f'|format(dt.last_lat) }}, {{ '%.6f'|format(dt.last_lng) }}</strong>
         &nbsp;·&nbsp;
         {% if dt.last_location_at %}
           {{ (dt.last_location_at|local).strftime('%d.%m.%Y %H:%M:%S') }}
         {% endif %}
       </p>
-      <div id="deviceMap" style="height:280px;border-radius:6px;border:1px solid var(--border);"></div>
+      <div class="sys-map-box" id="deviceMap"></div>
       {% else %}
-      <div style="height:200px;display:flex;align-items:center;justify-content:center;
-                  border:1px dashed var(--border);border-radius:6px;color:var(--color-text-muted);">
-        <div style="text-align:center;">
-          <div style="font-size:2rem;margin-bottom:6px;">{{ icon("device-mobile-off", size="lg") }}</div>
+      <div class="sys-empty sys-map-empty">
+        <div class="sys-center">
+          <div class="sys-empty-icon">{{ icon("device-mobile-off", size="lg") }}</div>
           <p>Noch kein Standort übermittelt.</p>
           <small>Die App überträgt den Standort automatisch wenn Dienst aktiv ist.</small>
         </div>
       </div>
       {% endif %}
-    </div>
+    </section>
   </div>
 
-  <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">Fehlgeschlagene Zugriffe</h2>
-  {% include "admin/_auth_failures.html" %}
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("shield") }} Fehlgeschlagene Zugriffe</h2></div>
+    {% include "admin/_auth_failures.html" %}
+  </section>
 </div>
 {% endblock %}
 

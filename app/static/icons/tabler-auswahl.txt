@@ -123,6 +123,7 @@ masks-theater
 maximize
 menu-2
 message
+message-share
 messages
 microphone
 minimize
@@ -172,6 +173,7 @@ steering-wheel
 stopwatch
 sun
 sun-low
+table
 tag
 target
 temperature
@@ -205,3 +207,12 @@ truck
 
 arrows-maximize
 layout-grid
+brand-teams
+brand-wordpress
+road
+list-details
+antenna-bars-5
+activity
+plug-connected
+shield-lock
+send

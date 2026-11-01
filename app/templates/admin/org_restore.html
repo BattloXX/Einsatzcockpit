@@ -1,106 +1,110 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Datensicherung — Wiederherstellen{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Datensicherung', 'url': '/admin/org-backup'}, {'label': 'Wiederherstellen'}]) }}{% endblock %}
 
 {% block admin_content %}
 {% with section_id='org_backup' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <div>
-    <h1>Archiv wiederherstellen</h1>
-    <p class="page-header__sub">Ein Org-Archiv in eine <strong>neue</strong> Organisation importieren (mit neuer ID-Vergabe). Bestehende Organisationen werden nicht verändert.</p>
-  </div>
-</div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("recycle") }} Archiv wiederherstellen</h1>
+  <p class="sys-muted">Ein Org-Archiv in eine <strong>neue</strong> Organisation importieren (mit neuer ID-Vergabe). Bestehende Organisationen werden nicht verändert.</p>
+</header>
 
 {% if error %}
-<div class="alert alert--error mb-4">{{ error }}</div>
+<div class="alert alert--error">{{ error }}</div>
 {% endif %}
 
 {% if summary %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:20px;">
-    <h2 style="margin-top:0;">{{ icon("circle-check", size="md") }} Wiederherstellung abgeschlossen</h2>
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("circle-check") }} Wiederherstellung abgeschlossen</h2></div>
+  <div>
     <p>
       {% if summary.replaced %}Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}) <strong>ersetzt</strong>{% else %}Neue Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}, Slug <code>{{ summary.slug }}</code>) angelegt{% endif %}
       aus Quell-Org {{ summary.source_org_id }} — <strong>{{ summary.rows_total }}</strong> Datensätze,
       <strong>{{ summary.media_restored }}</strong> Mediendateien.
     </p>
     {% if summary.replaced and summary.safety_backup %}
-    <p class="page-header__sub">Sicherheits-Autobackup vor dem Ersetzen: <code>{{ summary.safety_backup }}</code></p>
+    <p class="sys-muted">Sicherheits-Autobackup vor dem Ersetzen: <code>{{ summary.safety_backup }}</code></p>
     {% endif %}
-    <a class="btn" href="/admin/org-backup/restore">Weitere Wiederherstellung</a>
+    <a class="btn sys-mt-1" href="/admin/org-backup/restore">Weitere Wiederherstellung</a>
   </div>
 </section>
 {% endif %}
 
 {% if preview %}
-<section class="card mb-4">
-  <div class="card-body" style="padding:20px;">
-    <h2 style="margin-top:0;">Vorschau</h2>
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("eye") }} Vorschau</h2></div>
+  <div>
     <p>Quell-Organisation: <strong>{{ preview.org_id }}</strong> · App-Version {{ preview.app_version }} ·
        Export vom {{ preview.exported_at }}</p>
     <p>{{ preview.tables | length }} Tabellen, {{ preview.media_count }} Mediendateien.</p>
     <details>
       <summary>Tabellen anzeigen</summary>
-      <ul style="columns:2;margin-top:8px;">
+      <ul class="sys-list sys-columns-2">
         {% for name, cnt in preview.tables.items() %}<li>{{ name }}: {{ cnt }}</li>{% endfor %}
       </ul>
     </details>
-    <p class="page-header__sub" style="margin-top:12px;">Zum Anwenden bitte die Datei erneut wählen und „Wiederherstellung bestätigen" ankreuzen.</p>
+    <p class="sys-muted sys-mt-2">Zum Anwenden bitte die Datei erneut wählen und „Wiederherstellung bestätigen" ankreuzen.</p>
   </div>
 </section>
 {% endif %}
 
-<section class="card mb-4">
-  <div class="card-body" style="padding:20px;">
-    <h2 style="margin-top:0;">Archiv hochladen</h2>
-    <form method="post" action="/admin/org-backup/restore" enctype="multipart/form-data" style="max-width:560px">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div style="margin-bottom:12px;">
-        <label>Archiv-Datei (ZIP)</label>
-        <input class="form-control" type="file" name="archiv" accept=".zip" required>
-      </div>
-      <div style="margin:12px 0;">
-        <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
-          <input type="radio" name="modus" value="new" checked onclick="document.getElementById('replace-box').style.display='none'">
-          In eine <strong>neue</strong> Organisation importieren
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:4px;">
-          <input type="radio" name="modus" value="replace" onclick="document.getElementById('replace-box').style.display='block'">
-          Eine <strong>bestehende</strong> Organisation <strong style="color:#b91c1c">ersetzen</strong> (löscht deren Daten)
-        </label>
-      </div>
+<section class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("upload") }} Archiv hochladen</h2></div>
+  <form method="post" action="/admin/org-backup/restore" enctype="multipart/form-data" class="sys-stack sys-form-wide">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="sys-field">
+      <label>Archiv-Datei (ZIP)</label>
+      <input class="form-control" type="file" name="archiv" accept=".zip" required>
+    </div>
+    <div class="sys-stack">
+      <label class="sys-check">
+        <input type="radio" name="modus" value="new" checked onclick="document.getElementById('replace-box').style.display='none'">
+        <span>In eine <strong>neue</strong> Organisation importieren</span>
+      </label>
+      <label class="sys-check">
+        <input type="radio" name="modus" value="replace" onclick="document.getElementById('replace-box').style.display='block'">
+        <span>Eine <strong>bestehende</strong> Organisation <strong class="sys-danger">ersetzen</strong> (löscht deren Daten)</span>
+      </label>
+    </div>
 
-      <div style="margin-bottom:12px;">
-        <label>Name der neuen Organisation (Modus „neu")</label>
-        <input class="form-control" name="neue_org_name" placeholder="z. B. Wiederherstellung FF Musterdorf">
-      </div>
+    <div class="sys-field">
+      <label>Name der neuen Organisation (Modus „neu")</label>
+      <input class="form-control" name="neue_org_name" placeholder="z. B. Wiederherstellung FF Musterdorf">
+    </div>
 
-      <div id="replace-box" style="display:none;border:1px solid #b91c1c;border-radius:8px;padding:12px;margin-bottom:12px;">
+    <div id="replace-box" class="sys-fieldset sys-fieldset--danger" style="display:none">
+      <div class="sys-field sys-mb-2">
         <label>Ziel-Organisation (wird ERSETZT)</label>
         <select class="form-control" name="ziel_org_id">
           <option value="">-- wählen --</option>
           {% for o in all_orgs %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
         </select>
-        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400;">
-          <input type="checkbox" name="confirm_replace" value="1">
-          <strong style="color:#b91c1c">Ja, alle bestehenden Daten dieser Organisation löschen und ersetzen.</strong>
-        </label>
-        <p class="page-header__sub" style="margin:6px 0 0;">Vor dem Ersetzen wird automatisch ein Sicherheits-Backup der Ziel-Org erstellt.</p>
       </div>
-
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-        <input type="checkbox" name="confirm" value="1">
-        <strong>Wiederherstellung bestätigen</strong> (ohne Haken: nur Vorschau)
+      <label class="sys-check sys-mb-1">
+        <input type="checkbox" name="confirm_replace" value="1">
+        <strong class="sys-danger">Ja, alle bestehenden Daten dieser Organisation löschen und ersetzen.</strong>
       </label>
-      <button class="btn btn--primary" type="submit">Hochladen</button>
-    </form>
-    <p class="page-header__sub" style="margin-top:14px;">
-      Der Import legt eine neue Organisation an und vergibt für alle Datensätze neue IDs — es
-      gibt keine Kollision mit Bestandsdaten. Server-gebundene Geheimnisse und flüchtige Tokens
-      sind im Archiv nicht enthalten und müssen ggf. neu konfiguriert werden.
-    </p>
-  </div>
+      <p class="sys-muted sys-m-0">Vor dem Ersetzen wird automatisch ein Sicherheits-Backup der Ziel-Org erstellt.</p>
+    </div>
+
+    <label class="sys-check">
+      <input type="checkbox" name="confirm" value="1">
+      <span><strong>Wiederherstellung bestätigen</strong> (ohne Haken: nur Vorschau)</span>
+    </label>
+    <div class="sys-actions"><button class="btn btn--primary" type="submit">Hochladen</button></div>
+  </form>
+  <p class="sys-muted sys-mt-2">
+    Der Import legt eine neue Organisation an und vergibt für alle Datensätze neue IDs — es
+    gibt keine Kollision mit Bestandsdaten. Server-gebundene Geheimnisse und flüchtige Tokens
+    sind im Archiv nicht enthalten und müssen ggf. neu konfiguriert werden.
+  </p>
 </section>
+</div>
 {% endblock %}

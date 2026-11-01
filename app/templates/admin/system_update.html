@@ -1,24 +1,29 @@
 {% extends "admin/_layout.html" %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block title %}System-Update{% endblock %}
 
 {% block admin_content %}
 {% with section_id='updates_backups' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="system-update-page">
-<div class="page-header">
-  <h1>System-Update</h1>
-  <span class="badge-pill badge-pill--amber">Nur Systemadministratoren</span>
+<div class="page-content system-update-page sys-page">
+<div class="sys-hero">
+  <h1>{{ icon("refresh") }} System-Update</h1>
+  <span class="sys-pill sys-status--warn">Nur Systemadministratoren</span>
 </div>
 
-<div class="card mb-4">
+<div class="sys-card">
   <div class="card-body">
-    <dl class="info-list">
+    <dl class="sys-kv">
+      <div>
       <dt>Aktuelle Version</dt>
-      <dd><strong>{{ version }}</strong></dd>
+      <dd><strong>{{ version }}</strong></dd></div>
       {% if deployed_ref %}
-      <dt>Letztes Branch-Update</dt>
+      <div><dt>Letztes Branch-Update</dt>
       <dd><code>{{ deployed_ref.branch }}@{{ deployed_ref.sha[:7] }}</code>
-          <span class="text-muted" style="font-size:.82rem;">({{ deployed_ref.datum[:10] }})</span></dd>
+          <span class="text-muted">({{ deployed_ref.datum[:10] }})</span></dd></div>
       {% endif %}
     </dl>
   </div>
@@ -52,17 +57,16 @@
   {% endif %}
 {% endif %}
 
-<div class="card mb-4">
-  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-    <h2>Automatisches Update von GitHub</h2>
+<div class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ icon("brand-github") }} Automatisches Update von GitHub</h2>
     <form hx-get="/admin/system/update/check-github"
           hx-target="#github-update-box"
           hx-swap="innerHTML"
           hx-indicator="#github-spinner"
-          style="display:flex;align-items:center;gap:10px;">
-      <span class="htmx-indicator" id="github-spinner"
-            style="font-size:.82rem;color:var(--text-muted);">Prüfe…</span>
-      <label style="display:flex;align-items:center;gap:5px;font-size:.87rem;cursor:pointer;user-select:none;white-space:nowrap;">
+          class="sys-toolbar">
+      <span class="htmx-indicator sys-muted sys-small" id="github-spinner">Prüfe…</span>
+      <label class="sys-check">
         <input type="checkbox" name="prerelease" value="1"> Pre-Release
       </label>
       <button type="submit" class="btn btn--secondary btn--sm">Auf Updates prüfen</button>
@@ -70,42 +74,41 @@
   </div>
   <div class="card-body">
     <div id="github-update-box">
-      <p class="text-muted" style="margin:0;font-size:.9rem;">
-        Auf „Auf Updates prüfen" klicken um GitHub auf verfügbare Releases zu prüfen.<br>
-        „Pre-Release" einschalten um auch Vorab-Versionen anzuzeigen.<br>
+      <p class="text-muted">
+        Auf "Auf Updates prüfen" klicken um GitHub auf verfügbare Releases zu prüfen.<br>
+        "Pre-Release" einschalten um auch Vorab-Versionen anzuzeigen.<br>
         Verfügbare APK-Assets werden ebenfalls angezeigt.
       </p>
     </div>
   </div>
 </div>
 
-<div class="card mb-4">
-  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-    <h2>Direkt vom Repository (Branch)</h2>
+<div class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ icon("code") }} Direkt vom Repository (Branch)</h2>
     <button class="btn btn--secondary btn--sm"
             hx-get="/admin/system/update/check-branch"
             hx-target="#github-branch-box" hx-swap="innerHTML"
             hx-indicator="#branch-spinner">Branch laden</button>
   </div>
   <div class="card-body">
-    <span class="htmx-indicator" id="branch-spinner"
-          style="font-size:.82rem;color:var(--text-muted);">Prüfe…</span>
+    <span class="htmx-indicator sys-muted sys-small" id="branch-spinner">Prüfe…</span>
     <div id="github-branch-box">
-      <p class="text-muted" style="margin:0;font-size:.9rem;">
+      <p class="text-muted">
         Spielt den aktuellen Stand eines Branches (Standard <code>main</code>) direkt vom
         GitHub-Repository ein — ohne Release. Gedacht für Hotfixes und Testsysteme;
-        „Branch laden" zeigt Branch-Auswahl und letzten Commit.
+        "Branch laden" zeigt Branch-Auswahl und letzten Commit.
       </p>
     </div>
   </div>
 </div>
 
-<div class="card mb-4">
-  <div class="card-header"><h2>GitHub-Zugriffstoken (private Repositories)</h2></div>
+<div class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("key") }} GitHub-Zugriffstoken (private Repositories)</h2></div>
   <div class="card-body">
-    <p class="text-muted" style="font-size:.9rem;">
+    <p class="text-muted">
       {% if token_configured %}
-      <span class="badge-pill badge-pill--amber" style="padding:2px 8px;">Token hinterlegt</span>
+      <span class="sys-pill sys-status--warn">Token hinterlegt</span>
       Zum Ersetzen neuen Token eingeben, zum Löschen leer speichern.
       {% else %}
       Ohne Token funktionieren Release- und Branch-Update nur bei öffentlichen Repositories.
@@ -114,17 +117,17 @@
       {% endif %}
     </p>
     <form method="post" action="/admin/system/update/github-token"
-          style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          class="sys-toolbar">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="password" name="github_token" class="form-control" autocomplete="off"
-             placeholder="github_pat_… oder ghp_…" style="max-width:380px;">
+             placeholder="github_pat_… oder ghp_…">
       <button type="submit" class="btn btn--secondary">Speichern</button>
     </form>
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header"><h2>Release-ZIP hochladen</h2></div>
+<div class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("upload") }} Release-ZIP hochladen</h2></div>
   <div class="card-body">
     <p>Lade eine <code>.zip</code>-Datei hoch, die als Release verpackt wurde.
        Das ZIP muss mindestens ein <code>app/</code>-Verzeichnis und eine
@@ -159,8 +162,8 @@
   </div>
 </div>
 
-<div class="card mt-4">
-  <div class="card-header"><h2>Hinweis zum Update-Prozess</h2></div>
+<div class="sys-card">
+  <div class="sys-card__head"><h2>{{ icon("info-circle") }} Hinweis zum Update-Prozess</h2></div>
   <div class="card-body text-muted">
     <ol>
       <li>ZIP wird serverseitig validiert (muss <code>app/</code> und <code>pyproject.toml</code> enthalten)</li>

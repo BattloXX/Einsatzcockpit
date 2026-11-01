@@ -2,23 +2,27 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}SMS senden – Admin{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SMS senden'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 
 {% block admin_content %}
-<div class="page-content">
-  {% include "admin/_sms_tabs.html" %}
-  <div class="page-header">
-    <div>
-      <h1>SMS senden</h1>
-      <p class="page-header__sub">Manuelle SMS an Gruppen, einzelne Mitglieder oder eine Nummer senden.</p>
-    </div>
-    <div>
+{% include "admin/_sms_tabs.html" %}
+<div class="sys-page">
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <div>
+        <h1>{{ icon("message-share") }} SMS senden</h1>
+        <p class="sys-muted">Manuelle SMS an Gruppen, einzelne Mitglieder oder eine Nummer senden.</p>
+      </div>
       {% if sms_provider_ready %}
-      <span class="badge-pill badge-pill--green" style="font-size:.8rem;">&#x25cf; SMS-Provider {{ sms_provider_name }} bereit</span>
+      <span class="sys-pill sys-status--ok"><span class="sys-indicator"></span> SMS-Provider {{ sms_provider_name }} bereit</span>
       {% else %}
-      <span class="badge-pill badge-pill--red" style="font-size:.8rem;">&#x25cf; SMS-Versand nicht verfuegbar</span>
+      <span class="sys-pill sys-status--fail"><span class="sys-indicator"></span> SMS-Versand nicht verfügbar</span>
       {% endif %}
     </div>
-  </div>
+  </header>
 
   {% if sent is not none %}
   {% if sent|int > 0 %}
@@ -27,50 +31,49 @@
   </div>
   {% else %}
   <div class="alert alert--error">
-    Keine SMS zugestellt (Gateway pruefen oder Empfaenger-Telefonnummern kontrollieren).
+    Keine SMS zugestellt (Gateway prüfen oder Empfänger-Telefonnummern kontrollieren).
   </div>
   {% endif %}
   {% if request.query_params.get('started') %}
-  <div class="alert alert--success">SMS-Versand wurde gestartet und laeuft im Hintergrund.</div>
+  <div class="alert alert--success">SMS-Versand wurde gestartet und läuft im Hintergrund.</div>
   {% endif %}
   {% endif %}
   {% if error == 'empty' %}
   <div class="alert alert--error">Nachrichtentext darf nicht leer sein.</div>
   {% endif %}
   {% if error == 'no_provider' %}
-  <div class="alert alert--error">SMS-Versand derzeit nicht verfuegbar.</div>
+  <div class="alert alert--error">SMS-Versand derzeit nicht verfügbar.</div>
   {% endif %}
   {% if error == 'no_recipients' %}
-  <div class="alert alert--error">Keine Empfaenger ausgewaehlt oder Empfaenger haben keine Telefonnummer.</div>
+  <div class="alert alert--error">Keine Empfänger ausgewählt oder Empfänger haben keine Telefonnummer.</div>
   {% endif %}
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;align-items:start;">
+  <div class="sys-grid-2 sys-grid-2--cards">
 
     <!-- ── SMS verfassen ── -->
-    <div class="chart-box"
-         x-data="{ targetType: 'group' }">
-      <h3 style="margin-bottom:16px;">Nachricht verfassen</h3>
-      <form method="post" action="/admin/sms-senden/senden">
+    <section class="sys-card" x-data="{ targetType: 'group' }">
+      <div class="sys-card__head"><h2>{{ icon("message-share") }} Nachricht verfassen</h2></div>
+      <form method="post" action="/admin/sms-senden/senden" class="sys-stack">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
-        <!-- Empfaenger-Art -->
+        <!-- Empfänger-Art -->
         <div class="form-group">
-          <label class="form-label">Empfaenger</label>
-          <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <label class="form-label">Empfänger</label>
+          <div class="sys-stack sys-gap-sm">
+            <label class="sys-check">
               <input type="radio" name="target_type" value="group"
                      x-model="targetType" {% if not groups %}disabled{% endif %}>
               <span>Gruppen
               {% if not groups %}
-              <span class="text-muted" style="font-size:.82rem;">(keine Gruppen angelegt)</span>
+              <span class="sys-muted sys-small">(keine Gruppen angelegt)</span>
               {% endif %}
               </span>
             </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <label class="sys-check">
               <input type="radio" name="target_type" value="member" x-model="targetType">
               Einzelne Mitglieder
             </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <label class="sys-check">
               <input type="radio" name="target_type" value="adhoc" x-model="targetType">
               Ad-hoc-Nummer
             </label>
@@ -80,13 +83,13 @@
         <!-- Gruppen-Auswahl -->
         <div x-show="targetType === 'group'" class="form-group">
           {% if groups %}
-          <label class="form-label" style="font-size:.85rem;">Gruppen auswaehlen</label>
-          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;">
+          <label class="form-label">Gruppen auswählen</label>
+          <div class="sys-option sys-stack sys-gap-sm">
             {% for grp in groups %}
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
+            <label class="sys-check">
               <input type="checkbox" name="group_id" value="{{ grp.id }}">
               <span>{{ grp.name }}
-                <span class="badge-pill badge-pill--gray" style="font-size:.72rem;">
+                <span class="badge-pill badge-pill--gray sys-small">
                   {{ grp.members|length }} Mitgl.
                 </span>
               </span>
@@ -94,30 +97,31 @@
             {% endfor %}
           </div>
           {% else %}
-          <p class="text-muted" style="font-size:.85rem;">Keine Gruppen vorhanden.
+          <p class="sys-muted sys-small">Keine Gruppen vorhanden.
             <a href="/admin/gruppen">Gruppen anlegen</a></p>
           {% endif %}
         </div>
 
         <!-- Mitglieder-Auswahl -->
         <div x-show="targetType === 'member'" class="form-group">
-          <label class="form-label" style="font-size:.85rem;">Mitglieder auswaehlen</label>
+          <label class="form-label">Mitglieder auswählen</label>
           {% if members %}
-          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;max-height:220px;overflow-y:auto;">
+          <div class="sys-option sys-scroll-box">
             {% for m in members %}
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0;font-size:.88rem;">
+            <label class="sys-check">
               <input type="checkbox" name="member_id" value="{{ m.id }}">
-              {{ m.lastname }}, {{ m.firstname }}
+              <span>{{ m.lastname }}, {{ m.firstname }}
               {% if m.phone %}
-              <span class="text-muted" style="font-size:.78rem;">{{ m.phone }}</span>
+              <span class="sys-muted sys-small">{{ m.phone }}</span>
               {% else %}
-              <span class="text-muted" style="font-size:.78rem;">(keine Tel.)</span>
+              <span class="sys-muted sys-small">(keine Tel.)</span>
               {% endif %}
+              </span>
             </label>
             {% endfor %}
           </div>
           {% else %}
-          <p class="text-muted" style="font-size:.85rem;">Keine aktiven Mitglieder vorhanden.</p>
+          <p class="sys-muted sys-small">Keine aktiven Mitglieder vorhanden.</p>
           {% endif %}
         </div>
 
@@ -129,79 +133,80 @@
         </div>
 
         <!-- Nachrichtentext -->
-        <div class="form-group" style="margin-top:4px;">
-          <label class="form-label">Nachricht <span style="color:var(--color-danger)">*</span></label>
-          <textarea name="text" class="form-input" required maxlength="500" rows="4"
-                    placeholder="Nachrichtentext (max. 500 Zeichen)"
-                    style="resize:vertical;"></textarea>
+        <div class="form-group">
+          <label class="form-label">Nachricht <span class="sys-danger">*</span></label>
+          <textarea name="text" class="form-input sys-resize-y" required maxlength="500" rows="4"
+                    placeholder="Nachrichtentext (max. 500 Zeichen)"></textarea>
         </div>
 
-        <div style="margin-top:16px;">
+        <div class="sys-row">
           <button type="submit" class="btn btn--primary"
                   {% if not sms_provider_ready %}disabled{% endif %}>
             SMS senden
           </button>
           {% if not sms_provider_ready %}
-          <span class="text-muted" style="font-size:.85rem;margin-left:10px;">SMS-Versand nicht verfuegbar</span>
+          <span class="sys-muted sys-small">SMS-Versand nicht verfügbar</span>
           {% endif %}
         </div>
       </form>
-    </div>
+    </section>
 
     <!-- ── Hinweise ── -->
-    <div>
-      <div class="chart-box" style="margin-bottom:16px;">
-        <h3 style="margin-bottom:10px;">Hinweise</h3>
-        <ul style="margin:0;padding-left:18px;line-height:1.75;color:var(--color-text-muted);font-size:.9rem;">
+    <div class="sys-stack">
+      <section class="sys-card sys-m-0">
+        <div class="sys-card__head"><h2>{{ icon("info-circle") }} Hinweise</h2></div>
+        <ul class="sys-list sys-muted">
           <li>Mitglieder ohne Telefonnummer erhalten keine SMS.</li>
           <li>Bei Gruppen und Mitglieder-Auswahl werden Duplikate (gleiche Nummer) automatisch eliminiert.</li>
           <li>Jeder Versand wird im Protokoll unten aufgezeichnet.</li>
-          <li>Ein konfigurierter SMS-Provider muss verfuegbar sein.</li>
+          <li>Ein konfigurierter SMS-Provider muss verfügbar sein.</li>
         </ul>
-      </div>
-      <div class="chart-box">
-        <h3 style="margin-bottom:10px;">Gruppen verwalten</h3>
-        <p style="font-size:.88rem;color:var(--color-text-muted);margin-bottom:10px;">
-          Gruppen beinhalten Mitglieder und koennen auch fuer den automatischen
+      </section>
+      <section class="sys-card sys-m-0">
+        <div class="sys-card__head"><h2>{{ icon("users-group") }} Gruppen verwalten</h2></div>
+        <p class="sys-muted">
+          Gruppen beinhalten Mitglieder und können auch für den automatischen
           Einsatzinfo-Versand konfiguriert werden.
         </p>
         <a href="/admin/gruppen" class="btn btn--ghost btn--xs">Gruppen verwalten</a>
-      </div>
+      </section>
     </div>
 
   </div>
 
   <!-- ── Protokoll ── -->
-  <div class="admin-section-title" style="margin-top:32px;">
-    Versandprotokoll <small style="font-weight:400;color:var(--color-text-muted)">(letzte 30)</small>
-  </div>
-  {% if sms_logs %}
-  <div style="overflow-x:auto;margin-bottom:24px;">
-    <table class="table-admin" style="min-width:560px;">
-      <thead>
-        <tr>
-          <th style="width:130px;">Zeitpunkt</th>
-          <th style="width:80px;">Art</th>
-          <th>Text</th>
-          <th style="width:80px;">Stichwort</th>
-          <th style="width:100px;text-align:right;">Versendet</th>
-          <th style="width:80px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for entry in sms_logs %}
-        {% include "admin/_sms_log_row.html" %}
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="text-muted" style="margin-bottom:24px;">Noch keine SMS versendet.</p>
-  {% endif %}
+  <section class="sys-card">
+    <div class="sys-card__head">
+      <h2>{{ icon("list-details") }} Versandprotokoll <small class="sys-muted">(letzte 30)</small></h2>
+    </div>
+    {% if sms_logs %}
+    <div class="sys-table-wrap">
+      <table class="sys-table sys-table--responsive">
+        <thead>
+          <tr>
+            <th>Zeitpunkt</th>
+            <th>Art</th>
+            <th>Text</th>
+            <th>Stichwort</th>
+            <th class="sys-number">Versendet</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in sms_logs %}
+          {% include "admin/_sms_log_row.html" %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="sys-muted sys-m-0">Noch keine SMS versendet.</p>
+    {% endif %}
+  </section>
 
   <dialog id="smsLogDetailsModal" class="modal">
     <div class="modal__content" id="smsLogDetailsContent">
-      <div class="modal__body"><p class="text-muted">Details werden geladen...</p></div>
+      <div class="modal__body"><p class="sys-muted">Details werden geladen...</p></div>
     </div>
   </dialog>
 

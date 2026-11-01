@@ -6,24 +6,17 @@
 
 {% block head_extra %}
 {{ super() }}
-<style>
-@media (max-width: 760px) {
-  .push-two-col,
-  .push-kpi-grid { grid-template-columns:1fr !important; }
-}
-</style>
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
 {% endblock %}
 
 {% block admin_content %}
 {% with section_id='alarmierung' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>Push-Nachrichten</h1>
-      <p class="page-header__sub">Abonnements verwalten und Nachrichten manuell senden.</p>
-    </div>
-  </div>
+<div class="sys-page">
+  <header class="sys-hero">
+    <h1>{{ icon("bell") }} Push-Nachrichten</h1>
+    <p class="sys-muted">Abonnements verwalten und Nachrichten manuell senden.</p>
+  </header>
 
   {% if sent is not none %}
   {% if sent|int > 0 %}
@@ -43,34 +36,34 @@
   {% endif %}
 
   {% if not push_enabled %}
-  <div class="alert alert--error" style="margin-bottom:20px;">
+  <div class="alert alert--error">
     Push-Nachrichten sind nicht aktiviert oder VAPID-Schlüssel fehlen.
     Bitte unter <a href="/admin/system-einstellungen">System-Einstellungen</a> konfigurieren.
   </div>
   {% endif %}
 
   <!-- ── Abonnement dieses Geräts ────────────────────────────────── -->
-  <div class="admin-section-title">Push-Abonnement dieses Geräts</div>
-  <div class="chart-box" style="margin-bottom:24px;">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("device-mobile") }} Push-Abonnement dieses Geräts</h2></div>
     {% if is_native_app %}
     {# Native Android-App (Capacitor-WebView): kein ServiceWorker/PushManager
        (WebView-Limitierung), Push läuft hier stattdessen über FCM — siehe
        native-bridge.js::_registerFcmToken(), automatisch bei jedem App-Start
        ausgelöst. Serverseitig geprüft (has_fcm_token), kein JS-Selbstcheck
        nötig/sinnvoll (der würde immer "nicht unterstützt" zeigen). #}
-    <div id="pushStatusArea" style="min-height:36px;">
+    <div id="pushStatusArea" class="sys-status-area">
       {% if has_fcm_token %}
-      <span class="badge-pill badge-pill--green" style="font-size:.85rem;margin-right:8px;">{{ icon("circle-check", size="sm") }} Aktiv</span>
+      <span class="badge-pill badge-pill--green sys-mr-1">{{ icon("circle-check", size="sm") }} Aktiv</span>
       Push-Benachrichtigungen sind für dieses Gerät über die native App (FCM) aktiviert.
       {% else %}
-      <span class="badge-pill badge-pill--gray" style="font-size:.85rem;margin-right:8px;">Inaktiv</span>
+      <span class="badge-pill badge-pill--gray sys-mr-1">Inaktiv</span>
       Noch keine FCM-Registrierung für dieses Gerät erkannt. App neu starten und Benachrichtigungen erlauben.
       {% endif %}
-      <p class="form-hint" style="margin:8px 0 0 0">
+      <p class="form-hint">
         Die native App nutzt Firebase Cloud Messaging (FCM) statt Web-Push, da die Android-WebView-Komponente
         keinen Service-Worker-Push (PushManager) unterstützt.
       </p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+      <div class="sys-actions">
         <a id="registerNativePushButton" class="btn btn--secondary"
            href="https://localhost/about.html">
           Push jetzt registrieren
@@ -81,37 +74,36 @@
         </button>
         {% endif %}
       </div>
-      <p class="form-hint" style="margin:8px 0 0 0">
+      <p class="form-hint">
         Die Registrierung wird auf der lokal in der App gebündelten Seite "Über die App" ausgeführt,
         auf der die Capacitor-Bridge zuverlässig verfügbar ist.
       </p>
-      <div id="nativePushResult" style="display:none;margin-top:12px;"></div>
+      <div id="nativePushResult" class="sys-initially-hidden sys-mt-2"></div>
     </div>
     {% else %}
-    <div id="pushStatusArea" style="min-height:36px;">
-      <span class="text-muted">Prüfe Status…</span>
+    <div id="pushStatusArea" class="sys-status-area">
+      <span class="sys-muted">Prüfe Status…</span>
     </div>
     {% endif %}
-  </div>
+  </section>
 
-  <div class="push-two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+  <div class="sys-grid-2 sys-grid-2--cards">
 
     <!-- ── Nachricht verfassen ── -->
-    <div class="chart-box">
-      <h3 style="margin-bottom:16px;">Nachricht verfassen</h3>
-      <form method="post" action="/admin/push-nachrichten/senden" id="pushForm">
+    <section class="sys-card">
+      <div class="sys-card__head"><h2>{{ icon("bell") }} Nachricht verfassen</h2></div>
+      <form method="post" action="/admin/push-nachrichten/senden" id="pushForm" class="sys-stack">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <div class="form-group">
-          <label class="form-label">Titel <span style="color:var(--color-danger)">*</span></label>
+          <label class="form-label">Titel <span class="sys-danger">*</span></label>
           <input type="text" name="title" class="form-input" required maxlength="100"
                  placeholder="z.B. Übung morgen Abend"
                  {{ tip('Wird als Benachrichtigungstitel angezeigt') }}>
         </div>
         <div class="form-group">
-          <label class="form-label">Text <span style="color:var(--color-danger)">*</span></label>
-          <textarea name="body" class="form-input" required maxlength="300" rows="3"
+          <label class="form-label">Text <span class="sys-danger">*</span></label>
+          <textarea name="body" class="form-input sys-resize-y" required maxlength="300" rows="3"
                     placeholder="z.B. Donnerstag 19:00 Uhr, Anwesenheit erbeten."
-                    style="resize:vertical;"
                     {{ tip('Nachrichteninhalt, max. 300 Zeichen') }}></textarea>
         </div>
         <div class="form-group">
@@ -122,21 +114,20 @@
         </div>
         <div class="form-group">
           <label class="form-label">Empfänger</label>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <div class="sys-stack sys-gap-sm">
+            <label class="sys-check">
               <input type="radio" name="target" value="all" checked onchange="toggleUserSelect()">
               Alle Abonnenten
-              <span class="badge-pill badge-pill--gray" style="font-size:.75rem;">
+              <span class="badge-pill badge-pill--gray sys-small">
                 {{ sub_count }} Gerät{{ 'e' if sub_count != 1 else '' }}
               </span>
             </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <label class="sys-check">
               <input type="radio" name="target" value="user" onchange="toggleUserSelect()"
                      {% if not users_with_subs %}disabled{% endif %}>
               Einzelner Benutzer
             </label>
-            <select name="user_id" id="userSelect" class="form-input" disabled
-                    style="margin-left:20px;max-width:280px;">
+            <select name="user_id" id="userSelect" class="form-input sys-indent sys-select-narrow" disabled>
               {% for u in users_with_subs %}
               <option value="{{ u.id }}">{{ u.display_name or u.username }}</option>
               {% endfor %}
@@ -146,7 +137,7 @@
             </select>
           </div>
         </div>
-        <div style="margin-top:20px;">
+        <div class="sys-row">
           <button type="submit" class="btn btn--primary"
                   {% if not push_enabled %}disabled{% endif %}
                   {{ tip('Sendet sofort an alle ausgewählten Geräte') }}>
@@ -154,110 +145,110 @@
           </button>
         </div>
       </form>
-    </div>
+    </section>
 
     <!-- ── Abonnenten-Übersicht ── -->
-    <div>
-      <div class="chart-box" style="margin-bottom:16px;">
-        <h3 style="margin-bottom:12px;">Aktive Abonnements</h3>
-        <div class="kpi-grid push-kpi-grid" style="padding:0;grid-template-columns:1fr 1fr;">
-          <div class="kpi-card" style="padding:16px 12px;">
-            <div class="kpi-card__value">{{ sub_count }}</div>
-            <div class="kpi-card__label">Geräte gesamt</div>
+    <div class="sys-stack">
+      <section class="sys-card sys-m-0">
+        <div class="sys-card__head"><h2>{{ icon("users") }} Aktive Abonnements</h2></div>
+        <dl class="sys-kpis sys-m-0">
+          <div class="sys-kpi">
+            <dt>Geräte gesamt</dt>
+            <dd>{{ sub_count }}</dd>
           </div>
-          <div class="kpi-card" style="padding:16px 12px;">
-            <div class="kpi-card__value">{{ users_with_subs|length }}</div>
-            <div class="kpi-card__label">Benutzer</div>
+          <div class="sys-kpi">
+            <dt>Benutzer</dt>
+            <dd>{{ users_with_subs|length }}</dd>
           </div>
-        </div>
+        </dl>
         {% if users_with_subs %}
-        <div style="overflow-x:auto;">
-          <table class="table-admin" style="margin-top:12px;">
+        <div class="sys-table-wrap sys-mt-2">
+          <table class="sys-table sys-table--responsive">
             <thead>
-              <tr><th>Benutzer</th><th style="width:90px;text-align:right;">Geräte</th></tr>
+              <tr><th>Benutzer</th><th class="sys-number">Geräte</th></tr>
             </thead>
             <tbody>
               {% for u in users_with_subs %}
               <tr>
-                <td>{{ u.display_name or u.username }}</td>
-                <td style="text-align:right;">{{ u.push_subscriptions|length }}</td>
+                <td data-label="Benutzer">{{ u.display_name or u.username }}</td>
+                <td class="sys-number" data-label="Geräte">{{ u.push_subscriptions|length }}</td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
         {% else %}
-        <p class="text-muted" style="margin-top:8px;">Noch keine aktiven Push-Abonnements.</p>
+        <p class="sys-muted sys-mt-1">Noch keine aktiven Push-Abonnements.</p>
         {% endif %}
-      </div>
+      </section>
 
-      <div class="chart-box">
-        <h3 style="margin-bottom:8px;">Hinweise</h3>
-        <ul style="margin:0;padding-left:18px;line-height:1.7;color:var(--color-text-muted);font-size:.9rem;">
+      <section class="sys-card sys-m-0">
+        <div class="sys-card__head"><h2>{{ icon("info-circle") }} Hinweise</h2></div>
+        <ul class="sys-list sys-muted">
           <li>Benutzer müssen Push-Benachrichtigungen im Browser aktiviert haben.</li>
           <li>Nachrichten werden an alle registrierten Geräte eines Benutzers gesendet.</li>
           <li>Nicht erreichbare Geräte werden stillschweigend übersprungen.</li>
           <li>Jeder Versand — manuell und vom System — wird protokolliert.</li>
         </ul>
-      </div>
+      </section>
     </div>
   </div>
 
   <!-- ── Protokoll ───────────────────────────────────────────────── -->
-  <div class="admin-section-title" style="margin-top:32px;">
-    Protokoll gesendeter Nachrichten
-    <small style="font-weight:400;color:var(--color-text-muted)">(letzte 30)</small>
-  </div>
+  <section class="sys-card">
+    <div class="sys-card__head">
+      <h2>{{ icon("list-details") }} Protokoll gesendeter Nachrichten <small class="sys-muted">(letzte 30)</small></h2>
+    </div>
   {% if push_logs %}
-  <div style="overflow-x:auto;margin-bottom:24px;">
-    <table class="table-admin" style="min-width:600px;">
+  <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead>
         <tr>
-          <th style="width:140px;">Zeitpunkt</th>
+          <th>Zeitpunkt</th>
           <th>Titel</th>
           <th>Text</th>
-          <th style="width:130px;">Quelle</th>
-          <th style="width:210px;text-align:right;">Zustellung</th>
+          <th>Quelle</th>
+          <th class="sys-number">Zustellung</th>
         </tr>
       </thead>
       <tbody>
         {% for entry in push_logs %}
         <tr>
-          <td style="white-space:nowrap;color:var(--color-text-muted);font-size:.85rem;">
+          <td class="sys-nowrap sys-muted sys-small" data-label="Zeitpunkt">
             {{ (entry.sent_at|local).strftime('%d.%m.%Y %H:%M') }}
           </td>
-          <td><strong>{{ entry.title }}</strong></td>
-          <td style="color:var(--color-text-muted);font-size:.9rem;">
+          <td data-label="Titel"><strong>{{ entry.title }}</strong></td>
+          <td class="sys-muted sys-small" data-label="Text">
             {{ entry.body[:80] }}{% if entry.body|length > 80 %}…{% endif %}
           </td>
-          <td>
+          <td data-label="Quelle">
             {% if entry.source == 'system' %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.75rem;">System</span>
+              <span class="badge-pill badge-pill--gray sys-small">System</span>
             {% elif entry.source == 'admin_all' %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.75rem;">Admin (Alle)</span>
+              <span class="badge-pill badge-pill--gray sys-small">Admin (Alle)</span>
             {% elif entry.source == 'admin_user' %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.75rem;">
+              <span class="badge-pill badge-pill--gray sys-small">
                 Admin › {{ entry.target_user.display_name if entry.target_user else '–' }}
               </span>
             {% else %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.75rem;">{{ entry.source }}</span>
+              <span class="badge-pill badge-pill--gray sys-small">{{ entry.source }}</span>
             {% endif %}
           </td>
-          <td style="text-align:right;">
+          <td class="sys-number" data-label="Zustellung">
             {% set fcm = fcm_stats[entry.id] %}
-            <div>Web-Push: {{ entry.sent_count }}<span class="text-muted">/{{ entry.total_count }}</span></div>
-            <div>FCM: {{ fcm.success }}<span class="text-muted">/{{ fcm.total }}</span></div>
+            <div>Web-Push: {{ entry.sent_count }}<span class="sys-muted">/{{ entry.total_count }}</span></div>
+            <div>FCM: {{ fcm.success }}<span class="sys-muted">/{{ fcm.total }}</span></div>
             {% if entry.source in ('einsatz_alarm', 'fcm_alarm_test', 'fcm_push_test') %}
-            <div>Zugestellt: {{ fcm.delivered }}<span class="text-muted">/{{ fcm.total }}</span></div>
+            <div>Zugestellt: {{ fcm.delivered }}<span class="sys-muted">/{{ fcm.total }}</span></div>
             {% else %}
-            <div {{ tip('Zustellbestätigung nur für Einsatzalarme und Server-Tests') }}>Zugestellt: <span class="text-muted">–</span></div>
+            <div {{ tip('Zustellbestätigung nur für Einsatzalarme und Server-Tests') }}>Zugestellt: <span class="sys-muted">–</span></div>
             {% endif %}
             {% if fcm.failures %}
-            <details style="margin-top:6px;text-align:left;">
-              <summary style="cursor:pointer;color:var(--color-danger);">
+            <details class="sys-details sys-left">
+              <summary class="sys-danger">
                 {{ fcm.failures|length }} FCM-Fehler
               </summary>
-              <ul style="margin:6px 0 0 18px;padding:0;font-size:.8rem;">
+              <ul class="sys-list sys-small">
                 {% for delivery in fcm.failures %}
                 <li>
                   {% if delivery.user %}{{ delivery.user.display_name or delivery.user.username }}: {% endif %}
@@ -276,8 +267,9 @@
     </table>
   </div>
   {% else %}
-  <p class="text-muted" style="margin-bottom:24px;">Noch keine gesendeten Nachrichten.</p>
+  <p class="sys-muted sys-m-0">Noch keine gesendeten Nachrichten.</p>
   {% endif %}
+  </section>
 
 </div>
 {% endblock %}
@@ -379,7 +371,7 @@ async function testPush() {
 (async function () {
   const area = document.getElementById('pushStatusArea');
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    area.innerHTML = '<span class="text-muted">Push wird von diesem Browser nicht unterstützt (kein Service-Worker oder PushManager).</span>';
+    area.innerHTML = '<span class="sys-muted">Push wird von diesem Browser nicht unterstützt (kein Service-Worker oder PushManager).</span>';
     return;
   }
   // Alle SW-Registrierungen prüfen (scope-unabhängig, kein ewiges Warten)
@@ -400,7 +392,7 @@ async function testPush() {
     }
   } catch { swReg = null; }
   if (!swReg) {
-    area.innerHTML = '<span class="text-muted">Service-Worker nicht verfügbar – Push kann nicht geprüft werden. Seite neu laden und erneut versuchen.</span>';
+    area.innerHTML = '<span class="sys-muted">Service-Worker nicht verfügbar – Push kann nicht geprüft werden. Seite neu laden und erneut versuchen.</span>';
     return;
   }
   const existing = await swReg.pushManager.getSubscription().catch(() => null);
@@ -408,20 +400,20 @@ async function testPush() {
 
   if (existing) {
     area.innerHTML =
-      '<span class="badge-pill badge-pill--green" style="font-size:.85rem;margin-right:8px;">' + ecpIcon('circle-check', {size: 'sm'}) + ' Aktiv</span>'
+      '<span class="badge-pill badge-pill--green sys-mr-1">' + ecpIcon('circle-check', {size: 'sm'}) + ' Aktiv</span>'
       + 'Push-Benachrichtigungen sind für dieses Gerät aktiviert.'
-      + ' <button class="btn btn--primary btn--xs" style="margin-left:8px;" onclick="testPush()">Test senden</button>'
-      + ' <button class="btn btn--ghost btn--xs" style="margin-left:4px;" onclick="unsubscribePush()">Abonnement aufheben</button>'
-      + '<div id="pushTestResult" style="margin-top:8px;display:none;"></div>';
+      + ' <button class="btn btn--primary btn--xs sys-ml-1" onclick="testPush()">Test senden</button>'
+      + ' <button class="btn btn--ghost btn--xs sys-ml-1" onclick="unsubscribePush()">Abonnement aufheben</button>'
+      + '<div id="pushTestResult" class="sys-initially-hidden sys-mt-1"></div>';
   } else if (perm === 'denied') {
     area.innerHTML =
-      '<span class="badge-pill badge-pill--red" style="font-size:.85rem;margin-right:8px;">Blockiert</span>'
+      '<span class="badge-pill badge-pill--red sys-mr-1">Blockiert</span>'
       + 'Benachrichtigungen sind im Browser blockiert. Bitte in den Browser-Einstellungen für diese Seite erlauben.';
   } else {
     area.innerHTML =
-      '<span class="badge-pill badge-pill--gray" style="font-size:.85rem;margin-right:8px;">Inaktiv</span>'
+      '<span class="badge-pill badge-pill--gray sys-mr-1">Inaktiv</span>'
       + 'Dieses Gerät empfängt keine Push-Nachrichten.'
-      + ' <button class="btn btn--primary btn--xs" style="margin-left:8px;" onclick="subscribePush()">Aktivieren</button>';
+      + ' <button class="btn btn--primary btn--xs sys-ml-1" onclick="subscribePush()">Aktivieren</button>';
   }
 })();
 {% endif %}
@@ -430,7 +422,7 @@ async function subscribePush() {
   const area = document.getElementById('pushStatusArea');
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') {
-    area.innerHTML = '<span class="text-muted">Benachrichtigungen wurden nicht erlaubt.</span>';
+    area.innerHTML = '<span class="sys-muted">Benachrichtigungen wurden nicht erlaubt.</span>';
     return;
   }
   try {

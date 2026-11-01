@@ -313,3 +313,43 @@ def test_verify_does_not_redirect_to_secret_page(mfa_env):
     assert "data:image/png" not in response.text and "Manueller Schluessel" not in response.text
     assert db.get(AdminTotp, user.id) is None
     assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("path,key,control", [
+    ("/mfa/global", "admin_2fa_enabled", "mfa-enabled"),
+    ("/admin/system-einstellungen/admin-mcp", "admin_mcp_enabled", "mcp-enabled"),
+    ("/admin/system-einstellungen/admin-mcp/reparatur", "admin_repair_enabled", "repair-enabled"),
+])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_settings_switch_form_roundtrip(request, path, key, control, enabled):
+    import re
+    from urllib.parse import urlencode
+
+    db, user, _, client = request.getfixturevalue("mfa_env")
+    activate(db, user)
+    if key != "admin_2fa_enabled":
+        db.add(SystemSettings(key=key, value="true"))
+        db.commit()
+    set_session(client, sign_session(user.id, mfa_at=int(time.time())))
+    page = client.get("/admin/system-einstellungen")
+    assert page.status_code == 200
+    form = re.search(r'<form\b[^>]*action="' + re.escape(path) + r'"[^>]*>(.*?)</form>', page.text, re.S)
+    assert form is not None
+    hidden = '<input type="hidden" name="enabled" value="false">'
+    checkbox = re.search(r'<input\b[^>]*id="' + control + r'"[^>]*>', form[1])
+    assert checkbox is not None and 'role="switch"' in checkbox[0] and 'checked' in checkbox[0]
+    assert 'name="enabled" value="true"' in checkbox[0]
+    assert form[1].index(hidden) < checkbox.start()
+    # Browser-Reihenfolge: ausgeschaltet nur false, eingeschaltet false gefolgt von true.
+    fields = [("_csrf", client.cookies["ec_csrf"]), ("enabled", "false")]
+    if enabled:
+        fields.append(("enabled", "true"))
+    response = client.post(path, content=urlencode(fields),
+                           headers={"Content-Type": "application/x-www-form-urlencoded"}, follow_redirects=False)
+    assert response.status_code == 303, response.text
+    db.expire_all()
+    assert db.get(SystemSettings, key).value == str(enabled).lower()
+    if key != "admin_2fa_enabled" or enabled:
+        updated = client.get("/admin/system-einstellungen")
+        checkbox = re.search(r'<input\b[^>]*id="' + control + r'"[^>]*>', updated.text)
+        assert checkbox is not None and ('checked' in checkbox[0]) == enabled

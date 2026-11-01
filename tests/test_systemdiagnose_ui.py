@@ -211,4 +211,4 @@ def test_repair_switches_dry_run_and_stepup(client, cockpit):
         run = db.get(AdminRepairRun, run_id)
         assert run.status == "simuliert"
         assert run.simulation_hash
-    assert "Bestaetigung" in response.text or "bestaetigen" in response.text
+    assert "Bestätigung" in response.text or "bestätigen" in response.text

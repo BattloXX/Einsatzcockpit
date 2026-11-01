@@ -3,89 +3,109 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Administration – Dashboard{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block admin_breadcrumb %}
 {{ breadcrumb([{'label': 'Dashboard'}]) }}
 {% endblock %}
 
 {% block admin_content %}
-<div class="page-header">
-  <div>
-    <h1>Dashboard</h1>
-    <p class="page-header__sub">Übersicht & Kennzahlen für {{ user.org.name if user.org else 'das System' }}</p>
-  </div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("layout-dashboard") }} Dashboard</h1>
+  <p class="sys-muted">Übersicht &amp; Kennzahlen für {{ user.org.name if user.org else 'das System' }}</p>
+</header>
+
+<div class="sys-kpis sys-mb-2">
+  <dl class="sys-kpi" {{ tip('Einsätze mit Status "active"') }}>
+    <dt>Aktive Einsätze</dt>
+    <dd class="sys-kpi__value">{{ kpis.active_incidents }}</dd>
+  </dl>
+  <dl class="sys-kpi" {{ tip('Alle jemals erfassten Einsätze') }}>
+    <dt>Einsätze gesamt</dt>
+    <dd class="sys-kpi__value">{{ kpis.total_incidents }}</dd>
+  </dl>
+  <dl class="sys-kpi" {{ tip('Aktive Mannschaftsmitglieder') }}>
+    <dt>Mitglieder</dt>
+    <dd class="sys-kpi__value">{{ kpis.members }}</dd>
+  </dl>
+  <dl class="sys-kpi" {{ tip('Aktive Ressourcen in den Stammdaten (eigene + Fremdorg)') }}>
+    <dt>Ressourcen</dt>
+    <dd class="sys-kpi__value">{{ kpis.vehicles }}</dd>
+  </dl>
+  <dl class="sys-kpi" {{ tip('Login-Benutzer mit Status aktiv') }}>
+    <dt>Benutzer</dt>
+    <dd class="sys-kpi__value">{{ kpis.users }}</dd>
+  </dl>
 </div>
 
-<div class="kpi-grid" style="padding:0; margin-bottom:24px;">
-  <div class="kpi-card" {{ tip('Einsätze mit Status "active"') }}>
-    <div class="kpi-card__value">{{ kpis.active_incidents }}</div>
-    <div class="kpi-card__label">Aktive Einsätze</div>
+{% set nav = admin_navigation(request, user) %}
+<section class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ icon("layout-dashboard") }} Verwaltung auf einen Blick</h2>
+    <a href="{{ wiki_url('Administration-Navigation') }}" target="_blank" rel="noopener" class="btn btn-sm">Menü erklärt {{ icon("external-link", size="xs") }}</a>
   </div>
-  <div class="kpi-card" {{ tip('Alle jemals erfassten Einsätze') }}>
-    <div class="kpi-card__value">{{ kpis.total_incidents }}</div>
-    <div class="kpi-card__label">Einsätze gesamt</div>
-  </div>
-  <div class="kpi-card" {{ tip('Aktive Mannschaftsmitglieder') }}>
-    <div class="kpi-card__value">{{ kpis.members }}</div>
-    <div class="kpi-card__label">Mitglieder</div>
-  </div>
-  <div class="kpi-card" {{ tip('Aktive Ressourcen in den Stammdaten (eigene + Fremdorg)') }}>
-    <div class="kpi-card__value">{{ kpis.vehicles }}</div>
-    <div class="kpi-card__label">Ressourcen</div>
-  </div>
-  <div class="kpi-card" {{ tip('Login-Benutzer mit Status aktiv') }}>
-    <div class="kpi-card__value">{{ kpis.users }}</div>
-    <div class="kpi-card__label">Benutzer</div>
-  </div>
-</div>
-
-<div class="chart-box" style="margin-bottom:24px; padding:20px 24px;">
-  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-    <h3 style="margin:0;">Dokumentation & Hilfe</h3>
-    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki"
-       target="_blank" rel="noopener"
-       class="btn btn-sm"
-       style="font-size:.8rem;">Vollständiges Wiki {{ icon("external-link", size="xs") }}</a>
-  </div>
-  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
-    {% set wiki_links = [
-      ('book', 'Erste Schritte', 'Anwender-Erste-Schritte'),
-      ('urgent', 'Einsatz starten', 'Anwender-Einsatz-starten'),
-      ('folders', 'Kanban-Board', 'Anwender-Kanban-Board-bedienen'),
-      ('lungs', 'Atemschutz', 'Anwender-Atemschutzueberwachung'),
-      ('home-x', 'Großschadenslage', 'Anwender-Grosschadenslage'),
-      ('map', 'Lagekarte GSL', 'Anwender-Grosschadenslage-Karte'),
-      ('target', 'Taktische Karte', 'Anwender-Taktische-Lagekarte'),
-      ('cloud-rain', 'Wetter', 'Anwender-Wetter'),
-      ('speakerphone', 'Übergreifende Meldungen', 'Anwender-Uebergreifende-Meldungen'),
-      ('users', 'GSL-Ressourcen', 'Anwender-GSL-Ressourcenverwaltung'),
-      ('package', 'Geräteverleih', 'Anwender-Geraeteverleih'),
-      ('drone', 'Drohne / UAS', 'Anwender-Drohne-UAS'),
-      ('key', 'Single Sign-On', 'Administration-Single-Sign-On'),
-      ('tools', 'Installation', 'Installation-App-Installation'),
-      ('message', 'Fehler & Wünsche', 'Feedback-und-Support'),
-    ] %}
-    {% for icon_name, label, slug in wiki_links %}
-    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki/{{ slug }}"
-       target="_blank" rel="noopener"
-       style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;
-              background:var(--surface-high);border:1px solid var(--border);
-              color:var(--on-surface);text-decoration:none;font-size:.88rem;
-              transition:background .12s,border-color .12s;"
-       onmouseover="this.style.background='var(--surface-highest)';this.style.borderColor='var(--border-focus,#4a6fa5)'"
-       onmouseout="this.style.background='var(--surface-high)';this.style.borderColor='var(--border)'">
-      <span style="display:inline-flex;align-items:center;flex-shrink:0;">{{ icon(icon_name, size="sm") }}</span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ label }}</span>
-      <span style="margin-left:auto;font-size:.72rem;color:var(--text-muted);flex-shrink:0;">{{ icon("external-link", size="xs") }}</span>
+  <p class="sys-muted">Pro Fachgebiet ein Menüpunkt, die Unterseiten sind Tabs im Inhalt. Angezeigt wird, was Ihre Rolle und die aktivierten Module erlauben.</p>
+  {% for gruppe in nav.gruppen %}{% if gruppe.eintraege %}
+  <h3 class="sys-section-title">{{ gruppe.titel }}</h3>
+  <div class="sys-link-tiles">
+    {% for eintrag in gruppe.eintraege %}
+    <a href="{{ eintrag.href }}"{% if eintrag.neues_fenster %} target="_blank" rel="noopener"{% endif %} class="sys-link-tile"{% if eintrag.tooltip %} {{ tip(eintrag.tooltip) }}{% endif %}>
+      <span class="sys-no-shrink">{% if eintrag.icon_art == 'modul_icon' %}{{ modul_icon(eintrag.icon, size="sm") }}{% elif eintrag.icon_art == 'text' %}{{ eintrag.icon }}{% else %}{{ icon(eintrag.icon, size="sm") }}{% endif %}</span>
+      <span class="sys-link-tile__label">{{ eintrag.label }}</span>
+      {% if eintrag.tabs|length > 1 %}<span class="sys-ml-auto sys-muted sys-no-shrink">{{ eintrag.tabs|length }} Tabs</span>{% endif %}
     </a>
     {% endfor %}
   </div>
-</div>
+  {% endif %}{% endfor %}
+</section>
 
-<div class="charts-grid" style="padding:0;">
-  <div class="chart-box">
-    <h3>Letzte Einsätze</h3>
+<section class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ icon("rocket") }} Einrichtung in sinnvoller Reihenfolge</h2>
+    <a href="{{ wiki_url('Installation-Erst-Setup') }}" target="_blank" rel="noopener" class="btn btn-sm">Erst-Setup {{ icon("external-link", size="xs") }}</a>
+  </div>
+  <ol class="sys-steps">
+    {% for schritt in einrichtung %}
+    <li class="sys-step">
+      <div>
+        <a href="{{ schritt.href }}"><strong>{{ schritt.titel }}</strong></a>
+        <p class="sys-muted sys-m-0">{{ schritt.beschreibung }}</p>
+      </div>
+      <a href="{{ wiki_url(schritt.wiki) }}" target="_blank" rel="noopener" class="sys-muted sys-nowrap" aria-label="Wiki: {{ schritt.titel }}">Wiki {{ icon("external-link", size="xs") }}</a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section class="sys-card">
+  <div class="sys-card__head">
+    <h2>{{ icon("book") }} Dokumentation &amp; Hilfe</h2>
+    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki" target="_blank" rel="noopener" class="btn btn-sm">Vollständiges Wiki {{ icon("external-link", size="xs") }}</a>
+  </div>
+  {% for bereich in wiki_bereiche %}
+  <h3 class="sys-section-title">{{ icon(bereich.icon, size="sm") }} {{ bereich.titel }}</h3>
+  <div class="sys-link-tiles">
+    {% for link in bereich.links %}
+    <a href="{{ wiki_url(link.slug) }}" target="_blank" rel="noopener" class="sys-link-tile">
+      <span class="sys-no-shrink">{{ icon(link.icon, size="sm") }}</span>
+      <span class="sys-link-tile__label">{{ link.label }}</span>
+      <span class="sys-ml-auto sys-muted sys-no-shrink">{{ icon("external-link", size="xs") }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+
+<div class="sys-grid sys-grid--top">
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("urgent") }} Letzte Einsätze</h2></div>
     {% if recent_incidents %}
-    <table class="table-admin table-admin--cards">
+    <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead>
         <tr><th>Datum</th><th>Stichwort</th><th>Adresse</th><th>Status</th></tr>
       </thead>
@@ -97,35 +117,37 @@
           <td data-label="Adresse">{{ i.address_street or '' }} {{ i.address_no or '' }}, {{ i.address_city or '' }}</td>
           <td data-label="Status">
             {% if i.status == 'active' %}
-              <span class="badge-pill badge-pill--red">aktiv</span>
+              <span class="sys-pill sys-status--fail">aktiv</span>
             {% else %}
-              <span class="badge-pill badge-pill--gray">{{ i.status }}</span>
+              <span class="sys-pill">{{ i.status }}</span>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
-    <p class="text-muted">Noch keine Einsätze.</p>
+    <div class="sys-empty">Noch keine Einsätze.</div>
     {% endif %}
-  </div>
+  </section>
 
-  <div class="chart-box">
-    <h3>Letzte Aktionen (Audit)</h3>
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("list-details") }} Letzte Aktionen (Audit)</h2></div>
     {% if recent_audit %}
-    <ul class="change-list">
+    <ul class="sys-list-tight">
       {% for a in recent_audit %}
-      <li class="change-list__item">
-        <span class="text-muted">{{ (a.created_at|local).strftime('%d.%m. %H:%M') }}</span>
+      <li>
+        <span class="sys-muted">{{ (a.created_at|local).strftime('%d.%m. %H:%M') }}</span>
         — {{ a.action }}
-        {% if a.entity_type %}<span class="text-muted">({{ a.entity_type }} #{{ a.entity_id }})</span>{% endif %}
+        {% if a.entity_type %}<span class="sys-muted">({{ a.entity_type }} #{{ a.entity_id }})</span>{% endif %}
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="text-muted">Noch keine Audit-Einträge.</p>
+    <div class="sys-empty">Noch keine Audit-Einträge.</div>
     {% endif %}
-  </div>
+  </section>
+</div>
 </div>
 {% endblock %}

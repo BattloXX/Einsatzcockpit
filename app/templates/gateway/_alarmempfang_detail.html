@@ -1,5 +1,5 @@
-<article id="alarm-detail-inhalt" class="gwx-panel">
-  <div class="gwx-panel__hd"><div>
+<article id="alarm-detail-inhalt" class="sys-card">
+  <div class="sys-card__head"><div>
       <h2 class="gwx-panel__t">{{ icon('file-text', size='md') }} Alarmempfang #{{ ingest.id }}</h2>
       <div class="gwx-panel__sub">Originaltext, Verarbeitung und Parserfelder dieses Empfangs.</div>
     </div></div>
@@ -7,16 +7,16 @@
     <p>{{ ingest.received_at|local_datetime_sec }} | {{ ingest.process_status }} | Version {{ ingest.version_no or '-' }}</p>
     <p>Versuche: {{ ingest.process_attempts or 0 }} | Letzter Versuch: {{ ingest.parsed_at|local_datetime_sec or '-' }} | Verarbeitet: {{ ingest.applied_at|local_datetime_sec or '-' }}</p>
     {% if ingest.einsatz_id %}<p><a href="/einsatz/{{ ingest.einsatz_id }}">Einsatz #{{ ingest.einsatz_id }}</a></p>{% endif %}
-    {% if ingest.process_error %}<p class="gwx-alert gwx-alert--err">{{ ingest.process_error }}</p>{% endif %}
-    <div class="gwx-btnrow">
+    {% if ingest.process_error %}<p class="alert alert--error">{{ ingest.process_error }}</p>{% endif %}
+    <div class="sys-actions">
       <form hx-post="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}/neu-verarbeiten" hx-target="#alarm-detail-inhalt" hx-swap="outerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="gwx-btn gwx-btn--primary" type="submit" {{ 'disabled' if ingest.process_status == 'processing' else '' }}>Neu verarbeiten</button>
+        <button class="btn btn--primary" type="submit" {{ 'disabled' if ingest.process_status == 'processing' else '' }}>Neu verarbeiten</button>
       </form>
       {% if ingest.process_status in ['needs_review', 'error'] %}
       <form hx-post="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}/geprueft" hx-target="#alarm-detail-inhalt" hx-swap="outerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="gwx-btn" type="submit">Als geprüft markieren</button>
+        <button class="btn btn--secondary" type="submit">Als geprüft markieren</button>
       </form>
       {% if not ingest.einsatz_id %}<p>Ohne verknüpften Einsatz bleibt der Status erhalten; die Prüfung wird im Audit vermerkt.</p>{% endif %}
       {% endif %}

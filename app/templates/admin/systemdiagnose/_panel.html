@@ -1,8 +1,16 @@
-{% macro tree(value) %}
-{% if value is mapping %}<dl>{% for key,child in value.items() %}<dt>{{ key }}</dt><dd>{{ tree(child) }}</dd>{% endfor %}</dl>
-{% elif value is sequence and value is not string %}<div>{% for child in value %}<div class="diag-card">{{ tree(child) }}</div>{% else %}-{% endfor %}</div>
-{% elif value is string and github_date(value) %}{{ github_date(value)|local_datetime }}
+{% macro kv(value) %}
+{% if value is mapping %}
+<dl class="sys-kv">{% for key,child in value.items() %}<div><dt>{{ key }}</dt><dd>{{ kv(child) }}</dd></div>{% else %}<div><dt>Daten</dt><dd>Keine Angaben</dd></div>{% endfor %}</dl>
+{% elif value is sequence and value is not string %}
+<ul class="sys-list">{% for child in value %}<li>{{ kv(child) }}</li>{% else %}<li>Keine Einträge</li>{% endfor %}</ul>
+{% elif value is sameas true %}Ja
+{% elif value is sameas false %}Nein
+{% elif value is string and github_date is defined and github_date(value) %}{{ github_date(value)|local_datetime }}
 {% else %}{{ value if value is not none else '-' }}{% endif %}
+{% endmacro %}
+{% macro status_pill(status) %}
+{% set color = 'gruen' if status == 'ok' else 'rot' if status in ['fail','kritisch'] else 'gelb' if status == 'warn' else 'grau' %}
+<span class="sys-pill {{ 'sys-status--ok' if status == 'ok' else 'sys-status--fail' if status in ['fail','kritisch'] else 'sys-status--warn' if status == 'warn' else '' }}">{{ status_dot(color, status) }} {{ status }}</span>
 {% endmacro %}
 {% macro csrf() %}<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% endmacro %}
 {% macro post(action, label, fields={}) %}
@@ -12,56 +20,153 @@
 {% if section == 'geraete' %}
 {% include 'admin/systemdiagnose/_geraete.html' %}
 {% elif section == 'gesamt' %}
-<h2>Gesamtzustand: {{ summary.status }}</h2>
-<p>{{ status_dot('gruen' if summary.status == 'ok' else 'rot' if summary.status == 'fail' else 'gelb', summary.status) }} Ampel: {{ summary.status }}</p>
-<p>Version {{ summary.evidence.version.APP_VERSION }} / Commit {{ summary.evidence.version.GIT_SHA }} / Build {{ github_date(summary.evidence.version.BUILD_TIME)|local_datetime }}</p>
+<section class="sys-hero" aria-label="Gesamtzustand">
+<div class="sys-hero__head">
+<h2>{{ icon("traffic-lights") }} Gesamtzustand</h2>
+{{ status_pill(summary.status) }}
+</div>
 <p>GitHub-Abgleich: {{ summary.github_zugang.status }}. Details unter GitHub-CI.</p>
-<div class="diag-grid">{% for name,part in parts.items() %}<article class="diag-card"><h3>{{ {'admin_worker_pruefen':'Worker / Leader','admin_redis_pruefen':'Redis','admin_datenbank_pruefen':'MariaDB','admin_gateway_pruefen':'Gateway / Alarmierung','admin_dienste_pruefen':'Dienste'}[name] }}</h3><p>Status: {{ part.status }}</p><pre>{{ part.evidence|tojson(indent=2) }}</pre></article>{% endfor %}</div>
+<dl class="sys-kpis">
+<div class="sys-kpi"><dt>Version</dt><dd>{{ summary.evidence.version.APP_VERSION }}</dd></div>
+<div class="sys-kpi"><dt>Commit</dt><dd>{{ summary.evidence.version.GIT_SHA }}</dd></div>
+<div class="sys-kpi"><dt>Build</dt><dd>{{ github_date(summary.evidence.version.BUILD_TIME)|local_datetime }}</dd></div>
+</dl>
+</section>
+{% set part_labels = {'admin_worker_pruefen':'Worker / Leader','admin_redis_pruefen':'Redis','admin_datenbank_pruefen':'MariaDB','admin_gateway_pruefen':'Gateway / Alarmierung','admin_dienste_pruefen':'Dienste'} %}
+{% set part_icons = {'admin_worker_pruefen':'users-group','admin_redis_pruefen':'bolt','admin_datenbank_pruefen':'server','admin_gateway_pruefen':'antenna','admin_dienste_pruefen':'settings'} %}
+<div class="sys-grid">
+{% for name,part in parts.items() %}
+<article class="sys-card">
+<header class="sys-card__head"><h3>{{ icon(part_icons[name]) }} {{ part_labels[name] }}</h3>{{ status_pill(part.status) }}</header>
+{{ kv(part.evidence) }}
+<details class="sys-details"><summary>Rohdaten</summary><pre>{{ part.evidence|tojson(indent=2) }}</pre></details>
+</article>
+{% endfor %}
+</div>
 {% elif section == 'diagnose' %}
-<h2>Diagnoselauf</h2>
-{% if throttled %}<p class="alert alert--warn">Einsatzdrosselung aktiv: aufwendige Checks werden uebersprungen. Geplante Laeufe werden bis zu 6 Stunden verschoben, danach nur leichte Checks.</p>{% endif %}
-<form hx-post="/admin/systemdiagnose/start" hx-target="#diag-panel" method="post" class="diag-wrap">{{ csrf() }}
+<section class="sys-card">
+<header class="sys-card__head"><h2>{{ icon("clipboard-check") }} Diagnoselauf</h2><span class="sys-pill">Manuelle Prüfung</span></header>
+{% if throttled %}<p class="alert alert--warn">Einsatzdrosselung aktiv: aufwendige Checks werden übersprungen. Geplante Läufe werden bis zu 6 Stunden verschoben, danach nur leichte Checks.</p>{% endif %}
+<form hx-post="/admin/systemdiagnose/start" hx-target="#diag-panel" method="post" class="sys-toolbar">{{ csrf() }}
 <label>Umfang <select name="umfang" class="form-input"><option value="schnell">schnell (leicht)</option><option value="voll">voll</option></select></label>
-<label>Pruefung <select name="check" class="form-input"><option value="">Gesamtdiagnose</option>{% for id,c in checks.items() %}<option value="{{ id }}">{{ id }} ({{ c.kosten }})</option>{% endfor %}</select></label>
+<label>Prüfung <select name="check" class="form-input"><option value="">Gesamtdiagnose</option>{% for id,c in checks.items() %}<option value="{{ id }}">{{ id }} ({{ c.kosten }})</option>{% endfor %}</select></label>
 <button type="submit" class="btn btn--primary">Diagnose starten</button></form>
-{% if run %}<article class="diag-card" {% if run.status in ['queued','running'] %}hx-get="/admin/systemdiagnose/teil/diagnose" hx-trigger="every 2s" hx-target="#diag-panel"{% endif %}>
-<h3>Lauf #{{ run.id }}: {{ run.status }}</h3><p>{{ run.created_at|local_datetime }} / {{ run.quelle }}</p>
-<progress value="{{ run.fortschritt.get('erledigt',0) }}" max="{{ run.fortschritt.get('gesamt',1) or 1 }}"></progress>
-<p>Schweregrade: {{ run.fortschritt.get('schweregrade',{})|tojson }}</p>
-<p>{{ run.fortschritt.get('erledigt',0) }} / {{ run.fortschritt.get('gesamt',0) }} Pruefungen</p>
-{% for id in run.checks %}<p>{{ id }}: {{ run.fortschritt.get('checks',{}).get(id,{}).get('status','wartend') }}{% if id in run.fortschritt.get('uebersprungen',{}) %} - wegen Einsatz oder Zeitbudget uebersprungen{% endif %}</p>{% endfor %}
-</article>{% endif %}
-<details><summary>Checkliste und Kosten</summary>{% for id,c in checks.items() %}<p>{{ c.beschreibung }} ({{ id }}): {{ c.kosten }}</p>{% endfor %}</details>
+</section>
+{% if run %}
+<article class="sys-card" {% if run.status in ['queued','running'] %}hx-get="/admin/systemdiagnose/teil/diagnose" hx-trigger="every 2s" hx-target="#diag-panel"{% endif %}>
+<header class="sys-card__head"><h3>{{ icon("player-play") }} Lauf #{{ run.id }}</h3><span class="sys-pill">{{ run.status }}</span></header>
+<dl class="sys-kv"><div><dt>Gestartet</dt><dd>{{ run.created_at|local_datetime }}</dd></div><div><dt>Quelle</dt><dd>{{ run.quelle }}</dd></div></dl>
+<progress class="sys-progress" aria-label="Fortschritt des Diagnoselaufs" value="{{ run.fortschritt.get('erledigt',0) }}" max="{{ run.fortschritt.get('gesamt',1) or 1 }}"></progress>
+<p>{{ run.fortschritt.get('erledigt',0) }} / {{ run.fortschritt.get('gesamt',0) }} Prüfungen</p>
+<div class="sys-pills" aria-label="Schweregrade">
+{% for severity,count in run.fortschritt.get('schweregrade',{}).items() %}<span class="sys-pill {{ 'sys-status--fail' if severity in ['fail','kritisch'] else 'sys-status--warn' if severity == 'warn' else '' }}">{{ severity }}: {{ count }}</span>{% else %}<span class="sys-muted">Noch keine Schweregrade gemeldet.</span>{% endfor %}
+</div>
+<div class="sys-table-wrap" role="region" aria-label="Prüfstatus" tabindex="0">
+<table class="sys-table"><caption>Prüfstatus des Laufs</caption><thead><tr><th scope="col">ID</th><th scope="col">Status</th><th scope="col">Hinweis</th></tr></thead><tbody>
+{% for id in run.checks %}<tr><th scope="row">{{ id }}</th><td>{{ status_pill(run.fortschritt.get('checks',{}).get(id,{}).get('status','wartend')) }}</td><td>{% if id in run.fortschritt.get('uebersprungen',{}) %}Wegen Einsatz oder Zeitbudget übersprungen{% else %}-{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+</div>
+</article>
+{% else %}<div class="sys-empty">{{ icon("clipboard-list") }} Noch kein Diagnoselauf vorhanden.</div>{% endif %}
+<details class="sys-card sys-details"><summary>Checkliste und Kosten</summary>
+<div class="sys-table-wrap" role="region" aria-label="Checkliste und Kosten" tabindex="0">
+<table class="sys-table"><caption>Verfügbare Prüfungen</caption><thead><tr><th scope="col">ID</th><th scope="col">Beschreibung</th><th scope="col">Kosten</th></tr></thead><tbody>
+{% for id,c in checks.items() %}<tr><th scope="row">{{ id }}</th><td>{{ c.beschreibung }}</td><td><span class="sys-pill">{{ c.kosten }}</span></td></tr>{% endfor %}
+</tbody></table>
+</div>
+</details>
 {% elif section == 'befunde' %}
-<h2>Integritaetsbefunde</h2>
-<form hx-get="/admin/systemdiagnose/teil/befunde" hx-target="#diag-panel" class="diag-wrap">
-{% for key, choices in [('modul',modules),('schweregrad',['info','warn','fail','kritisch']),('status',['offen','behoben','unterdrueckt'])] %}<label>{{ key }}<select name="{{ key }}" class="form-input"><option value="">Alle</option>{% for value in choices %}<option {% if request.query_params.get(key) == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>{% endfor %}<button type="submit" class="btn btn--secondary">Filtern</button></form>
-<div class="diag-grid">{% for f in findings %}<article class="diag-card"><h3>#{{ f.id }} {{ safe_title(f.titel) }}</h3><p>{{ f.modul if f.modul in modules else 'system' }} / {{ f.schweregrad }} / {{ f.status }}</p><p>Zuletzt {{ f.last_seen_at|local_datetime }} / Anzahl {{ f.occurrences }}</p>
+<section class="sys-card">
+<header class="sys-card__head"><h2>{{ icon("alert-triangle") }} Integritätsbefunde</h2></header>
+<form hx-get="/admin/systemdiagnose/teil/befunde" hx-target="#diag-panel" class="sys-toolbar">
+{% for key, choices in [('modul',modules),('schweregrad',['info','warn','fail','kritisch']),('status',['offen','behoben','unterdrueckt'])] %}
+<label>{{ {'modul':'Modul','schweregrad':'Schweregrad','status':'Status'}[key] }}<select name="{{ key }}" class="form-input"><option value="">Alle</option>{% for value in choices %}<option value="{{ value }}" {% if request.query_params.get(key) == value %}selected{% endif %}>{{ 'unterdrückt' if value == 'unterdrueckt' else value }}</option>{% endfor %}</select></label>
+{% endfor %}<button type="submit" class="btn btn--secondary">Filtern</button></form>
+</section>
+<div class="sys-grid">
+{% for f in findings %}
+<article class="sys-card">
+<header class="sys-card__head"><h3>#{{ f.id }} {{ safe_title(f.titel) }}</h3>{{ status_pill(f.schweregrad) }}</header>
+<div class="sys-pills"><span class="sys-pill">{{ f.modul if f.modul in modules else 'system' }}</span><span class="sys-pill">{{ 'unterdrückt' if f.status == 'unterdrueckt' else f.status }}</span></div>
+<dl class="sys-kv"><div><dt>Zuletzt</dt><dd>{{ f.last_seen_at|local_datetime }}</dd></div><div><dt>Anzahl</dt><dd>{{ f.occurrences }}</dd></div></dl>
+<div class="sys-actions">
 <button class="btn btn--secondary" hx-get="/admin/systemdiagnose/befund/{{ f.id }}" hx-target="#diag-detail">Details</button>
 {{ post('reparatur/vorschlagen','Reparatur vorschlagen',{'finding_id':f.id}) }}
-<form hx-post="/admin/systemdiagnose/codex/{{ f.id }}" hx-target="#diag-detail" method="post">{{ csrf() }}<button class="btn btn--secondary" type="submit">Codex-Auftrag generieren</button></form></article>{% else %}<p>Keine Befunde.</p>{% endfor %}</div>
+<form hx-post="/admin/systemdiagnose/codex/{{ f.id }}" hx-target="#diag-detail" method="post">{{ csrf() }}<button class="btn btn--secondary" type="submit">Codex-Auftrag generieren</button></form>
+</div></article>
+{% else %}<div class="sys-empty">{{ icon("clipboard-list") }} Keine Befunde.</div>{% endfor %}
+</div>
 {% if cursor %}<button class="btn btn--secondary" hx-get="{{ request.url.include_query_params(cursor=cursor) }}" hx-target="#diag-panel">Weitere Befunde</button>{% endif %}
 {% elif section == 'laeufe' %}
-<h2>Fehlerhistorie / Laeufe</h2><div class="diag-grid">{% for run in runs %}<article class="diag-card"><h3>Lauf #{{ run.id }}: {{ run.status }}</h3><p>{{ run.created_at|local_datetime }} / Ende {{ run.finished_at|local_datetime }} / {{ run.quelle }}</p><p>{{ run.fortschritt.get('erledigt',0) }} Pruefungen</p>{% if run.fehlertext %}<p>Fehler: Diagnose abgebrochen oder Zeitbudget erreicht. Erneuten Lauf pruefen.</p>{% endif %}</article>{% else %}<p>Noch keine Laeufe.</p>{% endfor %}</div>
+<section class="sys-card">
+<header class="sys-card__head"><h2>{{ icon("history") }} Fehlerhistorie / Läufe</h2></header>
+<div class="sys-table-wrap" role="region" aria-label="Diagnoseläufe" tabindex="0">
+<table class="sys-table"><thead><tr><th scope="col">Lauf</th><th scope="col">Status</th><th scope="col">Start</th><th scope="col">Ende</th><th scope="col">Quelle</th><th scope="col">Prüfungen</th><th scope="col">Hinweis</th></tr></thead><tbody>
+{% for run in runs %}<tr><th scope="row">Lauf #{{ run.id }}</th><td><span class="sys-pill">{{ run.status }}</span></td><td>{{ run.created_at|local_datetime }}</td><td>{{ run.finished_at|local_datetime }}</td><td>{{ run.quelle }}</td><td>{{ run.fortschritt.get('erledigt',0) }} Prüfungen</td><td>{% if run.fehlertext %}Fehler: Diagnose abgebrochen oder Zeitbudget erreicht. Erneuten Lauf prüfen.{% else %}-{% endif %}</td></tr>
+{% else %}<tr><td colspan="7">Noch keine Läufe.</td></tr>{% endfor %}
+</tbody></table></div></section>
 {% elif section == 'reparaturen' %}
-<h2>Reparaturen</h2><p>Dry-Run veraendert keine Fachdaten. Simulation 15 Minuten gueltig. MEDIUM erfordert Bestaetigung und Simulationshash; HIGH zusaetzlich einmalige Web-Freigabe. CRITICAL bleibt reine Simulation.</p>
-{% if not repair_enabled %}<p class="alert alert--warn">Reparaturen gesperrt: aktive 2FA und Reparaturschalter erforderlich.</p>{% endif %}
-<p><a href="/mfa/verify">MFA frisch bestaetigen</a> | <a href="/admin/system-einstellungen">Sicherheitsschalter</a></p>
-{% if repair_result %}<p>Status: {{ repair_result.status }}{% if repair_result.evidence.get('fehler') %} - Parameter, Berechtigung oder Simulation pruefen.{% endif %}</p>{% endif %}
-{% if repair_enabled %}<details><summary>Registrierte Aktion direkt simulieren</summary><form hx-post="/admin/systemdiagnose/reparatur/simulieren" hx-target="#diag-panel" method="post">{{ csrf() }}<label>Aktion<select name="aktion_id" class="form-input">{% for id,a in actions.items() %}<option value="{{ id }}">{{ a.titel }} ({{ a.risiko }})</option>{% endfor %}</select></label><label>Scope als JSON<textarea name="scope" class="form-input" required>{"org_id":1}</textarea></label><button class="btn btn--secondary" type="submit">Dry-Run erstellen</button></form>{% for id,a in actions.items() %}<details><summary>{{ id }}: Scope-Schema</summary><pre>{{ a.scope_schema.model_json_schema()|tojson(indent=2) }}</pre></details>{% endfor %}</details>{% endif %}
-<div class="diag-grid">{% for r in repairs %}<article class="diag-card"><h3>#{{ r.id }} {{ r.aktion_id }} / {{ r.risiko }}</h3><p>{{ r.status }} / {{ r.created_at|local_datetime }}</p><p>Vorschau (IDs/Zaehler): {{ numbers(r.vorschau)|tojson }}</p><p>Ergebnis: {{ numbers(r.ergebnis)|tojson }}</p>
+<section class="sys-card">
+<header class="sys-card__head"><h2>{{ icon("tools") }} Reparaturen</h2></header>
+<p>Dry-Run verändert keine Fachdaten. Simulation 15 Minuten gültig.</p>
+<ol class="sys-list">
+<li>Scope prüfen und Dry-Run erstellen.</li>
+<li><span class="sys-pill sys-status--ok">LOW</span> Simulation prüfen. <span class="sys-pill sys-status--warn">MEDIUM</span> erfordert Bestätigung und Simulationshash.</li>
+<li><span class="sys-pill sys-status--fail">HIGH</span> erfordert zusätzlich einmalige Web-Freigabe. <span class="sys-pill sys-status--fail">CRITICAL</span> bleibt reine Simulation.</li>
+<li>Freigegebene Reparatur kontrolliert ausführen und anschließend verifizieren.</li>
+</ol>
+{% if not repair_enabled %}<p class="alert alert--warn" role="alert">Reparaturen gesperrt: aktive 2FA und Reparaturschalter erforderlich.</p>{% endif %}
+<div class="sys-actions"><a href="/mfa/verify">MFA frisch bestätigen</a><a href="/admin/system-einstellungen">Sicherheitsschalter</a></div>
+{% if repair_result %}<p role="status">Status: {{ repair_result.status }}{% if repair_result.evidence.get('fehler') %} - Parameter, Berechtigung oder Simulation prüfen.{% endif %}</p>{% endif %}
 {% if repair_enabled %}
-<form hx-post="/admin/systemdiagnose/reparatur/simulieren" hx-target="#diag-panel" method="post">{{ csrf() }}<input type="hidden" name="run_id" value="{{ r.id }}"><label>Scope als JSON (nur Org-ID und Objekt-IDs)<textarea name="scope" class="form-input" required>{{ safe_scope(r)|tojson }}</textarea></label><details><summary>Erlaubtes Scope-Schema</summary><pre>{{ actions[r.aktion_id].scope_schema.model_json_schema()|tojson(indent=2) }}</pre></details><button class="btn btn--secondary" type="submit">Dry-Run</button></form>
+<details class="sys-details"><summary>Registrierte Aktion direkt simulieren</summary>
+<form hx-post="/admin/systemdiagnose/reparatur/simulieren" hx-target="#diag-panel" method="post" class="sys-form-grid">{{ csrf() }}
+<label>Aktion<select name="aktion_id" class="form-input">{% for id,a in actions.items() %}<option value="{{ id }}">{{ a.titel }} ({{ a.risiko }})</option>{% endfor %}</select></label>
+<label>Scope als JSON<textarea name="scope" class="form-input sys-mono" required>{"org_id":1}</textarea></label>
+<button class="btn btn--secondary" type="submit">Dry-Run erstellen</button></form>
+{% for id,a in actions.items() %}<details class="sys-details"><summary>{{ id }}: Scope-Schema</summary><pre>{{ a.scope_schema.model_json_schema()|tojson(indent=2) }}</pre></details>{% endfor %}
+</details>{% endif %}
+</section>
+<div class="sys-grid">
+{% for r in repairs %}
+<article class="sys-card">
+<header class="sys-card__head"><h3>#{{ r.id }} {{ r.aktion_id }}</h3><span class="sys-pill {{ 'sys-status--ok' if r.risiko == 'low' else 'sys-status--warn' if r.risiko == 'medium' else 'sys-status--fail' }}">{{ r.risiko|upper }}</span></header>
+<dl class="sys-kv"><div><dt>Status</dt><dd>{{ r.status }}</dd></div><div><dt>Erstellt</dt><dd>{{ r.created_at|local_datetime }}</dd></div><div><dt>Vorschau (IDs/Zähler)</dt><dd>{{ kv(numbers(r.vorschau)) }}</dd></div><div><dt>Ergebnis</dt><dd>{{ kv(numbers(r.ergebnis)) }}</dd></div></dl>
+{% if repair_enabled %}
+<ol class="sys-list sys-repair-steps">
+<li><h4>Simulation</h4>
+<form hx-post="/admin/systemdiagnose/reparatur/simulieren" hx-target="#diag-panel" method="post" class="sys-form-grid">{{ csrf() }}<input type="hidden" name="run_id" value="{{ r.id }}">
+<label>Scope als JSON (nur Org-ID und Objekt-IDs)<textarea name="scope" class="form-input sys-mono" required>{{ safe_scope(r)|tojson }}</textarea></label>
+<details class="sys-details"><summary>Erlaubtes Scope-Schema</summary><pre>{{ actions[r.aktion_id].scope_schema.model_json_schema()|tojson(indent=2) }}</pre></details><button class="btn btn--secondary" type="submit">Dry-Run</button></form></li>
 {% if r.simulation_hash and r.status in ['simuliert','freigegeben'] %}
-{% if r.risiko == 'high' %}<p><a href="/admin/reparatur/freigabe/{{ r.id }}">HIGH-Freigabe mit neuem Faktor</a></p>{% endif %}
-{% if r.risiko != 'critical' %}<form hx-post="/admin/systemdiagnose/reparatur/ausfuehren" hx-target="#diag-panel" method="post">{{ csrf() }}<input type="hidden" name="run_id" value="{{ r.id }}"><input type="hidden" name="simulation_hash" value="{{ r.simulation_hash }}">
+{% if r.risiko == 'high' %}<li><h4>Einmalige Web-Freigabe</h4><a href="/admin/reparatur/freigabe/{{ r.id }}">HIGH-Freigabe mit neuem Faktor</a></li>{% endif %}
+{% if r.risiko != 'critical' %}<li><h4>Bestätigung und Ausführung</h4>
+<form hx-post="/admin/systemdiagnose/reparatur/ausfuehren" hx-target="#diag-panel" method="post" class="sys-form-grid">{{ csrf() }}<input type="hidden" name="run_id" value="{{ r.id }}"><input type="hidden" name="simulation_hash" value="{{ r.simulation_hash }}">
 {% if r.risiko == 'high' %}<label>Einmaliger Freigabetoken<input name="approval_token" class="form-input" autocomplete="off" required></label>{% endif %}
-<label><input type="checkbox" name="bestaetigt" value="true" required> Diese Simulation ausdruecklich bestaetigen</label><button type="submit" class="btn btn--primary">Kontrolliert ausfuehren</button></form>{% endif %}{% endif %}
-{{ post('reparatur/verifizieren','Verifizieren',{'run_id':r.id}) }}{% endif %}</article>{% else %}<p>Reparatur zuerst aus einem Befund vorschlagen.</p>{% endfor %}</div>
+<label class="sys-check"><input type="checkbox" name="bestaetigt" value="true" required> Diese Simulation ausdrücklich bestätigen</label><button type="submit" class="btn btn--primary">Kontrolliert ausführen</button></form></li>
+{% else %}<li>CRITICAL: Nur Simulation, keine Ausführung.</li>{% endif %}{% endif %}
+<li><h4>Ergebnis prüfen</h4>{{ post('reparatur/verifizieren','Verifizieren',{'run_id':r.id}) }}</li>
+</ol>{% endif %}
+</article>{% else %}<div class="sys-empty">{{ icon("tools") }} Reparatur zuerst aus einem Befund vorschlagen.</div>{% endfor %}</div>
 {% elif section == 'github' %}
-<h2>GitHub-CI</h2><p>Abgleich: {{ ci.status }} / Token: {{ ci.github_zugang.status }}</p><p><a href="/admin/system-einstellungen#github-zugang">GitHub-Zugang verwalten</a></p>
-<div class="diag-card">{{ tree(ci.evidence) }}</div><h3>Lokale Codeanalyse</h3><div class="diag-card">{{ tree(analysis.evidence) }}</div>
+<section class="sys-card">
+<header class="sys-card__head"><h2>{{ icon("brand-github") }} GitHub-CI</h2>{{ status_pill(ci.status) }}</header>
+<p>Token: {{ ci.github_zugang.status }}</p><p><a href="/admin/system-einstellungen#github-zugang">GitHub-Zugang verwalten</a></p>
+{{ kv(ci.evidence) }}
+<details class="sys-details"><summary>Rohdaten</summary><pre>{{ ci.evidence|tojson(indent=2) }}</pre></details>
+</section>
+<section class="sys-card"><header class="sys-card__head"><h3>{{ icon("file-text") }} Lokale Codeanalyse</h3>{{ status_pill(analysis.status) }}</header>
+{{ kv(analysis.evidence) }}
+<details class="sys-details"><summary>Rohdaten</summary><pre>{{ analysis.evidence|tojson(indent=2) }}</pre></details>
+</section>
 {% elif section == 'audit' %}
-<h2>Audit</h2><div class="diag-grid">{% for entry in entries %}<article class="diag-card"><strong>{{ mask_text(entry.action) }}</strong><p>{{ entry.created_at|local_datetime }} / Eintrag #{{ entry.id }} / Objekt-ID {{ entry.entity_id or '-' }}</p>{% if login_grund(entry) %}<p>Grund: {{ login_grund(entry) }}</p>{% endif %}<p>Weitere Payload und Benutzer-/IP-Daten werden hier nicht ausgegeben.</p></article>{% else %}<p>Keine Eintraege.</p>{% endfor %}</div>
+<section class="sys-card">
+<header class="sys-card__head"><h2>{{ icon("file-text") }} Audit</h2></header>
+<p class="sys-muted">Weitere Payload und Benutzer-/IP-Daten werden hier nicht ausgegeben.</p>
+<div class="sys-table-wrap" role="region" aria-label="Audit-Einträge" tabindex="0">
+<table class="sys-table"><thead><tr><th scope="col">Eintrag</th><th scope="col">Aktion</th><th scope="col">Zeitpunkt</th><th scope="col">Objekt-ID</th><th scope="col">Grund</th></tr></thead><tbody>
+{% for entry in entries %}<tr><th scope="row">Eintrag #{{ entry.id }}</th><td>{{ mask_text(entry.action) }}</td><td>{{ entry.created_at|local_datetime }}</td><td>{{ entry.entity_id or '-' }}</td><td>{{ login_grund(entry) or '-' }}</td></tr>
+{% else %}<tr><td colspan="5">Keine Einträge.</td></tr>{% endfor %}
+</tbody></table></div></section>
 {% endif %}
-{% if section in ['audit','laeufe'] %}<nav class="diag-wrap" aria-label="Seiten">{% if page > 0 %}<button class="btn btn--secondary" hx-get="/admin/systemdiagnose/teil/{{ section }}?page={{ page-1 }}" hx-target="#diag-panel">Zurueck</button>{% endif %}<button class="btn btn--secondary" hx-get="/admin/systemdiagnose/teil/{{ section }}?page={{ page+1 }}" hx-target="#diag-panel">Weitere</button></nav>{% endif %}
+{% if section in ['audit','laeufe'] %}<nav class="sys-actions" aria-label="Seiten">{% if page > 0 %}<button class="btn btn--secondary" hx-get="/admin/systemdiagnose/teil/{{ section }}?page={{ page-1 }}" hx-target="#diag-panel">Zurück</button>{% endif %}<span class="sys-muted">Seite {{ page+1 }}</span><button class="btn btn--secondary" hx-get="/admin/systemdiagnose/teil/{{ section }}?page={{ page+1 }}" hx-target="#diag-panel">Weitere</button></nav>{% endif %}

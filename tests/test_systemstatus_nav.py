@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+from app.core.icons import status_dot
 from app.core.security import hash_api_key, hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -149,7 +150,7 @@ def test_systemstatus_zeigt_bestaetigten_ausfall_ohne_benachrichtigung(client, s
         response = client.get("/admin/systemstatus")
 
         assert response.status_code == 200
-        assert '<span class="badge badge--closed">Ausfall</span>' in response.text
+        assert f'<span class="sys-pill sys-status--fail">{status_dot("rot", "Ausfall")} Ausfall</span>' in response.text
         assert "Keine Benachrichtigung verschickt" in response.text
     finally:
         db.query(DienstStatus).filter(
@@ -210,7 +211,7 @@ def test_ui_und_uptime_api_zeigen_denselben_ausfall(client, setup_db, monkeypatc
 
         _login(client, "gleichlauf_admin", "Test1234!")
         seite = client.get("/admin/systemstatus")
-        assert '<span class="badge badge--closed">Ausfall</span>' in seite.text
+        assert f'<span class="sys-pill sys-status--fail">{status_dot("rot", "Ausfall")} Ausfall</span>' in seite.text
     finally:
         db.query(DienstStatus).filter(DienstStatus.org_id == org_id, DienstStatus.key == "sms_gateway").delete()
         db.query(SmsGatewayToken).filter(
@@ -269,7 +270,10 @@ def test_ui_und_uptime_api_zeigen_sms_teilstoerung(client, setup_db, monkeypatch
 
         _login(client, "teilausfall_admin", "Test1234!")
         seite = client.get("/admin/systemstatus")
-        assert '<span class="badge badge--warn">Teilstörung</span>' in seite.text
+        assert (
+            f'<span class="sys-pill sys-status--warn">{status_dot("orange", "Teilstörung")} Teilstörung</span>'
+            in seite.text
+        )
         assert "Android-Wache" in seite.text
         assert "Android-Nord" in seite.text
     finally:

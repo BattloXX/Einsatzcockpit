@@ -25,6 +25,27 @@ HTMX_FRAGMENTE = {
         "gateway/_alarmempfang_detail.html",
         "gateway/_alarmempfang_parser.html",
     ],
+    "gateway/druckregeln.html": ["gateway/_druckregel_simulation.html"],
+    "admin/settings_dibos.html": ["admin/_dibos_live.html"],
+    "admin/sms_send.html": ["admin/_sms_log_details.html"],
+    "admin/system_update.html": [
+        "admin/_github_update.html",
+        "admin/_github_branch_update.html",
+    ],
+    "verleih/artikel_list.html": ["verleih/_artikel_row.html"],
+    "planspiel/admin/einstellungen.html": [
+        "planspiel/admin/_pool_liste.html",
+        "planspiel/admin/_pool_zeile.html",
+        "planspiel/admin/_pool_ergebnis.html",
+        "planspiel/admin/_osm_laeuft.html",
+    ],
+    "planspiel/admin/szenarien.html": ["planspiel/admin/_szenario_zeile.html"],
+    "admin/systemdiagnose/index.html": [
+        "admin/systemdiagnose/_panel.html",
+        "admin/systemdiagnose/_finding.html",
+        "admin/systemdiagnose/_geraet.html",
+        "admin/systemdiagnose/_codex.html",
+    ],
 }
 MODIFIER_RE = re.compile(r"^[a-z][a-z0-9-]*--[a-z0-9-]+$")
 CSS_CLASS_RE = re.compile(r"\.([a-z][a-z0-9-]*--[a-z0-9-]+)")

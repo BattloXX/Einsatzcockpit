@@ -1,12 +1,12 @@
-<section id="diag-settings" class="card mb-4"><div class="card-body"><h2>Systemdiagnose</h2>
+<section id="diag-settings" class="sys-card sys-page"><header class="sys-card__head"><h2>{{ icon("clipboard-check") }} Systemdiagnose</h2></header>
 {% if saved %}<p role="status">Systemdiagnose-Einstellungen gespeichert.</p>{% endif %}
-<p><a href="/admin/systemdiagnose">Systemdiagnose oeffnen</a>. Standard: Tagesdiagnose AUS, keine Benachrichtigungen. Uhrzeit gilt systemweit in Europe/Vienna.</p>
-<form hx-post="/admin/systemdiagnose/einstellungen" hx-target="#diag-settings" hx-swap="outerHTML" method="post" style="display:grid;gap:12px">
+<p><a href="/admin/systemdiagnose">Systemdiagnose öffnen</a>. Standard: Tagesdiagnose AUS, keine Benachrichtigungen. Uhrzeit gilt systemweit in Europe/Vienna.</p>
+<form hx-post="/admin/systemdiagnose/einstellungen" hx-target="#diag-settings" hx-swap="outerHTML" method="post" class="sys-form-grid">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 <label>Tagesdiagnose<select name="diag_schedule_enabled" class="form-input"><option value="false">AUS</option><option value="true" {% if diag_settings.diag_schedule_enabled == 'true' %}selected{% endif %}>AN</option></select></label>
 <label>Uhrzeit (Europe/Vienna)<input name="diag_schedule_time" type="time" value="{{ diag_settings.diag_schedule_time }}" required class="form-input"></label>
 <label>Umfang<select name="diag_schedule_scope" class="form-input">{% for v in ['schnell','voll'] %}<option {% if diag_settings.diag_schedule_scope == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
 <label>Kritische Meldungen per Systemmail an (kommagetrennt; leer = kein Versand)<input name="diag_schedule_mail" value="{{ diag_settings.diag_schedule_mail }}" class="form-input"></label>
 <label>Mindest-Schweregrad<select name="diag_schedule_severity" class="form-input">{% for v in ['warn','fail','kritisch'] %}<option {% if diag_settings.diag_schedule_severity == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
-<label>Unveraenderte Meldungen nach Stunden wiederholen<input type="number" name="diag_schedule_repeat_hours" min="1" max="720" value="{{ diag_settings.diag_schedule_repeat_hours }}" class="form-input" required></label>
-<button type="submit" class="btn btn--primary">Systemdiagnose speichern</button></form></div></section>
+<label>Unveränderte Meldungen nach Stunden wiederholen<input type="number" name="diag_schedule_repeat_hours" min="1" max="720" value="{{ diag_settings.diag_schedule_repeat_hours }}" class="form-input" required></label>
+<button type="submit" class="btn btn--primary">Systemdiagnose speichern</button></form></section>

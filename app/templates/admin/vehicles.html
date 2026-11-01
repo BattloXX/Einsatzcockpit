@@ -1,17 +1,24 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Ressourcen – Admin{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
 {% block admin_content %}
 {% if merge_preview is defined %}
-<div class="page-content">
-  <div class="page-header">
-    <div><h1>Fahrzeuge zusammenführen</h1><p class="page-header__sub">Dublette prüfen und Gewinner auswählen</p></div>
-    <a href="/admin/fahrzeuge" class="btn btn--ghost">Zurück</a>
-  </div>
+<div class="sys-page">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
+    <div><h1>{{ icon("link") }} Fahrzeuge zusammenführen</h1><p class="sys-muted">Dublette prüfen und Gewinner auswählen</p></div>
+    <a href="/admin/fahrzeuge" class="btn btn--ghost">{{ icon("arrow-left", size="sm") }} Zurück</a>
+   </div>
+  </header>
   {% if merge_preview|length == 2 %}
-  <section class="card mb-4">
-    <div class="card-header"><h2>Änderungsvorschau</h2></div>
+  <section class="sys-card">
+    <div class="sys-card__head"><h2>{{ icon("list-details") }} Änderungsvorschau</h2></div>
     <div class="card-body">
-      <table class="table table--compact">
+      <div class="sys-table-wrap">
+      <table class="sys-table">
         <thead><tr><th>Feld</th>{% for item in merge_preview %}<th>{{ item.vehicle.display_label }}</th>{% endfor %}</tr></thead>
         <tbody>
           <tr><td>Code</td>{% for item in merge_preview %}<td>{{ item.vehicle.code }}</td>{% endfor %}</tr>
@@ -25,12 +32,13 @@
           <tr><td>LIS-Referenz</td>{% for item in merge_preview %}<td>{{ item.vehicle.lis_reference_id or '–' }}</td>{% endfor %}</tr>
         </tbody>
       </table>
-      <form method="post" action="/admin/fahrzeuge/zusammenfuehren" style="margin-top:12px">
+      </div>
+      <form method="post" action="/admin/fahrzeuge/zusammenfuehren" class="sys-mt-2">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <div class="form-group">
           <label class="form-label">Dieses Fahrzeug bleibt erhalten</label>
           {% for item in merge_preview %}
-          <label style="display:block;margin:.5rem 0">
+          <label class="sys-check">
             <input type="radio" name="winner_id" value="{{ item.vehicle.id }}" required{% if loop.first %} checked{% endif %}>
             {{ item.vehicle.display_label }} – {{ item.vehicle.name }}
           </label>
@@ -42,26 +50,28 @@
     </div>
   </section>
   {% else %}
-  <div class="alert alert--info">Bitte genau zwei gültige Fahrzeuge auswählen.</div>
+  <div class="sys-notice">Bitte genau zwei gültige Fahrzeuge auswählen.</div>
   {% endif %}
 </div>
 {% else %}
-<div class="page-content">
-  <div class="page-header">
+<div class="sys-page">
+  <header class="sys-hero">
+   <div class="sys-hero__head">
     <div>
-      <h1>Ressourcen</h1>
-      <p class="page-header__sub">Eigene Einheiten und Ressourcen aus Fremdorganisationen</p>
+      <h1>{{ icon("truck") }} Ressourcen</h1>
+      <p class="sys-muted">Eigene Einheiten und Ressourcen aus Fremdorganisationen</p>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div class="sys-row">
       <button class="btn btn--ghost" data-ec-action="open-dialog" data-ec-dialog="mergeVehiclesModal">{{ icon("link", size="sm") }} Fahrzeuge zusammenführen</button>
       <button class="btn btn--ghost" data-ec-action="open-dialog" data-ec-dialog="newExternalModal">
-        + Fremdorganisation
+        {{ icon("plus", size="sm") }} Fremdorganisation
       </button>
       <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newVehicleModal">
-        + Eigene Ressource
+        {{ icon("plus", size="sm") }} Eigene Ressource
       </button>
     </div>
-  </div>
+   </div>
+  </header>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if error %}<div class="alert alert--error">{% if error == 'no_org' %}Keine Organisation zugeordnet.{% elif error == 'exists' %}Dieser Code wird bereits von einem eigenen Fahrzeug verwendet.{% elif error == 'fahrtenbuch_conflict' %}Beide Fahrzeuge besitzen Fahrtenbucheinträge und können nicht zusammengeführt werden.{% elif error == 'same_vehicle' %}Bitte zwei verschiedene Fahrzeuge auswählen.{% elif error == 'different_org' %}Die Fahrzeuge gehören nicht derselben Organisation.{% elif error == 'not_found' %}Mindestens ein Fahrzeug wurde nicht gefunden.{% elif error == 'references_remaining' %}Nicht alle Referenzen konnten übertragen werden.{% else %}{{ error }}{% endif %}</div>{% endif %}
@@ -75,9 +85,9 @@
   </div>
   {% endif %}
 
-  <form method="get" action="/admin/fahrzeuge" style="display:flex;gap:10px;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+  <form method="get" action="/admin/fahrzeuge" class="sys-toolbar sys-mb-2">
     {% if is_sysadmin %}
-    <div class="form-group" style="margin:0;min-width:200px">
+    <div class="form-group sys-min-200">
       <select name="filter_org_id" class="form-select form-select--sm" onchange="this.form.submit()">
         <option value="">Alle Organisationen</option>
         {% for org in all_orgs %}
@@ -86,14 +96,14 @@
       </select>
     </div>
     {% endif %}
-    <div class="form-group" style="margin:0;min-width:160px">
+    <div class="form-group sys-min-160">
       <select name="filter_kind" class="form-select form-select--sm" onchange="this.form.submit()">
         <option value="all" {% if filter_kind == 'all' %}selected{% endif %}>Alle Ressourcen</option>
         <option value="own" {% if filter_kind == 'own' %}selected{% endif %}>Eigene</option>
         <option value="external" {% if filter_kind == 'external' %}selected{% endif %}>Fremdorganisationen</option>
       </select>
     </div>
-    <div class="form-group" style="margin:0;min-width:150px">
+    <div class="form-group sys-min-150">
       <select name="filter_status" class="form-select form-select--sm" onchange="this.form.submit()">
         <option value="all" {% if filter_status == 'all' %}selected{% endif %}>Alle Status</option>
         <option value="active" {% if filter_status == 'active' %}selected{% endif %}>Aktiv</option>
@@ -106,15 +116,17 @@
   </form>
 
   {% if filter_kind == 'external' or filter_kind == 'all' %}
-  <div class="alert" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:#fbbf24;margin-bottom:1rem;padding:.6rem 1rem;border-radius:6px;font-size:.85rem;">
+  <div class="sys-notice sys-notice--warn sys-small">
     <strong>Fremdorganisationen</strong> erscheinen in der Vorauswahl bei Einsätzen und im GSL, werden aber nicht automatisch disponiert. Sie können in der Ausrückordnung hinterlegt werden.
   </div>
   {% endif %}
 
-  <table class="table-admin table-admin--cards" id="vehiclesTable">
+  <div class="sys-card">
+  <div class="sys-table-wrap">
+  <table class="sys-table sys-table--responsive sys-table--wide" id="vehiclesTable">
     <thead>
       <tr>
-        <th style="width:32px;"></th>
+        <th class="sys-col-32"><span class="sr-only">Sortierung</span></th>
         <th>Code</th>
         <th>Name / Typ</th>
         <th>Kennzeichen</th>
@@ -128,21 +140,21 @@
     <tbody id="vehiclesTbody">
       {% for v in vehicles %}
       <tr data-vehicle-id="{{ v.id }}">
-        <td data-label="" class="drag-handle" title="Ziehen zum Sortieren" style="cursor:grab;color:var(--text-muted);user-select:none;text-align:center;font-size:1.1rem;">⠿</td>
+        <td data-label="" class="drag-handle sys-dnd-handle" title="Ziehen zum Sortieren">{{ icon("grip-vertical", size="sm") }}</td>
         <td data-label="Code">
           <strong>{{ v.code }}</strong>
           {% if v.is_external %}
-          <span class="badge-pill badge-pill--amber" style="font-size:.6rem;margin-left:4px;vertical-align:middle;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.4);">FREMD</span>
+          <span class="sys-pill sys-pill--warn sys-pill--tiny">FREMD</span>
           {% endif %}
           {% if v.lis_auto_created %}
-          <span class="badge-pill badge-pill--gray" style="font-size:.6rem;margin-left:4px;vertical-align:middle;" title="Automatisch aus LIS übernommen — wird bei Bedarf beim nächsten Poll neu angelegt">AUS LIS</span>
+          <span class="sys-pill sys-pill--tiny" title="Automatisch aus LIS übernommen — wird bei Bedarf beim nächsten Poll neu angelegt">AUS LIS</span>
           {% endif %}
         </td>
         <td data-label="Name / Typ">{{ v.name }}<br><small class="text-muted">{{ v.type }}</small></td>
         <td data-label="Kennzeichen">{{ v.kennzeichen or '–' }}</td>
         <td data-label="Organisation">
           {% if v.is_external %}
-          <span style="color:#fbbf24;">{{ v.adhoc_org_name or '–' }}</span>
+          <span class="sys-warn">{{ v.adhoc_org_name or '–' }}</span>
           {% if v.adhoc_org_short %}<small class="text-muted"> ({{ v.adhoc_org_short }})</small>{% endif %}
           {% else %}
           {{ v.dept.name if v.dept else '–' }}
@@ -154,7 +166,7 @@
           {% if v.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
         </td>
-        <td data-label="Aktionen" style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap;">
+        <td data-label="Aktionen"><div class="sys-row sys-gap-sm">
           {% if v.is_external %}
           <button class="btn btn--ghost btn--xs"
                   onclick="openEditExternal({{ v.id }}, '{{ v.adhoc_org_name|replace("'","\\'")|e }}', '{{ v.adhoc_org_short or "" }}', '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', '{{ v.bos_override or "" }}', '{{ v.kennzeichen or "" }}')">
@@ -167,23 +179,25 @@
           </button>
           {% endif %}
           <button type="button" class="btn btn--ghost btn--xs" onclick="openMergeVehicles({{ v.id }})">Zusammenführen</button>
-          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/toggle" style="display:inline">
+          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/toggle" class="sys-inline-form">
             <button type="submit" class="btn btn--ghost btn--xs">
               {% if v.active %}Deaktivieren{% else %}Aktivieren{% endif %}
             </button>
           </form>
-          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/loeschen" style="display:inline">
-            <button type="submit" class="btn btn--ghost btn--xs" style="color:var(--color-danger)"
+          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/loeschen" class="sys-inline-form">
+            <button type="submit" class="btn btn--ghost btn--xs sys-danger"
                     data-name="{{ v.name | e }}"
                     onclick="return confirm('Ressource „' + this.dataset.name + '" löschen?')">
               Löschen
             </button>
           </form>
-        </td>
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  </div>
 </div>
 
 <dialog class="modal" id="mergeVehiclesModal">
@@ -354,25 +368,25 @@
     </div>
     <form method="post" action="/admin/fahrzeuge/neu-extern">
       <div class="modal__body">
-        <p class="form-hint" style="margin-bottom:12px;">
+        <p class="form-hint sys-mb-2">
           Ressourcen fremder Organisationen erscheinen in der Einsatz- und GSL-Vorauswahl, werden aber nicht automatisch disponiert. Sie können in der Ausrückordnung hinterlegt werden.
         </p>
-        <div class="form-row" style="display:flex;gap:8px;">
-          <div class="form-group" style="flex:2;">
+        <div class="form-row sys-flex-gap">
+          <div class="form-group sys-col-2">
             <label class="form-label">Organisation (Name) *</label>
             <input type="text" name="org_name" class="form-input" required maxlength="150" placeholder="z.B. FF Bregenz, BRK Dornbirn">
           </div>
-          <div class="form-group" style="flex:1;">
+          <div class="form-group sys-col-1">
             <label class="form-label">Org-Kürzel (max. 3 Z.)</label>
             <input type="text" name="org_short" class="form-input" maxlength="3" placeholder="z.B. BRG">
           </div>
         </div>
-        <div class="form-row" style="display:flex;gap:8px;">
-          <div class="form-group" style="flex:1;">
+        <div class="form-row sys-flex-gap">
+          <div class="form-group sys-col-1">
             <label class="form-label">Code / Rufname *</label>
             <input type="text" name="code" class="form-input" required maxlength="30" placeholder="z.B. HLP-1, ASP, AFÜST">
           </div>
-          <div class="form-group" style="flex:2;">
+          <div class="form-group sys-col-2">
             <label class="form-label">Bezeichnung *</label>
             <input type="text" name="name" class="form-input" required maxlength="150" placeholder="z.B. Hochleistungspumpe, Atemschutzsammelplatz">
           </div>
@@ -413,22 +427,22 @@
     </div>
     <form method="post" id="editExternalForm">
       <div class="modal__body">
-        <div class="form-row" style="display:flex;gap:8px;">
-          <div class="form-group" style="flex:2;">
+        <div class="form-row sys-flex-gap">
+          <div class="form-group sys-col-2">
             <label class="form-label">Organisation (Name) *</label>
             <input type="text" name="org_name" id="ee_org_name" class="form-input" required maxlength="150">
           </div>
-          <div class="form-group" style="flex:1;">
+          <div class="form-group sys-col-1">
             <label class="form-label">Org-Kürzel (max. 3 Z.)</label>
             <input type="text" name="org_short" id="ee_org_short" class="form-input" maxlength="3">
           </div>
         </div>
-        <div class="form-row" style="display:flex;gap:8px;">
-          <div class="form-group" style="flex:1;">
+        <div class="form-row sys-flex-gap">
+          <div class="form-group sys-col-1">
             <label class="form-label">Code / Rufname *</label>
             <input type="text" name="code" id="ee_code" class="form-input" required maxlength="30">
           </div>
-          <div class="form-group" style="flex:2;">
+          <div class="form-group sys-col-2">
             <label class="form-label">Bezeichnung *</label>
             <input type="text" name="name" id="ee_name" class="form-input" required maxlength="150">
           </div>

@@ -3,27 +3,33 @@
 {% block title %}Szenariokatalog{% endblock %}
 {% block head_extra %}
 {{ super() }}
+  <link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
   {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
 {% block admin_content %}
+<div class="sys-page">
 {% with section_id='planspiele' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<section class="ps-page">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": none}]) }}
-  <div class="ps-header"><h1>Szenariokatalog</h1><div>{% if can_edit %}<a class="btn btn--secondary btn--sm" href="/admin/settings/planspiele/szenarien/export.json">Export JSON</a><form class="planspiel-import" method="post" action="/admin/settings/planspiele/szenarien/import" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label>Import JSON<input type="file" name="file" accept="application/json" required></label><button class="btn btn--secondary btn--sm" type="submit">Importieren</button></form><a class="btn btn--primary btn--sm" href="/admin/settings/planspiele/szenarien/neu">Neues Szenario</a>{% endif %}<a class="btn btn--secondary btn--sm" href="/admin/settings/planspiele/stichworte">Stichwort-Referenz</a></div></div>
+  <header class="sys-hero">
+    <div class="sys-hero__head">
+      <h1>{{ icon("clipboard-list") }} Szenariokatalog</h1>
+      <div class="sys-row">{% if can_edit %}<a class="btn btn--secondary btn--sm" href="/admin/settings/planspiele/szenarien/export.json">{{ icon("download", size="sm") }} Export JSON</a><form class="sys-row" method="post" action="/admin/settings/planspiele/szenarien/import" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label class="sys-field">Import JSON<input type="file" name="file" accept="application/json" required></label><button class="btn btn--secondary btn--sm" type="submit">Importieren</button></form><a class="btn btn--primary btn--sm" href="/admin/settings/planspiele/szenarien/neu">{{ icon("plus", size="sm") }} Neues Szenario</a>{% endif %}<a class="btn btn--secondary btn--sm" href="/admin/settings/planspiele/stichworte">Stichwort-Referenz</a></div>
+    </div>
+  </header>
   {% if fehler %}<p class="form-error">{{ fehler }}</p>{% endif %}
   {% if meldung %}<p class="form-success">{{ meldung }}</p>{% endif %}
-  <form class="ps-filter" hx-get="/admin/settings/planspiele/szenarien" hx-target="#szenario-liste" hx-push-url="true">
-    <input class="form-input" name="q" value="{{ filters.q or '' }}" placeholder="Code oder Titel suchen" hx-trigger="keyup changed delay:300ms">
-    <select class="form-input" name="kategorie" hx-trigger="change"><option value="">Alle Kategorien</option>{% for key in ['brand', 'technik', 'gsl', 'sonstiges'] %}<option value="{{ key }}" {% if filters.kategorie == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select>
-    <input class="form-input" name="stichwort" value="{{ filters.stichwort or '' }}" placeholder="Stichwort">
-    <select class="form-input" name="schwierigkeit"><option value="">Alle Schwierigkeiten</option>{% for key in ['leicht', 'mittel', 'schwer'] %}<option value="{{ key }}" {% if filters.schwierigkeit == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select>
-    <select class="form-input" name="orttyp"><option value="">Alle Ortstypen</option>{% for key, label in ort_typen.items() %}<option value="{{ key }}" {% if filters.orttyp == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-    <select class="form-input" name="status"><option value="">Aktive und inaktive</option>{% for key in ['aktiv', 'inaktiv', 'archiviert'] %}<option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select>
-    <select class="form-input" name="herkunft"><option value="">System und eigene</option><option value="system" {% if filters.herkunft == 'system' %}selected{% endif %}>System</option><option value="org" {% if filters.herkunft == 'org' %}selected{% endif %}>Eigene</option></select>
+  <form class="sys-toolbar sys-mb-2" hx-get="/admin/settings/planspiele/szenarien" hx-target="#szenario-liste" hx-push-url="true">
+    <div class="form-group sys-min-200"><input class="form-input" name="q" aria-label="Suche" value="{{ filters.q or '' }}" placeholder="Code oder Titel suchen" hx-trigger="keyup changed delay:300ms"></div>
+    <div class="form-group sys-min-160"><select class="form-input" name="kategorie" aria-label="Kategorie" hx-trigger="change"><option value="">Alle Kategorien</option>{% for key in ['brand', 'technik', 'gsl', 'sonstiges'] %}<option value="{{ key }}" {% if filters.kategorie == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select></div>
+    <div class="form-group sys-min-150"><input class="form-input" name="stichwort" aria-label="Stichwort" value="{{ filters.stichwort or '' }}" placeholder="Stichwort"></div>
+    <div class="form-group sys-min-160"><select class="form-input" name="schwierigkeit" aria-label="Schwierigkeit"><option value="">Alle Schwierigkeiten</option>{% for key in ['leicht', 'mittel', 'schwer'] %}<option value="{{ key }}" {% if filters.schwierigkeit == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select></div>
+    <div class="form-group sys-min-160"><select class="form-input" name="orttyp" aria-label="Orttyp"><option value="">Alle Ortstypen</option>{% for key, label in ort_typen.items() %}<option value="{{ key }}" {% if filters.orttyp == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="form-group sys-min-160"><select class="form-input" name="status" aria-label="Status"><option value="">Aktive und inaktive</option>{% for key in ['aktiv', 'inaktiv', 'archiviert'] %}<option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select></div>
+    <div class="form-group sys-min-160"><select class="form-input" name="herkunft" aria-label="Herkunft"><option value="">System und eigene</option><option value="system" {% if filters.herkunft == 'system' %}selected{% endif %}>System</option><option value="org" {% if filters.herkunft == 'org' %}selected{% endif %}>Eigene</option></select></div>
     <button class="btn btn--secondary btn--sm" type="submit">Filtern</button>
   </form>
   <div id="szenario-liste">{% include "planspiel/admin/_szenario_liste.html" %}</div>
-</section>
+</div>
 {% endblock %}

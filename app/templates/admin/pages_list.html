@@ -1,28 +1,32 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Seiten – Pflege{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
 {% block admin_content %}
 {% with section_id='systemkonfiguration' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 
-<div class="page-header">
-  <div>
-    <h1>Öffentliche Seiten</h1>
-    <p class="page-header__sub">Inhalte der Seiten vor dem Login per WYSIWYG-Editor bearbeiten</p>
-  </div>
-</div>
+<div class="sys-page">
+<header class="sys-hero">
+  <h1>{{ icon("file-text") }} Öffentliche Seiten</h1>
+  <p class="sys-muted">Inhalte der Seiten vor dem Login per WYSIWYG-Editor bearbeiten</p>
+</header>
 
-<section class="card">
-  <div class="card-body" style="padding:0">
-    <table class="table-admin" style="width:100%">
+<section class="sys-card">
+  <div class="sys-table-wrap">
+    <table class="sys-table sys-table--responsive">
       <thead>
-        <tr><th>Seite</th><th>Adresse</th><th style="text-align:right">Aktionen</th></tr>
+        <tr><th>Seite</th><th>Adresse</th><th class="sys-right">Aktionen</th></tr>
       </thead>
       <tbody>
         {% for slug, meta in pages.items() %}
         <tr>
-          <td><strong>{{ meta.label }}</strong></td>
-          <td><code>{{ '/' if slug == 'landing' else '/' ~ slug }}</code></td>
-          <td style="text-align:right;white-space:nowrap">
+          <td data-label="Seite"><strong>{{ meta.label }}</strong></td>
+          <td data-label="Adresse"><code>{{ '/' if slug == 'landing' else '/' ~ slug }}</code></td>
+          <td class="sys-right sys-nowrap" data-label="Aktionen">
             {% if slug == 'landing' %}
             <a href="/startseite/vorschau" target="_blank" class="btn btn--ghost btn--sm">Vorschau {{ icon("external-link", size="xs") }}</a>
             {% else %}
@@ -36,4 +40,5 @@
     </table>
   </div>
 </section>
+</div>
 {% endblock %}
