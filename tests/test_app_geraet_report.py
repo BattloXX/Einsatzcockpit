@@ -311,3 +311,35 @@ def test_standort_migration_spalten_existieren():
     cols = {c["name"] for c in sa.inspect(SessionLocal().get_bind()).get_columns("device_token")}
     assert {"last_location_received_at", "last_location_attempt_at", "last_location_status",
             "last_location_error", "last_location_source", "last_location_accuracy_m"} <= cols
+
+
+@pytest.mark.parametrize("android,sdk", [("16", 36), ("17", 37)])
+def test_echte_versionen_bleiben_auswertbar(bericht, android, sdk):
+    from types import SimpleNamespace
+
+    from app.admin_mcp.geraete_tools import _safe
+    from app.services.app_geraet_auswertung import ampel, befunde, calver
+
+    bericht["app"]["version_name"] = "2026.11.01.2"
+    bericht["android"].update(version=android, sdk_int=sdk, build_id="SDK 36")
+    bericht["webview"] = {"version": "142.0.7444.138"}
+    result = validiere_bericht(bericht)
+    assert result["app"]["version_name"] == "2026.11.01.2"
+    assert result["android"]["version"] == android
+    assert result["android"]["build_id"] == "SDK 36"
+    assert result["webview"]["version"] == "142.0.7444.138"
+    safe_details = _safe({"geraet_details": result})["geraet_details"]
+    for key in ("app", "android", "webview"):
+        assert safe_details[key] == result[key]
+    assert _safe({"webview_version": "142.0.7444.138"})["webview_version"] == "142.0.7444.138"
+    assert calver(result["app"]["version_name"]) == (2026, 11, 1, 2)
+    assert ampel(result["app"]["version_name"], "2026.11.01.2") == "aktuell"
+    geraet = SimpleNamespace(sdk_int=sdk, sicherheitspatch=None,
+        webview_version=result["webview"]["version"], geraet_details=result,
+        app_version=result["app"]["version_name"], berechtigungen={}, device_token_id=None)
+    assert "webview" not in befunde(geraet, "2026.11.01.2")
+    for version in ("2026.11.01.2", "142.0.7444.138", "16", "SDK 36"):
+        assert maskiere_text(version) == version
+    assert maskiere_text("2026.11.01.2 142.0.7444.138") == "2026.11.01.2 142.0.7444.138"
+    assert maskiere_text("Telefon +43 664 1234567") == "Telefon [Telefon]"
+    assert maskiere_text("Telefon 0664.1234567") == "Telefon [Telefon]"

@@ -214,3 +214,34 @@ async def test_failed_root_loop_restarts_under_same_lock(monkeypatch, caplog):
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.parametrize("hours", [24, 2])
+def test_cleanup_removes_only_expired_rows_beyond_retention(tmp_path, monkeypatch, hours):
+    from datetime import timedelta
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models.worker_runtime import WorkerRuntime
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'cleanup.db'}")
+    WorkerRuntime.__table__.create(engine)
+    factory = sessionmaker(engine)
+    now = runtime.gateway_presence.utc()
+    monkeypatch.setattr(runtime, "SessionLocal", factory)
+    monkeypatch.setattr(runtime, "EXPIRED_WORKER_RETENTION", timedelta(hours=hours))
+    monkeypatch.setattr("app.services.push_service.cleanup_inactive_fcm_tokens", lambda db: 0)
+    with factory() as db:
+        for name, expiry in (("old", now - timedelta(hours=hours, seconds=1)),
+                             ("recent", now - timedelta(hours=hours) + timedelta(minutes=1)),
+                             ("active", now + timedelta(seconds=20))):
+            db.add(WorkerRuntime(worker_id=name, hostname="test", pid=1, started_at=now,
+                                 heartbeat_at=now, expires_at=expiry, is_leader=False, redis={}, loops={}))
+        db.commit()
+    runtime.BackgroundRuntime.cleanup()
+    with factory() as db:
+        assert db.get(WorkerRuntime, "old") is None
+        assert db.get(WorkerRuntime, "recent") is not None
+        assert db.get(WorkerRuntime, "active") is not None
+    engine.dispose()

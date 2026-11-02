@@ -55,5 +55,6 @@ class DiagFinding(Base):
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     behoben_am: Mapped[datetime | None] = mapped_column(DateTime)
+    ok_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     occurrences: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(16), default="offen", index=True)

@@ -166,6 +166,13 @@ def execute_check(bind, check: Check, seconds: float = CHECK_TIMEOUT, runtime: d
                 db.rollback()
 
 
+class IsolatedCheckError(RuntimeError):
+    def __init__(self, exception_type: str, message: str, timed_out: bool):
+        super().__init__(message)
+        self.exception_type = exception_type
+        self.timed_out = timed_out
+
+
 def _process_check(sender, url: str, check: Check, seconds: float, runtime: dict):
     """Separater Prozess mit eigener DB-Verbindung; keine geerbten Pools/Sessions."""
     from sqlalchemy import create_engine
@@ -182,8 +189,11 @@ def _process_check(sender, url: str, check: Check, seconds: float, runtime: dict
     try:
         try:
             sender.send(execute_check(engine, check, seconds, runtime))
-        except Exception:
-            sender.send(None)  # Keine SQL-/Dateipfade oder Exceptiontexte uebertragen.
+        except Exception as exc:
+            from app.admin_mcp.masking import mask_text
+
+            sender.send({"exception_type": type(exc).__name__, "message": mask_text(str(exc))[:300],
+                         "timed_out": isinstance(exc, TimeoutError)})
     finally:
         sender.close()
         engine.dispose()
@@ -217,6 +227,8 @@ def execute_isolated(bind, check: Check, seconds: float = CHECK_TIMEOUT) -> Chec
         if not receiver.poll(max(0, deadline - time.monotonic())):
             raise TimeoutError("Diagnose-Zeitbudget erreicht")
         result = receiver.recv()
+        if isinstance(result, dict):
+            raise IsolatedCheckError(result["exception_type"], result["message"], result["timed_out"])
         if not isinstance(result, CheckResult):
             raise RuntimeError("Diagnose-Check fehlgeschlagen")
         return result

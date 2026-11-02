@@ -1,6 +1,6 @@
 {% macro kv(value) %}
 {% if value is mapping %}
-<dl class="sys-kv">{% for key,child in value.items() %}<div><dt>{{ key }}</dt><dd>{{ kv(child) }}</dd></div>{% else %}<div><dt>Daten</dt><dd>Keine Angaben</dd></div>{% endfor %}</dl>
+<dl class="sys-kv">{% for key,child in value.items() %}<div><dt>{% if key == 'nicht_konfiguriert' %}<span class="sys-pill sys-status--neutral">Nicht eingerichtet</span>{% else %}{{ key }}{% endif %}</dt><dd>{{ kv(child) }}</dd></div>{% else %}<div><dt>Daten</dt><dd>Keine Angaben</dd></div>{% endfor %}</dl>
 {% elif value is sequence and value is not string %}
 <ul class="sys-list">{% for child in value %}<li>{{ kv(child) }}</li>{% else %}<li>Keine Einträge</li>{% endfor %}</ul>
 {% elif value is sameas true %}Ja

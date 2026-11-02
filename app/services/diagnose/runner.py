@@ -22,6 +22,8 @@ from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger(__name__)
 RUN_TIMEOUT = 120.0
+CHECK_RETRY_DELAY = 0.2
+OK_STREAK_CLOSE = 3
 _next_retention = 0.0
 
 
@@ -95,20 +97,29 @@ def persist_result(db: Session, run_id: int, check_id: str, result: CheckResult,
         row.run_id = run_id
         row.last_seen_at = utcnow()
         row.occurrences += 1
+        row.ok_streak = 0
         if row.status == "behoben":
             row.status = "offen"
             row.behoben_am = None
         row.schweregrad = finding.schweregrad
         row.titel = mask_text(finding.titel)[:200]
         row.evidenz = _numbers(finding.evidenz)
+        if not success and finding.kern == "check_fehlgeschlagen":
+            row.evidenz = {**row.evidenz, **{
+                k: str(finding.evidenz[k])[:100] if k == "exception_type" else mask_text(str(finding.evidenz[k]))[:300]
+                for k in ("exception_type", "message", "art") if k in finding.evidenz}}
         row.betroffene_ids = {k: v[:MAX_IDS] for k, v in list(finding.betroffene_ids.items())[:10]}
         row.ursache_hypothese = mask_text(finding.ursache_hypothese)[:500]
         row.empfehlung = mask_text(finding.empfehlung)[:500]
     db.flush()
     complete = success and result.vollstaendig and len(result.findings) <= 200
-    if complete:
-        for previous in db.scalars(select(DiagFinding).where(DiagFinding.check_id == check_id,
-            DiagFinding.status == "offen", DiagFinding.finding_key.not_in(keys))):
+    for previous in db.scalars(select(DiagFinding).where(DiagFinding.check_id == check_id,
+        DiagFinding.status == "offen", DiagFinding.finding_key.not_in(keys))):
+        if not success:
+            previous.ok_streak = 0
+        elif check_id not in run.fortschritt.get("checks", {}):
+            previous.ok_streak = (previous.ok_streak or 0) + 1
+        if complete or previous.ok_streak >= OK_STREAK_CLOSE:
             from app.models.diag_schedule import DiagNotification
 
             notification = db.get(DiagNotification, previous.finding_key)
@@ -155,7 +166,7 @@ def _prepare(factory):
         if ident is None:
             return None
         row = db.get(DiagRun, ident)
-        return ident, list(row.checks)
+        return ident, list(row.checks), row.quelle == "schedule"
 
 
 def _skip(factory, ident, check_id, reason):
@@ -193,7 +204,7 @@ async def run_once(factory=SessionLocal):
     prepared = await asyncio.to_thread(_prepare, factory)
     if prepared is None:
         return
-    ident, selected = prepared
+    ident, selected, scheduled = prepared
     deadline = time.monotonic() + RUN_TIMEOUT
     failure = None
     try:
@@ -205,19 +216,31 @@ async def run_once(factory=SessionLocal):
                 continue
             check = CHECKS[check_id]
 
-            def execute(check=check, check_id=check_id, remaining=remaining):
+            def execute(check=check, check_id=check_id):
                 with factory() as db:
                     active = einsatz_aktiv(db)
                     bind = db.get_bind()
                 if active and check.kosten != "leicht":
                     _skip(factory, ident, check_id, "uebersprungen_wegen_einsatz")
                     return
-                success = True
-                try:
-                    result = execute_isolated(bind, check, min(10.0, remaining))
-                except Exception:
-                    success = False
-                    result = CheckResult([Finding("check_fehlgeschlagen", "check_fehlgeschlagen", "warn")], False)
+                success = False
+                started = time.monotonic()
+                for attempt in range(2 if scheduled else 1):
+                    try:
+                        result = execute_isolated(bind, check, min(10.0, max(0.001, deadline - time.monotonic())))
+                        success = True
+                        break
+                    except Exception as exc:
+                        result = CheckResult([Finding("check_fehlgeschlagen", "check_fehlgeschlagen", "warn",
+                            evidenz={"exception_type": getattr(exc, "exception_type", type(exc).__name__),
+                                     "message": mask_text(str(exc))[:300],
+                                     "art": "timeout" if isinstance(exc, TimeoutError)
+                                     or getattr(exc, "timed_out", False) else "exception",
+                                     "dauer_ms": round((time.monotonic() - started) * 1000),
+                                     "versuche": attempt + 1})], False)
+                        if not scheduled or attempt or deadline - time.monotonic() <= CHECK_RETRY_DELAY:
+                            break
+                        time.sleep(CHECK_RETRY_DELAY)
                 with factory() as db:
                     persist_result(db, ident, check_id, result, success=success)
             # Nach Abbruch keinen unbeobachteten Schreibthread mit dem naechsten Lauf ueberlappen.

@@ -76,9 +76,10 @@ def _print_gateway_teil(gateway, now: datetime, org) -> DienstTeil:
 
 
 def aggregiere(teile: tuple[DienstTeil, ...]) -> str:
-    """Dienstzustand aus den Einzelgeraeten: ok | teilweise | down | unknown."""
+    """Einzelgeraete aggregieren; ohne Einrichtung gilt nicht_konfiguriert."""
+    teile = tuple(t for t in teile if t.state != "nicht_konfiguriert")
     if not teile:
-        return "unknown"
+        return "nicht_konfiguriert"
     down = [t for t in teile if t.state == "down"]
     if not down:
         return "ok" if any(t.state == "ok" for t in teile) else "unknown"
@@ -103,7 +104,7 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     if not monitored:
         detail = ("Ausfallalarmierung fuer alle Print-Gateways deaktiviert."
                   if paired else "Kein Print-Gateway eingerichtet.")
-        print_check = DienstCheck("print_gateway", "unknown", detail, False)
+        print_check = DienstCheck("print_gateway", "unknown" if paired else "nicht_konfiguriert", detail, False)
     else:
         print_teile = tuple(_print_gateway_teil(g, jetzt, org) for g in monitored)
         print_state = aggregiere(print_teile)
@@ -127,7 +128,7 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     eus = "eus" in ctx.chain and ctx.eus is not None
     sms_relevant = bool(tokens or eus)
     if not sms_relevant:
-        sms_check = DienstCheck("sms_gateway", "unknown", "Kein SMS-Dienst eingerichtet.", False)
+        sms_check = DienstCheck("sms_gateway", "nicht_konfiguriert", "Kein SMS-Dienst eingerichtet.", False)
     else:
         connected = connected_gateway_token_ids(org_id)
         sms_teile_liste = []
@@ -174,7 +175,7 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
 
     wut = [g for g in paired if (g.wut_config or {}).get("host")]
     if not wut:
-        serial = DienstCheck("alarm_seriell", "unknown", "Kein serieller W&T-Alarm eingerichtet.", False)
+        serial = DienstCheck("alarm_seriell", "nicht_konfiguriert", "Kein serieller W&T-Alarm eingerichtet.", False)
     else:
         serial_teile = tuple(
             DienstTeil(
@@ -223,7 +224,7 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         .first()
     )
     if not dibos_relevant:
-        dibos = DienstCheck("alarm_dibos", "unknown", "DIBOS-Poll ist nicht eingerichtet.", False)
+        dibos = DienstCheck("alarm_dibos", "nicht_konfiguriert", "DIBOS-Poll ist nicht eingerichtet.", False)
     else:
         if not probe or probe.last_probe_at is None:
             dibos_state, dibos_detail = "unknown", "DIBOS wurde noch nicht geprueft."
@@ -282,6 +283,11 @@ def entscheide(
 ) -> Entscheidung:
     jetzt = _naive_utc(now)
     assert jetzt is not None
+    if check.state == "nicht_konfiguriert":
+        row.down_since = row.outage_notified_at = row.last_repeat_at = None
+        row.fail_cycles = row.ok_cycles = 0
+        row.last_error = None
+        return Entscheidung(None)
     if not check.relevant or check.state == "unknown":
         return Entscheidung(None)
     if check.state in ("down", "teilweise"):
@@ -323,9 +329,11 @@ def bestaetigt_down(row: DienstStatus | None, karenz_min: int, now: datetime) ->
 
 
 def dienst_zustand(check: DienstCheck, row: DienstStatus | None, karenz_min: int, now: datetime) -> str:
-    """nicht_konfiguriert | ok | teilweise | down -- einzige Quelle fuer UI und Uptime-API."""
-    if not check.relevant:
+    """nicht_konfiguriert | unknown | ok | teilweise | down -- einzige Quelle fuer UI und Uptime-API."""
+    if not check.relevant or check.state == "nicht_konfiguriert":
         return "nicht_konfiguriert"
+    if check.state == "unknown":
+        return "unknown"
     if check.state == "ok":
         return "ok"
     if not bestaetigt_down(row, karenz_min, now):
@@ -388,12 +396,16 @@ def record_probe(org_id: int, key: str, ok: bool, fehler: str | None = None) -> 
             row = DienstStatus(org_id=org_id, key=key, state="unknown")
             db.add(row)
         elif (
-            row.last_probe_ok == ok
+            row.state != "nicht_konfiguriert"
+            and row.last_probe_ok == ok
             and row.last_probe_error == (fehler or None)
             and row.last_probe_at
             and now - (_naive_utc(row.last_probe_at) or now) <= timedelta(seconds=60)
         ):
             return
+        if row.state == "nicht_konfiguriert":
+            row.state = "unknown"
+            row.since = now
         row.last_probe_at = now
         row.last_probe_ok = ok
         row.last_probe_error = fehler[:500] if fehler else None

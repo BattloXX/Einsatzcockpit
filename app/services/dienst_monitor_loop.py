@@ -97,7 +97,7 @@ async def _process_org(org_id: int) -> None:
                 row = DienstStatus(org_id=org_id, key=check.key, state="unknown", since=now)
                 db.add(row)
                 db.flush()
-            if check.relevant and row.state != check.state:
+            if row.state != check.state:
                 row.state = check.state
                 row.since = now
             if check.state == "ok":

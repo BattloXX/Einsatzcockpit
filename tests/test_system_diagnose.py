@@ -184,3 +184,25 @@ def test_settings_version_only_for_system_admin(client, monkeypatch, role_code):
                 db.delete(row)
             db.delete(db.get(User, user_id))
             db.commit()
+
+
+def test_alte_abgelaufene_worker_warnen_nicht_mehr(diagnose_db, monkeypatch):
+    now = datetime.now(UTC).replace(tzinfo=None)
+    _worker(diagnose_db, "active", "host", now)
+    _worker(diagnose_db, "old", "host", now - timedelta(hours=25), expired=True)
+    result = diagnose.worker_status(diagnose_db, now)
+    assert result["status"] == "ok"
+    assert "old" not in result["evidence"]["expired_workers"]
+    assert "old" not in result["evidence"]["heartbeat_age_s"]
+
+
+@pytest.mark.parametrize("state,expected", [("nicht_konfiguriert", "ok"), ("unknown", "warn")])
+def test_service_summary_separates_unconfigured(diagnose_db, state, expected):
+    from app.models.dienst_monitor import DienstStatus
+
+    DienstStatus.__table__.create(diagnose_db.get_bind())
+    diagnose_db.add(DienstStatus(id=1, org_id=1, key="sms_gateway", state=state))
+    diagnose_db.flush()
+    result = diagnose.service_summary(diagnose_db)
+    assert result["status"] == expected
+    assert result["evidence"]["dienste"]["sms_gateway"][state] == 1
