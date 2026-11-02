@@ -174,6 +174,7 @@ class Settings(BaseSettings):
     # Update-Mechanismus: erwarteter SHA256 der nächsten Release-ZIP (optional;
     # wenn gesetzt, muss er auch im Upload-Form vom Admin angegeben werden)
     UPDATE_ZIP_REQUIRE_HASH: bool = True
+    UPDATE_BACKUP_KEEP: int = Field(default=5, ge=1)
     UPDATE_BACKUP_BEFORE_MIGRATE: bool = True
     UPDATE_REQUIRE_BACKUP: bool = True
 
@@ -462,6 +463,9 @@ class Settings(BaseSettings):
     BACKUP_KEEP_DAILY: int = 14
     # Medien (app_storage) mitsichern (Einsatzfotos, Objektdokumente, Nachschlagewerke).
     BACKUP_INCLUDE_MEDIA: bool = True
+    # Gesamtlimit je Dump/Medienarchiv; Remote: Prozess- bzw. Socket-Timeout.
+    BACKUP_DUMP_TIMEOUT_S: int = Field(default=7200, ge=1)
+    BACKUP_REMOTE_TIMEOUT_S: int = Field(default=1800, ge=1)
     # Binaries (ggf. absoluter Pfad ueber ENV). MariaDB 10.11 liefert mariadb/mariadb-dump.
     BACKUP_DUMP_BIN: str = "mariadb-dump"
     BACKUP_CLIENT_BIN: str = "mariadb"

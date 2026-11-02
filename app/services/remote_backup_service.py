@@ -161,7 +161,7 @@ def config_pruefen_org(cfg: RemoteConfig, resolver: Callable | None = None) -> N
 
 def _ssh_optionen(cfg: RemoteConfig) -> list[str]:
     """Gemeinsame ssh-Optionen fuer scp/sftp (Port/Key/Hostkey, non-interaktiv)."""
-    opts = ["-o", f"StrictHostKeyChecking={cfg.ssh_strict}", "-o", "BatchMode=yes"]
+    opts = ["-o", f"StrictHostKeyChecking={cfg.ssh_strict}", "-o", "BatchMode=yes", "-o", "ConnectTimeout=30"]
     if cfg.port:
         opts += ["-o", f"Port={cfg.port}"]
     if cfg.key:
@@ -231,7 +231,7 @@ def ftp_upload(
     """Laedt Dateien per FTP/FTPS hoch (ftplib). factory ist fuer Tests injizierbar."""
     if factory is None:
         factory = ftplib.FTP_TLS if cfg.protocol == "ftps" else ftplib.FTP
-    ftp = factory()
+    ftp = _ftp_client(factory)
     try:
         ftp.connect(cfg.host, cfg.port or 21)
         ftp.login(cfg.user, cfg.password)
@@ -253,6 +253,25 @@ def ftp_upload(
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
+def _remote_lauf(runner: Runner, argv: list[str]) -> subprocess.CompletedProcess:
+    from app.config import settings
+    try:
+        return runner(argv, capture_output=True, timeout=settings.BACKUP_REMOTE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Zeitlimit fuer Remote-Backup ueberschritten") from None
+
+
+def _ftp_client(factory: Callable[[], ftplib.FTP]) -> ftplib.FTP:
+    from app.config import settings
+    # Test-Factories bleiben parameterlos; reale Clients erhalten das Socket-Limit
+    # schon beim Anlegen, bevor connect() und der Datenkanal verwendet werden.
+    if factory in (ftplib.FTP, ftplib.FTP_TLS):
+        return factory(timeout=settings.BACKUP_REMOTE_TIMEOUT_S)  # type: ignore[call-arg]
+    ftp = factory()
+    ftp.timeout = settings.BACKUP_REMOTE_TIMEOUT_S
+    return ftp
+
+
 def upload(
     cfg: RemoteConfig,
     dateien: Sequence[Path],
@@ -266,6 +285,7 @@ def upload(
     der aufrufende Backup-Lauf einen Off-Site-Fehler sichtbar macht.
     """
     config_pruefen(cfg)
+    dateien = [p for p in dateien if not p.name.endswith(".partial") and not p.name.startswith(".")]
     if not dateien and cfg.protocol != "rclone":
         logger.info("Remote-Upload: keine Dateien zu uebertragen.")
         return
@@ -285,7 +305,7 @@ def upload(
 
     if cfg.protocol == "rclone":
         # rclone kopiert das ganze Backup-Verzeichnis (dedupliziert serverseitig).
-        argv = build_rclone_argv(cfg, backup_dir)
+        argv = [*build_rclone_argv(cfg, backup_dir), "--exclude", "*.partial", "--exclude", ".*"]
     elif cfg.protocol == "scp":
         argv = build_scp_argv(cfg, dateien)
     elif cfg.protocol == "rsync":
@@ -295,7 +315,7 @@ def upload(
     else:  # pragma: no cover — von config_pruefen abgedeckt
         raise ValueError(f"Unbehandeltes Protokoll: {cfg.protocol}")
 
-    ergebnis = runner(argv, capture_output=True)
+    ergebnis = _remote_lauf(runner, argv)
     if ergebnis.returncode != 0:
         stderr = (ergebnis.stderr or b"")
         text = stderr.decode("utf-8", "ignore") if isinstance(stderr, bytes) else str(stderr)
@@ -310,7 +330,7 @@ def _sftp_ausfuehren(cfg: RemoteConfig, dateien: Sequence[Path], runner: Runner)
         batch = Path(tf.name)
     try:
         argv = build_sftp_argv(cfg, batch)
-        ergebnis = runner(argv, capture_output=True)
+        ergebnis = _remote_lauf(runner, argv)
         if ergebnis.returncode != 0:
             stderr = ergebnis.stderr or b""
             text = stderr.decode("utf-8", "ignore") if isinstance(stderr, bytes) else str(stderr)
@@ -411,7 +431,8 @@ def neueste_je_praefix(backup_dir: Path, praefixe: Sequence[str]) -> list[Path]:
     """Neueste Datei je Praefix (fuer den Upload nur der frischen Dumps)."""
     treffer: list[Path] = []
     for praefix in praefixe:
-        kandidaten = sorted(backup_dir.glob(f"{praefix}-*"))
+        kandidaten = sorted(p for p in backup_dir.glob(f"{praefix}-*")
+                            if p.is_file() and not p.name.endswith(".partial"))
         if kandidaten:
             treffer.append(kandidaten[-1])
     return treffer
@@ -445,7 +466,7 @@ def _remote_liste(cfg: RemoteConfig, praefix: str, runner: Runner,
     if cfg.protocol in FTP_PROTOKOLLE:
         if ftp_factory is None:
             ftp_factory = ftplib.FTP_TLS if cfg.protocol == "ftps" else ftplib.FTP
-        ftp = ftp_factory()
+        ftp = _ftp_client(ftp_factory)
         try:
             ftp.connect(cfg.host, cfg.port or 21)
             ftp.login(cfg.user, cfg.password)
@@ -466,7 +487,7 @@ def _remote_liste(cfg: RemoteConfig, praefix: str, runner: Runner,
     else:  # sftp/scp/rsync -> ssh
         pfad = cfg.path or "."
         argv = ["ssh", *_ssh_optionen(cfg), "--", _ssh_host(cfg), f"ls -1 -- {shlex.quote(pfad)}"]
-    res = runner(argv, capture_output=True)
+    res = _remote_lauf(runner, argv)
     if res.returncode != 0:
         return []
     out = res.stdout.decode("utf-8", "ignore") if isinstance(res.stdout, bytes) else (res.stdout or "")
@@ -487,7 +508,7 @@ def _remote_delete(cfg: RemoteConfig, namen: Sequence[str], runner: Runner,
     if cfg.protocol in FTP_PROTOKOLLE:
         if ftp_factory is None:
             ftp_factory = ftplib.FTP_TLS if cfg.protocol == "ftps" else ftplib.FTP
-        ftp = ftp_factory()
+        ftp = _ftp_client(ftp_factory)
         try:
             ftp.connect(cfg.host, cfg.port or 21)
             ftp.login(cfg.user, cfg.password)
@@ -506,14 +527,13 @@ def _remote_delete(cfg: RemoteConfig, namen: Sequence[str], runner: Runner,
 
     if cfg.protocol == "rclone":
         for n in namen:
-            runner([cfg.rclone_bin, "deletefile", f"{cfg.rclone_remote}{cfg.path}/{n}"],
-                   capture_output=True)
+            _remote_lauf(runner, [cfg.rclone_bin, "deletefile", f"{cfg.rclone_remote}{cfg.path}/{n}"])
         return
 
     # sftp/scp/rsync -> ssh rm
     pfad = cfg.path or "."
     ziele = " ".join(shlex.quote(f"{pfad}/{n}") for n in namen)
-    runner(["ssh", *_ssh_optionen(cfg), "--", _ssh_host(cfg), f"rm -f -- {ziele}"], capture_output=True)
+    _remote_lauf(runner, ["ssh", *_ssh_optionen(cfg), "--", _ssh_host(cfg), f"rm -f -- {ziele}"])
 
 
 def prune_remote(

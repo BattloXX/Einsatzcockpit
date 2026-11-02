@@ -25,8 +25,9 @@ python -m app.cli restore-test    # spielt den neuesten Dump testweise ein und v
 ```
 
 Passwörter kommen über die `.env`/Umgebung (`MYSQL_PWD`), **nie** auf der Kommandozeile
-(sonst in der Prozessliste sichtbar). Alte Backups werden gemäß `BACKUP_KEEP_DAILY`
-automatisch entfernt.
+(sonst in der Prozessliste sichtbar). Tägliche DB-Dumps werden nach den Retention-Regeln der Verwaltung entfernt
+(Standard 30 Tage oder höchstens 7 je DB), Medien nach `BACKUP_KEEP_DAILY`
+(Standard 14 Archive).
 
 ## Automatisierung (systemd-Timer)
 
@@ -89,3 +90,58 @@ keine Connection-Strings wie `:sftp,ssh=...:`.
 ---
 
 **Nächster Schritt:** [Updates einspielen](Installation-Updates)
+
+## Robuste DB-Sicherungen und Grenzen
+
+DB-Dumps werden zunächst als `<name>.sql.gz.partial`, Medienarchive als
+`<name>.tar.gz.partial` geschrieben. Erst nach erfolgreichem Prozessende sowie
+Flush und `fsync` wird die Datei atomar umbenannt. Teildateien zählen weder für
+Retention noch Liste, Download, Restore-Probe oder Upload. Verwaiste `.partial`
+werden am Beginn eines gesperrten Backup-Laufs nach 24 Stunden entfernt. Bei einem
+harten Prozessabbruch bleiben sie bis dahin liegen. Verzeichnisrechte: 0700;
+Dumps und Medienarchive: 0600 (auch bei einer großzügigeren Benutzer-umask).
+
+Timer, Verwaltungsbutton und Pre-Update verwenden dieselbe nicht blockierende
+Dateisperre `<BACKUP_DIR>/.backup.lock`. Ein zweiter Lauf endet mit Exit-Code 1 und
+„Backup laeuft bereits“. Die Lockdatei darf bestehen bleiben; maßgeblich ist die
+Betriebssystem-Sperre. Bei gleichem Sekundenzeitstempel erhalten weitere Dateien
+einen eindeutigen Suffix.
+
+Vor jedem DB-Dump wird der freie Platz gegen die Größe des letzten Dumps derselben
+Datenbank (täglich oder vor Update) × 1,5 geprüft. Ohne Vorgänger entfällt die Schätzung. Die Schätzung garantiert
+keinen ausreichenden Platz bei starkem Datenwachstum; ein Fehler veröffentlicht
+auch dann keinen halben Dump.
+
+```env
+UPDATE_BACKUP_KEEP=5
+BACKUP_DUMP_TIMEOUT_S=7200
+BACKUP_REMOTE_TIMEOUT_S=1800
+```
+
+`BACKUP_DUMP_TIMEOUT_S` begrenzt jeden Dump und jeden Medien-Tar-Prozess insgesamt;
+bei Überschreitung wird der Prozess beendet und seine Teildatei entfernt.
+`BACKUP_REMOTE_TIMEOUT_S` begrenzt SCP/SFTP/rsync/rclone/SSH-Prozesse und FTP/FTPS-
+Socketoperationen (kein Gesamtlimit für mehrere FTP-Dateien). SSH erhält zusätzlich
+`ConnectTimeout=30`. Microsoft Graph verwendet sein eigenes HTTP-Timeout.
+Die Backup-Unit hat `TimeoutStartSec=2h`; dieses Gesamtlimit gilt für den gesamten
+Lauf einschließlich Medien und Upload. Für große Installationen beide Grenzen
+bewusst aufeinander abstimmen. Ein lokales systemd-Drop-in kann unter `[Unit]`
+`OnFailure=<eigene Alarmierungs-Unit>` setzen.
+
+Pre-Update-Dumps heißen `pre-update-einsatzleiter-<stamp>.sql.gz` bzw.
+`pre-update-einsatzleiter_weather-<stamp>.sql.gz`. Nur ihre eigene Anzahlgrenze
+`UPDATE_BACKUP_KEEP` gilt je Datenbank; sie verdrängen keine täglichen Dumps und
+werden von deren Regeln nicht entfernt. Die Verwaltung zeigt „Vor Update“ bzw.
+„Täglich“. Die Retention-Felder der Verwaltung gelten für tägliche Dumps.
+
+Die Restore-Probe wählt weiterhin den neuesten gültigen täglichen Haupt-Dump.
+Sie verlangt `fire_dept` und `users` mit jeweils mindestens einer Zeile sowie genau
+eine `alembic_version` mit dem aktuellen Alembic-Head des Codes. Eine Abweichung ist
+ein Fehler (bei einer gezielten Probe eines Pre-Update-Dumps nur eine Warnung).
+Wenn Wetter-DB konfiguriert und ein täglicher Wetter-Dump vorhanden ist, wird auch
+dieser nach `<scratch>_weather` eingespielt und werden die Wettertabellen geprüft.
+Die Wetter-DB wird über `create_all`, ohne Alembic, verwaltet; leere Messreihen sind
+zulässig. CREATE/DROP-Rechte müssen auch für die zweite Wegwerf-DB vorhanden sein.
+Beide Scratch-Namen werden gegen die Produktionsdatenbanken geprüft. Das neueste
+fertige Medienarchiv wird vollständig gelesen, einschließlich gzip-Prüfsumme und
+TAR-Inhalt. Fehlende Wetter-Dumps oder Medienarchive werden nicht geprüft.

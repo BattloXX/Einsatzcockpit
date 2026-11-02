@@ -19,6 +19,7 @@
 
 <section class="sys-card">
   <div class="sys-card__head"><h2>{{ icon("clock") }} Aufbewahrung für DB-Dumps</h2></div>
+  <p class="sys-muted">Diese Regeln gelten für tägliche Dumps. Vor Update: separat {{ update_backup_keep }} Dumps je Datenbank (UPDATE_BACKUP_KEEP).</p>
   <form method="post" action="/admin/db-backups" class="sys-stack">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="sys-form-grid">

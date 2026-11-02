@@ -83,7 +83,7 @@ def test_batch_maskierung_und_rsync_key(cfg):
     assert all(not zeile.startswith(("!", "-")) for zeile in text.splitlines())
     argv = rbs.build_rsync_argv(replace(cfg, key="/key with spaces/'key"), [Path("a.zip")])
     assert shlex.split(argv[argv.index("-e") + 1]) == [
-        "ssh", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes",
+        "ssh", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "-o", "ConnectTimeout=30",
         "-i", "/key with spaces/'key", "--"]
 
 

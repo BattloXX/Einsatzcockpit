@@ -5,12 +5,14 @@ Wants=mariadb.service
 
 [Service]
 Type=oneshot
+UMask=0077
 User=clp-einsatz
 Group=clp-einsatz
 WorkingDirectory=/home/clp-einsatz/htdocs/einsatzleiter
 EnvironmentFile=/home/clp-einsatz/htdocs/einsatzleiter/.env
 # Der DB-Benutzer braucht CREATE/DROP auf die Wegwerf-DB
-# (Standard: einsatzleiter_restore_test). Siehe Runbook, Abschnitt "Restore-Probe".
+# (Standard: einsatzleiter_restore_test und einsatzleiter_restore_test_weather).
+# Siehe Runbook, Abschnitt "Restore-Probe".
 ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/python -m app.cli restore-test
 
 [Install]

@@ -34,11 +34,12 @@ def _dump_liste() -> list[dict]:
         label, zeitpunkt = parsed
         dumps.append({
             "name": pfad.name,
-            "label": label,
+            "label": label.removeprefix("pre-update-"),
+            "typ": "Vor Update" if label.startswith("pre-update-") else "Täglich",
             "zeitpunkt": zeitpunkt,
             "groesse": pfad.stat().st_size,
         })
-    return sorted(dumps, key=lambda item: item["zeitpunkt"], reverse=True)
+    return sorted(dumps, key=lambda item: (item["zeitpunkt"], item["name"]), reverse=True)
 
 
 def _listen_context(
@@ -69,6 +70,7 @@ def db_backups(
         "is_sysadmin": True,
         "retention_days": retention_days,
         "max_count": max_count,
+        "update_backup_keep": settings.UPDATE_BACKUP_KEEP,
         **_listen_context(request),
         "saved": request.query_params.get("saved"),
     })
@@ -107,7 +109,8 @@ def db_backup_erstellen(
     return templates.TemplateResponse(
         request,
         "admin/_db_backups_liste.html",
-        _listen_context(request, created=created, failures=result.failures),
+        _listen_context(request, created=created, failures=result.failures,
+                        backup_laeuft=result.failures == ["Backup laeuft bereits"]),
     )
 
 

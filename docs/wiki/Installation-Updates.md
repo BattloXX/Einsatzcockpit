@@ -46,7 +46,8 @@ der Server lehnt Uploads ohne Prüfsumme vor der Verarbeitung ab.
 ### Automatisches Backup vor Migrationen
 
 `UPDATE_BACKUP_BEFORE_MIGRATE=true` erstellt vor jedem Migrationslauf DB-Dumps ohne
-Medienarchiv. Sie landen in `BACKUP_DIR` und unterliegen `BACKUP_KEEP_DAILY`. Mit dem
+Medienarchiv. Sie landen mit Präfix `pre-update-` in `BACKUP_DIR` und unterliegen
+separat `UPDATE_BACKUP_KEEP` (Standard 5 je DB). Mit dem
 Standard `UPDATE_REQUIRE_BACKUP=true` stoppt ein fehlgeschlagenes Backup das Update nach
 dem Code-Austausch bewusst vor Dependencies, Migration und Reload. Bei `false` wird die
 Backup-Warnung angezeigt, das Update läuft aber weiter. Restore-Anleitung und DR-Runbook:
@@ -172,3 +173,23 @@ Für größere Updates kann eine Wartungsseite geschaltet werden:
 ---
 
 **Nächster Schritt:** [Troubleshooting](Installation-Troubleshooting)
+
+### Getrennte Aufbewahrung der Pre-Update-Dumps
+
+Vor Migrationen erzeugte Dumps heißen `pre-update-einsatzleiter-<stamp>.sql.gz`
+und `pre-update-einsatzleiter_weather-<stamp>.sql.gz`. `UPDATE_BACKUP_KEEP=5`
+begrenzt sie separat je Datenbank. Tägliche Sicherungen behalten ihre eigene
+Aufbewahrung und werden durch häufige Updates nicht verdrängt. Die Verwaltung
+zeigt den Typ „Vor Update“.
+
+Die Dateisperre `<BACKUP_DIR>/.backup.lock` serialisiert Timer, UI und Pre-Update.
+Bei „Backup laeuft bereits“ wartet der Update-Backup-Schritt nicht; mit
+`UPDATE_REQUIRE_BACKUP=true` bricht das Update ab. Nach Ende der Sicherung erneut
+versuchen. Pro Dump wird vorab der freie Platz geprüft (letzter Dump derselben
+Datenbank × 1,5; ohne Vorgänger kein Check). Ein Platzfehler oder das Gesamtzeitlimit
+`BACKUP_DUMP_TIMEOUT_S=7200` veröffentlicht keinen unvollständigen Dump.
+Remote-Prozesse verwenden `BACKUP_REMOTE_TIMEOUT_S=1800`, SSH zusätzlich 30 Sekunden
+Verbindungszeitlimit. Details: [Backups](Installation-Backups#robuste-db-sicherungen-und-grenzen).
+
+Diese Härtung ändert die oben beschriebene Update-Reihenfolge nicht; der sichere
+Codeaustausch und Rollback sind ein eigener Umsetzungsschritt.

@@ -306,6 +306,7 @@ def _run_pre_migration_backup() -> dict:
             out_dir=settings.BACKUP_DIR,
             keep=-1,
             include_media=0,
+            praefix="pre-update-",
         )
         files = [str(path) for path in result.created]
         if result.returncode == 0:
