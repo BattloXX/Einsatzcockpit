@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Geraete-API:** Neuer authentifizierter Endpunkt `GET /api/v1/device/capabilities` liefert API-Version 1, Server-Version und vorhandene Funktionen mit expliziter Routen-Zuordnung; Sitzung oder Bearer-Geraetetoken wie beim FCM-Token-Status. Keine Migration.
+
 - **Systemadmin ohne Organisation:** Die Einstellungsseiten Allgemein, Wetter, Wetter-Infoscreen, SSO, DIBOS, LIS, Teams-Alarmierung, Org-Mail und Org-Backup leiten einen Systemadmin ohne eigene Organisation auf die erste Organisation weiter (`?org_id=`, relativ) statt "Keine Organisation ausgewaehlt" zu zeigen; die Organisationsauswahl auf der Seite bleibt. Die Modul-Seiten Planspiel und Strassensperren sind ohne Organisation weiterhin nicht aktiv (404), weil die Modul-Schalter an den Org-Einstellungen haengen.
 
 - **Systemstatus:** Ein organisationsloser Systemadmin bekam unter `/admin/systemstatus` den Fehler 400 "Keine Organisation ausgewaehlt". Die Seite waehlt jetzt die erste Organisation vor und bietet eine Organisationsauswahl.

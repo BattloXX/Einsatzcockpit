@@ -137,3 +137,7 @@ Regeln (`app/services/geraet_standort.py`):
   `standort_blockiert`); aeltere Clients ohne `measured_at` funktionieren unveraendert (Messzeit = Empfang).
 - Android-Seite: gemeinsam mit dem Geraetetoken; ohne Token keine Ortung; Retry mit Backoff (max. 3 Versuche je Lauf),
   Neustart-fest durch WorkManager plus Boot-/Push-Aufrufe von `ensureScheduled`.
+
+Die verfügbaren Geräte-API-Funktionen meldet `GET /api/v1/device/capabilities`
+(Sitzung oder Bearer-Gerätetoken, sonst HTTP 401); Antwortformat und Feature-Zuordnung
+siehe [REST-API: Server-Fähigkeiten](../wiki/Entwickler-REST-API.md#geräte-api-server-fähigkeiten).

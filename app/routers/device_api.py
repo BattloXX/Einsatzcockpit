@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.async_bridge import run_async
 from app.core.dependencies import _set_module_states
 from app.core.permissions import can_view_kontakt_directory, can_view_kontakt_directory_request
@@ -33,6 +34,18 @@ from app.services.resource_service import STATUS_IM_EINSATZ
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
 log = logging.getLogger(__name__)
+
+DEVICE_API_VERSION = 1
+# Eine gemeinsame Quelle fuer Feature-Namen und die zugehoerigen Routen.
+DEVICE_FEATURE_ROUTES: tuple[tuple[str, str], ...] = (
+    ("diagnose_report", "/diagnose-report"),
+    ("location", "/location"),
+    ("duty_state", "/duty-state"),
+    ("push_ack", "/push-ack"),
+    ("fcm_test_alarm", "/fcm-test-alarm"),
+    ("fcm_test_push", "/fcm-test-push"),
+    ("kontakte_sync", "/kontakte/sync"),
+)
 
 
 
@@ -120,6 +133,21 @@ def _get_device_token(user_id: int, db: Session, request: Request | None = None)
 
 def _can_read_kontakte(user: User) -> bool:
     return can_view_kontakt_directory(user)
+
+
+@router.get("/capabilities")
+def get_device_capabilities(request: Request, db: Session = Depends(get_db)):
+    """Meldet die API-Version und die auf diesem Server vorhandenen Geraete-Funktionen."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+    if not user:
+        raise _unauthorized(request)
+    return {
+        "api_version": DEVICE_API_VERSION,
+        "server_version": settings.APP_VERSION,
+        "features": [feature for feature, _ in DEVICE_FEATURE_ROUTES],
+    }
 
 
 @router.get("/kontakte/sync")
