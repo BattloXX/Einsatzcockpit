@@ -2,7 +2,7 @@
 
 ← [Zurück zur Startseite](Home)
 
-Die REST-API ist für **externe Systeme** (Alarmierungssystem) gedacht. Alle Endpunkte erfordern einen gültigen API-Key.
+Die REST-API ist für **externe Systeme** (Alarmierungssystem) gedacht. Die Endpunkte für externe Systeme erfordern einen gültigen API-Key; die Geräte-API verwendet Sitzung oder Bearer-Gerätetoken (siehe unten).
 
 ## Authentifizierung
 
@@ -428,3 +428,31 @@ Label: Alarmierungssystem Leitstelle
 ```
 
 > Den Key sofort kopieren — er wird nur einmal im Klartext angezeigt.
+
+
+## Geräte-API: Server-Fähigkeiten
+
+`GET /api/v1/device/capabilities` benötigt ein gültiges Bearer-Gerätetoken
+(`Authorization: Bearer <Pairing-Token>`) oder eine bestehende Sitzung wie
+`GET /api/v1/device/fcm-token/status`. Ohne gültige Authentifizierung: HTTP 401.
+Keine Query-Parameter oder Request-Daten erforderlich.
+
+Antwort (HTTP 200; `server_version` entspricht `settings.APP_VERSION`):
+
+```json
+{"api_version": 1, "server_version": "2026.11.02", "features": ["diagnose_report", "location", "duty_state", "push_ack", "fcm_test_alarm", "fcm_test_push", "kontakte_sync"]}
+```
+
+`api_version` ist eine Ganzzahl. `features` nennt vorhandene Server-Routen;
+Berechtigungen, Modulschalter und Laufzeitbedingungen der jeweiligen Route gelten weiterhin.
+Die Zuordnung wird in `DEVICE_FEATURE_ROUTES` in `app/routers/device_api.py` gepflegt:
+
+| Feature | Route |
+|---|---|
+| `diagnose_report` | `POST /api/v1/device/diagnose-report` |
+| `location` | `POST /api/v1/device/location` |
+| `duty_state` | `GET /api/v1/device/duty-state` |
+| `push_ack` | `POST /api/v1/device/push-ack` |
+| `fcm_test_alarm` | `POST /api/v1/device/fcm-test-alarm` |
+| `fcm_test_push` | `POST /api/v1/device/fcm-test-push` |
+| `kontakte_sync` | `GET /api/v1/device/kontakte/sync` |
