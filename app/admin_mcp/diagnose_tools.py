@@ -1,9 +1,10 @@
 """Vier begrenzte Diagnosewerkzeuge; ausschliesslich Start schreibt einen Lauf."""
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 
+from app.admin_mcp.zeit import iso_utc, utc_response
 from app.models.admin_security import utcnow
 from app.models.diagnose import DiagFinding, DiagRun
 from app.models.user import User
@@ -12,6 +13,7 @@ from app.services.diagnose.registry import CHECKS
 SEVERITY = ("kritisch", "fail", "warn", "info")
 
 
+@utc_response
 def collect_diagnose(db, name: str, user_id: int, correlation: str, **args) -> dict:
     evidence: dict
     if name == "admin_diagnose_starten":
@@ -73,7 +75,6 @@ def collect_diagnose(db, name: str, user_id: int, correlation: str, **args) -> d
             try:
                 since = datetime.fromisoformat(args["seit"].replace("Z", "+00:00"))
                 if since.tzinfo is not None:
-                    from datetime import UTC
                     since = since.astimezone(UTC).replace(tzinfo=None)
             except (TypeError, ValueError, AttributeError) as exc:
                 raise ValueError("Ungueltiger Zeitpunkt") from exc
@@ -84,8 +85,10 @@ def collect_diagnose(db, name: str, user_id: int, correlation: str, **args) -> d
                 rank_value, timestamp, ident = cursor.split("|")  # kein unmaskierter Dateninhalt im Cursor
                 seen = datetime.fromisoformat(timestamp)
                 rank_value, ident = int(rank_value), int(ident)
-                if rank_value not in range(4) or ident < 1 or seen.tzinfo is not None:
+                if rank_value not in range(4) or ident < 1:
                     raise ValueError
+                if seen.tzinfo is not None:
+                    seen = seen.astimezone(UTC).replace(tzinfo=None)
             except (ValueError, AttributeError) as exc:
                 raise ValueError("Ungueltiger Cursor") from exc
             from sqlalchemy import and_, or_
@@ -97,8 +100,8 @@ def collect_diagnose(db, name: str, user_id: int, correlation: str, **args) -> d
         last = page[-1] if page else None
         evidence = {"befunde": [{"id": r.id, "finding_key": r.finding_key, "check_id": r.check_id,
             "modul": r.modul, "schweregrad": r.schweregrad, "status": r.status, "titel": r.titel,
-            "last_seen_at": r.last_seen_at.isoformat() + "Z"} for r in page], "cursor":
-            f"{SEVERITY.index(last.schweregrad)}|{last.last_seen_at.isoformat()}|{last.id}"
+            "last_seen_at": iso_utc(r.last_seen_at)} for r in page], "cursor":
+            f"{SEVERITY.index(last.schweregrad)}|{iso_utc(last.last_seen_at)}|{last.id}"
             if len(rows) > limit and last else None}
     else:
         ident, finding_key = args.get("id"), args.get("finding_key")
@@ -114,6 +117,6 @@ def collect_diagnose(db, name: str, user_id: int, correlation: str, **args) -> d
             "titel": row.titel, "status": row.status, "evidenz": row.evidenz,
             "betroffene_ids": {k: v[:50] for k, v in row.betroffene_ids.items()},
             "hypothese": "Hypothese: " + row.ursache_hypothese.removeprefix("Hypothese: "),
-            "empfehlung": row.empfehlung, "first_seen_at": row.first_seen_at.isoformat() + "Z",
-            "last_seen_at": row.last_seen_at.isoformat() + "Z", "occurrences": row.occurrences}
+            "empfehlung": row.empfehlung, "first_seen_at": iso_utc(row.first_seen_at),
+            "last_seen_at": iso_utc(row.last_seen_at), "occurrences": row.occurrences}
     return {"status": "ok", "evidence": evidence}

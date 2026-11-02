@@ -84,8 +84,10 @@ REGELN = {
     "fehler": (
         "Wiederkehrende Fehler in den letzten 7 Tagen",
         "warn",
-        "Eine App-Komponente meldet wiederholt Fehler.",
-        "Fehlerdetails und App-Version pruefen.",
+        ("Geraeteberichte enthalten wiederholte Fehler derselben Komponente innerhalb "
+            "von sieben Tagen."),
+        ("Geraetedetail oeffnen, Komponente/Fehlercode und Zeitpunkte vergleichen; App "
+            "auf Soll-Version aktualisieren und danach neuen Diagnosebericht pruefen."),
     ),
     "bericht": (
         "Kein Bericht seit mehr als 48 Stunden bei aktivem Dienst",

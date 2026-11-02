@@ -8,6 +8,8 @@ import logging
 import os
 import threading
 import time
+from datetime import UTC, datetime
+from pathlib import Path
 
 MAX_ENTRIES = 2000
 _FORMATTER = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s")
@@ -26,7 +28,13 @@ class _MemoryLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
+            path = Path(record.pathname)
+            root = Path(__file__).resolve().parent
+            pathname = "app/" + str(path.relative_to(root)) if path.is_relative_to(root) else record.pathname
             entry = {
+                "ts_iso": datetime.fromtimestamp(record.created, UTC).isoformat().replace("+00:00", "Z"),
+                "pathname": pathname, "funcName": record.funcName, "lineno": record.lineno,
+                "exception_typ": record.exc_info[0].__name__ if record.exc_info and record.exc_info[0] else None,
                 "ts": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created)),
                 "level": record.levelname,
                 "name": record.name,

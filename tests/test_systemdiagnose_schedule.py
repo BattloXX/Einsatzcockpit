@@ -184,3 +184,36 @@ def test_migration_0329_upgrade_and_downgrade():
             module.downgrade()
             assert "diag_notification" not in inspect(connection).get_table_names()
     engine.dispose()
+
+
+def test_github_expiry_persists_and_uses_notification_path(factory, mail, monkeypatch):
+    from app.config import settings
+    from app.services import github_token
+    from app.services.diagnose.deploy import check_deploy
+    from app.services.diagnose.registry import Budget
+
+    monkeypatch.setattr(github_token, "now", lambda: NOW)
+    monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
+    monkeypatch.setattr(settings, "GITHUB_READ_TOKEN", "notification-fixture")
+    values = {"expires_at": (NOW + timedelta(days=14)).isoformat(), "last_status": "ok"}
+    monkeypatch.setattr(github_token, "read", lambda db, key: values.get(key, ""))
+    budget = Budget()
+    budget.runtime["deploy"] = {"status": "ok", "daten": {"commits_hinter_main": 0}}
+    with factory() as db:
+        enable(db)
+        setting(db, "diag_schedule_severity", "warn")
+        run = DiagRun(status="running", active_slot=1, korrelations_id="token-expiry")
+        db.add(run)
+        db.commit()
+        result = check_deploy(db, budget)
+        runner.persist_result(db, run.id, "deploy.version", result, success=True)
+        finding = result.findings[0]
+        saved = db.scalar(select(DiagFinding).where(DiagFinding.finding_key == finding.key("deploy.version")))
+        assert saved.evidenz["ablauf_am"] == "2026-11-11T02:00:00Z"
+        assert all(word in saved.empfehlung for word in ("Contents", "Actions", "Systemeinstellungen"))
+        schedule.notify_run(db, run.id, NOW)
+        claim = db.get(DiagNotification, saved.finding_key)
+        assert claim is not None and claim.last_sent_at == NOW
+        assert len(mail) == 1
+        text = mail[0].get_body(preferencelist=("plain",)).get_content()
+        assert "GitHub" in text and "2026-11-11T02:00:00Z" in text

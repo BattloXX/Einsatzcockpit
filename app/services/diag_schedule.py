@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.admin_mcp.code_tools import safe_title
+from app.admin_mcp.zeit import iso_utc
 from app.config import settings
 from app.core.async_bridge import run_async
 from app.core.audit import write_audit
@@ -120,8 +121,10 @@ def notify_run(db: Session, run_id: int, now: datetime | None = None) -> None:
             claim.last_sent_at, claim.count = now, claim.count + 1
             # Nur Registry-Modul, fester Titelwortschatz und Zaehler, keine freien DB-Texte.
             check = CHECKS.get(row.check_id)
+            expiry = iso_utc(row.evidenz.get("ablauf_am")) if row.check_id == "deploy.version" else None
             selected.append(f"{check.modul if check else 'system'} | {row.schweregrad} | "
-                            f"{safe_title(row.titel)} | Anzahl: {row.occurrences}")
+                            f"{safe_title(row.titel)} | Anzahl: {row.occurrences}"
+                            + (f" | Ablauf: {expiry}" if expiry else ""))
         db.commit()
     except (IntegrityError, OperationalError):
         db.rollback()
@@ -138,7 +141,7 @@ def notify_run(db: Session, run_id: int, now: datetime | None = None) -> None:
         write_audit(db, "diag.notification.sent", entity_id=run_id, payload={"anzahl": len(selected)})
     except Exception:
         db.rollback()
-        logger.warning("Systemdiagnose: Sammelmail fehlgeschlagen (Lauf %s)", run_id)
+        logger.exception("Systemdiagnose: Sammelmail fehlgeschlagen (Lauf %s)", run_id)
         write_audit(db, "diag.notification.failed", entity_id=run_id)
     db.commit()
 
@@ -157,5 +160,5 @@ async def diag_schedule_loop():
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.warning("Systemdiagnose: Tagesplanung fehlgeschlagen")
+            logger.exception("Systemdiagnose: Tagesplanung fehlgeschlagen")
         await asyncio.sleep(60)

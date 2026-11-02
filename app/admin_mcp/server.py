@@ -1,6 +1,7 @@
 """Separater SDK-Server mit eigenen OAuth-/Discovery-Pfaden."""
 import asyncio
 import json
+import logging
 from typing import cast
 from uuid import uuid4
 
@@ -33,12 +34,15 @@ from app.admin_mcp.masking import mask_arguments
 from app.admin_mcp.provider import RESOURCE, provider
 from app.admin_mcp.registry import ADMIN_TOOLS, CODE_TOOLS, DIAG_TOOLS, REPAIR_TOOLS, collect
 from app.admin_mcp.repair_tools import collect_repair
+from app.admin_mcp.zeit import iso_utc, timestamps
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.security import hash_api_key
 from app.models.admin_mcp import AdminMCPOAuthToken
 from app.models.admin_security import utcnow
 from app.services.repair.runner import gates, prepare_session
+
+logger = logging.getLogger(__name__)
 
 TOOL_TIMEOUT = 20
 MAX_RESPONSE_BYTES = 64 * 1024
@@ -72,19 +76,95 @@ class AdminMCPServer(MCPServer):
                 if repair_enabled or tool.name not in REPAIR_TOOLS]
 
 
+RESPONSE_TEXTE = {
+    "system": (
+        "Mindestens ein Systemteilcheck oder Build-Metadatum ist auffaellig.",
+        ("Teilchecks und Build-Zeitquelle in der Evidenz pruefen; den auffaelligen Teilcheck einzeln aufrufen."),
+    ),
+    "logs": (
+        "Der lokale Worker protokolliert Warnungen oder Fehler.",
+        (
+            "Haeufigstes Template und Beispielort mit admin_code_analyse korrelieren; "
+            "Exception-Typ und Deploy-Abstand pruefen."
+        ),
+    ),
+    "deploy": (
+        "CI-/Deploy-Abgleich ist eingeschraenkt oder der Deploystand ist veraltet.",
+        (
+            "GitHub-Zugang in Systemeinstellungen testen; CI-Lauf fuer Deploy-SHA pruefen "
+            "und erfolgreich gebautes Image pullen."
+        ),
+    ),
+    "datenbank": (
+        "DB-Verbindung, Pool oder Migrationsstand weichen vom Soll ab.",
+        (
+            "connected, Pool und current_revisions mit head_revisions vergleichen; bei "
+            "Schemaabweichung alembic upgrade head ausfuehren."
+        ),
+    ),
+    "redis": (
+        "Redis ist nicht eingerichtet oder die lokale Verbindung ist unterbrochen.",
+        ("REDIS_URL und Erreichbarkeit aus dem Container pruefen; Redis-Neustarts mit Fehlerzeitpunkten vergleichen."),
+    ),
+    "worker": (
+        "Worker-Leader oder Hintergrundloops halten ihre Fristen nicht ein.",
+        ("Aktive Worker, Leaderzahl und fehlerhafte Loops mit dem Worker-Dienst und dessen Logs vergleichen."),
+    ),
+    "gateway": (
+        "Gateway-Praesenz oder offene Versandauftraege sind auffaellig.",
+        ("Gateway-Verbindung und abgelaufene Job-Leases pruefen; vor Neuversand Empfang am Zielgeraet kontrollieren."),
+    ),
+    "app": (
+        "App-Version, Berechtigungen oder Diagnoseberichte weichen vom Soll ab.",
+        (
+            "admin_geraet_details fuer die betroffenen IDs aufrufen und die Empfehlung des "
+            "jeweiligen Geraetebefunds ausfuehren."
+        ),
+    ),
+    "push": (
+        "FCM-Konfiguration oder Empfangsbestaetigungen sind unvollstaendig.",
+        (
+            "FCM-Konfiguration und letzte Zustellversuche pruefen; Testpush am betroffenen "
+            "Geraet ausloesen und ACK abgleichen."
+        ),
+    ),
+    "osm": (
+        "Lokaler OSM-Import oder Overpass-Fallback ist eingeschraenkt.",
+        ("recommendations in der Evidenz ausfuehren; lokalen Importstatus vor erneuter Live-Probe pruefen."),
+    ),
+    "code": (
+        "Lokale Fehlerstellen oder GitHub-Vergleich liefern eingeschraenkte Evidenz.",
+        (
+            "Exception-Typ und belegte Datei/Funktion pruefen; GitHub-Zugang testen und "
+            "Regression an der Fehlerstelle reproduzieren."
+        ),
+    ),
+    "dienste": (
+        "Ein konfigurierter Dienst meldet down, teilweise oder unbekannt.",
+        (
+            "Auffaelligen Dienstschluessel im Dienstmonitor oeffnen, Konfiguration und "
+            "Erreichbarkeit pruefen und Diensttest wiederholen."
+        ),
+    ),
+}
+
+
 def response(name: str, correlation: str, result: dict) -> dict:
     state = result["status"]
-    return {"zeitpunkt": utcnow().isoformat() + "Z", "status": state,
+    module = (ADMIN_TOOLS | REPAIR_TOOLS)[name].module
+    cause, step = RESPONSE_TEXTE.get(module, (f"Die Pruefung {name} liefert eingeschraenkte Evidenz.",
+        f"Fehlercode in der Evidenz von {name} pruefen und die Abfrage mit gueltigen Parametern wiederholen."))
+    return timestamps({"zeitpunkt": iso_utc(utcnow()), "status": state,
         "modul": (ADMIN_TOOLS | REPAIR_TOOLS)[name].module,
         "schweregrad": {"ok": "info", "warn": "warnung", "fail": "fehler", "unbekannt": "info",
                        "eingeschraenkt": "info", "nicht verfuegbar": "info"}[state],
         "evidenz": result["evidence"],
         **({"github_zugang": result["github_zugang"]} if "github_zugang" in result else {}),
-        "ursachenhypothese": "Hypothese: Teilkomponente gestoert oder Datenbasis unvollstaendig."
+        "ursachenhypothese": "Hypothese: " + cause
             if state != "ok" else "Keine Hypothese erforderlich.",
-        "empfehlung": "Zustaendige Systemadministration soll den Teilcheck pruefen."
+        "empfehlung": step
             if state != "ok" else "Keine Aktion erforderlich.",
-        "korrelations_id": correlation}
+        "korrelations_id": correlation})
 
 
 def _repair_rejection(db, name: str, user_id: int | None, correlation: str, reason: str):
@@ -111,6 +191,7 @@ def _execute(name: str, arguments: dict, correlation: str) -> dict:
             try:
                 permitted = _tool_limiter.hit(parse("30/minute"), "admin-mcp-tool", str(user_id))
             except Exception:
+                logger.exception("Admin-MCP: Rate-Limit-Pruefung fehlgeschlagen")
                 _repair_rejection(db, name, user_id, correlation, "rate_limit_nicht_verfuegbar")
                 return {"status": "unbekannt", "evidence": {"fehler": "Rate-Limit-Pruefung nicht verfuegbar"}}
             if not permitted:
@@ -133,6 +214,7 @@ def _execute(name: str, arguments: dict, correlation: str) -> dict:
                 _repair_rejection(db, name, None, correlation, "berechtigung_widerrufen")
             raise
         except Exception:
+            logger.exception("Admin-MCP: Teilcheck fehlgeschlagen")
             return {"status": "fail", "evidence": {"fehler": "Teilcheck nicht verfuegbar"}}
 
 

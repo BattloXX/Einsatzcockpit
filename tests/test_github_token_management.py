@@ -213,7 +213,8 @@ def test_mcp_block_and_finding(env, monkeypatch, state):
     monkeypatch.setattr(settings, "GIT_SHA", "")
     result = check_deploy(db, Budget())
     assert any(f.kern == "github.token" for f in result.findings) == (state in (
-        "laeuft_bald_ab", "abgelaufen", "ungueltig", "keine_berechtigung"))
+        "abgelaufen", "ungueltig", "keine_berechtigung"))
+    assert any(f.kern == "github_token_laeuft_ab" for f in result.findings) == (state == "laeuft_bald_ab")
     assert SECRET not in repr(result)
 
 

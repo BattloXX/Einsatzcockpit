@@ -6,7 +6,10 @@ Jede Diagnose liefert status (ok/warn/fail), evidence und checked_at.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import logging
+import os
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from alembic.migration import MigrationContext
@@ -21,6 +24,9 @@ from app.models.worker_runtime import WorkerRuntime
 from app.services import gateway_presence as presence
 from app.services import ws_bus
 from app.services.background_runtime import EXPIRED_WORKER_RETENTION
+
+_PROCESS_STARTED_AT = datetime.now(UTC)
+logger = logging.getLogger(__name__)
 
 
 def _datetime(value):
@@ -115,12 +121,14 @@ def db_status(db: Session) -> dict:
         evidence["connected"] = True
         evidence["current_revisions"] = sorted(MigrationContext.configure(db.connection()).get_current_heads())
     except SQLAlchemyError:
+        logger.exception("Systemdiagnose: DB-Pruefung fehlgeschlagen")
         evidence["error"] = "database_check_failed"
         return {"status": "fail", "evidence": evidence, "checked_at": now}
     try:
         scripts = ScriptDirectory(str(Path(__file__).resolve().parents[2] / "alembic"))
         evidence["head_revisions"] = sorted(scripts.get_heads())
     except Exception:
+        logger.exception("Systemdiagnose: Migrationsstand nicht verfuegbar")
         evidence["error"] = "migration_head_unavailable"
         return {"status": "warn", "evidence": evidence, "checked_at": now}
     state = "ok" if evidence["current_revisions"] == evidence["head_revisions"] else "warn"
@@ -129,9 +137,34 @@ def db_status(db: Session) -> dict:
 
 def version_info() -> dict:
     """Build-Metadaten aus den Laufzeiteinstellungen."""
-    return {"status": "ok" if settings.GIT_SHA and settings.GIT_SHA != "unknown" else "warn",
+    from app.admin_mcp.zeit import iso_utc
+
+    build = iso_utc(settings.BUILD_TIME) if settings.BUILD_TIME.strip().lower() not in ("", "unknown") else None
+    source = "BUILD_TIME"
+    if build is None:
+        try:
+            fallback = datetime.fromtimestamp(Path(__file__).stat().st_mtime, UTC)
+            source = "Image-Datei-mtime (kein Buildnachweis)"
+        except OSError:
+            # Linux-Prozessstart, kein frei erfundener Buildzeitpunkt.
+            try:
+                # Linux /proc: Feld 22 sind Ticks seit Boot; comm kann Leerzeichen enthalten.
+                fields = Path("/proc/self/stat").read_text().rsplit(")", 1)[1].split()
+                age = time.clock_gettime(time.CLOCK_BOOTTIME) - int(fields[19]) / os.sysconf("SC_CLK_TCK")
+                fallback = datetime.now(UTC) - timedelta(seconds=age)
+                source = "Prozessstart (kein Buildnachweis)"
+            except (OSError, ValueError, IndexError, AttributeError):
+                fallback = _PROCESS_STARTED_AT
+                source = "Modulinitialisierung (kein Buildnachweis)"
+        build = iso_utc(fallback)
+    missing = source != "BUILD_TIME"
+    return {"status": "warn" if missing or not settings.GIT_SHA or settings.GIT_SHA == "unknown" else "ok",
             "checked_at": presence.utc(), "evidence": {
-                "APP_VERSION": settings.APP_VERSION, "GIT_SHA": settings.GIT_SHA, "BUILD_TIME": settings.BUILD_TIME,
+                "APP_VERSION": settings.APP_VERSION, "GIT_SHA": settings.GIT_SHA, "BUILD_TIME": build,
+                "build_time_quelle": source,
+                "empfehlung": ("BUILD_TIME fehlt: CI-Image aus docker-build.yml mit compose pull beziehen "
+                               "oder beim lokalen Build --build-arg BUILD_TIME=<UTC-ISO-Zeitpunkt> setzen.")
+                if missing else "Keine Aktion erforderlich.",
             }}
 
 
@@ -226,6 +259,7 @@ def deploy_summary(db: Session) -> dict:
                             aktuell=behind == 0, hinweis="Deploy entspricht main oder liegt davor"
                             if behind == 0 else "Deploy liegt hinter main")
     except Exception:
+        logger.exception("Systemdiagnose: GitHub-Abgleich fehlgeschlagen")
         evidence["hinweis"] = "GitHub-Abgleich nicht verfuegbar"
     return evidence
 
@@ -267,6 +301,7 @@ def push_summary(db: Session, org_id: int | None = None, limit: int = 20, quelle
         try:
             ready = push_service._get_fcm_app(cfg) is not None
         except Exception:
+            logger.exception("Systemdiagnose: FCM-Initialisierung fehlgeschlagen")
             ready = False
         fcm["initialisiert"] = push_service._fcm_app is not None
         fcm["nicht_verfuegbar_markiert"] = push_service._fcm_unavailable

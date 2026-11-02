@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import ast
 import re
+from datetime import datetime
 from pathlib import Path
 
 from app.admin_mcp.masking import mask_text
+from app.admin_mcp.zeit import iso_utc, log_timestamp
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 PATH = re.compile(r"app/(?:[A-Za-z_][A-Za-z0-9_]*/)*[A-Za-z_][A-Za-z0-9_]*\.py")
@@ -100,6 +102,18 @@ def extract_places(text: str) -> list[dict]:
     return result[:50]
 
 
+def entry_places(row: dict) -> list[dict]:
+    places = extract_places(str(row.get("msg", "")))
+    raw = row.get("pathname")
+    line = row.get("lineno")
+    if isinstance(raw, str):
+        place = _place(raw, row.get("funcName") or "<module>",
+                       line if type(line) is int and 0 < line < 10_000_000 else None)
+        if place and not any(p["datei"] == place["datei"] and p["funktion"] == place["funktion"] for p in places):
+            places.append(place)
+    return places
+
+
 def group_logs(rows: list[dict]) -> list[dict]:
     groups: dict[tuple, dict] = {}
     for row in rows:
@@ -109,11 +123,14 @@ def group_logs(rows: list[dict]) -> list[dict]:
         import builtins
 
         types = EXCEPTION.findall(text)
-        exception = types[-1] if types and isinstance(getattr(builtins, types[-1], None), type) else "unbekannt"
-        stamp = row.get("ts", "")
-        stamp = stamp if isinstance(stamp, str) and re.fullmatch(r"[0-9TZ: .+-]{10,35}", stamp) else None
+        if row.get("exception_typ"):
+            types.append(row["exception_typ"])
+        candidate = getattr(builtins, types[-1], None) if types else None
+        exception = (types[-1] if isinstance(candidate, type) and issubclass(candidate, BaseException)
+                     else "unbekannt")
+        stamp = log_timestamp(row)
         seen = set()
-        for place in extract_places(text):
+        for place in entry_places(row):
             key = (place["datei"], place["funktion"], exception)
             if key in seen:
                 continue
@@ -131,8 +148,8 @@ def group_logs(rows: list[dict]) -> list[dict]:
             )
             group["anzahl"] += 1
             if stamp:
-                group["erstes_auftreten"] = min(group["erstes_auftreten"] or stamp, stamp)
-                group["letztes_auftreten"] = max(group["letztes_auftreten"] or stamp, stamp)
+                group["erstes_auftreten"] = min(group["erstes_auftreten"] or stamp, stamp, key=datetime.fromisoformat)
+                group["letztes_auftreten"] = max(group["letztes_auftreten"] or stamp, stamp, key=datetime.fromisoformat)
     return sorted(groups.values(), key=lambda g: -g["anzahl"])[:100]
 
 
@@ -157,8 +174,8 @@ def finding_groups(finding) -> list[dict]:
             **p,
             "exception_typ": "unbekannt",
             "anzahl": finding.occurrences,
-            "erstes_auftreten": finding.first_seen_at.isoformat() + "Z",
-            "letztes_auftreten": finding.last_seen_at.isoformat() + "Z",
+            "erstes_auftreten": iso_utc(finding.first_seen_at),
+            "letztes_auftreten": iso_utc(finding.last_seen_at),
         }
         for p in places[:50]
     ]

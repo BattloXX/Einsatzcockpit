@@ -11,6 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 from app.admin_mcp.masking import mask_text
+from app.admin_mcp.zeit import iso_utc, utc_response
 from app.config import settings
 from app.services import geodienst_statistik as statistik
 from app.services import hydrant_service, osm_gebaeude_import, overpass_endpunkte
@@ -41,7 +42,7 @@ async def _probe(client: httpx.AsyncClient, url: str, *, pbf: bool = False) -> d
         if pbf and antwort.headers.get("last-modified"):
             try:
                 datum = parsedate_to_datetime(antwort.headers["last-modified"])
-                ergebnis["last_modified"] = datum.astimezone(UTC).isoformat().replace("+00:00", "Z")
+                ergebnis["last_modified"] = iso_utc(datum)
             except (ValueError, TypeError, OverflowError):
                 ergebnis["last_modified"] = None
     except (httpx.HTTPError, TimeoutError) as exc:
@@ -54,7 +55,7 @@ async def _fehlerschutz(key: str) -> dict:
     wert = await hydrant_service._lesen(key, redis_zuerst=True) or {}
     bis = wert.get("offen_bis", 0)
     return {"status": "offen" if bis > time.time() else "geschlossen",
-            "offen_bis": datetime.fromtimestamp(bis, UTC).isoformat().replace("+00:00", "Z") if bis else None,
+            "offen_bis": iso_utc(datetime.fromtimestamp(bis, UTC)) if bis else None,
             "code": wert.get("code")}
 
 
@@ -91,6 +92,7 @@ async def _sammeln(live: bool, quellen: list[tuple[str, str]]) -> dict:
     return ergebnis
 
 
+@utc_response
 def collect_osm(*, live: bool = True) -> dict:
     quellen = osm_gebaeude_import.quellen()
     rohdaten = osm_gebaeude_import.status()
@@ -113,7 +115,7 @@ def collect_osm(*, live: bool = True) -> dict:
     pruefung = any(z["pruefung"] for z in bestand)
     importfehler = any(z["letzter_fehler"] for z in bestand)
     letzte = evidenz["statistik"]["overpass"]
-    grenze = (datetime.now(UTC) - timedelta(hours=24)).isoformat().replace("+00:00", "Z")
+    grenze = iso_utc(datetime.now(UTC) - timedelta(hours=24))
     fehler_24h = bool(letzte["last_failure"] and letzte["last_failure"] >= grenze)
     erreichbar = any(p["status"] == "ok" for p in evidenz.get("endpoints", [])) if live else (
         bool(letzte["last_success"] and (not letzte["last_failure"] or letzte["last_success"] > letzte["last_failure"]))

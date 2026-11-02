@@ -25,8 +25,15 @@ class Finding:
     schweregrad: str = "warn"
     evidenz: dict = field(default_factory=dict)
     betroffene_ids: dict = field(default_factory=dict)
-    ursache_hypothese: str = "Hypothese: Datenbestand oder Teilkomponente ist unvollstaendig."
-    empfehlung: str = "Systemadministration soll die betroffenen IDs manuell pruefen."
+    ursache_hypothese: str = ""
+    empfehlung: str = ""
+
+    def __post_init__(self):
+        from app.services.diagnose.texte import befund_texte
+
+        cause, step = befund_texte(self.kern, self.titel)
+        self.ursache_hypothese = (self.ursache_hypothese or cause)[:500]
+        self.empfehlung = (self.empfehlung or step)[:500]
 
     def key(self, check_id: str) -> str:
         def normalize(value):

@@ -104,6 +104,10 @@ def persist_result(db: Session, run_id: int, check_id: str, result: CheckResult,
         row.schweregrad = finding.schweregrad
         row.titel = mask_text(finding.titel)[:200]
         row.evidenz = _numbers(finding.evidenz)
+        if check_id == "deploy.version" and finding.kern == "github_token_laeuft_ab":
+            from app.admin_mcp.zeit import iso_utc
+
+            row.evidenz["ablauf_am"] = iso_utc(finding.evidenz.get("ablauf_am"))
         if not success and finding.kern == "check_fehlgeschlagen":
             row.evidenz = {**row.evidenz, **{
                 k: str(finding.evidenz[k])[:100] if k == "exception_type" else mask_text(str(finding.evidenz[k]))[:300]
@@ -197,7 +201,7 @@ def _finish(factory, ident, failure: str | None = None):
                 notify_run(db, ident)
             except Exception:
                 db.rollback()
-                logger.warning("Systemdiagnose: Benachrichtigung fehlgeschlagen (Lauf %s)", ident)
+                logger.exception("Systemdiagnose: Benachrichtigung fehlgeschlagen (Lauf %s)", ident)
 
 
 async def run_once(factory=SessionLocal):
