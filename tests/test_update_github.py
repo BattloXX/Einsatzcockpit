@@ -12,9 +12,12 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def host_update_environment(monkeypatch, tmp_path):
+    from app.config import settings
     from app.services import update_service as us
     # Eigener Lock je Test: parallele xdist-Worker teilen sonst .update.lock im Repo.
     monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+    monkeypatch.setattr(us, "CGROUP_PATH", tmp_path / "cgroup")
+    monkeypatch.setattr(settings, "SYSTEMD_UNIT", "")
     from app.routers import ui_settings
     monkeypatch.setattr(us, "is_docker", lambda: False)
     monkeypatch.setattr(ui_settings, "is_docker", lambda: False)

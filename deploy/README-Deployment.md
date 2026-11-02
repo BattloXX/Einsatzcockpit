@@ -160,9 +160,18 @@ Unit einmal als Betreiber übernehmen, `sudo systemctl daemon-reload` und
 `sudo systemctl restart einsatzleiter` ausführen. Der Multi-Worker-Vorschlag liest
 `GUNICORN_PID_FILE` ebenfalls aus der Umgebung. Bei gültiger PID erfolgt SIGHUP.
 Ohne Setting bleibt der bisherige Pfad `<APP_ROOT>/gunicorn.pid` aktiv; ohne gültige
-PID folgt `sudo -n systemctl restart einsatzleiter` (Timeout 15 Sekunden).
-`deploy/sudoers-einsatzleiter.example` dokumentiert ausschließlich das vorhandene
-Recht für diesen Restart. Mit `sudo visudo -f /etc/sudoers.d/einsatzleiter` bearbeiten,
+PID folgt `sudo -n systemctl restart <Unit-Name>` (Timeout 15 Sekunden).
+Der Unit-Name wird aus `/proc/self/cgroup` unter `system.slice` erkannt; ohne Treffer
+gilt `einsatzleiter`. Mit `SYSTEMD_UNIT` in `.env` lässt er sich überschreiben,
+zum Beispiel `SYSTEMD_UNIT=einsatzleiter-test` (auch mit `.service` möglich).
+`deploy/sudoers-einsatzleiter.example` dokumentiert das Recht für diesen Restart.
+Das Testsystem braucht eine eigene sudoers-Zeile für seine Unit:
+
+```sudoers
+clp-einsatz ALL=(root) NOPASSWD: /usr/bin/systemctl restart einsatzleiter-test
+```
+
+Mit `sudo visudo -f /etc/sudoers.d/einsatzleiter` bearbeiten,
 mit `sudo visudo -c` prüfen. Kein `systemd-run`, keine neue Update-Unit erforderlich.
 
 `start_new_session=True` schützt vor dem Ende des HTTP-Requests, aber **nicht vor

@@ -27,6 +27,7 @@ def _progress(progress: Progress | None, step: str, state: str) -> None:
 
 
 APP_ROOT = Path(__file__).parent.parent.parent  # Projektverzeichnis
+CGROUP_PATH = Path("/proc/self/cgroup")
 
 # Dateien und Verzeichnisse, die beim Update NIEMALS überschrieben werden
 PROTECTED_PATHS = {
@@ -114,7 +115,8 @@ def _finish_update(
     if progress is None:
         result["server_reloaded"] = _reload_server()
         if not result["server_reloaded"]:
-            result.update(success=False, message=RELOAD_ERROR + ". Code und Migration sind bereits eingespielt.")
+            result.update(success=False,
+                          message=reload_error_message() + ". Code und Migration sind bereits eingespielt.")
     return result
 
 
@@ -410,7 +412,37 @@ def _run_pre_migration_backup() -> dict:
                 "message": f"Backup fehlgeschlagen: {exc}", "files": []}
 
 
-RELOAD_ERROR = "Neustart fehlgeschlagen, bitte manuell: sudo systemctl restart einsatzleiter"
+RELOAD_ERROR = "Neustart fehlgeschlagen"
+
+
+def systemd_unit_name() -> str:
+    """Konfigurierte Unit oder letzte Service-Unit unter system.slice ermitteln."""
+    from app.config import settings
+
+    fallback = "einsatzleiter"
+    if settings.SYSTEMD_UNIT:
+        name = settings.SYSTEMD_UNIT.removesuffix(".service")
+        return name if re.fullmatch(r"[A-Za-z0-9@_.:-]+", name) else fallback
+    try:
+        lines = CGROUP_PATH.read_text().splitlines()
+    except OSError:
+        return fallback
+    for line in lines:
+        fields = line.split(":", 2)
+        if len(fields) != 3:
+            continue
+        segments = fields[2].split("/")
+        if "system.slice" not in segments:
+            continue
+        services = [part for part in segments[segments.index("system.slice") + 1:] if part.endswith(".service")]
+        if services:
+            name = services[-1].removesuffix(".service")
+            return name if re.fullmatch(r"[A-Za-z0-9@_.:-]+", name) else fallback
+    return fallback
+
+
+def reload_error_message() -> str:
+    return f"{RELOAD_ERROR}, bitte manuell: sudo systemctl restart {systemd_unit_name()}"
 
 
 def _reload_server() -> bool:
@@ -432,16 +464,16 @@ def _reload_server() -> bool:
             continue
     try:
         result = subprocess.run(
-            ["sudo", "-n", "systemctl", "restart", "einsatzleiter"],
+            ["sudo", "-n", "systemctl", "restart", systemd_unit_name()],
             timeout=15,
             capture_output=True,
         )
         if result.returncode == 0:
             return True
     except OSError, subprocess.SubprocessError:
-        logger.warning(RELOAD_ERROR)
+        logger.warning(reload_error_message())
         return False
-    logger.warning(RELOAD_ERROR)
+    logger.warning(reload_error_message())
     return False
 
 

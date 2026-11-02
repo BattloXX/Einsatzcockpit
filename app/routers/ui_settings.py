@@ -49,6 +49,7 @@ from app.services.update_service import (
     get_github_token,
     is_docker,
     list_github_branches,
+    systemd_unit_name,
     validate_release_tag,
 )
 
@@ -2580,6 +2581,7 @@ def update_page(request: Request, db=Depends(get_db), user: User = Depends(requi
             "is_docker": is_docker(),
             "version": version,
             "token_configured": get_github_token(db) is not None,
+            "systemd_unit": systemd_unit_name(),
             "deployed_ref": _deployed_ref(db),
             "token_saved": request.query_params.get("token_saved"),
             "job": update_job.public_status(),

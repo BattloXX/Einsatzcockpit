@@ -1,3 +1,6 @@
 # Mit sudo visudo -f /etc/sudoers.d/einsatzleiter installieren und prüfen.
 # Nur das bereits benötigte Neustartrecht, keine zusätzlichen sudo-Rechte.
 clp-einsatz ALL=(root) NOPASSWD: /usr/bin/systemctl restart einsatzleiter
+# Unit-Name: automatisch aus der cgroup erkannt, mit SYSTEMD_UNIT in .env überschreibbar.
+# Für das Testsystem ist eine eigene Zeile erforderlich (bei Bedarf aktivieren):
+# clp-einsatz ALL=(root) NOPASSWD: /usr/bin/systemctl restart einsatzleiter-test
