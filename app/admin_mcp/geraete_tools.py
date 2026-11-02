@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
 from app.admin_mcp.masking import mask_text
+from app.admin_mcp.zeit import iso_utc, utc_response
 from app.models.admin_security import utcnow
 from app.services import app_geraet_auswertung as auswertung
 from app.services.app_geraet_service import technik_text
@@ -17,11 +18,12 @@ PERMISSIONS = (
 
 def _safe(value, *, technik=False):
     if isinstance(value, datetime):
-        return value.isoformat() + "Z"
+        return iso_utc(value)
     if isinstance(value, str):
         try:
             datetime.fromisoformat(value)
-            return value
+            # Reine Datumswerte (z. B. Sicherheitspatch) bleiben Datum, nur echte Zeitstempel bekommen Offset.
+            return (iso_utc(value) or value) if len(value) > 10 else value
         except ValueError:
             pass  # Nur gueltige Zeitstempel unveraendert ausgeben.
         return value if auswertung.calver(value) or (technik and technik_text(value)) else mask_text(value)[:253]
@@ -47,6 +49,7 @@ def _short(row):
             "last_report_at": g.last_report_at}
 
 
+@utc_response
 def collect_geraete(db, name: str, **args) -> dict:
     if name == "admin_geraet_details":
         ident = args.get("geraet_id")

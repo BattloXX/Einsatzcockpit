@@ -137,7 +137,8 @@ def test_version_info(monkeypatch):
     result = diagnose.version_info()
     assert result["status"] == "ok"
     assert result["evidence"] == {"APP_VERSION": "test-version", "GIT_SHA": "0123456789abcdef",
-                                  "BUILD_TIME": "2026-10-27T12:30:00Z"}
+                                  "BUILD_TIME": "2026-10-27T12:30:00Z",
+                                  "build_time_quelle": "BUILD_TIME", "empfehlung": "Keine Aktion erforderlich."}
     monkeypatch.setattr(settings, "GIT_SHA", "")
     assert diagnose.version_info()["status"] == "warn"
 
@@ -206,3 +207,30 @@ def test_service_summary_separates_unconfigured(diagnose_db, state, expected):
     result = diagnose.service_summary(diagnose_db)
     assert result["status"] == expected
     assert result["evidence"]["dienste"]["sms_gateway"][state] == 1
+
+
+@pytest.mark.parametrize("build", ["", "unknown", "invalid"])
+def test_missing_build_time_warns_with_labelled_fallback(monkeypatch, build):
+    monkeypatch.setattr(settings, "BUILD_TIME", build)
+    monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
+    result = diagnose.version_info()
+    assert result["status"] == "warn"
+    evidence = result["evidence"]
+    assert "mtime" in evidence["build_time_quelle"]
+    assert datetime.fromisoformat(evidence["BUILD_TIME"]).tzinfo is not None
+    assert "compose pull" in evidence["empfehlung"] and "--build-arg BUILD_TIME" in evidence["empfehlung"]
+
+
+def test_build_falls_back_to_process_start(monkeypatch):
+    from pathlib import Path
+    real_stat = Path.stat
+    def missing_image_file(path, *args, **kwargs):
+        if path == Path(diagnose.__file__):
+            raise OSError("image file metadata unavailable")
+        return real_stat(path, *args, **kwargs)
+    monkeypatch.setattr(settings, "BUILD_TIME", "unknown")
+    monkeypatch.setattr(Path, "stat", missing_image_file)
+    evidence = diagnose.version_info()["evidence"]
+    assert evidence["build_time_quelle"] == "Prozessstart (kein Buildnachweis)"
+    stamp = datetime.fromisoformat(evidence["BUILD_TIME"])
+    assert stamp.tzinfo is not None and stamp <= datetime.now(UTC)

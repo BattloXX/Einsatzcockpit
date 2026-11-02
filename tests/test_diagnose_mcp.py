@@ -1,6 +1,6 @@
 """Neue Tools behalten OAuth, Live-Rechte, Audit und begrenzte Antworten."""
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -96,6 +96,8 @@ def test_pagination_filters_details_and_masking(client, admin_env):
         page = call(client, token, "admin_fehler_liste", {"limit": 2, "cursor": cursor})["evidenz"]
         rows.extend(page["befunde"])
         cursor = page["cursor"]
+        if cursor:
+            assert datetime.fromisoformat(cursor.split("|")[1]).tzinfo is not None
         if cursor is None:
             break
     assert len(rows) == len({r["id"] for r in rows}) == 5

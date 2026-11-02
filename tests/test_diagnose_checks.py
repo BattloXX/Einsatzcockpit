@@ -362,3 +362,25 @@ def test_snapshot_sqlite_retry_detail(diag_engine, monkeypatch, statistik, schwe
         finding = result.findings[0]
         assert finding.evidenz["zaehler"] == {str(code): statistik.get(code, 0) for code in (1020, 1205, 1213)}
         assert finding.key("db.snapshot_isolation") == registry.Finding("retry_konflikte", "").key("db.snapshot_isolation")
+
+
+def test_no_finding_uses_generic_defaults():
+    import ast
+    from pathlib import Path
+    from app.services.diagnose.registry import Finding
+    from app.services.diagnose.texte import TEXTE, WORKER, REDIS
+
+    keys = list(TEXTE) + list(WORKER) + list(REDIS)
+    for path in Path("app/services/diagnose").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Finding" and node.args:
+                try:
+                    keys.append(ast.literal_eval(node.args[0]))
+                except (ValueError, TypeError):
+                    continue
+    for kern in keys:
+        finding = Finding(kern, str(kern))
+        assert not any(text in finding.ursache_hypothese + finding.empfehlung for text in (
+            "Teilkomponente", "Datenbestand oder", "IDs manuell pruefen"))
+        assert 0 < len(finding.ursache_hypothese) <= 500
+        assert 0 < len(finding.empfehlung) <= 500

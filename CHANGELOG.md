@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Admin-MCP / Diagnose:** Strukturierte Logorte und Exception-Typen, datensparsame Logtemplates mit gemeinsamen Signaturen und UTC-Zeitstempel mit Z-Suffix. Konkrete Befundempfehlungen, Warnung bei fehlender Buildzeit mit gekennzeichnetem Ersatzzeitpunkt und Build-Args fuer lokale Compose-Builds. GitHub-Tokenablauf als Diagnosebefund (Info ab 30, Warnung ab 14 Tagen) ueber den bestehenden Benachrichtigungspfad. Keine Migration.
+
 - **OSM / Overpass:** Auch bei gleichzeitigem Ablauf von Gesamt- und Versuchszeitlimit zaehlt jeder fehlgeschlagene Versuch genau einmal fuer den Endpunkt-Breaker. Der lokale Gebaeudebestand bleibt primaer (veralteter Stand wird mit Warnung geliefert, die Georef-Alterssperre bleibt wirksam). Admincheck und Systemdiagnose zeigen offene Endpunkte samt Sperrfrist und letztem Fehlercode sowie eine Empfehlung bei gesundem lokalem Bestand. Keine Migration.
 
 - **Monitoring:** Versions-, Android- und WebView-Angaben bleiben fuer Vergleiche erhalten. Fehlgeschlagene Diagnosechecks zeigen maskierte Ursache und Dauer; geplante Laeufe wiederholen einmal. Befunde schliessen nach drei erfolgreichen Pruefungen ohne erneutes Auftreten auch bei unvollstaendiger Datenbasis (Migration 0343). Nicht eingerichtete Dienste werden separat ausgewiesen; abgelaufene Worker verschwinden nach 24 Stunden aus Warnungen und werden bereinigt.

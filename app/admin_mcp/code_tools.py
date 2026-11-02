@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app import log_buffer
 from app.admin_mcp.masking import mask_text
+from app.admin_mcp.zeit import utc_response
 from app.config import settings
 from app.models.diagnose import DiagFinding
 from app.services import code_analyse as code
@@ -15,6 +16,11 @@ from app.services.github_readonly import GitHubReadonly, unavailable, valid_sha
 
 TITLE_WORDS = frozenset(
     {
+        "github",
+        "lesetoken",
+        "laeuft",
+        "bald",
+        "ab",
         "gateway",
         "fehler",
         "ci",
@@ -86,6 +92,7 @@ def ci_status(sha: str | None = None) -> dict:
     }
 
 
+@utc_response
 def collect_code(db, name: str, **args) -> dict:
     result = _collect_code(db, name, **args)
     access = github_token.status(db)

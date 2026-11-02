@@ -1,5 +1,6 @@
 """Leichter Deploy-Check; kein Ausfallbefund bei fehlenden GitHub-Daten."""
 
+from app.admin_mcp.zeit import iso_utc
 from app.config import settings
 from app.services import github_token
 from app.services.diagnose.registry import CheckResult, Finding, register_check
@@ -10,7 +11,18 @@ from app.services.github_readonly import GitHubReadonly, valid_sha
 def check_deploy(db, budget):
     access = github_token.status(db)
     findings = []
-    if access["status"] in ("abgelaufen", "ungueltig", "laeuft_bald_ab", "keine_berechtigung"):
+    days = access["restlaufzeit_tage"]
+    if access["quelle"] != "keine" and days is not None and 0 <= days <= 30:
+        findings.append(Finding(
+            "github_token_laeuft_ab", "GitHub-Lesetoken laeuft bald ab", "warn" if days <= 14 else "info",
+            {"restlaufzeit_tage": days, "ablauf_am": iso_utc(access["ablauf_am"])},
+            ursache_hypothese=("Das hinterlegte GitHub-Lesetoken erreicht sein Ablaufdatum; "
+                                  "CI-/Deploy-Abfragen fallen danach aus."),
+            empfehlung=("Neues fine-grained GitHub-Lesetoken mit ausschliesslich lesenden "
+                           "Rechten fuer Contents und Actions erstellen "
+                       "und unter Systemeinstellungen > GitHub-Zugang samt Ablaufdatum hinterlegen."),
+        ))
+    if access["status"] in ("abgelaufen", "ungueltig", "keine_berechtigung"):
         findings.append(Finding("github.token", "github.token: GitHub-Zugang pruefen", "warn",
                                 {"status": access["status"], "tage": access["restlaufzeit_tage"]}))
     if not valid_sha(settings.GIT_SHA):

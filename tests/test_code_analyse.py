@@ -93,3 +93,59 @@ def test_recursive_frames_count_one_log_event():
     rows = [{"msg": TRACE + TRACE.replace("line 18", "line 19"), "ts": "2026-10-27 10:00:00"}]
     result = code.group_logs(rows)
     assert len(result) == 1 and result[0]["anzahl"] == 1
+
+
+def test_structured_log_record_and_builtin_exception_only():
+    import logging
+    from app.log_buffer import _MemoryLogHandler
+
+    handler = _MemoryLogHandler()
+    record = logging.LogRecord("app.services.code_analyse", logging.ERROR,
+                               str(code.APP_ROOT / "services/code_analyse.py"), 123,
+                               "private source text", (), None, "group_logs")
+    try:
+        raise ValueError("private caught exception")
+    except ValueError:
+        import sys
+        record.exc_info = sys.exc_info()
+    handler.emit(record)
+    entry = handler.get_entries()[0]
+    assert {"ts", "level", "name", "msg", "pathname", "funcName", "lineno", "ts_iso", "exception_typ"} <= entry.keys()
+    assert entry["pathname"] == "app/services/code_analyse.py"
+    group = code.group_logs([entry])[0]
+    assert (group["funktion"], group["zeile"], group["exception_typ"]) == ("group_logs", 123, "ValueError")
+    assert datetime.fromisoformat(group["erstes_auftreten"]).tzinfo is not None
+    entry["exception_typ"] = "PrivateCustomerError"
+    entry["msg"] = "private"
+    assert code.group_logs([entry])[0]["exception_typ"] == "unbekannt"
+    assert "private" not in json.dumps(code.group_logs([entry]))
+
+
+@pytest.mark.parametrize("days,severity", [(0, "warn"), (14, "warn"), (15, "info"), (30, "info"), (31, None)])
+def test_github_expiry_reminder(monkeypatch, days, severity):
+    from datetime import timedelta
+    from app.services import github_token
+    now = datetime(2026, 11, 2, 12)
+    monkeypatch.setattr(github_token, "now", lambda: now)
+    monkeypatch.setattr(settings, "GITHUB_READ_TOKEN", "fixture-token")
+    monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
+    values = {"expires_at": (now + timedelta(days=days, seconds=1)).isoformat(), "last_status": "ok"}
+    monkeypatch.setattr(github_token, "read", lambda db, key: values.get(key, ""))
+    budget = Budget()
+    budget.runtime["deploy"] = {"status": "ok", "daten": {"commits_hinter_main": 0}}
+    findings = [f for f in check_deploy(None, budget).findings if f.kern == "github_token_laeuft_ab"]
+    if severity is None:
+        assert not findings
+    else:
+        finding = findings[0]
+        assert finding.schweregrad == severity
+        assert datetime.fromisoformat(finding.evidenz["ablauf_am"]).tzinfo is not None
+        assert all(word in finding.empfehlung for word in ("Contents", "Actions", "Systemeinstellungen"))
+
+
+def test_first_last_seen_compare_fractional_seconds_chronologically():
+    rows = [{"msg": TRACE, "ts_iso": stamp} for stamp in (
+        "2026-11-02T12:00:00.100Z", "2026-11-02T12:00:00Z")]
+    result = code.group_logs(rows)[0]
+    assert result["erstes_auftreten"] == "2026-11-02T12:00:00Z"
+    assert result["letztes_auftreten"] == "2026-11-02T12:00:00.100000Z"

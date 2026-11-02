@@ -1,17 +1,19 @@
 """Diagnosewerkzeuge ohne Fachdatenmutationen."""
 import hashlib
 import hmac
-import re
-from collections import Counter
+import logging
 from dataclasses import dataclass
+from datetime import datetime
 
 from app import log_buffer
 from app.admin_mcp.geraete_tools import collect_geraete
-from app.admin_mcp.masking import mask_text
+from app.admin_mcp.log_templates import normalize_message
 from app.admin_mcp.osm_tools import collect_osm
+from app.admin_mcp.zeit import log_timestamp, utc_response
 from app.config import settings
 from app.services import github_token
 from app.services import system_diagnose as diagnose
+from app.services.code_analyse import entry_places
 from app.services.diagnose.runner import resolve_deploy_findings
 
 
@@ -61,6 +63,7 @@ CODE_TOOLS = {
 ADMIN_TOOLS.update(CODE_TOOLS)
 
 
+@utc_response
 def collect(db, name: str, **arguments) -> dict:
     if name == "admin_system_uebersicht":
         parts = {}
@@ -70,6 +73,7 @@ def collect(db, name: str, **arguments) -> dict:
             try:
                 parts[key] = collect(db, key, **({"live": False} if key == "admin_osm_pruefen" else {}))
             except Exception:
+                logging.getLogger(__name__).exception("Admin-Systemuebersicht: Teilcheck fehlgeschlagen")
                 db.rollback()
                 parts[key] = {"status": "fail", "evidence": {"fehler": "Teilcheck nicht verfuegbar"}}
         version = diagnose.version_info()
@@ -117,17 +121,24 @@ def collect(db, name: str, **arguments) -> dict:
         raise ValueError("Ungueltige Log-Filter")
     rows = log_buffer.get_entries(2000, level)
     rows = [row for row in rows if search.casefold() in row["msg"].casefold()][-limit:]
-    # Selbst maskierte Freitexte koennten Namen/Einsatzdetails enthalten. Nach der
-    # Maskierung nur eine Signatur ausgeben; identische Meldungen zusammenfassen.
-    groups: Counter = Counter()
+    groups: dict[tuple, dict] = {}
     for row in rows:
-        message = re.sub(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[,.]\d+\s*", "", row["msg"])
-        signature = hmac.new(settings.SECRET_KEY.encode(), mask_text(message).encode(), hashlib.sha256).hexdigest()[:16]
-        groups[(row["level"], signature)] += 1
+        template = normalize_message(row["msg"])
+        signature = hmac.new(settings.SECRET_KEY.encode(), template.encode(), hashlib.sha256).hexdigest()[:16]
+        stamp = log_timestamp(row)
+        places = entry_places(row)
+        group = groups.setdefault((row["level"], signature), {
+            "level": row["level"], "signatur": signature, "anzahl": 0,
+            "template": template[:160], "beispiel_ort": places[-1] if places else None,
+            "erstes_auftreten": stamp, "letztes_auftreten": stamp,
+        })
+        group["anzahl"] += 1
+        if stamp:
+            group["erstes_auftreten"] = min(group["erstes_auftreten"] or stamp, stamp, key=datetime.fromisoformat)
+            group["letztes_auftreten"] = max(group["letztes_auftreten"] or stamp, stamp, key=datetime.fromisoformat)
     return {"status": "warn" if rows else "ok", "evidence": {
         "quelle": "lokaler Worker-Ringpuffer", "rohtexte": "nicht ausgegeben",
-        "gruppen": [{"level": level, "signatur": signature, "anzahl": count}
-                    for (level, signature), count in groups.items()]}}
+        "gruppen": list(groups.values())}}
 
 
 REPAIR_TOOLS = {

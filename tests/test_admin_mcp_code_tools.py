@@ -173,3 +173,16 @@ def test_optional_title_technical_words_only():
     assert code_tools.safe_title("Gateway Fehler pruefen") == "Gateway Fehler pruefen"
     text = code_tools.safe_title("Max Muster alice@example.org +436641234567 token=PRIVATE")
     assert not any(v in text for v in ("Max", "Muster", "alice", "4366", "PRIVATE"))
+
+
+def test_structured_location_reaches_mcp(client, admin_env, monkeypatch):
+    monkeypatch.setattr(log_buffer, "get_entries", lambda *a: [{
+        "ts_iso": "2026-11-02T12:00:00Z", "level": "ERROR", "msg": "private customer name",
+        "pathname": "app/services/code_analyse.py", "funcName": "group_logs", "lineno": 125,
+        "exception_typ": "RuntimeError"}])
+    token = oauth.tokens(client, admin_env)["access_token"]
+    answer = call(client, token, "admin_code_analyse")
+    place = answer["evidenz"]["fehlerstellen"][0]
+    assert (place["datei"], place["funktion"], place["zeile"], place["exception_typ"]) == (
+        "app/services/code_analyse.py", "group_logs", 125, "RuntimeError")
+    assert "private customer name" not in json.dumps(answer)
