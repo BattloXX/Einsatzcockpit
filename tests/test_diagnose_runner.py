@@ -239,3 +239,109 @@ def test_snapshot_process_uses_worker_counters(diag_engine, monkeypatch):
     assert finding.schweregrad == "warn"
     assert finding.evidenz["worker_pid"] == os.getpid()
     assert finding.evidenz["zaehler"] == {"1020": 2, "1205": 0, "1213": 8}
+
+
+@pytest.mark.parametrize("quelle,versuche", [("manual", 1), ("mcp", 1), ("schedule", 2)])
+@pytest.mark.parametrize("exc,art", [(ValueError, "exception"), (TimeoutError, "timeout")])
+def test_failure_evidence_and_scheduled_retry(factory, monkeypatch, quelle, versuche, exc, art):
+    with factory() as db:
+        ident = queue(db, quelle=quelle)
+    calls = []
+    def broken(*args):
+        calls.append(1)
+        raise exc("alice@example.org " + "x " * 200 + " token=PRIVATE")
+    monkeypatch.setattr(runner, "execute_isolated", broken)
+    monkeypatch.setattr(runner, "CHECK_RETRY_DELAY", .001)
+    asyncio.run(runner.run_once(factory))
+    assert len(calls) == versuche
+    with factory() as db:
+        finding = db.scalar(select(DiagFinding).where(DiagFinding.run_id == ident))
+        assert finding.evidenz["exception_type"] == exc.__name__
+        assert finding.evidenz["art"] == art
+        assert 0 <= finding.evidenz["dauer_ms"] < 10000
+        assert finding.evidenz["versuche"] == versuche
+        assert len(finding.evidenz["message"]) <= 300
+        assert "alice@example.org" not in str(finding.evidenz)
+        assert "PRIVATE" not in str(finding.evidenz)
+
+
+def test_scheduled_retry_recovers(factory, monkeypatch):
+    with factory() as db:
+        ident = queue(db, quelle="schedule")
+    calls = []
+    def transient(*args):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ConnectionError("temporary")
+        return CheckResult()
+    monkeypatch.setattr(runner, "execute_isolated", transient)
+    monkeypatch.setattr(runner, "CHECK_RETRY_DELAY", .001)
+    asyncio.run(runner.run_once(factory))
+    with factory() as db:
+        assert len(calls) == 2
+        assert db.get(DiagRun, ident).fortschritt["checks"]["worker.zustand"]["status"] == "done"
+        assert db.scalar(select(DiagFinding).where(DiagFinding.run_id == ident)) is None
+
+
+def failing_check(db, budget):
+    raise ValueError("alice@example.org token=PRIVATE")
+
+
+def test_isolated_exception_keeps_masked_cause(diag_engine):
+    from app.services.diagnose.registry import IsolatedCheckError
+
+    with pytest.raises(IsolatedCheckError) as raised:
+        execute_isolated(diag_engine, Check("broken", "test", "", "leicht", failing_check))
+    assert raised.value.exception_type == "ValueError"
+    assert not raised.value.timed_out
+    assert "PRIVATE" not in str(raised.value)
+    assert "alice@example.org" not in str(raised.value)
+
+
+def test_partial_success_streak_resets_and_closes(factory):
+    with factory() as db:
+        finding = Finding("streak", "Streak")
+        def run(result, success=True):
+            ident = queue(db)
+            runner.claim_run(db)
+            runner.persist_result(db, ident, "worker.zustand", result, success=success)
+            row = db.get(DiagRun, ident)
+            row.status, row.active_slot = "done", None
+            db.commit()
+        run(CheckResult([finding], False))
+        row = db.scalar(select(DiagFinding).where(DiagFinding.finding_key == finding.key("worker.zustand")))
+        for expected in (1, 2):
+            run(CheckResult([], False))
+            db.refresh(row)
+            assert row.ok_streak == expected and row.status == "offen"
+        run(CheckResult([], False), success=False)
+        db.refresh(row)
+        assert row.ok_streak == 0
+        run(CheckResult([], False))
+        run(CheckResult([finding], False))
+        db.refresh(row)
+        assert row.ok_streak == 0
+        for _ in range(3):
+            run(CheckResult([], False))
+        db.refresh(row)
+        assert row.ok_streak == 3 and row.status == "behoben" and row.behoben_am is not None
+        run(CheckResult([finding], False))
+        db.refresh(row)
+        assert row.ok_streak == 0 and row.status == "offen" and row.behoben_am is None
+
+
+def test_migration_0343_populates_existing_findings(tmp_path):
+    spec = importlib.util.spec_from_file_location("migration0343", "alembic/versions/0343_diagnose_ok_streak.py")
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    assert migration.revision == "0343" and migration.down_revision == "0342"
+    engine = create_engine(f"sqlite:///{tmp_path / 'streak.db'}")
+    with engine.begin() as con:
+        con.execute(text("CREATE TABLE diag_finding (id INTEGER PRIMARY KEY)"))
+        con.execute(text("INSERT INTO diag_finding (id) VALUES (1)"))
+        migration.op = Operations(MigrationContext.configure(con))
+        migration.upgrade()
+        assert con.scalar(text("SELECT ok_streak FROM diag_finding WHERE id = 1")) == 0
+        migration.downgrade()
+        assert "ok_streak" not in {c["name"] for c in inspect(con).get_columns("diag_finding")}
+    engine.dispose()

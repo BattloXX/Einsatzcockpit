@@ -65,7 +65,8 @@ def maskiere_text(text: str) -> str:
     text = re.sub(r"(?i)\b(?:bearer\s+\S+|(?:token|password|secret|api[_-]?key)\s*[:=]\s*\S+)",
                   "[Token]", text)
     text = re.sub(r"(?<!\w)[A-Za-z0-9_+/=-]{32,}(?!\w)", "[Token]", text)
-    text = re.sub(r"(?<!\w)\+?\d(?:[\d ()/.-]*\d){6,}(?!\w)", "[Telefon]", text)
+    text = re.sub(r"(?<![\w.])(?:\d+(?:\.\d+){2,}(?![\w.])|\+?\d(?:[\d ()/.-]*\d){6,}(?![\w.]))",
+                  lambda m: m[0] if re.fullmatch(r"\d+(?:\.\d+){2,}", m[0]) else "[Telefon]", text)
     return text
 
 
@@ -76,11 +77,23 @@ def _url_host(url: str) -> str:
         return "[URL]"
 
 
-def _wert(wert: Any, regel: Any) -> Any:
+TECHNIK_FELDER = {("app", "version_name"), ("android", "version"), ("android", "build_id"),
+                  ("android", "oberflaeche"), ("webview", "version"), ("webview", "paket")}
+
+
+def technik_text(wert: str) -> bool:
+    """Begrenztes Alphabet fuer Versions-, OS- und Build-Angaben ohne Freitext-Geheimnisse."""
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._()+/-]{0,119}", wert))
+
+
+def _wert(wert: Any, regel: Any, *, technik: bool = False) -> Any:
     if regel is bool:
         return wert if type(wert) is bool else None
     if isinstance(regel, int):
-        return maskiere_text(wert.strip())[:regel] if isinstance(wert, str) else None
+        if not isinstance(wert, str):
+            return None
+        wert = wert.strip()
+        return (wert if technik and technik_text(wert) else maskiere_text(wert))[:regel]
     if isinstance(regel, set):
         return wert if isinstance(wert, str) and wert in regel else None
     if isinstance(regel, tuple):
@@ -123,7 +136,7 @@ def validiere_bericht(data: Any) -> dict:
         result[gruppe] = {}
         if isinstance(quelle, dict):
             for key, regel in regeln.items():
-                wert = _wert(quelle.get(key), regel)
+                wert = _wert(quelle.get(key), regel, technik=(gruppe, key) in TECHNIK_FELDER)
                 if wert is not None:
                     result[gruppe][key] = wert
                 elif gruppe == "locale" and key in quelle and quelle[key] is None:

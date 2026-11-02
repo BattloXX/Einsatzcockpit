@@ -125,3 +125,27 @@ def test_invalid_id(ident):
 def test_registry_overview_exclusion():
     for name in ("admin_geraete_pruefen", "admin_geraet_details"):
         assert name in ADMIN_TOOLS and name in READ_TOOLS and name in OVERVIEW_EXCLUDED
+
+
+@pytest.mark.parametrize("android,sdk", [("16", 36), ("17", 37)])
+def test_real_versions_survive_mcp_output(factory, monkeypatch, android, sdk):  # noqa: F811
+    from app.models.app_geraet import AppGeraet
+
+    monkeypatch.setattr(auswertung, "soll_version", lambda: "2026.11.01.2")
+    with factory() as db:
+        db.info["current_org_id"] = None
+        ident = seed(db, install_id="real-version", app_version="2026.11.01.2", android_version=android,
+                     sdk_int=sdk, geraet_details={"android": {"version": android, "build_id": "SDK 36"},
+                                                 "webview": {"version": "142.0.7444.138"}})
+        row = db.get(AppGeraet, ident)
+        row.webview_version = "142.0.7444.138"
+        db.commit()
+        details = collect(db, "admin_geraet_details", geraet_id=ident)["evidence"]
+        assert details["version"]["ist"] == "2026.11.01.2"
+        assert details["version"]["ampel"] == "aktuell"
+        assert details["eigenschaften"]["webview_version"] == "142.0.7444.138"
+        assert details["eigenschaften"]["android_version"] == android
+        assert details["geraet_details"]["android"]["build_id"] == "SDK 36"
+        assert "webview" not in {f["code"] for f in details["befunde"]}
+        aggregate = collect(db, "admin_geraete_pruefen")["evidence"]
+        assert any(v["wert"] == "2026.11.01.2" for v in aggregate["verteilungen"]["app_version"]["werte"])

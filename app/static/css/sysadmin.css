@@ -4,7 +4,7 @@
    sys-kv: rekursive dl-Liste; sys-tabs: Navigation mit aria-current="page".
    sys-toolbar: Formularzeile; sys-switch-row: Text und beschrifteter Schalter.
    sys-table-wrap > sys-table: scrollbar mit fixiertem Tabellenkopf.
-   sys-empty: Leerzustand; sys-status--ok/--warn/--fail: Status mit Text.
+   sys-empty: Leerzustand; sys-status--ok/--warn/--fail/--neutral: Status mit Text.
    Alle interaktiven Elemente erhalten 44px Touchfläche und sichtbaren Fokus. */
 .sys-page { min-width: 0; color: var(--on-surface); overflow-wrap: anywhere; }
 .sys-hero, .sys-card, .sys-kpi {
@@ -51,6 +51,7 @@
 .sys-status--ok { color: var(--green); }
 .sys-status--warn { color: var(--yellow); }
 .sys-status--fail { color: var(--red); }
+.sys-status--neutral { color: var(--text-muted, inherit); }
 .sys-tabs { display: flex; gap: .4rem; overflow-x: auto; margin-bottom: 1rem; padding: .4rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface-low); }
 .sys-tabs > button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; flex: 0 0 auto; min-height: 44px; padding: .6rem .9rem; border: 1px solid transparent; border-radius: .5rem; background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; white-space: nowrap; }
 .sys-tabs > button:hover { background: var(--surface-high); color: var(--on-surface); }

@@ -20,6 +20,7 @@ from app.config import settings
 from app.models.worker_runtime import WorkerRuntime
 from app.services import gateway_presence as presence
 from app.services import ws_bus
+from app.services.background_runtime import EXPIRED_WORKER_RETENTION
 
 
 def _datetime(value):
@@ -36,7 +37,8 @@ def active_workers(db: Session, now: datetime | None = None) -> list[WorkerRunti
 def worker_status(db: Session, now: datetime | None = None) -> dict:
     """Heartbeats und Leader je Host; abgelaufene Worker sind keine Leader."""
     now = presence.utc(now)
-    registered = db.query(WorkerRuntime).execution_options(include_all_tenants=True)\
+    registered = db.query(WorkerRuntime).filter(WorkerRuntime.expires_at >= now - EXPIRED_WORKER_RETENTION)\
+        .execution_options(include_all_tenants=True)\
         .order_by(WorkerRuntime.worker_id).all()
     workers = [w for w in registered if w.expires_at > now]
     expired = [w for w in registered if w.expires_at <= now]
@@ -141,13 +143,15 @@ def service_summary(db: Session) -> dict:
 
     now = presence.utc()
     rows = db.query(DienstStatus.key, DienstStatus.state, func.count(DienstStatus.id)).filter(
-        DienstStatus.key.in_(DIENST_LABELS), DienstStatus.state.in_(("ok", "down", "unknown", "teilweise")),
+        DienstStatus.key.in_(DIENST_LABELS),
+        DienstStatus.state.in_(("ok", "down", "unknown", "teilweise", "nicht_konfiguriert")),
     ).execution_options(include_all_tenants=True).group_by(DienstStatus.key, DienstStatus.state).all()
-    evidence = {key: {"ok": 0, "down": 0, "unknown": 0, "teilweise": 0} for key in DIENST_LABELS}
+    evidence = {key: {"ok": 0, "down": 0, "unknown": 0, "teilweise": 0, "nicht_konfiguriert": 0}
+                for key in DIENST_LABELS}
     for key, state, count in rows:
         evidence[key][state] = count
     status = "unbekannt" if not rows else "fail" if any(r[1] == "down" for r in rows) else (
-        "warn" if any(r[1] != "ok" for r in rows) else "ok")
+        "warn" if any(r[1] in ("unknown", "teilweise") for r in rows) else "ok")
     return {"status": status, "checked_at": now,
             "evidence": {"dienste": evidence, "datenbasis": "gespeicherter Dienstmonitor-Zustand"
                          if rows else "nicht verfuegbar"}}

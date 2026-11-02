@@ -5,8 +5,8 @@
   {% for check in checks %}
   {% set row = status_rows.get(check.key) %}
   {% set zustand = dienst_zustaende.get(check.key, 'ok') %}
-  {% set farbe = 'fail' if zustand == 'down' else ('warn' if zustand == 'teilweise' else ('neutral' if zustand == 'nicht_konfiguriert' else 'ok')) %}
-  {% set bezeichnung = {'down': 'Ausfall', 'teilweise': 'Teilstörung', 'nicht_konfiguriert': 'Nicht eingerichtet'}.get(zustand, 'OK') %}
+  {% set farbe = 'fail' if zustand == 'down' else ('warn' if zustand == 'teilweise' else ('neutral' if zustand == 'nicht_konfiguriert' else ('neutral' if zustand == 'unknown' else 'ok'))) %}
+  {% set bezeichnung = {'down': 'Ausfall', 'teilweise': 'Teilstörung', 'nicht_konfiguriert': 'Nicht eingerichtet', 'unknown': 'Unbekannt'}.get(zustand, 'OK') %}
   <article class="sys-card sys-service sys-service--{{ farbe }}">
     <header class="sys-card__head">
       <h3>{{ icon({'mail': 'mail', 'sms_gateway': 'device-mobile-message', 'print_gateway': 'printer', 'redis_bus': 'topology-star-3', 'sms_jobs': 'message', 'print_jobs': 'printer', 'alarm_seriell': 'plug', 'alarm_dibos': 'bell', 'alarm_outbox': 'inbox'}.get(check.key, 'server')) }} {{ labels.get(check.key, check.key) }}</h3>

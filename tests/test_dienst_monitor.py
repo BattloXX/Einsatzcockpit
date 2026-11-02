@@ -205,6 +205,10 @@ def test_gateway_aggregation_serial_unknown_und_sms_ohne_heartbeat(monkeypatch):
     db.commit()
     org_id = org.id
     try:
+        unconfigured = {c.key: c for c in pruefe_dienste(db, org_id, now)}
+        for key in ("print_gateway", "sms_gateway", "alarm_seriell", "alarm_dibos"):
+            assert unconfigured[key].state == "nicht_konfiguriert"
+            assert not unconfigured[key].relevant
         frisch = Gateway(org_id=org_id, name="Frisch", device_token_hash="dm-frisch",
                          last_seen_at=now, serial_connected=True, wut_config={"host": "wt-a"})
         alt = Gateway(org_id=org_id, name="Alt", standort="Depot", device_token_hash="dm-alt",
@@ -345,3 +349,46 @@ def test_bestaetigt_down_unabhaengig_vom_versanderfolg():
     assert not bestaetigt_down(None, 5, now)
     # aware/naive gemischt darf nicht crashen
     assert bestaetigt_down(ueber_karenz, 5, now.replace(tzinfo=UTC))
+
+
+def test_nicht_konfiguriert_beendet_alte_stoerung_ohne_entwarnung():
+    from app.services.dienst_monitor_service import DienstTeil, aggregiere
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    status = row(fail_cycles=4, down_since=now, outage_notified_at=now, last_repeat_at=now)
+    check = DienstCheck("sms_gateway", "nicht_konfiguriert", "Kein SMS-Dienst", False)
+    assert entscheide(check, status, 0, 1, now).art is None
+    assert status.down_since is status.outage_notified_at is status.last_repeat_at is None
+    assert status.fail_cycles == status.ok_cycles == 0
+    assert dienst_zustand(check, status, 0, now) == "nicht_konfiguriert"
+    assert dienst_zustand(DienstCheck("sms_gateway", "unknown", "Nicht geprueft", True), status, 0, now) == "unknown"
+    assert aggregiere(()) == "nicht_konfiguriert"
+    assert aggregiere((DienstTeil("a", "A", "unknown", "Nicht geprueft"),)) == "unknown"
+
+
+def test_record_probe_reactivates_previously_unconfigured_service(monkeypatch):
+    from uuid import uuid4
+
+    from app.db import SessionLocal
+    from app.models.master import FireDept
+    from app.services.dienst_monitor_service import record_probe
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug="dm-probe-" + uuid4().hex, name="Probe")
+        db.add(org)
+        db.flush()
+        org_id = org.id
+        db.add(DienstStatus(org_id=org_id, key="alarm_dibos", state="nicht_konfiguriert"))
+        db.commit()
+        try:
+            record_probe(org_id, "alarm_dibos", True)
+            db.expire_all()
+            status = db.query(DienstStatus).filter_by(org_id=org_id, key="alarm_dibos").one()
+            assert status.state == "unknown"
+            assert status.last_probe_ok and status.last_probe_at is not None
+        finally:
+            for status in db.query(DienstStatus).filter_by(org_id=org_id).all():
+                db.delete(status)
+            db.delete(db.get(FireDept, org_id))
+            db.commit()

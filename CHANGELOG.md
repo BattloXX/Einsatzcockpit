@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Monitoring:** Versions-, Android- und WebView-Angaben bleiben fuer Vergleiche erhalten. Fehlgeschlagene Diagnosechecks zeigen maskierte Ursache und Dauer; geplante Laeufe wiederholen einmal. Befunde schliessen nach drei erfolgreichen Pruefungen ohne erneutes Auftreten auch bei unvollstaendiger Datenbasis (Migration 0343). Nicht eingerichtete Dienste werden separat ausgewiesen; abgelaufene Worker verschwinden nach 24 Stunden aus Warnungen und werden bereinigt.
+
 - **Geraete-API:** Neuer authentifizierter Endpunkt `GET /api/v1/device/capabilities` liefert API-Version 1, Server-Version und vorhandene Funktionen mit expliziter Routen-Zuordnung; Sitzung oder Bearer-Geraetetoken wie beim FCM-Token-Status. Keine Migration.
 
 - **Systemadmin ohne Organisation:** Die Einstellungsseiten Allgemein, Wetter, Wetter-Infoscreen, SSO, DIBOS, LIS, Teams-Alarmierung, Org-Mail und Org-Backup leiten einen Systemadmin ohne eigene Organisation auf die erste Organisation weiter (`?org_id=`, relativ) statt "Keine Organisation ausgewaehlt" zu zeigen; die Organisationsauswahl auf der Seite bleibt. Die Modul-Seiten Planspiel und Strassensperren sind ohne Organisation weiterhin nicht aktiv (404), weil die Modul-Schalter an den Org-Einstellungen haengen.

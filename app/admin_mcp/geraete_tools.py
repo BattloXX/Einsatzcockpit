@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from app.admin_mcp.masking import mask_text
 from app.models.admin_security import utcnow
 from app.services import app_geraet_auswertung as auswertung
+from app.services.app_geraet_service import technik_text
 from app.services.diagnose.registry import MAX_IDS
 
 DETAIL_LIMIT = 50
@@ -14,7 +15,7 @@ PERMISSIONS = (
 )
 
 
-def _safe(value):
+def _safe(value, *, technik=False):
     if isinstance(value, datetime):
         return value.isoformat() + "Z"
     if isinstance(value, str):
@@ -23,12 +24,15 @@ def _safe(value):
             return value
         except ValueError:
             pass  # Nur gueltige Zeitstempel unveraendert ausgeben.
-        return value if auswertung.calver(value) else mask_text(value)[:253]
+        return value if auswertung.calver(value) or (technik and technik_text(value)) else mask_text(value)[:253]
     if isinstance(value, dict):
         # Schluessel stammen aus dem festen Schema bzw. der Ingest-Whitelist.
-        return {k: _safe(v) for k, v in value.items() if k != "geraetename"}
+        return {k: _safe(v, technik=technik or k in {
+            "app_version", "android_version", "webview_version", "version", "version_name",
+            "build_id", "build_variant", "oberflaeche", "webview", "android",
+        }) for k, v in value.items() if k != "geraetename"}
     if isinstance(value, (list, tuple)):
-        return [_safe(v) for v in value]
+        return [_safe(v, technik=technik) for v in value]
     return value
 
 

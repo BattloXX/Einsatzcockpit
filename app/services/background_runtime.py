@@ -19,6 +19,7 @@ from app.services.leader_lock import LeaderLock
 logger = logging.getLogger("einsatzleiter.background")
 HEARTBEAT_S = 5
 WORKER_TTL_S = 20
+EXPIRED_WORKER_RETENTION = timedelta(hours=24)
 TAKEOVER_S = 2
 LOOP_RESTART_S = 5
 _loops: ContextVar[dict | None] = ContextVar("leader_loop_metrics", default=None)
@@ -182,7 +183,7 @@ class BackgroundRuntime:
         with SessionLocal() as db:
             set_tenant_context(db, None)
             db.query(WorkerRuntime).filter(
-                WorkerRuntime.expires_at < gateway_presence.utc() - timedelta(days=1)
+                WorkerRuntime.expires_at < gateway_presence.utc() - EXPIRED_WORKER_RETENTION
             ).delete()
             from app.services.push_service import cleanup_inactive_fcm_tokens
 
