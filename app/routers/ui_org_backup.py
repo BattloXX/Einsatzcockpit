@@ -32,12 +32,13 @@ from app.core.tenant import set_tenant_context
 from app.db import get_db
 from app.models.master import FireDept
 from app.models.org_backup import OrgBackupConfig
+from app.services import remote_backup_service as rbs
 
 logger = logging.getLogger("einsatzleiter.org_backup")
 
 router = APIRouter(prefix="/admin")
 
-_PROTOKOLLE = ("sftp", "scp", "rsync", "ftp", "ftps", "rclone", "graph")
+_PROTOKOLLE = rbs.ORG_PROTOKOLLE
 
 
 def _lade_config(db: Session, org_id: int) -> OrgBackupConfig | None:
@@ -188,12 +189,12 @@ def org_backup_save(
         db.add(cfg)
     cfg.enabled = enabled == "1"
     cfg.protocol = protocol
-    cfg.host = host.strip() or None
+    cfg.host = host or None
     cfg.port = port or 0
-    cfg.username = username.strip() or None
-    cfg.remote_path = remote_path.strip() or None
-    cfg.ssh_strict = ssh_strict.strip() or "accept-new"
-    cfg.rclone_remote = rclone_remote.strip() or None
+    cfg.username = username or None
+    cfg.remote_path = remote_path or None
+    cfg.ssh_strict = ssh_strict
+    cfg.rclone_remote = rclone_remote or None
     cfg.schedule = "weekly" if schedule == "weekly" else "daily"
     cfg.hour = max(0, min(23, hour))
     cfg.weekday = weekday if (cfg.schedule == "weekly" and weekday is not None) else None
@@ -217,6 +218,11 @@ def org_backup_save(
         cfg.ssh_key_enc = encrypt_secret(ssh_key.strip())
     elif clear_key == "1":
         cfg.ssh_key_enc = None
+    try:
+        rbs.config_pruefen_org(rbs.config_aus_org(cfg))
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(400, rbs.ORG_CONFIG_FEHLER) from exc
     db.commit()
     return _redirect(user, effective, "saved")
 
@@ -228,11 +234,10 @@ def org_backup_test(
     _=Depends(require_role("org_admin", "admin")),
     target_org_id: int | None = Form(None),
 ):
-    from app.services import remote_backup_service as rbs
     user = request.state.user
     effective = _guard(user, target_org_id)
     cfg = _lade_config(db, effective)
-    if cfg is None or not cfg.is_fully_configured:
+    if cfg is None:
         return _redirect(user, effective, "test_incomplete")
     with tempfile.TemporaryDirectory(prefix="orgbackup_test_") as td:
         probe = Path(td) / "ec-backup-verbindungstest.txt"
@@ -241,6 +246,9 @@ def org_backup_test(
             with rbs.org_remote_config(cfg) as remote:
                 rbs.upload(remote, [probe], Path(td))
             return _redirect(user, effective, "test_ok")
+        except rbs.OrgConfigFehler:
+            db.commit()
+            return _redirect(user, effective, "test_error")
         except Exception as exc:  # noqa: BLE001
             logger.warning("Org-Backup-Verbindungstest fehlgeschlagen (org %s): %s", effective, exc)
             return _redirect(user, effective, "test_error")
@@ -260,7 +268,7 @@ def org_backup_run_now(
     user = request.state.user
     effective = _guard(user, target_org_id)
     cfg = _lade_config(db, effective)
-    if cfg is None or not cfg.is_fully_configured:
+    if cfg is None:
         return _redirect(user, effective, "run_incomplete")
     status = run_org_backup_sync(cfg.id)
     return _redirect(user, effective, "run_ok" if status == "ok" else "run_error")

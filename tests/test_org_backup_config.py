@@ -7,7 +7,7 @@ from app.services import remote_backup_service as rbs
 
 
 def _cfg(**kw) -> OrgBackupConfig:
-    base = dict(org_id=1, protocol="sftp", host="backup.example.org", port=0,
+    base = dict(org_id=1, protocol="sftp", host="8.8.8.8", port=0,
                 username="ec", remote_path="/srv/ec")
     base.update(kw)
     return OrgBackupConfig(**base)
@@ -40,7 +40,7 @@ def test_config_aus_org_mappt_und_entschluesselt():
               ssh_strict="yes", remote_path="/up")
     cfg = rbs.config_aus_org(row, key_path="/tmp/k")
     assert cfg.protocol == "ftps"
-    assert cfg.host == "backup.example.org"
+    assert cfg.host == "8.8.8.8"
     assert cfg.port == 2121
     assert cfg.user == "ec"
     assert cfg.password == "geheim"        # entschluesselt

@@ -54,6 +54,7 @@ def test_config_pruefen_ftp_ohne_user():
 
 def test_build_scp_argv():
     argv = rbs.build_scp_argv(_cfg(port=2222), [Path("a.sql.gz"), Path("b.tar.gz")])
+    assert "--" in argv
     assert argv[0] == "scp"
     assert "-o" in argv and "StrictHostKeyChecking=accept-new" in argv
     assert "BatchMode=yes" in argv
@@ -66,6 +67,7 @@ def test_build_scp_argv():
 def test_build_sftp_argv_und_batch():
     batch = Path("x.sftp")
     argv = rbs.build_sftp_argv(_cfg(), batch)
+    assert "--" in argv
     assert argv[0] == "sftp"
     assert "-b" in argv and str(batch) in argv
     assert argv[-1] == "ec@backup.example.test"
@@ -77,6 +79,7 @@ def test_build_sftp_argv_und_batch():
 
 def test_build_rsync_argv():
     argv = rbs.build_rsync_argv(_cfg(port=2222), [Path("a.sql.gz")])
+    assert "--" in argv
     assert argv[0] == "rsync" and "-az" in argv
     e_index = argv.index("-e")
     ssh_cmd = argv[e_index + 1]

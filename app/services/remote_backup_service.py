@@ -13,20 +13,36 @@ Netz testbar). Passwoerter landen NIE in einem Argv:
 from __future__ import annotations
 
 import ftplib
+import ipaddress
 import logging
 import os
+import re
 import shlex
+import socket
 import subprocess
 import tempfile
+import unicodedata
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.org_backup import OrgBackupConfig
 
 logger = logging.getLogger("einsatzleiter.backup.remote")
 
 SSH_PROTOKOLLE = ("sftp", "scp", "rsync")
 FTP_PROTOKOLLE = ("ftp", "ftps")
+ORG_PROTOKOLLE = ("sftp", "ftps", "graph")
+ORG_CONFIG_FEHLER = "Konfiguration ungültig/Protokoll nicht mehr erlaubt, bitte neu speichern"
+
+
+class OrgConfigFehler(ValueError):
+    """Org-Ziel darf nicht ausgefuehrt werden (Meldung ohne Eingabewerte)."""
+
+
 ALLE_PROTOKOLLE = (*SSH_PROTOKOLLE, *FTP_PROTOKOLLE, "rclone", "graph")
 
 
@@ -68,8 +84,40 @@ class RemoteConfig:
                          folder=self.graph_folder)
 
 
+def _pfad_pruefen(pfad: str) -> None:
+    if (pfad.startswith(("-", "!")) or any(unicodedata.category(c).startswith("C") for c in pfad)
+            or any(c in pfad for c in "\"'")):
+        raise ValueError("Ungültiger Pfad: Steuerzeichen, Anführungszeichen und führendes -/! sind gesperrt.")
+
+
+def _host_pruefen(host: str) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9.:-]+", host) or host.startswith("-"):
+        raise ValueError("Ungültiger Hostname oder IP-Adresse.")
+    try:
+        ipaddress.ip_address(host)
+        return
+    except ValueError:
+        pass
+    if len(host) > 253 or not re.fullmatch(
+        r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+        r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?", host
+    ):
+        raise ValueError("Ungültiger Hostname oder IP-Adresse.")
+
+
 def config_pruefen(cfg: RemoteConfig) -> None:
     """Wirft ValueError bei unvollstaendiger/ungueltiger Remote-Konfiguration."""
+    if cfg.host:
+        _host_pruefen(cfg.host)
+    if cfg.user and (cfg.user.startswith("-") or not re.fullmatch(r"[A-Za-z0-9._-]+", cfg.user)):
+        raise ValueError("Ungültiger Benutzername.")
+    if not isinstance(cfg.port, int) or not 0 <= cfg.port <= 65535:
+        raise ValueError("Port muss zwischen 0 und 65535 liegen.")
+    _pfad_pruefen(cfg.path)
+    if cfg.ssh_strict not in {"yes", "accept-new", "no"}:
+        raise ValueError("Ungültige SSH-Hostkey-Prüfung.")
+    if cfg.rclone_remote and not re.fullmatch(r"[A-Za-z0-9_-]+:", cfg.rclone_remote):
+        raise ValueError("rclone: nur benannte Remotes sind erlaubt.")
     if cfg.protocol not in ALLE_PROTOKOLLE:
         raise ValueError(f"Unbekanntes Remote-Protokoll: {cfg.protocol!r} "
                          f"(erlaubt: {', '.join(ALLE_PROTOKOLLE)})")
@@ -90,6 +138,27 @@ def config_pruefen(cfg: RemoteConfig) -> None:
         raise ValueError(f"{cfg.protocol}: BACKUP_REMOTE_USER fehlt.")
 
 
+def config_pruefen_org(cfg: RemoteConfig, resolver: Callable | None = None) -> None:
+    """Org-Ziele nur verschluesselt und mit oeffentlichen Adressen; DNS injizierbar."""
+    try:
+        config_pruefen(cfg)
+        if cfg.protocol not in ORG_PROTOKOLLE or cfg.ssh_strict not in {"yes", "accept-new"}:
+            raise ValueError("Org-Protokoll oder Hostkey-Prüfung gesperrt.")
+        if cfg.host:
+            if cfg.host.lower().rstrip(".") == "localhost":
+                raise ValueError("Lokales Ziel gesperrt.")
+            try:
+                adressen = [ipaddress.ip_address(cfg.host)]
+            except ValueError:
+                aufloesen = resolver or socket.getaddrinfo
+                adressen = [ipaddress.ip_address(info[4][0])
+                            for info in aufloesen(cfg.host, cfg.port or 0, type=socket.SOCK_STREAM)]
+            if not adressen or any(not adresse.is_global for adresse in adressen):
+                raise ValueError("Nur öffentliche Ziele sind erlaubt.")
+    except (ValueError, OSError) as exc:
+        raise OrgConfigFehler(ORG_CONFIG_FEHLER) from exc
+
+
 def _ssh_optionen(cfg: RemoteConfig) -> list[str]:
     """Gemeinsame ssh-Optionen fuer scp/sftp (Port/Key/Hostkey, non-interaktiv)."""
     opts = ["-o", f"StrictHostKeyChecking={cfg.ssh_strict}", "-o", "BatchMode=yes"]
@@ -103,37 +172,53 @@ def _ssh_optionen(cfg: RemoteConfig) -> list[str]:
 def _ziel(cfg: RemoteConfig) -> str:
     """user@host:pfad fuer scp/rsync."""
     wer = f"{cfg.user}@" if cfg.user else ""
-    return f"{wer}{cfg.host}:{cfg.path}"
+    host = f"[{cfg.host}]" if ":" in cfg.host else cfg.host
+    return f"{wer}{host}:{cfg.path}"
 
 
 def build_scp_argv(cfg: RemoteConfig, dateien: Sequence[Path]) -> list[str]:
-    return [cfg.scp_bin, *_ssh_optionen(cfg), *[str(d) for d in dateien], _ziel(cfg)]
+    config_pruefen(cfg)
+    return [cfg.scp_bin, *_ssh_optionen(cfg), "--", *[str(d) for d in dateien], _ziel(cfg)]
 
 
 def build_sftp_argv(cfg: RemoteConfig, batch_datei: Path) -> list[str]:
     """sftp im Batch-Modus (-b): non-interaktiv, Befehle aus batch_datei."""
+    config_pruefen(cfg)
     wer = f"{cfg.user}@" if cfg.user else ""
-    return [cfg.sftp_bin, *_ssh_optionen(cfg), "-b", str(batch_datei), f"{wer}{cfg.host}"]
+    return [cfg.sftp_bin, *_ssh_optionen(cfg), "-b", str(batch_datei), "--", f"{wer}{cfg.host}"]
 
 
 def sftp_batch_text(cfg: RemoteConfig, dateien: Sequence[Path]) -> str:
     """Batch-Skript fuer sftp -b: ins Zielverzeichnis wechseln, Dateien hochladen."""
+    config_pruefen(cfg)
+    for datei in dateien:
+        _pfad_pruefen(datei.name)
+
+    def zitat(pfad: str) -> str:
+        _pfad_pruefen(pfad)
+        # Backslashes und Glob-Zeichen fuer den SFTP-Parser maskieren.
+        for zeichen in ("\\", "*", "?", "[", "]"):
+            pfad = pfad.replace(zeichen, "\\" + zeichen)
+        return '"' + pfad + '"'
+
     zeilen = []
     if cfg.path:
-        zeilen.append(f'cd "{cfg.path}"')
-    zeilen += [f'put "{d}"' for d in dateien]
+        zeilen.append(f"cd {zitat(cfg.path)}")
+    zeilen += [f"put {zitat(str(d))}" for d in dateien]
     zeilen.append("bye")
     return "\n".join(zeilen) + "\n"
 
 
 def build_rsync_argv(cfg: RemoteConfig, dateien: Sequence[Path]) -> list[str]:
-    ssh_cmd = "ssh " + " ".join(_ssh_optionen(cfg))
-    return [cfg.rsync_bin, "-az", "--partial", "-e", ssh_cmd,
+    config_pruefen(cfg)
+    ssh_cmd = shlex.join(["ssh", *_ssh_optionen(cfg), "--"])
+    return [cfg.rsync_bin, "-az", "--partial", "-e", ssh_cmd, "--",
             *[str(d) for d in dateien], _ziel(cfg)]
 
 
 def build_rclone_argv(cfg: RemoteConfig, quelle: Path) -> list[str]:
     """rclone copy <quelle> <remote:pfad> — quelle ist Datei ODER Verzeichnis."""
+    config_pruefen(cfg)
     ziel = f"{cfg.rclone_remote}{cfg.path}"
     return [cfg.rclone_bin, "copy", str(quelle), ziel]
 
@@ -219,8 +304,9 @@ def upload(
 
 def _sftp_ausfuehren(cfg: RemoteConfig, dateien: Sequence[Path], runner: Runner) -> None:
     """Schreibt das sftp-Batch-Skript temporaer und fuehrt sftp -b aus."""
+    batch_text = sftp_batch_text(cfg, dateien)
     with tempfile.NamedTemporaryFile("w", suffix=".sftp", delete=False, encoding="utf-8") as tf:
-        tf.write(sftp_batch_text(cfg, dateien))
+        tf.write(batch_text)
         batch = Path(tf.name)
     try:
         argv = build_sftp_argv(cfg, batch)
@@ -238,14 +324,14 @@ def config_aus_settings() -> RemoteConfig:
     from app.config import settings
     return RemoteConfig(
         protocol=(settings.BACKUP_REMOTE_PROTOCOL or "sftp").strip().lower(),
-        host=settings.BACKUP_REMOTE_HOST.strip(),
+        host=settings.BACKUP_REMOTE_HOST,
         port=settings.BACKUP_REMOTE_PORT,
-        user=settings.BACKUP_REMOTE_USER.strip(),
+        user=settings.BACKUP_REMOTE_USER,
         password=settings.BACKUP_REMOTE_PASSWORD,
         key=settings.BACKUP_REMOTE_KEY.strip(),
-        path=settings.BACKUP_REMOTE_PATH.strip(),
-        ssh_strict=(settings.BACKUP_REMOTE_SSH_STRICT or "accept-new").strip(),
-        rclone_remote=settings.BACKUP_REMOTE_RCLONE_REMOTE.strip(),
+        path=settings.BACKUP_REMOTE_PATH,
+        ssh_strict=(settings.BACKUP_REMOTE_SSH_STRICT or "accept-new"),
+        rclone_remote=settings.BACKUP_REMOTE_RCLONE_REMOTE,
         scp_bin=settings.BACKUP_REMOTE_SCP_BIN,
         sftp_bin=settings.BACKUP_REMOTE_SFTP_BIN,
         rsync_bin=settings.BACKUP_REMOTE_RSYNC_BIN,
@@ -271,14 +357,14 @@ def config_aus_org(cfg_row: object, key_path: str = "") -> RemoteConfig:
         graph_secret = decrypt_secret(gs_enc)
     return RemoteConfig(
         protocol=(getattr(cfg_row, "protocol", "sftp") or "sftp").strip().lower(),
-        host=(getattr(cfg_row, "host", "") or "").strip(),
+        host=(getattr(cfg_row, "host", "") or ""),
         port=getattr(cfg_row, "port", 0) or 0,
-        user=(getattr(cfg_row, "username", "") or "").strip(),
+        user=(getattr(cfg_row, "username", "") or ""),
         password=passwort,
         key=key_path,
-        path=(getattr(cfg_row, "remote_path", "") or "").strip(),
-        ssh_strict=(getattr(cfg_row, "ssh_strict", "accept-new") or "accept-new").strip(),
-        rclone_remote=(getattr(cfg_row, "rclone_remote", "") or "").strip(),
+        path=(getattr(cfg_row, "remote_path", "") or ""),
+        ssh_strict=(getattr(cfg_row, "ssh_strict", "accept-new") or "accept-new"),
+        rclone_remote=(getattr(cfg_row, "rclone_remote", "") or ""),
         graph_tenant=(getattr(cfg_row, "graph_tenant_id", "") or "").strip(),
         graph_client=(getattr(cfg_row, "graph_client_id", "") or "").strip(),
         graph_secret=graph_secret,
@@ -288,13 +374,20 @@ def config_aus_org(cfg_row: object, key_path: str = "") -> RemoteConfig:
 
 
 @contextmanager
-def org_remote_config(cfg_row: object) -> Iterator[RemoteConfig]:
+def org_remote_config(cfg_row: OrgBackupConfig) -> Iterator[RemoteConfig]:
     """Context-Manager: liefert eine einsatzbereite RemoteConfig einer Org.
 
     Materialisiert einen ggf. hinterlegten SSH-Key (ssh_key_enc) in eine temporaere
     Datei mit Rechten 0600 und raeumt sie danach wieder ab.
     """
     from app.core.crypto import decrypt_secret
+    remote = config_aus_org(cfg_row)
+    try:
+        config_pruefen_org(remote)
+    except OrgConfigFehler:
+        cfg_row.last_status = "error"
+        cfg_row.last_error = ORG_CONFIG_FEHLER
+        raise
     key_enc = getattr(cfg_row, "ssh_key_enc", None)
     key_datei: Path | None = None
     try:
@@ -308,7 +401,7 @@ def org_remote_config(cfg_row: object) -> Iterator[RemoteConfig]:
                 os.chmod(key_datei, 0o600)
             except OSError:
                 pass
-        yield config_aus_org(cfg_row, key_path=str(key_datei) if key_datei else "")
+        yield replace(remote, key=str(key_datei) if key_datei else "")
     finally:
         if key_datei is not None:
             key_datei.unlink(missing_ok=True)
@@ -372,7 +465,7 @@ def _remote_liste(cfg: RemoteConfig, praefix: str, runner: Runner,
         argv = [cfg.rclone_bin, "lsf", f"{cfg.rclone_remote}{cfg.path}"]
     else:  # sftp/scp/rsync -> ssh
         pfad = cfg.path or "."
-        argv = ["ssh", *_ssh_optionen(cfg), _ssh_host(cfg), f"ls -1 {shlex.quote(pfad)}"]
+        argv = ["ssh", *_ssh_optionen(cfg), "--", _ssh_host(cfg), f"ls -1 -- {shlex.quote(pfad)}"]
     res = runner(argv, capture_output=True)
     if res.returncode != 0:
         return []
@@ -420,7 +513,7 @@ def _remote_delete(cfg: RemoteConfig, namen: Sequence[str], runner: Runner,
     # sftp/scp/rsync -> ssh rm
     pfad = cfg.path or "."
     ziele = " ".join(shlex.quote(f"{pfad}/{n}") for n in namen)
-    runner(["ssh", *_ssh_optionen(cfg), _ssh_host(cfg), f"rm -f {ziele}"], capture_output=True)
+    runner(["ssh", *_ssh_optionen(cfg), "--", _ssh_host(cfg), f"rm -f -- {ziele}"], capture_output=True)
 
 
 def prune_remote(
@@ -434,6 +527,7 @@ def prune_remote(
 
     Best-effort: gibt die geloeschten Namen zurueck; Fehler werden geloggt, nicht geworfen.
     """
+    config_pruefen(cfg)
     try:
         namen = _remote_liste(cfg, praefix, runner, ftp_factory)
         weg = waehle_zu_loeschen(namen, keep)

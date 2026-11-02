@@ -71,6 +71,8 @@ def test_seite_laedt_fuer_org_admin(client):
     r = client.get("/admin/org-backup")
     assert r.status_code == 200
     assert "Datensicherung" in r.text
+    for gesperrt in ("scp", "rsync", "rclone", "ftp", "no"):
+        assert f'<option value="{gesperrt}"' not in r.text
 
 
 def test_download_eigene_org(client):
