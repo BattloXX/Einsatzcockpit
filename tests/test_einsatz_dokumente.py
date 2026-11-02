@@ -441,11 +441,12 @@ def test_restore_der_fassungen_und_empfaenger(client, dokumente, einsatz, tmp_pa
     login(client, dokumente, "org_admin")
     ident = uebernehmen(client, dokumente, einsatz, einheit_ids=[einsatz["einheiten"][0]]).json()["ids"][0]
     original = lesen(client, ident)[0].content
-    # Der Backupdienst selbst wird in seiner Suite geprüft; hier zählt der Restoreinhalt.
-    monkeypatch.setattr(org_import_service, "_safety_backup", lambda *args: None)
     with TestingSession() as db:
         set_tenant_context(db, None)
         archive = export_org(db, dokumente["org_id"], tmp_path, include_media=False)
+        # Der Backupdienst selbst wird in seiner Suite geprüft; Ersetzen verlangt aber
+        # eine lesbare Sicherung derselben Org, daher dient das frische Archiv als Pre-Image.
+        monkeypatch.setattr(org_import_service, "_safety_backup", lambda *args: str(archive))
         org_import_service.import_org(db, archive, dokumente["org_id"], replace=True)
         obj = db.query(EinsatzDokument).filter_by(org_id=dokumente["org_id"]).one()
         assert pdf_daten(db, obj) == original

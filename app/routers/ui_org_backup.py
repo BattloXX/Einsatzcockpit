@@ -7,6 +7,7 @@ Das Remote-Ziel + die Zeitsteuerung kommen in PR 3, der Restore (Sysadmin) in PR
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -18,7 +19,6 @@ from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 from starlette.responses import FileResponse
 
-from app.core.async_bridge import run_async
 from app.core.crypto import encrypt_secret
 from app.core.org_auswahl import erste_org_weiterleitung
 from app.core.permissions import (
@@ -29,6 +29,7 @@ from app.core.permissions import (
 )
 from app.core.templating import templates
 from app.core.tenant import set_tenant_context
+from app.core.timezones import org_tz
 from app.db import get_db
 from app.models.master import FireDept
 from app.models.org_backup import OrgBackupConfig
@@ -74,6 +75,7 @@ def org_backup_page(
     return templates.TemplateResponse(request, "admin/org_backup.html", {
         "user": user,
         "org": org,
+        "org_timezone": org_tz(org).key,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "org_backup_enabled": settings.ORG_BACKUP_ENABLED,
@@ -285,7 +287,8 @@ def _unique_slug(db: Session, name: str) -> str:
     return slug
 
 
-def _restore_in_thread(zip_path: str, org_name: str) -> dict:
+def _restore_in_thread(zip_path: str, org_name: str, confirm_schema: bool = False) -> dict:
+    # Synchron im Request-Threadpool; der historische Name startet keinen eigenen Thread.
     from app.core.tenant import set_tenant_context as _ctx
     from app.db import SessionLocal
     from app.services.org_import_service import import_org
@@ -295,13 +298,14 @@ def _restore_in_thread(zip_path: str, org_name: str) -> dict:
         org = FireDept(slug=_unique_slug(db, org_name), name=org_name)
         db.add(org)
         db.flush()
-        summary = import_org(db, Path(zip_path), org.id)
+        summary = import_org(db, Path(zip_path), org.id, confirm_schema=confirm_schema)
         return {**summary, "org_name": org.name, "slug": org.slug}
     finally:
         db.close()
 
 
-def _restore_inplace_in_thread(zip_path: str, ziel_org_id: int) -> dict:
+def _restore_inplace_in_thread(zip_path: str, ziel_org_id: int, confirm_schema: bool = False) -> dict:
+    # Synchron im Request-Threadpool; seltene system_admin-Operation.
     from app.core.tenant import set_tenant_context as _ctx
     from app.db import SessionLocal
     from app.services.org_import_service import import_org
@@ -309,7 +313,7 @@ def _restore_inplace_in_thread(zip_path: str, ziel_org_id: int) -> dict:
     _ctx(db, None)
     try:
         org = db.get(FireDept, ziel_org_id)
-        summary = import_org(db, Path(zip_path), ziel_org_id, replace=True)
+        summary = import_org(db, Path(zip_path), ziel_org_id, replace=True, confirm_schema=confirm_schema)
         return {**summary, "org_name": org.name if org else str(ziel_org_id),
                 "slug": org.slug if org else ""}
     finally:
@@ -329,6 +333,21 @@ def org_restore_page(
     })
 
 
+class _LimitWriter:
+    """copyfileobj prueft das Limit vor jedem Schreibzugriff."""
+
+    def __init__(self, target, limit: int):
+        self.target = target
+        self.limit = limit
+        self.size = 0
+
+    def write(self, data: bytes) -> int:
+        self.size += len(data)
+        if self.limit and self.size > self.limit:
+            raise HTTPException(413, "Archiv zu groß")
+        return self.target.write(data)
+
+
 @router.post("/org-backup/restore", response_class=HTMLResponse)
 def org_restore_apply(
     request: Request,
@@ -340,53 +359,55 @@ def org_restore_apply(
     ziel_org_id: int | None = Form(None),
     confirm: str = Form(""),
     confirm_replace: str = Form(""),
+    confirm_schema: str = Form(""),
 ):
     from app.config import settings
-    from app.services.org_import_service import read_manifest
+    from app.services.org_import_service import RestoreFehler, read_manifest, schema_status
 
     if not settings.ORG_BACKUP_ENABLED:
         raise HTTPException(404)
-
-    rohdaten = run_async(archiv.read)
-    if settings.ORG_BACKUP_MAX_BYTES and len(rohdaten) > settings.ORG_BACKUP_MAX_BYTES:
-        raise HTTPException(413, "Archiv zu gross")
-
-    tmp = Path(tempfile.mkdtemp(prefix="orgrestore_"))
-    zpath = tmp / "archiv.zip"
-    zpath.write_bytes(rohdaten)
 
     def _ctx(**extra):
         base = {"user": request.state.user, "preview": None, "summary": None, "error": None,
                 "all_orgs": db.query(FireDept).order_by(FireDept.name).all()}
         return {**base, **extra}
 
-    try:
-        manifest = read_manifest(zpath)
-    except Exception:
-        shutil.rmtree(tmp, ignore_errors=True)
-        return templates.TemplateResponse(request, "admin/org_restore.html",
-                                          _ctx(error="Ungueltiges oder beschaedigtes Archiv."))
+    # TemporaryDirectory entfernt auch bei Upload-Limit, Vorschau und Importfehlern alles.
+    with tempfile.TemporaryDirectory(prefix="orgrestore_") as td:
+        zpath = Path(td) / "archiv.zip"
+        with os.fdopen(os.open(zpath, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as target:
+            shutil.copyfileobj(archiv.file, _LimitWriter(target, settings.ORG_BACKUP_MAX_BYTES),
+                               length=1024 * 1024)
+        try:
+            manifest = read_manifest(zpath)
+        except RestoreFehler as exc:
+            return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(error=str(exc)))
+        except Exception:
+            return templates.TemplateResponse(request, "admin/org_restore.html",
+                                              _ctx(error="Ungültiges oder beschädigtes Archiv."))
 
-    if confirm != "1":
-        # Vorschau (Dry-Run): Manifest anzeigen, noch nichts importieren.
-        shutil.rmtree(tmp, ignore_errors=True)
-        return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(preview=manifest))
-
-    try:
-        if modus == "replace":
-            if not ziel_org_id or confirm_replace != "1":
-                shutil.rmtree(tmp, ignore_errors=True)
-                return templates.TemplateResponse(request, "admin/org_restore.html",
-                    _ctx(error="Ersetzen erfordert eine Ziel-Organisation UND die Bestaetigung."))
-            summary = _restore_inplace_in_thread(str(zpath), ziel_org_id)
-        else:
-            name = neue_org_name.strip() or f"Restore Org {manifest.get('org_id')}"
-            summary = _restore_in_thread(str(zpath), name)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Org-Restore fehlgeschlagen")
-        return templates.TemplateResponse(request, "admin/org_restore.html",
-                                          _ctx(error=f"Import fehlgeschlagen: {exc}"))
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        status = schema_status(manifest)
+        if confirm != "1":
+            return templates.TemplateResponse(request, "admin/org_restore.html",
+                                              _ctx(preview=manifest, schema_status=status))
+        if status == "mismatch" and confirm_schema != "1":
+            return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(
+                preview=manifest, schema_status=status,
+                error="Abweichender Schema-Stand: Bitte die zusätzliche Schema-Bestätigung aktivieren."))
+        try:
+            if modus == "replace":
+                if not ziel_org_id or confirm_replace != "1":
+                    return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(
+                        error="Ersetzen erfordert eine Ziel-Organisation UND die Bestätigung."))
+                summary = _restore_inplace_in_thread(str(zpath), ziel_org_id, confirm_schema == "1")
+            else:
+                name = neue_org_name.strip() or f"Restore Org {manifest.get('org_id')}"
+                summary = _restore_in_thread(str(zpath), name, confirm_schema == "1")
+        except RestoreFehler as exc:
+            return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(error=str(exc)))
+        except Exception:
+            logger.exception("Org-Restore fehlgeschlagen")
+            return templates.TemplateResponse(request, "admin/org_restore.html",
+                                              _ctx(error="Import fehlgeschlagen. Bitte das Serverprotokoll prüfen."))
 
     return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(summary=summary))

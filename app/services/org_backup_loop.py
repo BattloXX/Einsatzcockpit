@@ -21,28 +21,33 @@ from app.services.loop_utils import iteration_watch
 logger = logging.getLogger("einsatzleiter.org_backup_loop")
 
 
-def ist_faellig(cfg: object, jetzt: datetime) -> bool:
+def ist_faellig(cfg: object, jetzt: datetime, org: object | None = None) -> bool:
     """True, wenn fuer diese Org-Config jetzt ein geplanter Push ansteht.
 
     jetzt ist naive UTC (DB-Konvention). Gefeuert wird ab der eingestellten Stunde,
-    hoechstens einmal pro Kalendertag (last_run_at-Datum < heute); bei 'weekly'
+    in Org-Ortszeit, hoechstens einmal pro lokalem Kalendertag (last_run_at-Datum < heute); bei 'weekly'
     zusaetzlich nur am eingestellten Wochentag.
     """
+    from app.core.timezones import to_org_tz
+    lokal = to_org_tz(jetzt, org)
+    assert lokal is not None
     if not getattr(cfg, "enabled", False) or not getattr(cfg, "is_fully_configured", False):
         return False
-    if jetzt.hour < getattr(cfg, "hour", 3):
+    if lokal.hour < getattr(cfg, "hour", 3):
         return False
     if getattr(cfg, "schedule", "daily") == "weekly":
         wd = getattr(cfg, "weekday", None)
-        if wd is None or jetzt.weekday() != wd:
+        if wd is None or lokal.weekday() != wd:
             return False
     last = getattr(cfg, "last_run_at", None)
-    return last is None or last.date() < jetzt.date()
+    last_lokal = to_org_tz(last, org)
+    return last_lokal is None or last_lokal.date() < lokal.date()
 
 
 def _lade_faellige_ids() -> list[int]:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
+    from app.models.master import FireDept
     from app.models.org_backup import OrgBackupConfig
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -51,7 +56,8 @@ def _lade_faellige_ids() -> list[int]:
         rows = (db.query(OrgBackupConfig)
                 .filter(OrgBackupConfig.enabled == True)  # noqa: E712
                 .execution_options(include_all_tenants=True).all())
-        return [c.id for c in rows if ist_faellig(c, jetzt)]
+        orgs = {o.id: o for o in db.query(FireDept).all()}
+        return [c.id for c in rows if ist_faellig(c, jetzt, orgs.get(c.org_id))]
     finally:
         db.close()
 

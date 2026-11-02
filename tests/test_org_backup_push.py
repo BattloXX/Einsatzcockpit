@@ -26,7 +26,7 @@ def _fake(**kw):
 
 def test_faellig_daily_ab_stunde():
     assert loop.ist_faellig(_fake(hour=3), datetime(2026, 7, 18, 4, 0)) is True
-    assert loop.ist_faellig(_fake(hour=5), datetime(2026, 7, 18, 4, 0)) is False
+    assert loop.ist_faellig(_fake(hour=7), datetime(2026, 7, 18, 4, 0)) is False
 
 
 def test_nicht_faellig_wenn_heute_schon_gelaufen():

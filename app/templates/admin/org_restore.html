@@ -13,7 +13,7 @@
 <div class="sys-page">
 <header class="sys-hero">
   <h1>{{ icon("recycle") }} Archiv wiederherstellen</h1>
-  <p class="sys-muted">Ein Org-Archiv in eine <strong>neue</strong> Organisation importieren (mit neuer ID-Vergabe). Bestehende Organisationen werden nicht verändert.</p>
+  <p class="sys-muted">Ein Org-Archiv mit neuer ID-Vergabe importieren oder eine bestehende Organisation nach einer Pflicht-Sicherung ersetzen.</p>
 </header>
 
 {% if error %}
@@ -27,7 +27,8 @@
     <p>
       {% if summary.replaced %}Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}) <strong>ersetzt</strong>{% else %}Neue Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}, Slug <code>{{ summary.slug }}</code>) angelegt{% endif %}
       aus Quell-Org {{ summary.source_org_id }} — <strong>{{ summary.rows_total }}</strong> Datensätze,
-      <strong>{{ summary.media_restored }}</strong> Mediendateien.
+      <strong>{{ summary.media_restored }}</strong> Mediendateien wiederhergestellt,
+      <strong>{{ summary.media_skipped }}</strong> Mediendateien übersprungen.
     </p>
     {% if summary.replaced and summary.safety_backup %}
     <p class="sys-muted">Sicherheits-Autobackup vor dem Ersetzen: <code>{{ summary.safety_backup }}</code></p>
@@ -44,13 +45,18 @@
     <p>Quell-Organisation: <strong>{{ preview.org_id }}</strong> · App-Version {{ preview.app_version }} ·
        Export vom {{ preview.exported_at }}</p>
     <p>{{ preview.tables | length }} Tabellen, {{ preview.media_count }} Mediendateien.</p>
+    {% if schema_status == 'mismatch' %}
+    <div class="alert alert--error"><strong>Warnung: Abweichender Schema-Stand.</strong> Die Alembic-Revision des Archivs stimmt nicht mit dem aktuellen Code überein. Der Import kann fehlschlagen. Eine zusätzliche Bestätigung ist erforderlich.</div>
+    {% elif schema_status == 'legacy' %}
+    <p class="sys-muted">Altarchiv ohne Alembic-Revision: Der Schema-Stand kann nicht verglichen werden.</p>
+    {% endif %}
     <details>
       <summary>Tabellen anzeigen</summary>
       <ul class="sys-list sys-columns-2">
         {% for name, cnt in preview.tables.items() %}<li>{{ name }}: {{ cnt }}</li>{% endfor %}
       </ul>
     </details>
-    <p class="sys-muted sys-mt-2">Zum Anwenden bitte die Datei erneut wählen und „Wiederherstellung bestätigen" ankreuzen.</p>
+    <p class="sys-muted sys-mt-2">Zum Anwenden bitte die Datei erneut wählen und "Wiederherstellung bestätigen" ankreuzen.</p>
   </div>
 </section>
 {% endif %}
@@ -75,7 +81,7 @@
     </div>
 
     <div class="sys-field">
-      <label>Name der neuen Organisation (Modus „neu")</label>
+      <label>Name der neuen Organisation (Modus "neu")</label>
       <input class="form-control" name="neue_org_name" placeholder="z. B. Wiederherstellung FF Musterdorf">
     </div>
 
@@ -97,6 +103,10 @@
     <label class="sys-check">
       <input type="checkbox" name="confirm" value="1">
       <span><strong>Wiederherstellung bestätigen</strong> (ohne Haken: nur Vorschau)</span>
+    </label>
+    <label class="sys-check">
+      <input type="checkbox" name="confirm_schema" value="1">
+      <span>Import trotz abweichendem Schema-Stand ausdrücklich bestätigen</span>
     </label>
     <div class="sys-actions"><button class="btn btn--primary" type="submit">Hochladen</button></div>
   </form>

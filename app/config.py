@@ -506,7 +506,10 @@ class Settings(BaseSettings):
     # Self-Service-Backup je Organisation (app/services/org_export_service.py +
     # org_backup_loop.py). Globaler Kill-Switch; je Org zusaetzlich in org_backup_config.
     ORG_BACKUP_ENABLED: bool = True
-    # Groessenlimit je Org-Export-Archiv (Schutz vor Ueberlast; 0 = unbegrenzt).
+    # Sicherheitsarchive je Org; entpackte ZIP-Gesamtgroesse beim Restore.
+    ORG_SAFETY_KEEP: int = 5
+    ORG_RESTORE_MAX_UNCOMPRESSED_BYTES: int = 8 * 1024 * 1024 * 1024
+    # Upload-Limit je Org-Archiv (0 = unbegrenzt); nginx-Limit entsprechend anpassen.
     ORG_BACKUP_MAX_BYTES: int = 2 * 1024 * 1024 * 1024  # 2 GB
     # Loop-Intervall (Sekunden), in dem faellige Org-Backups geprueft werden.
     ORG_BACKUP_LOOP_INTERVAL_S: int = 900
