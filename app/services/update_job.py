@@ -58,6 +58,7 @@ def _private_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as handle:
+        os.fchmod(handle.fileno(), 0o600)
         json.dump(value, handle, ensure_ascii=False)
         handle.flush()
         os.fsync(handle.fileno())
@@ -118,8 +119,27 @@ def _complete(status: dict, state: str, message: str, *, audit: bool = True) -> 
         if step["status"] == "running":
             step.update(status="success" if state == "success" else "failed", finished_at=_now())
     _save(status)
+    if state == "success":
+        _save_installed(status)
     if audit:
         _audit(status)
+
+
+def _save_installed(status: dict) -> None:
+    """Nur bestätigte Release-Installationen als Versionsquelle speichern."""
+    if status.get("kind") != "release":
+        return
+    try:
+        sha = None
+        if us.is_git_checkout():
+            rc, head, _ = us._run_git(["rev-parse", "HEAD"], timeout=2)
+            if not rc:
+                sha = head or None
+        _private_json(directory() / "installed.json", {
+            "kind": "release", "tag": status["ziel"], "sha": sha, "installed_at": _now(),
+        })
+    except Exception:
+        logger.warning("Installierte Release-Version konnte nicht gespeichert werden")
 
 
 def _audit(status: dict) -> None:
