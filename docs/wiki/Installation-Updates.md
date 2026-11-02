@@ -298,3 +298,11 @@ Verbindungszeitlimit. Details: [Backups](Installation-Backups#robuste-db-sicheru
 
 Das Pre-Update-Backup läuft vor dem Code-Austausch; die getrennte Aufbewahrung
 bleibt dabei erhalten.
+
+### Backup nach Updates überwachen
+
+Auch Pre-Update-Läufe aktualisieren `.status-backup.json` (Typ `pre-update`),
+ohne Tagessicherungen bei der Retention zu verdrängen. Nach einem Update die
+Datensicherung im Gesamtzustand der Systemdiagnose oder per `admin_backup_pruefen`
+kontrollieren. Die Restore-Probe bleibt ein eigener Lauf mit eigenem Alterslimit.
+[Backup-Monitoring und Fehlerbilder](Betrieb-Backup-und-Disaster-Recovery#monitoring).

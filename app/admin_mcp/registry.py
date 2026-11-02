@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app import log_buffer
+from app.admin_mcp.backup_tools import collect_backup
 from app.admin_mcp.geraete_tools import collect_geraete
 from app.admin_mcp.log_templates import normalize_message
 from app.admin_mcp.osm_tools import collect_osm
@@ -24,6 +25,7 @@ class AdminTool:
 
 
 ADMIN_TOOLS = {
+    "admin_backup_pruefen": AdminTool("Backup-Alter, Restore-Probe, Off-Site und Speicher lesend pruefen.", "backup"),
     "admin_system_uebersicht": AdminTool("Version, Build und Gesamtstatus der Teilchecks lesen.", "system"),
     "admin_dienste_pruefen": AdminTool("Gespeicherte Dienstzustaende organisationsuebergreifend zaehlen.", "dienste"),
     "admin_worker_pruefen": AdminTool("Worker-, Leader- und Loop-Zustaende zaehlen.", "worker"),
@@ -96,6 +98,8 @@ def collect(db, name: str, **arguments) -> dict:
         return collect_geraete(db, name, **arguments)
     if name == "admin_push_pruefen":
         return diagnose.push_summary(db, arguments.get("org_id"), arguments.get("limit", 20), arguments.get("quelle"))
+    if name == "admin_backup_pruefen":
+        return collect_backup()
     if name == "admin_osm_pruefen":
         return collect_osm(live=arguments.get("live", True))
     if name == "admin_dienste_pruefen":

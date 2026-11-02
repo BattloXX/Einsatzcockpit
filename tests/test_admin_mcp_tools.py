@@ -52,6 +52,7 @@ def test_all_read_schemas_audit_and_no_org_contents(client, admin_env, monkeypat
         {"level": "ERROR", "msg": sentinel + " password=SECRETPASSWORD alice@example.com +436641234567"},
         {"level": "ERROR", "msg": sentinel + " password=SECRETPASSWORD alice@example.com +436641234567"},
     ])
+    assert "admin_backup_pruefen" in READ_TOOLS
     values = tokens(client, admin_env)
     correlations = set()
     for name in READ_TOOLS:

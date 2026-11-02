@@ -350,3 +350,9 @@ def push_summary(db: Session, org_id: int | None = None, limit: int = 20, quelle
         summary["angenommen_ohne_ack"] or summary["fehlgeschlagen"]) else "ok"
     return {"status": state, "checked_at": now,
             "evidence": {"fcm": fcm, "tokens_je_org": tokens, "pushes": pushes, "zusammenfassung": summary}}
+
+
+def backup_status(now: datetime | None = None) -> dict:
+    """Gemeinsamer Teilcheck fuer Sicherung und Restore-Probe."""
+    from app.services.backup_status import pruefen
+    return pruefen(now=now)

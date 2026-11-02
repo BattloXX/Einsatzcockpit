@@ -336,8 +336,10 @@ def _run_backup_locked(out_dir: str, keep: int, include_media: int, praefix: str
             print(f"• Medien-Verzeichnis {medien_root} fehlt — uebersprungen")
 
     # Off-Site-Upload (3-2-1): frisch erzeugte Dumps an die Gegenstelle schieben.
+    offsite_ok = None
     if settings.BACKUP_REMOTE_ENABLED and erzeugt:
         rc, detail = _remote_upload(erzeugt, out)
+        offsite_ok = rc == 0
         if rc != 0:
             fehler += 1
             failures.append(detail or "Off-Site-Upload fehlgeschlagen")
@@ -346,6 +348,18 @@ def _run_backup_locked(out_dir: str, keep: int, include_media: int, praefix: str
         print(f"Backup mit {fehler} Fehler(n) beendet.", file=sys.stderr)
     else:
         print(f"Backup vollstaendig nach {out}.")
+    from app.services.backup_status import schreibe_status, sichere_meldung
+    try:
+        # Pre-Update-Laeufe getrennt fuehren: sie duerfen weder ein ausgefallenes
+        # Tages-Backup verdecken noch dessen Bewertung verschlechtern.
+        schreibe_status(out, ".status-backup-pre-update.json" if praefix else ".status-backup.json", {
+            "ok": not fehler, "kind": "pre-update" if praefix else "daily",
+            "files": [{"name": p.name, "size": p.stat().st_size} for p in erzeugt],
+            "failures": [sichere_meldung(f) for f in failures], "offsite": {"enabled": settings.BACKUP_REMOTE_ENABLED,
+                "ok": offsite_ok, "ziel_beschreibung": "Konfiguriertes Off-Site-Ziel"},
+        })
+    except Exception:
+        bs.logger.warning("Backup-Status konnte nicht erstellt werden")
     return BackupResult(returncode=1 if fehler else 0, created=erzeugt, failures=failures)
 
 
@@ -397,6 +411,19 @@ def backup_upload(alle: bool = False) -> int:
 
 
 def restore_test(scratch_db: str = "") -> int:
+    """Status auch bei fehlgeschlagener Probe best effort schreiben."""
+    from app.config import settings
+    from app.services.backup_status import schreibe_status
+    daten: dict = {"dump": None, "db_checks": [], "warnings": []}
+    rc = 1
+    try:
+        rc = _restore_test(scratch_db, daten)
+        return rc
+    finally:
+        schreibe_status(Path(settings.BACKUP_DIR), ".status-restore.json", {**daten, "ok": rc == 0})
+
+
+def _restore_test(scratch_db: str, daten: dict) -> int:
     """Prueft Haupt-DB, vorhandene Wetter-DB und das neueste Medienarchiv."""
     from app.config import settings
     from app.services import backup_service as bs
@@ -416,13 +443,22 @@ def restore_test(scratch_db: str = "") -> int:
                        if bs.parse_dump_dateiname(p.name) and p.is_file())
         if not dumps:
             raise RuntimeError("Kein Haupt-Dump gefunden")
+        daten["dump"] = dumps[-1].name
+        daten["db_checks"].extend(["haupt.users", "haupt.fire_dept", "haupt.alembic_version"])
         if _restore_db(cfg, scratch, dumps[-1]):
             return 1
         wetter = sorted(p for p in out.glob("einsatzleiter_weather-*.sql.gz")
                         if bs.parse_dump_dateiname(p.name) and p.is_file())
+        if wetter_cfg and not wetter:
+            daten["warnings"].append("Kein Wetter-Dump vorhanden")
+        if wetter_cfg and wetter:
+            daten["db_checks"].extend(["wetter.weather_reading", "wetter.weather_reading_hourly",
+                                       "wetter.abfluss_reading"])
         if wetter_cfg and wetter and _restore_db(wetter_cfg, scratch + "_weather", wetter[-1], wetter=True):
             return 1
         medien = sorted(p for p in out.glob("medien-*.tar.gz") if p.is_file())
+        if not medien:
+            daten["warnings"].append("Kein Medienarchiv vorhanden")
         if medien:
             # Bis EOF lesen: auch gzip-CRC/Laenge nach dem TAR-Endmarker pruefen.
             with gzip.open(medien[-1], "rb") as gz:

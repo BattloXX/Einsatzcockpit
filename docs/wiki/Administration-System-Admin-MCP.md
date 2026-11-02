@@ -1,6 +1,6 @@
 # System-Admin-MCP
 
-Der System-Admin-MCP stellt sieben direkte Diagnose-Lesewerkzeuge, drei Werkzeuge
+Der System-Admin-MCP stellt zwölf direkte Diagnose-Lesewerkzeuge, drei Werkzeuge
 fuer Code-/CI-Korrelation, vier Werkzeuge fuer Diagnose-Laeufe und optional fuenf
 kontrollierte Reparaturwerkzeuge bereit.
 Er ist vom organisationsgebundenen MCP getrennt und funktioniert auch fuer
@@ -41,6 +41,7 @@ beruecksichtigt. Die Login-Seite erklaert diese Grenze, Fehler verraten keine Ko
 | `admin_system_uebersicht` | Version, Commit, Build, Deploy-Abstand zu main und Gesamtstatus der Teilchecks |
 | `admin_dienste_pruefen` | Aggregierte gespeicherte Dienstmonitor-Zustaende aller Organisationen |
 | `admin_worker_pruefen` | Anzahl aktiver/abgelaufener Worker, Leader und fehlerhafter Loops |
+| `admin_backup_pruefen` | Backup-/Restore-Alter, Off-Site-Ergebnis, Dump-Zähler, Größen und freier Speicher; ohne Parameter, Modul `backup`, nur lesend |
 | `admin_osm_pruefen` | Lokaler OSM-Bestand, persistente Statistik und optionale Live-Proben (`live=true`) |
 | `admin_redis_pruefen` | Lokaler Konfigurations- und Verbindungszustand, ohne Netzwerkprobe |
 | `admin_datenbank_pruefen` | Verbindung, Pool-Zaehler und Alembic-Stand |
@@ -575,3 +576,19 @@ Organisationsnamen oder Installations-UUIDs. Frei vergebene Geraetenamen werden
 ausgelassen, Diagnosetexte mit der Admin-MCP-Maskierung behandelt. Einstellungen
 werden ausschliesslich gelesen; es gibt keinen Rueckkanal an die App.
 Audit und Korrelations-ID entsprechen den anderen Admin-MCP-Tools.
+
+## admin_backup_pruefen
+
+Parameterloser Lesecheck im Modul `backup`, auch Teil von `admin_system_uebersicht`
+und der Gesamtzustandskarte. Liefert UTC-Prüfzeit, `ok`/`warn`/`fail`/`unbekannt`,
+Alter in Stunden, gültige Dump-Dateinamen und Größen, Anzahl je Typ, freien Platz
+in MB und deutsche Handlungsanweisungen. Keine Rohfehler, URLs, Zugangsdaten oder
+Pfade außerhalb des Backup-Verzeichnisses werden ausgegeben.
+
+`BACKUP_MAX_AGE_H=26`, `BACKUP_RESTORE_MAX_AGE_D=8`: bis zur Grenze ok, bis zur
+zweifachen Grenze warn, danach fail. Ein letzter fehlgeschlagener Lauf ist fail.
+Fehlende/defekte Statusdateien sind unbekannt; Backup-Alter kann auf gültige
+Dump-mtime zurückfallen. Off-Site aktiviert ohne belegten Erfolg sowie weniger
+als zweimal die letzte Dump-Größe an freiem Platz warnen. Medienalter ist nur
+Hinweis. Details: [Backup-Monitoring](Betrieb-Backup-und-Disaster-Recovery#monitoring).
+Der Diagnose-Runner-Check `backup` macht Probleme über `admin_fehler_liste` sichtbar.

@@ -145,3 +145,20 @@ zulässig. CREATE/DROP-Rechte müssen auch für die zweite Wegwerf-DB vorhanden 
 Beide Scratch-Namen werden gegen die Produktionsdatenbanken geprüft. Das neueste
 fertige Medienarchiv wird vollständig gelesen, einschließlich gzip-Prüfsumme und
 TAR-Inhalt. Fehlende Wetter-Dumps oder Medienarchive werden nicht geprüft.
+
+## Backup-Monitoring einrichten
+
+`BACKUP_MAX_AGE_H=26` und `BACKUP_RESTORE_MAX_AGE_D=8` steuern die Altersgrenzen.
+Bis zur doppelten Grenze wird gewarnt, danach ist der Status `fail`; ein
+fehlgeschlagener letzter Lauf ist sofort `fail`. Beim ersten Lauf entstehen
+private Punktdateien `.status-backup.json` und `.status-restore.json` unter
+`BACKUP_DIR`; sie werden weder hochgeladen noch von Retention/Liste erfasst.
+Ohne Status greift für Dumps ein mtime-Rückfall, für Restore bleibt der Stand unbekannt.
+
+Nach Installation beide CLI-Läufe ausführen und die Datensicherungskarte im
+Gesamtzustand der Systemdiagnose oder `admin_backup_pruefen` kontrollieren.
+Off-Site-Ausfälle und weniger als zweimal die letzte Dump-Größe an freiem Platz
+warnen ebenfalls. Für aktive Meldungen die geplante Diagnose mit Sammelmail
+konfigurieren. Optionalen `OnFailure`-Hook nur lokal einrichten; die mitgelieferten
+Units enthalten kommentierte Beispiele. Details und Fehlerbilder:
+[Monitoring-Runbook](Betrieb-Backup-und-Disaster-Recovery#monitoring).
