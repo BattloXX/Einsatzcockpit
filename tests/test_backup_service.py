@@ -88,7 +88,7 @@ def test_build_admin_argv_ohne_db():
 # ── Dateinamen / Retention ────────────────────────────────────────────────────
 
 def test_dateinamen_sortierbar():
-    dt = datetime(2026, 7, 18, 1, 30, 0)
+    dt = datetime(2026, 7, 18, 1, 30, 0, tzinfo=UTC)
     assert bs.dump_dateiname("einsatzleiter", dt) == "einsatzleiter-20260718-013000Z.sql.gz"
     assert bs.medien_dateiname(dt) == "medien-20260718-013000Z.tar.gz"
 
@@ -185,6 +185,9 @@ def test_dump_db_schreibt_portable_fk_namen(tmp_path, monkeypatch):
                 b"  CONSTRAINT `1` FOREIGN KEY (`x`) REFERENCES `b` (`id`)\n);\n"
             )
             self.stderr = io.BytesIO()
+
+        def poll(self):
+            return 0
 
         def wait(self):
             return 0

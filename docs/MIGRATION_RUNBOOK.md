@@ -185,3 +185,19 @@ Die folgenden neuen Umgebungsvariablen wurden in v2.2.0 eingeführt:
 | `UPLOAD_RATELIMIT` | `20/minute` | Rate-Limit für Medien-Uploads |
 
 Alle Variablen haben sinnvolle Defaults und müssen nicht explizit gesetzt werden.
+
+## DB-Sicherung vor Migrationen (Backup-Härtung)
+
+Automatische Pre-Update-Dumps liegen unter `BACKUP_DIR` als
+`pre-update-einsatzleiter-<stamp>.sql.gz` und optional
+`pre-update-einsatzleiter_weather-<stamp>.sql.gz`. Sie haben eine eigene
+Anzahlgrenze `UPDATE_BACKUP_KEEP` (Standard 5 je DB). Nur fertige Dateien ohne
+`.partial` zum Wiederherstellen verwenden. Dateien sind 0600, das Verzeichnis
+0700. Vor manuellen Migrationen weiterhin eine Sicherung erstellen und prüfen.
+
+Bei belegter `.backup.lock`, Platzmangel (Schätzung: letzter Dump × 1,5) oder
+Timeout (`BACKUP_DUMP_TIMEOUT_S=7200`, Remote: `BACKUP_REMOTE_TIMEOUT_S=1800`) erst
+die Ursache beheben und den Sicherungslauf wiederholen. Die wöchentliche Probe
+prüft tägliche Dumps gegen den aktuellen Alembic-Head; ein Dump vor einer
+Migration kann erwartungsgemäß eine ältere Revision enthalten. Die Wetter-Probe
+benötigt zusätzlich CREATE/DROP auf `<BACKUP_RESTORE_TEST_DB>_weather`.

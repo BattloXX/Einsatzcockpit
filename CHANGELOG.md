@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **DB-Backup:** Dumps und Medienarchive werden atomar über `.partial` mit 0600 veröffentlicht, das Backup-Verzeichnis erhält 0700. Prozessübergreifende Sperre, Platzprüfung und Zeitlimits verhindern überlappende oder hängende Läufe; verwaiste Teildateien werden nach 24 Stunden entfernt. Pre-Update-Dumps (`pre-update-einsatzleiter-…`) haben mit `UPDATE_BACKUP_KEEP=5` eine eigene Aufbewahrung und verdrängen keine Tagessicherungen. Die Restore-Probe prüft Haupt- und Wetter-DB, gefüllte Kerntabellen, den Alembic-Head sowie die Integrität des neuesten Medienarchivs. Keine Migration.
+
 - **Sicherheitsfix / Org-Datensicherung:** Kommando-Injection durch strenge Remote-Validierung, sichere SSH-Argumente und maskierte SFTP-Batches geschlossen. Org-Ziele erlauben nur SFTP, FTPS und Microsoft Graph sowie öffentliche Zieladressen; SSH-Hostkey-Prüfung bleibt aktiv. Ungültige Bestandsziele werden mit Fehlerstatus gesperrt und müssen neu gespeichert werden. Serverweite Protokolle bleiben verfügbar. Keine Migration.
 
 - **Admin-MCP / Diagnose:** Strukturierte Logorte und Exception-Typen, datensparsame Logtemplates mit gemeinsamen Signaturen und UTC-Zeitstempel mit Z-Suffix. Konkrete Befundempfehlungen, Warnung bei fehlender Buildzeit mit gekennzeichnetem Ersatzzeitpunkt und Build-Args fuer lokale Compose-Builds. GitHub-Tokenablauf als Diagnosebefund (Info ab 30, Warnung ab 14 Tagen) ueber den bestehenden Benachrichtigungspfad. Keine Migration.

@@ -8,16 +8,20 @@ Verwendung:
   python -m app.cli restore-test           # Restore-Probe des neuesten Dumps
 """
 import argparse
+import fcntl
 import gzip
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event, Timer
 
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.tenant import set_tenant_context
@@ -152,44 +156,110 @@ def _dump_db(cfg, ziel: Path, dump_bin: str) -> int:
     from app.services import backup_service as bs
     argv, env_zusatz = bs.build_dump_argv(cfg, dump_bin)
     full_env = {**os.environ, **env_zusatz}
-    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=full_env)
-    assert proc.stdout is not None
-    try:
-        with gzip.open(ziel, "wb") as gz:
-            # Fremdschluessel stehen in CREATE TABLE-Zeilen. Zeilenweises
-            # Streamen vermeidet, dass ein Name an einer Chunk-Grenze entgeht.
-            for zeile in iter(proc.stdout.readline, b""):  # type: ignore[union-attr]
-                gz.write(bs.normalisiere_dump_fk_namen(zeile))
-    finally:
-        proc.stdout.close()
-    err = proc.stderr.read() if proc.stderr else b""
-    if proc.wait() != 0:
-        ziel.unlink(missing_ok=True)
-        raise RuntimeError(f"{dump_bin} fehlgeschlagen: {err.decode('utf-8', 'ignore')[:600]}")
+    from app.config import settings
+    partial = ziel.with_name(ziel.name + ".partial")
+    abgelaufen = Event()
+    with tempfile.TemporaryFile() as stderr:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=stderr, env=full_env)
+        assert proc.stdout is not None
+
+        def abbrechen() -> None:
+            abgelaufen.set()
+            proc.kill()
+
+        timer = Timer(settings.BACKUP_DUMP_TIMEOUT_S, abbrechen)
+        timer.start()
+        try:
+            fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as roh:
+                with gzip.GzipFile(fileobj=roh, mode="wb") as gz:
+                    for zeile in iter(proc.stdout.readline, b""):
+                        gz.write(bs.normalisiere_dump_fk_namen(zeile))
+                roh.flush()
+                os.fsync(roh.fileno())
+            rc = proc.wait()
+            if abgelaufen.is_set():
+                raise RuntimeError("Zeitlimit fuer DB-Dump ueberschritten")
+            if rc != 0:
+                stderr.seek(0)
+                detail = stderr.read().decode("utf-8", "ignore")[-600:]
+                raise RuntimeError(f"{dump_bin} fehlgeschlagen (Exit-Code {rc}): {detail}")
+            os.replace(partial, ziel)
+        finally:
+            timer.cancel()
+            proc.stdout.close()
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            partial.unlink(missing_ok=True)
     return ziel.stat().st_size
 
 
 def _tar_medien(ziel: Path, medien_root: Path, backup_dir: Path) -> int:
-    """Packt medien_root nach ziel (tar.gz), schliesst das Backup-Verzeichnis aus."""
+    """Archiviert mit Gesamtzeitlimit und veroeffentlicht nur fertige Archive."""
+    from app.config import settings
     medien_root = medien_root.resolve()
-    excl_prefix: str | None = None
-    try:
+    argv = ["tar", "-czf", "-", "-C", str(medien_root.parent)]
+    if backup_dir.resolve().is_relative_to(medien_root):
         rel = backup_dir.resolve().relative_to(medien_root)
-        excl_prefix = f"{medien_root.name}/{rel.as_posix()}"
-    except ValueError:
-        excl_prefix = None  # Backup-Dir liegt ausserhalb der Medien → nichts auszuschliessen
-
-    def _filter(ti: tarfile.TarInfo) -> tarfile.TarInfo | None:
-        if excl_prefix and (ti.name == excl_prefix or ti.name.startswith(excl_prefix + "/")):
-            return None
-        return ti
-
-    with tarfile.open(ziel, "w:gz") as tar:
-        tar.add(medien_root, arcname=medien_root.name, filter=_filter)
+        argv += [f"--exclude={medien_root.name}/{rel.as_posix()}"]
+    argv += [medien_root.name]
+    partial = ziel.with_name(ziel.name + ".partial")
+    try:
+        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as roh:
+            try:
+                result = subprocess.run(argv, stdout=roh, stderr=subprocess.PIPE,
+                                        timeout=settings.BACKUP_DUMP_TIMEOUT_S)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("Zeitlimit fuer Medien-Archiv ueberschritten") from exc
+            # tar-Exit 1 = "Datei beim Lesen geaendert": bei laufendem Betrieb normal.
+            if result.returncode not in (0, 1):
+                raise RuntimeError("Medien-Archiv fehlgeschlagen")
+            roh.flush()
+            os.fsync(roh.fileno())
+        os.replace(partial, ziel)
+    finally:
+        partial.unlink(missing_ok=True)
     return ziel.stat().st_size
 
 
-def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> BackupResult:
+def _freier_backup_pfad(out: Path, name: str, endung: str) -> Path:
+    """Fortlaufender Suffix erhaelt auch bei identischer Sekunde die Sortierung."""
+    stem = name.removesuffix(endung)
+    muster = re.compile(re.escape(stem) + r"(?:_(\d{6,}))?" + re.escape(endung) + r"(?:\.partial)?$")
+    nummern = [int(match[1] or 0) for p in out.glob(stem + "*")
+               if (match := muster.fullmatch(p.name))]
+    if not nummern:
+        return out / name
+    return out / f"{stem}_{max(nummern) + 1:06d}{endung}"
+
+
+def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1,
+               praefix: str = "") -> BackupResult:
+    """Serialisiert alle Backup-Einstiegspunkte ueber eine Dateisperre."""
+    from app.config import settings
+    if praefix not in {"", "pre-update-"}:
+        raise ValueError("Unbekannter Backup-Praefix")
+    out = Path(out_dir or settings.BACKUP_DIR)
+    out.mkdir(parents=True, exist_ok=True, mode=0o700)
+    out.chmod(0o700)
+    fd = os.open(out / ".backup.lock", os.O_CREAT | os.O_RDWR, 0o600)
+    with os.fdopen(fd, "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return BackupResult(1, [], ["Backup laeuft bereits"])
+        try:
+            for partial in out.glob("*.partial"):
+                if partial.is_file() and datetime.now(UTC).timestamp() - partial.stat().st_mtime > 86400:
+                    partial.unlink()
+            return _run_backup_locked(str(out), keep, include_media, praefix)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _run_backup_locked(out_dir: str, keep: int, include_media: int, praefix: str) -> BackupResult:
     """Sichert beide DBs (+ optional Medien) und raeumt alte Backups auf."""
     from app.config import settings
     from app.services import backup_service as bs
@@ -210,7 +280,7 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> Ba
             "DB-Dump-Retention konnte nicht geladen werden; verwende Fallbacks",
             exc_info=True,
         )
-    db_max_count = max_count if keep < 0 else keep
+    db_max_count = (settings.UPDATE_BACKUP_KEEP if praefix else max_count) if keep < 0 else keep
     medien_behalten = settings.BACKUP_KEEP_DAILY if keep < 0 else keep
     medien = settings.BACKUP_INCLUDE_MEDIA if include_media < 0 else bool(include_media)
     jetzt = datetime.now(UTC)
@@ -223,12 +293,26 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> Ba
     erzeugt: list[Path] = []
     failures: list[str] = []
     for label, url in dbs:
-        ziel = out / bs.dump_dateiname(label, jetzt)
+        label = praefix + label
+        name = bs.dump_dateiname(label, jetzt)
+        ziel = _freier_backup_pfad(out, name, ".sql.gz")
         try:
+            vorherige = sorted(
+                (p for p in out.iterdir() if p.is_file()
+                 and (parsed := bs.parse_dump_dateiname(p.name))
+                 and parsed[0].removeprefix("pre-update-") == label.removeprefix("pre-update-")),
+                key=lambda p: p.name.removeprefix("pre-update-"),
+            )
+            if vorherige and shutil.disk_usage(out).free < vorherige[-1].stat().st_size * 1.5:
+                raise RuntimeError("Zu wenig freier Speicherplatz fuer DB-Dump (letzter Dump × 1,5)")
             groesse = _dump_db(bs.parse_database_url(url), ziel, settings.BACKUP_DUMP_BIN)
             print(f"✓ DB-Dump {label}: {ziel.name} ({groesse // 1024} KB)")
+            ziel.chmod(0o600)
             erzeugt.append(ziel)
-            bs.prune_dump_backups(out, label, retention_days, db_max_count, jetzt)
+            if praefix:
+                bs.prune_backups(out, label, db_max_count)
+            else:
+                bs.prune_dump_backups(out, label, retention_days, db_max_count, jetzt)
         except Exception as exc:  # noqa: BLE001 — Sammelbetrieb, Rest weiterversuchen
             fehler += 1
             print(f"✗ DB-Dump {label} fehlgeschlagen: {exc}", file=sys.stderr)
@@ -237,10 +321,11 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> Ba
     if medien:
         medien_root = Path(settings.MEDIA_STORAGE_DIR).parent  # = app_storage
         if medien_root.is_dir():
-            ziel = out / bs.medien_dateiname(jetzt)
+            ziel = _freier_backup_pfad(out, bs.medien_dateiname(jetzt), ".tar.gz")
             try:
                 groesse = _tar_medien(ziel, medien_root, out)
                 print(f"✓ Medien-Archiv: {ziel.name} ({groesse // 1024} KB)")
+                ziel.chmod(0o600)
                 erzeugt.append(ziel)
                 bs.prune_backups(out, "medien", medien_behalten)
             except Exception as exc:  # noqa: BLE001
@@ -300,9 +385,11 @@ def backup_upload(alle: bool = False) -> int:
         print(f"✗ Backup-Verzeichnis {out} fehlt.", file=sys.stderr)
         return 1
     if alle or not settings.BACKUP_REMOTE_ONLY_LATEST:
-        dateien = sorted(p for p in out.glob("*") if p.is_file())
+        dateien = sorted(p for p in out.glob("*")
+                         if p.is_file() and not p.name.endswith(".partial") and not p.name.startswith("."))
     else:
-        dateien = rbs.neueste_je_praefix(out, ("einsatzleiter", "einsatzleiter_weather", "medien"))
+        dateien = rbs.neueste_je_praefix(out, ("einsatzleiter", "einsatzleiter_weather", "pre-update-einsatzleiter",
+                                                "pre-update-einsatzleiter_weather", "medien"))
     if not dateien and rbs.config_aus_settings().protocol != "rclone":
         print(f"✗ Keine Backups in {out} gefunden.", file=sys.stderr)
         return 1
@@ -310,29 +397,54 @@ def backup_upload(alle: bool = False) -> int:
 
 
 def restore_test(scratch_db: str = "") -> int:
-    """Restore-Probe: neuesten Haupt-Dump in eine Wegwerf-DB einspielen + pruefen.
-
-    Beweist bei jedem Lauf, dass der Dump tatsaechlich wiederherstellbar ist.
-    Ruehrt die Produktions-DB nie an (harte Namens-Pruefung) und raeumt die
-    Wegwerf-DB in jedem Fall wieder ab.
-    """
+    """Prueft Haupt-DB, vorhandene Wetter-DB und das neueste Medienarchiv."""
     from app.config import settings
     from app.services import backup_service as bs
-
-    cfg = bs.parse_database_url(settings.DATABASE_URL)
     scratch = scratch_db or settings.BACKUP_RESTORE_TEST_DB
     if not re.fullmatch(r"[A-Za-z0-9_]+", scratch):
-        print(f"✗ Ungueltiger Restore-Test-DB-Name: {scratch!r}", file=sys.stderr)
+        print("Ungueltiger Restore-Test-DB-Name", file=sys.stderr)
         return 1
-    if scratch == cfg.database:
-        print("✗ Restore-Test-DB darf nicht die Produktions-DB sein!", file=sys.stderr)
+    try:
+        cfg = bs.parse_database_url(settings.DATABASE_URL)
+        wetter_cfg = (bs.parse_database_url(settings.WEATHER_DATABASE_URL)
+                      if settings.WEATHER_DATABASE_URL.strip() else None)
+        produktiv = {cfg.database} | ({wetter_cfg.database} if wetter_cfg else set())
+        if {scratch, scratch + "_weather"} & produktiv:
+            raise RuntimeError("Restore-Test-DB darf nicht die Produktions-DB sein")
+        out = Path(settings.BACKUP_DIR)
+        dumps = sorted(p for p in out.glob("einsatzleiter-*.sql.gz")
+                       if bs.parse_dump_dateiname(p.name) and p.is_file())
+        if not dumps:
+            raise RuntimeError("Kein Haupt-Dump gefunden")
+        if _restore_db(cfg, scratch, dumps[-1]):
+            return 1
+        wetter = sorted(p for p in out.glob("einsatzleiter_weather-*.sql.gz")
+                        if bs.parse_dump_dateiname(p.name) and p.is_file())
+        if wetter_cfg and wetter and _restore_db(wetter_cfg, scratch + "_weather", wetter[-1], wetter=True):
+            return 1
+        medien = sorted(p for p in out.glob("medien-*.tar.gz") if p.is_file())
+        if medien:
+            # Bis EOF lesen: auch gzip-CRC/Laenge nach dem TAR-Endmarker pruefen.
+            with gzip.open(medien[-1], "rb") as gz:
+                while gz.read(1024 * 1024):
+                    pass
+            with tarfile.open(medien[-1], "r:gz") as tar:
+                for eintrag in tar:
+                    if eintrag.isfile():
+                        fh = tar.extractfile(eintrag)
+                        assert fh is not None
+                        with fh:
+                            while fh.read(1024 * 1024):
+                                pass
+        return 0
+    except Exception as exc:  # noqa: BLE001 — CLI liefert einen Fehlercode
+        print(f"Restore-Probe fehlgeschlagen: {exc}", file=sys.stderr)
         return 1
 
-    dumps = sorted(Path(settings.BACKUP_DIR).glob("einsatzleiter-*.sql.gz"))
-    if not dumps:
-        print(f"✗ Kein Haupt-Dump in {settings.BACKUP_DIR} gefunden.", file=sys.stderr)
-        return 1
-    neuester = dumps[-1]
+
+def _restore_db(cfg, scratch: str, neuester: Path, wetter: bool = False) -> int:
+    from app.config import settings
+    from app.services import backup_service as bs
     client = settings.BACKUP_CLIENT_BIN
     full_env = {**os.environ, "MYSQL_PWD": cfg.password}
 
@@ -343,9 +455,9 @@ def restore_test(scratch_db: str = "") -> int:
             raise RuntimeError(r.stderr.decode("utf-8", "ignore")[:600])
 
     print(f"Restore-Probe: {neuester.name} → DB {scratch}")
-    _admin(f"DROP DATABASE IF EXISTS `{scratch}`; "
-           f"CREATE DATABASE `{scratch}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
     try:
+        _admin(f"DROP DATABASE IF EXISTS `{scratch}`; "
+               f"CREATE DATABASE `{scratch}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
         restore_argv, _ = bs.build_restore_argv(cfg, scratch, client)
         proc = subprocess.Popen(restore_argv, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=full_env)
         assert proc.stdin is not None
@@ -365,13 +477,29 @@ def restore_test(scratch_db: str = "") -> int:
             print(f"✗ Restore fehlgeschlagen: {err.decode('utf-8', 'ignore')[:600]}", file=sys.stderr)
             return 1
 
-        for sql in bs.verify_sql():
+        for sql in (["SELECT COUNT(*) FROM weather_reading",
+                     "SELECT COUNT(*) FROM weather_reading_hourly",
+                     "SELECT COUNT(*) FROM abfluss_reading"] if wetter else bs.verify_sql()):
             argv, _ = bs.build_query_argv(cfg, scratch, sql, client)
             r = subprocess.run(argv, env=full_env, capture_output=True)
             if r.returncode != 0:
                 print(f"✗ Verifikation fehlgeschlagen ({sql}): "
                       f"{r.stderr.decode('utf-8', 'ignore')[:300]}", file=sys.stderr)
                 return 1
+            if not wetter:
+                bs.pruefe_zeilenzahl(sql, r.stdout.decode())
+            elif not r.stdout.decode().strip().isdigit():
+                raise RuntimeError("Ungueltige Zeilenzahl in Wetter-DB")
+        if not wetter:
+            argv, _ = bs.build_query_argv(cfg, scratch, "SELECT version_num FROM alembic_version", client)
+            r = subprocess.run(argv, env=full_env, capture_output=True)
+            if r.returncode:
+                raise RuntimeError("Alembic-Version konnte nicht gelesen werden")
+            if r.stdout.decode().strip() != bs.aktueller_alembic_head():
+                if neuester.name.startswith("pre-update-"):
+                    print("Warnung: Pre-Update-Dump weicht vom aktuellen Alembic-Head ab.", file=sys.stderr)
+                else:
+                    raise RuntimeError("Alembic-Version weicht vom aktuellen Code-Head ab")
         print("✓ Restore-Probe bestanden (Dump ist wiederherstellbar).")
         return 0
     finally:

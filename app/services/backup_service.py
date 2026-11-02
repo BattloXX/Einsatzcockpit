@@ -30,7 +30,7 @@ _STAMP_FMT = "%Y%m%d-%H%M%SZ"
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_MAX_COUNT = 7
 _DUMP_RE = re.compile(
-    r"^(?P<label>einsatzleiter(?:_weather)?)-(?P<stamp>\d{8}-\d{6}Z)\.sql\.gz$"
+    r"^(?P<label>(?:pre-update-)?einsatzleiter(?:_weather)?)-(?P<stamp>\d{8}-\d{6}Z)(?:_\d{6,})?\.sql\.gz$"
 )
 # Manche Bestands-Tabellen haben von MariaDB vergebene, rein numerische
 # Fremdschluessel-Namen (z. B. ``CONSTRAINT `1` FOREIGN KEY``). Solche Namen
@@ -198,8 +198,13 @@ def zu_loeschende_dump_backups(
     if referenz.tzinfo is None:
         referenz = referenz.replace(tzinfo=UTC)
     gueltig = [(pfad, parsed[1]) for pfad in pfade if (parsed := parse_dump_dateiname(pfad.name))]
-    gueltig.sort(key=lambda item: item[1], reverse=True)
-    ausserhalb_anzahl = {pfad for pfad, _ in gueltig[max_count:]}
+    gueltig.sort(key=lambda item: (item[1], item[0].name), reverse=True)
+    gruppen: dict[str, list[Path]] = {}
+    for pfad, _ in gueltig:
+        parsed = parse_dump_dateiname(pfad.name)
+        assert parsed is not None
+        gruppen.setdefault(parsed[0], []).append(pfad)
+    ausserhalb_anzahl = {pfad for gruppe in gruppen.values() for pfad in gruppe[max_count:]}
     zu_alt = {
         pfad for pfad, zeitpunkt in gueltig
         if (referenz - zeitpunkt).total_seconds() > retention_days * 86400
@@ -212,7 +217,9 @@ def prune_dump_backups(
     jetzt: datetime | None = None,
 ) -> list[Path]:
     """Löscht DB-Dumps nach Alter oder Anzahl; ignoriert fremde Dateinamen strikt."""
-    if not verzeichnis.is_dir() or praefix not in {"einsatzleiter", "einsatzleiter_weather"}:
+    if not verzeichnis.is_dir() or praefix not in {
+        "einsatzleiter", "einsatzleiter_weather", "pre-update-einsatzleiter", "pre-update-einsatzleiter_weather",
+    }:
         return []
     kandidaten = [
         pfad for pfad in verzeichnis.iterdir()
@@ -251,7 +258,12 @@ def prune_backups(verzeichnis: Path, praefix: str, behalten: int) -> list[Path]:
     """
     if not verzeichnis.is_dir():
         return []
-    kandidaten = sorted(verzeichnis.glob(f"{praefix}-*"))
+    kandidaten = sorted(p for p in verzeichnis.glob(f"{praefix}-*")
+                        if p.is_file() and not p.name.endswith(".partial"))
+    if praefix in {"einsatzleiter", "einsatzleiter_weather",
+                   "pre-update-einsatzleiter", "pre-update-einsatzleiter_weather"}:
+        kandidaten = [p for p in kandidaten
+                      if (parsed := parse_dump_dateiname(p.name)) and parsed[0] == praefix]
     geloescht: list[Path] = []
     for pfad in zu_loeschende(kandidaten, behalten):
         try:
@@ -266,7 +278,8 @@ def verify_sql(mindest_tabellen: tuple[str, ...] = ("fire_dept", "users", "alemb
     """SQL-Checks fuer die Restore-Probe: Schema-Version da, Kerntabellen befuellt.
 
     Eine wiederhergestellte DB gilt als plausibel, wenn alembic_version genau
-    einen Eintrag hat und die Kerntabellen existieren (COUNT laeuft ohne Fehler).
+    einen Eintrag hat und die Kerntabellen befuellt sind. Die Ergebnisse werden
+    mit pruefe_zeilenzahl bewertet; den Code-Head prueft die Orchestrierung.
     """
     checks = ["SELECT COUNT(*) FROM alembic_version"]
     checks += [f"SELECT COUNT(*) FROM {t}" for t in mindest_tabellen if t != "alembic_version"]
@@ -278,3 +291,26 @@ def _lauf(argv: list[str], env_zusatz: dict[str, str], **kw: object) -> subproce
     import os
     env = {**os.environ, **env_zusatz}
     return subprocess.run(argv, env=env, **kw)  # type: ignore[call-overload]
+
+
+def aktueller_alembic_head() -> str:
+    """Ermittelt den Code-Head unabhaengig vom Arbeitsverzeichnis."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    root = Path(__file__).resolve().parents[2]
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    head = ScriptDirectory.from_config(config).get_current_head()
+    if not head:
+        raise RuntimeError("Kein Alembic-Head im Code gefunden")
+    return head
+
+
+def pruefe_zeilenzahl(sql: str, ausgabe: str) -> None:
+    """Bewertet die COUNT-Abfragen statt nur deren Exit-Code."""
+    try:
+        anzahl = int(ausgabe.strip())
+    except ValueError as exc:
+        raise RuntimeError(f"Ungueltige Zeilenzahl ({sql})") from exc
+    if ("alembic_version" in sql and anzahl != 1) or anzahl < 1:
+        raise RuntimeError(f"Unplausible Zeilenzahl {anzahl} ({sql})")
