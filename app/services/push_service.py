@@ -38,7 +38,7 @@ def inactive_fcm_tokens(cutoff: datetime):
 def cleanup_inactive_fcm_tokens(db: Session) -> int:
     """Entfernt inaktive Tokens; Commit bleibt beim Housekeeping-Aufrufer."""
     cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=FCM_INACTIVE_DAYS)
-    tokens = db.query(FcmToken).filter(inactive_fcm_tokens(cutoff)).with_for_update().all()
+    tokens = db.query(FcmToken).filter(inactive_fcm_tokens(cutoff)).all()
     for token in tokens:
         # Historische Zustellnachweise auch unter SQLite ohne FK-Cascade erhalten.
         for delivery in db.query(FcmDeliveryLog).filter(FcmDeliveryLog.fcm_token_id == token.id).all():
@@ -648,15 +648,15 @@ def notify_org_fcm_wake_only(
     if incident_id is not None:
         from app.models.incident import Incident
 
-        # Zeilensperre serialisiert Reservierung und Limitpruefung ueber Worker hinweg.
-        incident = db.query(Incident).filter(Incident.id == incident_id).with_for_update().first()
+        # Bewusst ohne Zeilensperre: im Race-Fall droht hoechstens ein zusaetzlicher Wake.
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
         if incident is None:
             return 0
         now = datetime.now(UTC).replace(tzinfo=None)
         wakes = db.query(PushLog).filter(
             PushLog.incident_id == incident_id, PushLog.org_id == org_id,
             PushLog.source == source, PushLog.sent_at >= now - INCIDENT_WAKE_WINDOW,
-        ).order_by(PushLog.sent_at.desc()).with_for_update().all()
+        ).order_by(PushLog.sent_at.desc()).all()
         if len(wakes) >= INCIDENT_WAKE_LIMIT or (
             wakes and now - wakes[0].sent_at < INCIDENT_WAKE_BACKOFF * (2 ** (len(wakes) - 1))
         ):

@@ -727,7 +727,6 @@ def acknowledge_push(request: Request, db: Session = Depends(get_db)):
                 FcmDeliveryLog.id == delivery_id,
                 FcmToken.user_id == user.id,
             )
-            .with_for_update()
             .first()
         )
         if delivery and delivery.delivered_at is None:

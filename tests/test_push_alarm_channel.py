@@ -243,6 +243,8 @@ def _fake_messaging(monkeypatch, send):
     messaging.AndroidNotification = lambda **kwargs: SimpleNamespace(**kwargs)
     messaging.AndroidConfig = lambda **kwargs: SimpleNamespace(**kwargs)
     messaging.Message = lambda **kwargs: SimpleNamespace(**kwargs)
+    for name in ("APNSConfig", "APNSPayload", "Aps"):
+        setattr(messaging, name, lambda **kwargs: SimpleNamespace(**kwargs))
     messaging.send = send
     for name in (
         "UnregisteredError", "SenderIdMismatchError", "QuotaExceededError",
@@ -502,6 +504,7 @@ def test_native_capability_keeps_non_alarm_channel_behavior(monkeypatch):
 
 @pytest.mark.parametrize("path", ["all", "org", "user", "wake"])
 def test_push_log_counts_tokens_instead_of_users(monkeypatch, path):
+    quelle = f"zaehler-test-{path}"
     sent = []
     _fake_messaging(monkeypatch, sent.append)
     monkeypatch.setattr(push_service, "_push_cfg", lambda db: {"enabled": False})
@@ -510,15 +513,15 @@ def test_push_log_counts_tokens_instead_of_users(monkeypatch, path):
         db.add(FcmToken(user_id=user.id, token=f"zweites-token-{path}", capabilities="native_alarm"))
         db.commit()
         if path == "all":
-            push_service.notify_all(db, "Alarm", "Test", source="zaehler-test")
+            push_service.notify_all(db, "Alarm", "Test", source=quelle)
         elif path == "org":
-            push_service.notify_org(db, 1, "Alarm", "Test", source="zaehler-test")
+            push_service.notify_org(db, 1, "Alarm", "Test", source=quelle)
         elif path == "user":
-            push_service.notify_user(db, user.id, "Alarm", "Test", source="zaehler-test")
+            push_service.notify_user(db, user.id, "Alarm", "Test", source=quelle)
         else:
-            push_service.notify_org_fcm_wake_only(db, 1, "Alarm", "Test", source="zaehler-test")
+            push_service.notify_org_fcm_wake_only(db, 1, "Alarm", "Test", source=quelle)
         db.flush()
-        log = db.query(PushLog).filter_by(source="zaehler-test").order_by(PushLog.id.desc()).first()
+        log = db.query(PushLog).filter_by(source=quelle).order_by(PushLog.id.desc()).first()
         deliveries = db.query(FcmDeliveryLog).filter_by(push_log_id=log.id).all()
         assert len([row for row in deliveries if row.user_id == user.id]) == 2
         assert log.sent_count == sum(row.success for row in deliveries)
