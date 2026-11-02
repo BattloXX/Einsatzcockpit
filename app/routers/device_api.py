@@ -727,16 +727,17 @@ def acknowledge_push(request: Request, db: Session = Depends(get_db)):
                 FcmDeliveryLog.id == delivery_id,
                 FcmToken.user_id == user.id,
             )
+            .with_for_update()
             .first()
         )
         if delivery and delivery.delivered_at is None:
-            delivery.delivered_at = datetime.now(UTC).replace(tzinfo=None)
+            now = datetime.now(UTC).replace(tzinfo=None)
+            delivery.delivered_at = now
+            token = db.get(FcmToken, delivery.fcm_token_id)
+            if token is not None:
+                token.last_ack_at = now
     if delivery is None:
-        log.warning(
-            "Unbekannte oder fremde Push-Delivery-ID fuer User %s: %s",
-            user.id,
-            delivery_id,
-        )
+        log.warning("Push-Ack abgelehnt: unknown_delivery")
         return JSONResponse({"ok": False, "reason": "unknown_delivery"})
     db.commit()
     return JSONResponse({"ok": True})

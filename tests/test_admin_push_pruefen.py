@@ -10,7 +10,8 @@ from app.admin_mcp.registry import ADMIN_TOOLS, READ_TOOLS, collect
 from app.models.admin_security import utcnow
 from app.models.master import FireDept
 from app.models.user import FcmDeliveryLog, FcmToken, PushLog, User
-from app.services import push_service, system_diagnose as diagnose
+from app.services import push_service
+from app.services import system_diagnose as diagnose
 from tests import test_admin_mcp_oauth as oauth
 from tests.test_admin_mcp_tools import call
 
@@ -30,7 +31,8 @@ def push_daten(monkeypatch, tmp_path):
     monkeypatch.setattr(push_service, "_fcm_unavailable", False)
     import importlib.util
     original = importlib.util.find_spec
-    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a: object() if name == "firebase_admin" else original(name, *a))
+    monkeypatch.setattr(importlib.util, "find_spec",
+                        lambda name, *a: object() if name == "firebase_admin" else original(name, *a))
     ids = []
     secrets = []
     with SessionLocal() as db:
@@ -43,12 +45,13 @@ def push_daten(monkeypatch, tmp_path):
             user = User(username=secret, display_name=secret, org_id=org.id)
             db.add(user)
             db.flush()
-            token = FcmToken(user_id=user.id, token=secret, capabilities="native_alarm" if index == 0 else "nativeXalarm",
+            token = FcmToken(user_id=user.id, token=secret,
+                             capabilities="native_alarm" if index == 0 else "nativeXalarm",
                              last_used_at=now - timedelta(days=1 if index == 0 else 8))
             db.add(token)
             db.flush()
             push = PushLog(org_id=org.id, title=secret, body=secret, source="fcm_test_alarm",
-                           sent_at=now - timedelta(seconds=120), sent_count=3, total_count=4)
+                           sent_at=now - timedelta(seconds=120), sent_count=0, total_count=1)
             db.add(push)
             db.flush()
             for success, ack, age in ((True, None, 120), (True, 15, 120), (False, None, 120), (True, None, 30)):
@@ -70,7 +73,12 @@ def test_org_filter_datenschutz_und_ack(push_daten):
         assert evidence["tokens_je_org"] == [{"org_id": ids[0][0], "anzahl": 1, "native_alarm": 1, "aktiv_7_tage": 1}]
         assert [push["id"] for push in evidence["pushes"]] == [ids[0][1]]
         assert evidence["pushes"][0]["sent_at"].endswith("Z")
-        assert evidence["zusammenfassung"] == {"angenommen_ohne_ack": 1, "fehlgeschlagen": 1, "bestaetigt": 1}
+        assert evidence["zusammenfassung"] == {
+            "gesendet": 3, "angenommen_ohne_ack": 1, "fehlgeschlagen": 1, "bestaetigt": 1,
+        }
+        assert evidence["pushes"][0]["sent_count"] == 3
+        assert evidence["pushes"][0]["total_count"] == 4
+        assert evidence["pushes"][0]["bestaetigt"] == 1
         deliveries = evidence["pushes"][0]["zustellungen"]
         assert [d["ack_sekunden"] for d in deliveries if d["delivered_at"]] == [15]
         assert all(d["native_alarm"] is True for d in deliveries)
@@ -100,6 +108,8 @@ def test_zustellungen_begrenzt_aber_vollstaendig_gezaehlt(push_daten):
         db.commit()
         evidence = collect(db, "admin_push_pruefen", org_id=org_id)["evidence"]
         assert len(evidence["pushes"][0]["zustellungen"]) == 20
+        assert evidence["pushes"][0]["sent_count"] == 24
+        assert evidence["pushes"][0]["total_count"] == 25
         assert evidence["zusammenfassung"]["angenommen_ohne_ack"] == 22
 
 

@@ -72,7 +72,9 @@ async def test_incident_notify_logs_exercise_skip_and_incident_log(setup_db, mon
 
     db = SessionLocal()
     set_tenant_context(db, None)
-    incident = Incident(alarm_type_code="B2", address_city="Testort", is_exercise=True, primary_org_id=1, status="active")
+    incident = Incident(
+        alarm_type_code="B2", address_city="Testort", is_exercise=True, primary_org_id=1, status="active",
+    )
     db.add(incident)
     db.commit()
     monkeypatch.setattr("app.services.exercise_guard.darf_extern", lambda *args, **kwargs: False)
@@ -122,10 +124,14 @@ async def test_incident_channels_run_concurrently(setup_db, monkeypatch, mit_bac
     background_tasks = BackgroundTasks() if mit_background_tasks else None
 
     start = perf_counter()
-    db = SessionLocal(); set_tenant_context(db, None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
     incident = Incident(alarm_type_code="B2", address_city="Testort", primary_org_id=1, status="active")
-    db.add(incident); db.commit()
-    await notify_incident_created(db, incident, org_id=1, base_url="https://example.test", background_tasks=background_tasks)
+    db.add(incident)
+    db.commit()
+    await notify_incident_created(
+        db, incident, org_id=1, base_url="https://example.test", background_tasks=background_tasks,
+    )
     if background_tasks is not None:
         await background_tasks()
     dauer = perf_counter() - start
@@ -167,9 +173,11 @@ async def test_incident_channel_error_does_not_stop_others(setup_db, monkeypatch
         mail,
     )
 
-    db = SessionLocal(); set_tenant_context(db, None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
     incident = Incident(alarm_type_code="B2", address_city="Testort", primary_org_id=1, status="active")
-    db.add(incident); db.commit()
+    db.add(incident)
+    db.commit()
     with caplog.at_level(logging.ERROR, logger="einsatzleiter.alarm_outbox"):
         await notify_incident_created(db, incident, org_id=1, base_url="https://example.test", background_tasks=None)
 
@@ -199,9 +207,11 @@ async def test_new_incident_uses_alarm_channel(setup_db, monkeypatch):
         "app.services.teams_alarm_service.post_incident_card",
         Mock(),
     )
-    db = SessionLocal(); set_tenant_context(db, None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
     incident = Incident(alarm_type_code="B2", address_city="Testort", primary_org_id=1, status="active")
-    db.add(incident); db.commit()
+    db.add(incident)
+    db.commit()
     await notify_incident_created(db, incident, org_id=1, background_tasks=None)
 
     assert sent["channel_id"] == "einsatz_alarm"
@@ -366,6 +376,8 @@ def test_notify_vehicle_committet_die_transaktion_des_aufrufers_nicht(monkeypatc
         monkeypatch.setattr(db, "commit", commit_spy)
 
         push_service.notify_vehicle(db, vehicle.id, "Auftrag", "Test")
+        log = db.query(PushLog).filter_by(source="vehicle_assigned").order_by(PushLog.id.desc()).first()
+        assert (log.sent_count, log.total_count) == (1, 1)
 
         commit_spy.assert_not_called()
     finally:
@@ -376,8 +388,8 @@ def test_notify_vehicle_committet_die_transaktion_des_aufrufers_nicht(monkeypatc
 @pytest.mark.asyncio
 async def test_f30_wird_nie_alarmiert(setup_db, monkeypatch):
     """User-Vorgabe 2026-10-05: F30 (Proberuf) nie alarmieren - weder SMS noch Push noch Teams."""
-    from app.services import incident_notify
     from app.models.incident import IncidentLog
+    from app.services import incident_notify
 
     calls = []
 
@@ -388,13 +400,16 @@ async def test_f30_wird_nie_alarmiert(setup_db, monkeypatch):
     monkeypatch.setattr(incident_notify, "_send_incident_push", fake)
     monkeypatch.setattr("app.services.teams_alarm_service.post_incident_card", fake)
 
-    db = SessionLocal(); set_tenant_context(db, None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
     incident = Incident(alarm_type_code="F30", is_exercise=False, primary_org_id=1, status="active")
-    db.add(incident); db.commit()
+    db.add(incident)
+    db.commit()
     await incident_notify.notify_incident_created(db, incident, org_id=1, base_url="https://x")
     assert calls == []
     db.expire_all()
-    assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text == "Keine Alarmierung (SMS/Push/Teams/Mail): Stichwort F30"
+    text = db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text
+    assert text == "Keine Alarmierung (SMS/Push/Teams/Mail): Stichwort F30"
     assert incident_notify.incident_needs_alarm_backfill(db, incident) is False
     db.close()
 
@@ -441,7 +456,7 @@ def test_native_alarm_single_data_message(monkeypatch, wake_only):
     ("UnregisteredError", "unregistered_pruned", True),
     ("SenderIdMismatchError", "unregistered_pruned", True),
     ("QuotaExceededError", "quota_exceeded", False),
-    ("ThirdPartyAuthError", "sender_id_mismatch", False),
+    ("ThirdPartyAuthError", "third_party_auth_error", False),
     ("RuntimeError", "unknown", False),
 ])
 def test_native_alarm_failure_logged_without_second_message(monkeypatch, error_name, expected, pruned):
@@ -483,3 +498,130 @@ def test_native_capability_keeps_non_alarm_channel_behavior(monkeypatch):
     assert sent[0].data["silent"] == "1"
     assert sent[1].notification.title == "Info"
     assert all("alarm" not in message.data for message in sent)
+
+
+@pytest.mark.parametrize("path", ["all", "org", "user", "wake"])
+def test_push_log_counts_tokens_instead_of_users(monkeypatch, path):
+    sent = []
+    _fake_messaging(monkeypatch, sent.append)
+    monkeypatch.setattr(push_service, "_push_cfg", lambda db: {"enabled": False})
+    db, user, token, _log = _fcm_rows(f"zaehler-{path}")
+    try:
+        db.add(FcmToken(user_id=user.id, token=f"zweites-token-{path}", capabilities="native_alarm"))
+        db.commit()
+        if path == "all":
+            push_service.notify_all(db, "Alarm", "Test", source="zaehler-test")
+        elif path == "org":
+            push_service.notify_org(db, 1, "Alarm", "Test", source="zaehler-test")
+        elif path == "user":
+            push_service.notify_user(db, user.id, "Alarm", "Test", source="zaehler-test")
+        else:
+            push_service.notify_org_fcm_wake_only(db, 1, "Alarm", "Test", source="zaehler-test")
+        db.flush()
+        log = db.query(PushLog).filter_by(source="zaehler-test").order_by(PushLog.id.desc()).first()
+        deliveries = db.query(FcmDeliveryLog).filter_by(push_log_id=log.id).all()
+        assert len([row for row in deliveries if row.user_id == user.id]) == 2
+        assert log.sent_count == sum(row.success for row in deliveries)
+        assert log.total_count == len(deliveries)
+        assert log.sent_count >= 2
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_incident_wake_cap_and_backoff_persisted_per_org(monkeypatch, caplog):
+    from datetime import UTC, datetime, timedelta
+
+    sent = []
+    _fake_messaging(monkeypatch, sent.append)
+    monkeypatch.setattr(push_service, "_push_cfg", lambda db: {"enabled": False})
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.replace(tzinfo=tz)
+
+    monkeypatch.setattr(push_service, "datetime", Clock)
+    db, user, token, _log = _fcm_rows("wake-cap")
+    try:
+        incident = Incident(primary_org_id=1, alarm_type_code="B2", status="active")
+        other = Incident(primary_org_id=1, alarm_type_code="B2", status="active")
+        db.add_all([incident, other])
+        db.commit()
+        incident_id, other_id = incident.id, other.id
+
+        def wake(einsatz_id=incident_id, org_id=1):
+            # Neue Session pro Aufruf: der Zaehler darf nicht im Prozess liegen.
+            with SessionLocal() as session:
+                set_tenant_context(session, None)
+                result = push_service.notify_org_fcm_wake_only(
+                    session, org_id, "Uebung", "Test", "/beliebige-url", source="einsatz_wake",
+                    incident_id=einsatz_id,
+                )
+                session.commit()
+                return result
+
+        with caplog.at_level(logging.INFO, logger=push_service.__name__):
+            assert wake() >= 1
+            assert wake() == 0
+            now += timedelta(minutes=2)
+            assert wake() >= 1
+            now += timedelta(minutes=2)
+            assert wake() == 0  # Zweiter Abstand: vier Minuten.
+            now += timedelta(minutes=2)
+            assert wake() >= 1
+            now += timedelta(minutes=8)
+            assert wake() == 0  # Abstand erfuellt, aber drei Wakes im Fenster.
+            assert wake(other_id) >= 1
+            wake(org_id=2)
+            assert db.query(PushLog).filter_by(incident_id=incident_id, org_id=2).count() == 1
+            assert db.query(PushLog).filter_by(incident_id=incident_id, org_id=1).count() == 3
+            now += timedelta(minutes=2)
+            assert wake() >= 1  # Erster Wake liegt ausserhalb des Fensters.
+        assert "Einsatz-Wake unterdrueckt" in caplog.text
+        assert token.token not in caplog.text
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_exercise_outbox_does_not_repeat_terminal_wake(monkeypatch):
+    from app.services import incident_notify
+    from app.services.alarm_outbox import process_incident_alarm
+
+    calls = []
+
+    async def wake(*args, **kwargs):
+        calls.append(args[0])
+
+    monkeypatch.setattr(incident_notify, "_send_incident_wake_only", wake)
+    monkeypatch.setattr("app.services.exercise_guard.darf_extern", lambda *args, **kwargs: False)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        incident = Incident(primary_org_id=1, alarm_type_code="B2", status="active", is_exercise=True)
+        db.add(incident)
+        db.commit()
+        await notify_incident_created(db, incident, org_id=1)
+        for _ in range(10):
+            await process_incident_alarm(incident.id)
+        assert calls == [incident.id]
+
+
+def test_token_counters_include_failed_deliveries(monkeypatch):
+    def fail(message):
+        raise RuntimeError("Testfehler")
+
+    _fake_messaging(monkeypatch, fail)
+    monkeypatch.setattr(push_service, "_push_cfg", lambda db: {"enabled": False})
+    db, user, token, _log = _fcm_rows("zaehler-fehler")
+    try:
+        assert push_service.notify_user(db, user.id, "Alarm", "Test", source="zaehler-fehler") == 0
+        db.flush()
+        log = db.query(PushLog).filter_by(source="zaehler-fehler").one()
+        assert (log.sent_count, log.total_count) == (0, 1)
+        delivery = db.query(FcmDeliveryLog).filter_by(push_log_id=log.id).one()
+        assert delivery.success is False
+    finally:
+        db.rollback()
+        db.close()

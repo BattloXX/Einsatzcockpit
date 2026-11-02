@@ -13,12 +13,41 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.user import FcmDeliveryLog, FcmToken, PushLog, PushSubscription
 
 log = logging.getLogger(__name__)
+FCM_INACTIVE_DAYS = 30
+INCIDENT_WAKE_LIMIT = 3
+INCIDENT_WAKE_WINDOW = timedelta(minutes=15)
+INCIDENT_WAKE_BACKOFF = timedelta(minutes=2)
+
+
+def inactive_fcm_tokens(cutoff: datetime):
+    """Alle Aktivitaetszeitpunkte muessen vor der Grenze liegen (auch MariaDB)."""
+    return and_(
+        FcmToken.created_at < cutoff,
+        or_(FcmToken.last_used_at.is_(None), FcmToken.last_used_at < cutoff),
+        or_(FcmToken.last_ack_at.is_(None), FcmToken.last_ack_at < cutoff),
+    )
+
+
+def cleanup_inactive_fcm_tokens(db: Session) -> int:
+    """Entfernt inaktive Tokens; Commit bleibt beim Housekeeping-Aufrufer."""
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=FCM_INACTIVE_DAYS)
+    tokens = db.query(FcmToken).filter(inactive_fcm_tokens(cutoff)).with_for_update().all()
+    for token in tokens:
+        # Historische Zustellnachweise auch unter SQLite ohne FK-Cascade erhalten.
+        for delivery in db.query(FcmDeliveryLog).filter(FcmDeliveryLog.fcm_token_id == token.id).all():
+            delivery.fcm_token_id = None
+        db.delete(token)
+    db.flush()
+    log.info("FCM-Token-Housekeeping: %s inaktive Tokens entfernt", len(tokens))
+    return len(tokens)
+
 
 # Gecachter FCM-App-Zustand – wird beim ersten Aufruf initialisiert
 _fcm_app: Any = None
@@ -105,8 +134,6 @@ def send_fcm(
 ) -> tuple[bool, str | None]:
     """Sendet iOS per APNs, Android als nativen Alarm oder Wake/Display-Paar."""
     app = _get_fcm_app(cfg)
-    if app is None:
-        return False, "fcm_not_configured"
     if delivery is None and db is not None and push_log_id is not None:
         delivery = FcmDeliveryLog(
             push_log_id=push_log_id,
@@ -117,6 +144,12 @@ def send_fcm(
         )
         db.add(delivery)
         db.commit()
+
+    if app is None:
+        if delivery is not None:
+            delivery.error_code = "fcm_not_configured"
+            delivery.error_detail = "FCM ist nicht konfiguriert oder konnte nicht initialisiert werden"
+        return False, "fcm_not_configured"
 
     from firebase_admin import messaging  # type: ignore
 
@@ -147,7 +180,7 @@ def send_fcm(
             return False, "quota_exceeded", False
         except messaging.ThirdPartyAuthError as exc:
             log.warning("FCM-Authentifizierung fehlgeschlagen fuer Token %s (%s): %s", fcm_token_row.id, kind, exc)
-            return False, "sender_id_mismatch", False
+            return False, "third_party_auth_error", False
         except Exception as exc:
             log.warning("FCM fehlgeschlagen fuer Token %s (%s): %s", fcm_token_row.id, kind, exc)
             return False, "unknown", False
@@ -434,10 +467,19 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
     stehen (``notify_vehicle`` aus ``incident_service``), setzen daher False und
     verzichten auf die Ack-Garantie.
     """
-    tokens = db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).all() if user_ids else []
+    token_query = db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids))
+    if wake_only:
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=FCM_INACTIVE_DAYS)
+        token_query = token_query.filter(~inactive_fcm_tokens(cutoff))
+    tokens = token_query.all() if user_ids else []
     if push_log_id is None:
         fallback_log = _log_push(db, title, body, url, "system", None)
         push_log_id = fallback_log.id
+
+    push_log = db.get(PushLog, push_log_id)
+    if push_log is not None:
+        push_log.total_count = len(tokens)
+        push_log.sent_count = 0
 
     if _get_fcm_app(cfg) is None:
         if tokens:
@@ -500,6 +542,8 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
             extra_data=extra_data,
         )
         success_count += int(ok)
+    if push_log is not None:
+        push_log.sent_count = success_count
     db.flush()
     return success_count
 
@@ -550,8 +594,6 @@ def notify_all(db: Session, title: str, body: str, url: str | None = None,
         wp_count = sum(
             1 for s in subs if send_push(s, title, body, url, db=db, extra=extra)
         )
-        push_log.sent_count = wp_count
-        push_log.total_count = len(subs)
     else:
         wp_count = 0
     # FCM
@@ -581,8 +623,6 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
         wp_count = sum(
             1 for s in subs if send_push(s, title, body, url, db=db, extra=extra)
         )
-        push_log.sent_count = wp_count
-        push_log.total_count = len(subs)
     else:
         wp_count = 0
     org_user_ids = {r[0] for r in db.query(_User.id).filter(_User.org_id == org_id).all()}
@@ -600,12 +640,34 @@ def notify_org_fcm_wake_only(
     url: str | None = None,
     source: str = "system",
     channel_id: str | None = None,
+    *, incident_id: int | None = None,
 ) -> int:
     """Weckt nur native FCM-Geraete einer Organisation, ohne Web-/Display-Push."""
     from app.models.user import User as _User
 
+    if incident_id is not None:
+        from app.models.incident import Incident
+
+        # Zeilensperre serialisiert Reservierung und Limitpruefung ueber Worker hinweg.
+        incident = db.query(Incident).filter(Incident.id == incident_id).with_for_update().first()
+        if incident is None:
+            return 0
+        now = datetime.now(UTC).replace(tzinfo=None)
+        wakes = db.query(PushLog).filter(
+            PushLog.incident_id == incident_id, PushLog.org_id == org_id,
+            PushLog.source == source, PushLog.sent_at >= now - INCIDENT_WAKE_WINDOW,
+        ).order_by(PushLog.sent_at.desc()).with_for_update().all()
+        if len(wakes) >= INCIDENT_WAKE_LIMIT or (
+            wakes and now - wakes[0].sent_at < INCIDENT_WAKE_BACKOFF * (2 ** (len(wakes) - 1))
+        ):
+            log.info("Einsatz-Wake unterdrueckt: Limit/Backoff (Einsatz %s, Org %s, Wakes %s)",
+                     incident_id, org_id, len(wakes))
+            return 0
     cfg = _push_cfg(db)
     push_log = _log_push(db, title, body, url, source, None, org_id=org_id)
+    push_log.incident_id = incident_id
+    push_log.sent_at = datetime.now(UTC).replace(tzinfo=None)
+    db.flush()
     org_user_ids = {row[0] for row in db.query(_User.id).filter(_User.org_id == org_id).all()}
     return _notify_fcm_logged(
         db,
@@ -654,8 +716,6 @@ def notify_user(db: Session, user_id: int, title: str, body: str,
     if cfg["enabled"]:
         subs = db.query(PushSubscription).filter(PushSubscription.user_id == user_id).all()
         wp_count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
-        push_log.sent_count = wp_count
-        push_log.total_count = len(subs)
     else:
         wp_count = 0
     # FCM
@@ -684,8 +744,6 @@ def notify_vehicle(db: Session, vehicle_master_id: int, title: str, body: str,
     if cfg["enabled"]:
         subs = db.query(PushSubscription).filter(PushSubscription.user_id.in_(user_ids)).all()
         wp_count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
-        push_log.sent_count = wp_count
-        push_log.total_count = len(subs)
     else:
         wp_count = 0
     # FCM. Kein Commit der Delivery-Zeilen: notify_vehicle laeuft mitten in der

@@ -192,6 +192,8 @@ def test_push_fcm(request: Request, db: Session = Depends(get_db)):
         ok, error_code = send_result
     else:  # Kompatibilitaet fuer bestehende Integrations-Mocks.
         ok, error_code = bool(send_result), None
+    push_log.sent_count = int(ok)
+    push_log.total_count = 1
     db.commit()
     if not ok:
         return JSONResponse({

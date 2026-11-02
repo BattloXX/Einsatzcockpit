@@ -106,7 +106,7 @@ def test_ios_wake_only(ios_messaging, monkeypatch):
     ("UnregisteredError", "unregistered_pruned", True),
     ("SenderIdMismatchError", "unregistered_pruned", True),
     ("QuotaExceededError", "quota_exceeded", False),
-    ("ThirdPartyAuthError", "sender_id_mismatch", False),
+    ("ThirdPartyAuthError", "third_party_auth_error", False),
     ("RuntimeError", "unknown", False),
 ])
 def test_ios_failure(ios_messaging, wake_only, error_name, expected, pruned):
