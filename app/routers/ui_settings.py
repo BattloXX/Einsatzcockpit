@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.config import settings as app_settings
 from app.core.async_bridge import run_async
 from app.core.audit import write_audit
+from app.core.org_auswahl import erste_org_weiterleitung
 from app.core.permissions import (
     has_role,
     is_system_admin,
@@ -280,6 +281,8 @@ def settings_page(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
+    if (weiter := erste_org_weiterleitung(request, db, user, org_id)) is not None:
+        return weiter
     return templates.TemplateResponse(request, "admin/settings.html", _settings_context(request, db, user, org_id))
 
 
@@ -1090,6 +1093,8 @@ def weather_settings_page(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
+    if (weiter := erste_org_weiterleitung(request, db, user, org_id)) is not None:
+        return weiter
     return templates.TemplateResponse(
         request,
         "admin/settings_wetter.html",
@@ -1104,6 +1109,8 @@ def weather_infoscreen_settings_page(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
+    if (weiter := erste_org_weiterleitung(request, db, user, org_id)) is not None:
+        return weiter
     return templates.TemplateResponse(
         request,
         "admin/settings_wetter_infoscreen.html",
