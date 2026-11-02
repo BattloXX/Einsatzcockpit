@@ -157,6 +157,7 @@ async def _send_incident_wake_only(
             recipient_count = push_db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).count()
             sent_count = notify_org_fcm_wake_only(
                 push_db, org_id, title, body, url, source="einsatz_wake", channel_id="einsatz_alarm",
+                incident_id=incident_id,
             )
             write_audit(
                 push_db, "push.einsatz_wake_sent", org_id=org_id, user_id=triggered_by_user_id,

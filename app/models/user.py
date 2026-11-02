@@ -262,6 +262,8 @@ class FcmToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    last_ack_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     device_token: Mapped[DeviceToken | None] = relationship("DeviceToken", foreign_keys=[device_token_id])
 
@@ -305,6 +307,10 @@ class PushLog(Base):
     )
     target_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    # FCM-Pfade zaehlen Tokens, Web-only-Pfade Subscriptions.
+    incident_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True, index=True
     )
     sent_count: Mapped[int] = mapped_column(Integer, default=0)
     total_count: Mapped[int] = mapped_column(Integer, default=0)

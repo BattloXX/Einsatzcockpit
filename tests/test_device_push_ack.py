@@ -54,6 +54,7 @@ def test_push_ack_per_bearer_ist_idempotent(client, setup_db):
     try:
         delivered_at = db.get(FcmDeliveryLog, delivery_id).delivered_at
         assert delivered_at is not None
+        assert db.get(FcmDeliveryLog, delivery_id).fcm_token.last_ack_at == delivered_at
     finally:
         db.close()
 
@@ -62,6 +63,7 @@ def test_push_ack_per_bearer_ist_idempotent(client, setup_db):
     db = SessionLocal()
     try:
         assert db.get(FcmDeliveryLog, delivery_id).delivered_at == delivered_at
+        assert db.get(FcmDeliveryLog, delivery_id).fcm_token.last_ack_at == delivered_at
     finally:
         db.close()
 
@@ -99,7 +101,7 @@ def test_push_ack_fremde_id_wird_diagnostizierbar_abgelehnt(client, setup_db):
         db.close()
 
 
-def test_push_ack_unbekannte_id_wird_diagnostizierbar_abgelehnt(client, setup_db):
+def test_push_ack_unbekannte_id_wird_diagnostizierbar_abgelehnt(client, setup_db, caplog):
     _, raw_token, _ = _create_delivery()
 
     response = client.post(
@@ -110,3 +112,35 @@ def test_push_ack_unbekannte_id_wird_diagnostizierbar_abgelehnt(client, setup_db
 
     assert response.status_code == 200
     assert response.json() == {"ok": False, "reason": "unknown_delivery"}
+
+    assert "unknown_delivery" in caplog.text
+    assert raw_token not in caplog.text
+    assert "999999999" not in caplog.text
+
+
+def test_neue_delivery_aktualisiert_ack_aber_wiederholung_nicht(client, setup_db):
+    _, raw_token, delivery_id = _create_delivery()
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    response = client.post("/api/v1/device/push-ack", json={"delivery_id": delivery_id}, headers=headers)
+    assert response.json() == {"ok": True}
+    with SessionLocal() as db:
+        original = db.get(FcmDeliveryLog, delivery_id)
+        earlier = original.delivered_at
+        second = FcmDeliveryLog(
+            push_log_id=original.push_log_id, fcm_token_id=original.fcm_token_id,
+            user_id=original.user_id, success=True,
+        )
+        db.add(second)
+        db.commit()
+        second_id = second.id
+    response = client.post("/api/v1/device/push-ack", json={"delivery_id": second_id}, headers=headers)
+    assert response.json() == {"ok": True}
+    with SessionLocal() as db:
+        second = db.get(FcmDeliveryLog, second_id)
+        latest_ack = second.delivered_at
+        assert latest_ack >= earlier
+        assert second.fcm_token.last_ack_at == latest_ack
+    response = client.post("/api/v1/device/push-ack", json={"delivery_id": delivery_id}, headers=headers)
+    assert response.json() == {"ok": True}
+    with SessionLocal() as db:
+        assert db.get(FcmDeliveryLog, delivery_id).fcm_token.last_ack_at == latest_ack

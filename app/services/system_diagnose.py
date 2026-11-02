@@ -273,7 +273,7 @@ def push_summary(db: Session, org_id: int | None = None, limit: int = 20, quelle
     if quelle is not None:
         query = query.filter(PushLog.source == quelle)
     pushes = []
-    summary = {"angenommen_ohne_ack": 0, "fehlgeschlagen": 0, "bestaetigt": 0}
+    summary = {"gesendet": 0, "angenommen_ohne_ack": 0, "fehlgeschlagen": 0, "bestaetigt": 0}
 
     def iso(value):
         return presence.utc(value).isoformat() + "Z" if value is not None else None
@@ -288,9 +288,20 @@ def push_summary(db: Session, org_id: int | None = None, limit: int = 20, quelle
             FcmDeliveryLog.delivered_at.is_(None), FcmDeliveryLog.sent_at < now - timedelta(seconds=60)).count()
         summary["fehlgeschlagen"] += deliveries.filter(FcmDeliveryLog.success.is_(False)).count()
         summary["bestaetigt"] += deliveries.filter(FcmDeliveryLog.delivered_at.isnot(None)).count()
+        gesendet = deliveries.filter(FcmDeliveryLog.success.is_(True)).count()
+        bestaetigt = deliveries.filter(FcmDeliveryLog.delivered_at.isnot(None)).count()
+        # Alte PushLog-Zaehler enthalten nur Web-Push. FCM immer aus Nachweisen lesen.
+        total = db.query(FcmDeliveryLog).filter(
+            FcmDeliveryLog.push_log_id == push.id,
+            ~((FcmDeliveryLog.error_code == "fcm_not_configured")
+              & FcmDeliveryLog.user_id.is_(None) & FcmDeliveryLog.fcm_token_id.is_(None))
+            | FcmDeliveryLog.error_code.is_(None),
+        ).execution_options(include_all_tenants=True).count()
+        summary["gesendet"] += gesendet
         rows = deliveries.order_by(FcmDeliveryLog.sent_at.desc(), FcmDeliveryLog.id.desc()).limit(20).all()
         pushes.append({"id": push.id, "sent_at": iso(push.sent_at), "quelle": push.source,
-            "org_id": push.org_id, "sent_count": push.sent_count, "total_count": push.total_count,
+            "org_id": push.org_id, "sent_count": gesendet, "total_count": total,
+            "bestaetigt": bestaetigt,
             "zustellungen": [{"success": row.success, "error_code": row.error_code,
                 "native_alarm": "native_alarm" in (row.capabilities or "").split(",") if row.id is not None else None,
                 "delivered_at": iso(row.delivered_at),

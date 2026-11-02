@@ -184,6 +184,9 @@ class BackgroundRuntime:
             db.query(WorkerRuntime).filter(
                 WorkerRuntime.expires_at < gateway_presence.utc() - timedelta(days=1)
             ).delete()
+            from app.services.push_service import cleanup_inactive_fcm_tokens
+
+            cleanup_inactive_fcm_tokens(db)
             db.commit()
 
     async def stop_tasks(self):
