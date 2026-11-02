@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     SEARCH_ENABLED: bool = True
     SEARCH_INDEX_WORKER_ENABLED: bool = True
     SEARCH_ABGLEICH_MINUTEN: int = 60
+    # Ersten Vollabgleich nach Leader-Start verzoegern; faellige Outbox-Jobs laufen sofort.
+    SEARCH_ABGLEICH_START_VERZOEGERUNG_S: int = 300
     SEARCH_MCP_ENABLED: bool = True
     SEARCH_SEMANTIC_ENABLED: bool = False
     SEARCH_EMBED_URL: str = "http://localhost:11434"

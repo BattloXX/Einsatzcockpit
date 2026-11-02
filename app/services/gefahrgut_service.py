@@ -18,6 +18,7 @@ logger = logging.getLogger("einsatzleiter.gefahrgut")
 # Gebuendelter Seed (redaktioneller Auszug, immer vorhanden).
 _SEED_CSV_PFAD = Path(__file__).resolve().parent.parent / "data" / "bam_gefahrgut.csv"
 _DATEN: dict[str, dict] | None = None
+_DATEN_QUELLE: tuple[Path, int] | None = None
 
 
 def _csv_pfad() -> Path:
@@ -39,8 +40,9 @@ def _csv_pfad() -> Path:
 
 def invalidate_cache() -> None:
     """Verwirft den geladenen Datensatz (nach einem Sync neu einlesen)."""
-    global _DATEN
+    global _DATEN, _DATEN_QUELLE
     _DATEN = None
+    _DATEN_QUELLE = None
 
 
 def _norm_un(un: str | None) -> str:
@@ -88,15 +90,17 @@ def _lies_text(pfad: Path) -> str:
 
 def _lade_daten() -> dict[str, dict]:
     """Lädt die CSV lazy in ein dict {norm_un: felder}. Robust gegen fehlende Datei."""
-    global _DATEN
-    if _DATEN is not None:
+    global _DATEN, _DATEN_QUELLE
+    pfad = _csv_pfad()
+    try:
+        quelle = (pfad, pfad.stat().st_mtime_ns)
+    except FileNotFoundError:
+        logger.info("Gefahrgut-CSV nicht vorhanden (%s) — Anreicherung deaktiviert", pfad)
+        invalidate_cache()
+        return {}
+    if _DATEN is not None and _DATEN_QUELLE == quelle:
         return _DATEN
     daten: dict[str, dict] = {}
-    pfad = _csv_pfad()
-    if not pfad.exists():
-        logger.info("Gefahrgut-CSV nicht vorhanden (%s) — Anreicherung deaktiviert", pfad)
-        _DATEN = daten
-        return daten
     try:
         text = _lies_text(pfad)
         delim = _detect_delimiter(text)
@@ -116,7 +120,7 @@ def _lade_daten() -> dict[str, dict]:
         idx_vg = _finde_spalte(header, "vp_grup", "verpackungsgruppe", "verpack")
         if idx_un < 0:
             logger.warning("Gefahrgut-CSV ohne UN-Spalte — Anreicherung deaktiviert")
-            _DATEN = daten
+            _DATEN, _DATEN_QUELLE = daten, quelle
             return daten
 
         def _get(row: list[str], i: int) -> str | None:
@@ -149,7 +153,7 @@ def _lade_daten() -> dict[str, dict]:
             }
     except Exception:
         logger.exception("Gefahrgut-CSV konnte nicht gelesen werden")
-    _DATEN = daten
+    _DATEN, _DATEN_QUELLE = daten, quelle
     return daten
 
 

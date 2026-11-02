@@ -35,6 +35,32 @@ Leerlauf, App-Pong erneuert die Presence); Linux und Windows bleiben bei 90 Seku
 Der In-Memory-Fallback für Wetterstationsverläufe gilt pro Worker; bei mehreren
 Workern wird die separate Wetter-DB benötigt.
 
+## Prozesslokale Caches und Startlast
+
+Die Suche speichert ihren Index in der gemeinsamen DB (`search_documents` und
+`search_chunks`). Aenderungen gelangen ueber `search_outbox` und den
+Leader-Thread `suche_outbox_loop` in den Index. Die Frist bis zur Sichtbarkeit
+betraegt Outbox-Takt (10 s) plus Indexierzeit, bei Rueckstau entsprechend laenger.
+Faellige Outbox-Jobs werden auch direkt beim Leader-Start verarbeitet.
+Der erste Vollabgleich startet fruehestens nach
+`SEARCH_ABGLEICH_START_VERZOEGERUNG_S` (Standard 300 Sekunden), danach wie bisher
+alle `SEARCH_ABGLEICH_MINUTEN` (Standard 60 Minuten).
+
+Der Rettungskarten-Katalog liegt ebenfalls in einer gemeinsamen DB-Tabelle.
+Beim Leader-Start wird er nur synchronisiert, wenn die Tabelle leer oder
+`max(aktualisiert_am)` aelter als 24 Stunden ist. Fuer Gefahrgut zaehlt die
+gesyncte CSV unter `NACHSCHLAGEWERK_DATA_DIR/bam_gefahrgut.csv`: fehlt sie oder
+ist ihre mtime aelter als 24 Stunden, wird beim Start synchronisiert. Der
+gebuendelte Seed ersetzt diesen Frischenachweis nicht. Der taegliche Lauf um
+03:00 Europe/Vienna bleibt unveraendert.
+
+Gefahrgut bleibt als prozesslokaler CSV-Cache geladen. Jeder Zugriff vergleicht
+Pfad und `st_mtime_ns` und laedt bei Aenderung neu, sodass ein atomarer
+CSV-Austausch auch in anderen Workern ohne `invalidate_cache()` sichtbar wird.
+Alle Worker benoetigen dafuer dasselbe Datenverzeichnis; Redis ist fuer diesen
+Cache nicht erforderlich. Die Imports der Dienste und von `app.main` fuehren
+keine DB-Queries aus.
+
 ## DB-Verbindungsbudget
 
 `DB_POOL_SIZE` und `DB_MAX_OVERFLOW` gelten je Worker (Standard: 10/30).
