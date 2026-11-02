@@ -18,6 +18,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
+Progress = Callable[[str, str], None]
+
+
+def _progress(progress: Progress | None, step: str, state: str) -> None:
+    if progress:
+        progress(step, state)
+
+
 APP_ROOT = Path(__file__).parent.parent.parent  # Projektverzeichnis
 
 # Dateien und Verzeichnisse, die beim Update NIEMALS überschrieben werden
@@ -72,18 +80,24 @@ def _alembic_state(command: str) -> str | None:
     return None
 
 
-def _finish_update(result: dict, install_deps: bool, rollback: Callable[[], str]) -> dict:
+def _finish_update(
+    result: dict, install_deps: bool, rollback: Callable[[], str], progress: Progress | None = None
+) -> dict:
+    _progress(progress, "dependencies", "running")
     deps_ok, deps = _run_pip_install() if install_deps else (True, "übersprungen")
     result.update(deps_installed=deps, migrations_applied="übersprungen", server_reloaded=False)
+    _progress(progress, "dependencies", "success" if deps_ok else "failed")
     if not deps_ok:
         result.update(success=False, message=f"Abhängigkeiten konnten nicht installiert werden: {deps}. "
                       + rollback() + " " + _dump_hint(result["backup"]))
         return result
+    _progress(progress, "migration", "running")
     before = _alembic_state("current")
     heads = _alembic_state("heads")
     result.update(migrations_from=before, migrations_to=heads)
     logger.info("Update-Migration: current=%s heads=%s", before, heads)
     ok, message = _run_migrations()
+    _progress(progress, "migration", "success" if ok else "failed")
     result["migrations_applied"] = message
     if not ok:
         after = _alembic_state("current")
@@ -96,7 +110,11 @@ def _finish_update(result: dict, install_deps: bool, rollback: Callable[[], str]
                       "Die DB kann teilweise migriert sein (MariaDB-DDL ist nicht transaktional). "
                       + _dump_hint(result["backup"]))
         return result
-    result.update(success=True, server_reloaded=_reload_server())
+    result.update(success=True)
+    if progress is None:
+        result["server_reloaded"] = _reload_server()
+        if not result["server_reloaded"]:
+            result.update(success=False, message=RELOAD_ERROR + ". Code und Migration sind bereits eingespielt.")
     return result
 
 
@@ -163,7 +181,9 @@ def compute_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def apply_update(zip_path: Path, expected_sha256: str | None = None, install_deps: bool = False) -> dict:
+def apply_update(
+    zip_path: Path, expected_sha256: str | None = None, install_deps: bool = False, progress: Progress | None = None
+) -> dict:
     """
     Extrahiert das ZIP und kopiert Dateien über die bestehende Installation.
 
@@ -178,10 +198,12 @@ def apply_update(zip_path: Path, expected_sha256: str | None = None, install_dep
     with _update_lock() as acquired:
         if not acquired:
             return {"success": False, "locked": True, "message": "Update bereits in Arbeit"}
-        return _apply_update_locked(zip_path, expected_sha256, install_deps)
+        return _apply_update_locked(zip_path, expected_sha256, install_deps, progress)
 
 
-def _apply_update_locked(zip_path: Path, expected_sha256: str | None, install_deps: bool) -> dict:
+def _apply_update_locked(
+    zip_path: Path, expected_sha256: str | None, install_deps: bool, progress: Progress | None = None
+) -> dict:
     """Implementierung von apply_update(), waehrend der Update-Lock gehalten wird."""
     valid, msg = validate_zip(zip_path)
     if not valid:
@@ -223,10 +245,13 @@ def _apply_update_locked(zip_path: Path, expected_sha256: str | None, install_de
                 continue
             files.append((src, rel))
 
+        _progress(progress, "backup", "running")
         backup = _run_pre_migration_backup()
+        _progress(progress, "backup", "success" if backup["success"] else "failed")
         blocked = _backup_gate(backup)
         if blocked:
             return blocked
+        _progress(progress, "code", "running")
         project = APP_ROOT / "pyproject.toml"
         old_hash = compute_sha256(project) if project.is_file() else None
         rollback_root = APP_ROOT / ".update-rollback"
@@ -264,13 +289,22 @@ def _apply_update_locked(zip_path: Path, expected_sha256: str | None, install_de
         except OSError as exc:
             return {"success": False, "message": f"Code-Austausch fehlgeschlagen: {exc}. "
                     + rollback() + " " + _dump_hint(backup), "backup": backup}
+        _progress(progress, "code", "success")
         changed_project = old_hash != compute_sha256(project)
 
-    result = _finish_update({
-        "success": True, "message": "Update erfolgreich eingespielt",
-        "files_updated": len(files), "files_skipped": len(skipped), "backup": backup,
-        "rollback_dir": str(rollback_dir),
-    }, install_deps or changed_project, rollback)
+    result = _finish_update(
+        {
+            "success": True,
+            "message": "Update erfolgreich eingespielt",
+            "files_updated": len(files),
+            "files_skipped": len(skipped),
+            "backup": backup,
+            "rollback_dir": str(rollback_dir),
+        },
+        install_deps or changed_project,
+        rollback,
+        progress,
+    )
     if result["success"]:
         for old in sorted((p for p in rollback_root.iterdir() if p.is_dir() and not p.is_symlink()), reverse=True)[3:]:
             shutil.rmtree(old)
@@ -376,26 +410,39 @@ def _run_pre_migration_backup() -> dict:
                 "message": f"Backup fehlgeschlagen: {exc}", "files": []}
 
 
+RELOAD_ERROR = "Neustart fehlgeschlagen, bitte manuell: sudo systemctl restart einsatzleiter"
+
+
 def _reload_server() -> bool:
-    """Sendet SIGHUP an den Gunicorn-Master-Prozess (graceful reload)."""
-    pidfile = APP_ROOT / "gunicorn.pid"
-    if pidfile.exists():
+    """Graceful Reload per PID-Datei, sonst vorhandenes sudo-Recht nutzen."""
+    from app.config import settings
+
+    paths = [APP_ROOT / "gunicorn.pid"]
+    if settings.GUNICORN_PID_FILE:
+        paths.insert(0, Path(settings.GUNICORN_PID_FILE))
+    for pidfile in paths:
         try:
             pid = int(pidfile.read_text().strip())
+            if pid <= 1:
+                continue
+            os.kill(pid, 0)
             os.kill(pid, signal.SIGHUP)  # type: ignore[attr-defined]
             return True
-        except (ValueError, ProcessLookupError, PermissionError):
-            pass
-    # Fallback: systemctl restart (benötigt sudo-Rechte via sudoers)
+        except OSError, ValueError:
+            continue
     try:
         result = subprocess.run(
-            ["sudo", "systemctl", "restart", "einsatzleiter"],
-            timeout=10,
+            ["sudo", "-n", "systemctl", "restart", "einsatzleiter"],
+            timeout=15,
             capture_output=True,
         )
-        return result.returncode == 0
-    except Exception:
+        if result.returncode == 0:
+            return True
+    except OSError, subprocess.SubprocessError:
+        logger.warning(RELOAD_ERROR)
         return False
+    logger.warning(RELOAD_ERROR)
+    return False
 
 
 def get_current_version() -> str:
@@ -601,18 +648,23 @@ def _run_git(args: list[str], timeout: int = 300, env: dict[str, str] | None = N
         return 1, "", str(exc)
 
 
-def git_update(branch: str, token: str | None = None, install_deps: bool = False) -> dict:
+def git_update(
+    branch: str, token: str | None = None, install_deps: bool = False, progress: Progress | None = None
+) -> dict:
     """Aktualisiert per fetch und einzelnem Branch-Checkout, ohne andere Branches zu ändern."""
-    return _git_sync(branch, token=token, install_deps=install_deps, branch_checkout=branch)
+    return _git_sync(branch, token=token, install_deps=install_deps, branch_checkout=branch, progress=progress)
 
 
-def git_update_release(tag: str, token: str | None = None, install_deps: bool = False) -> dict:
+def git_update_release(
+    tag: str, token: str | None = None, install_deps: bool = False, progress: Progress | None = None
+) -> dict:
     """Aktualisiert einen Git-Checkout auf einen Release-Tag (detached HEAD)."""
-    return _git_sync(tag, token=token, install_deps=install_deps, branch_checkout=None)
+    return _git_sync(tag, token=token, install_deps=install_deps, branch_checkout=None, progress=progress)
 
 
-def _git_sync(ref: str, *, token: str | None, install_deps: bool,
-              branch_checkout: str | None) -> dict:
+def _git_sync(
+    ref: str, *, token: str | None, install_deps: bool, branch_checkout: str | None, progress: Progress | None = None
+) -> dict:
     """Synchronisiert einen Branch oder Release-Tag unter exklusivem Update-Lock."""
     if is_docker():
         return {"success": False, "message": DOCKER_MESSAGE}
@@ -623,12 +675,14 @@ def _git_sync(ref: str, *, token: str | None, install_deps: bool,
     with _update_lock() as acquired:
         if not acquired:
             return {"success": False, "locked": True, "message": "Update bereits in Arbeit"}
-        return _git_sync_locked(ref, token=token, install_deps=install_deps,
-                                branch_checkout=branch_checkout)
+        return _git_sync_locked(
+            ref, token=token, install_deps=install_deps, branch_checkout=branch_checkout, progress=progress
+        )
 
 
-def _git_sync_locked(ref: str, *, token: str | None, install_deps: bool,
-                     branch_checkout: str | None) -> dict:
+def _git_sync_locked(
+    ref: str, *, token: str | None, install_deps: bool, branch_checkout: str | None, progress: Progress | None = None
+) -> dict:
 
     if not _valid_ref(ref) or _run_git(["check-ref-format", "--branch", ref])[0] != 0:
         return {"success": False, "message": "Ungültiger Branch-/Tag-Name"}
@@ -645,16 +699,20 @@ def _git_sync_locked(ref: str, *, token: str | None, install_deps: bool,
     rc, _out, err = _run_git(["fetch", "--force", remote, "--", ref], env=env)
     if rc:
         return {"success": False, "message": f"git fetch fehlgeschlagen: {_scrub(err, token)[:300]}"}
+    _progress(progress, "backup", "running")
     backup = _run_pre_migration_backup()
+    _progress(progress, "backup", "success" if backup["success"] else "failed")
     blocked = _backup_gate(backup)
     if blocked:
         return {**blocked, "via": "git"}
+    _progress(progress, "code", "running")
     args = (["checkout", "--force", "-B", branch_checkout, "FETCH_HEAD"] if branch_checkout is not None
             else ["checkout", "--force", "--detach", "FETCH_HEAD"])
     rc, _out, err = _run_git(args)
     if rc:
         return {"success": False, "message": f"git checkout fehlgeschlagen: {_scrub(err, token)[:300]}",
                 "backup": backup}
+    _progress(progress, "code", "success")
     after = _run_git(["rev-parse", "HEAD"])[1]
     changed = len(_run_git(["diff", "--name-only", before, after])[1].splitlines())
 
@@ -666,10 +724,19 @@ def _git_sync_locked(ref: str, *, token: str | None, install_deps: bool,
             return f"Git-Rollback auf {before} fehlgeschlagen: {_scrub(err, token)[:300]}."
         return f"Code auf {before} wiederhergestellt."
 
-    return _finish_update({
-        "success": True, "message": f"Git-Update auf {ref} @ {after[:7]} eingespielt",
-        "files_updated": changed, "files_skipped": 0, "via": "git", "backup": backup,
-    }, install_deps, rollback)
+    return _finish_update(
+        {
+            "success": True,
+            "message": f"Git-Update auf {ref} @ {after[:7]} eingespielt",
+            "files_updated": changed,
+            "files_skipped": 0,
+            "via": "git",
+            "backup": backup,
+        },
+        install_deps,
+        rollback,
+        progress,
+    )
 
 
 def _valid_ref(ref: str) -> bool:
@@ -682,7 +749,11 @@ def _valid_ref(ref: str) -> bool:
 
 
 def deploy_github_branch(
-    branch: str, download_url: str, token: str | None = None, install_deps: bool = False,
+    branch: str,
+    download_url: str,
+    token: str | None = None,
+    install_deps: bool = False,
+    progress: Progress | None = None,
 ) -> dict:
     """Einheitlicher Branch-Deploy: bevorzugt Git (sauberer, konsistent zur
     Konsole); nur ohne Git-Checkout Fallback auf das Zipball-Overlay.
@@ -697,12 +768,20 @@ def deploy_github_branch(
         return {"success": False, "message": "Ungültiger Branch-Name"}
     download_url = f"https://api.github.com/repos/{GITHUB_REPO}/zipball/{quote(branch, safe='/')}"
     if is_git_checkout():
-        return git_update(branch, token=token, install_deps=install_deps)
-    return download_and_apply_github_update(download_url, token=token, install_deps=install_deps)
+        return git_update(
+            branch, token=token, install_deps=install_deps, **({"progress": progress} if progress else {})
+        )
+    return download_and_apply_github_update(
+        download_url, token=token, install_deps=install_deps, **({"progress": progress} if progress else {})
+    )
 
 
 def deploy_github_release(
-    download_url: str, tag_name: str, token: str | None = None, install_deps: bool = False,
+    download_url: str,
+    tag_name: str,
+    token: str | None = None,
+    install_deps: bool = False,
+    progress: Progress | None = None,
 ) -> dict:
     """Installiert Releases in Git-Checkouts per Tag, sonst als geschuetztes ZIP-Overlay."""
     if is_docker():
@@ -711,12 +790,19 @@ def deploy_github_release(
     if not _valid_ref(tag_name):
         return {"success": False, "message": "Ungültiger Tag-Name"}
     if is_git_checkout():
-        return git_update_release(tag_name, token=token, install_deps=install_deps)
-    return download_and_apply_github_update(download_url, token=token, install_deps=install_deps)
+        return git_update_release(
+            tag_name, token=token, install_deps=install_deps, **({"progress": progress} if progress else {})
+        )
+    return download_and_apply_github_update(
+        download_url, token=token, install_deps=install_deps, **({"progress": progress} if progress else {})
+    )
 
 
 def download_and_apply_github_update(
-    download_url: str, token: str | None = None, install_deps: bool = False,
+    download_url: str,
+    token: str | None = None,
+    install_deps: bool = False,
+    progress: Progress | None = None,
 ) -> dict:
     """Lädt das Release-/Branch-ZIP von GitHub herunter und spielt es ein.
 
@@ -738,6 +824,8 @@ def download_and_apply_github_update(
             tmp.write(data)
             tmp_path = Path(tmp.name)
 
+        if progress:
+            return apply_update(tmp_path, install_deps=install_deps, progress=progress)
         return apply_update(tmp_path, install_deps=install_deps)
     except Exception as exc:
         return {"success": False, "message": f"Download fehlgeschlagen: {exc}"}

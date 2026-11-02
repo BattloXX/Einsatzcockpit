@@ -597,6 +597,8 @@ def mfa_global_aus() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command")
+    p_update = sub.add_parser("update-run", help="Lokalen Hintergrund-Updatejob ausführen")
+    p_update.add_argument("job_id")
     p_mfa = sub.add_parser("mfa-reset", help="Lokaler Notfallreset eines Systemadministrators")
     p_mfa.add_argument("username")
     sub.add_parser("mfa-global-aus", help="2FA lokal deaktivieren und Admin-Sessions widerrufen")
@@ -644,6 +646,10 @@ def main() -> None:
     sub.add_parser("osm-gebaeude-status", help="OSM-Importstatus anzeigen")
 
     args = parser.parse_args()
+    if args.command == "update-run":
+        from app.services.update_job import run_job
+        run_job(args.job_id)
+        return
     if args.command and args.command.startswith("osm-gebaeude-"):
         from app.services import osm_gebaeude_import as osm
         if args.command == "osm-gebaeude-status":

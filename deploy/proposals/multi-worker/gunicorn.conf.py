@@ -9,6 +9,8 @@ workers = int(raw_workers)
 if workers > 1 and not os.environ.get("REDIS_URL", "").strip():
     raise RuntimeError("Mehrere Worker benoetigen einen konfigurierten Redis-Bus")
 
+pidfile = os.environ.get("GUNICORN_PID_FILE") or None
+
 worker_class = "app.uvicorn_worker.TolerantUvicornWorker"
 bind = os.environ.get("ECP_GUNICORN_BIND", "127.0.0.1:8092")
 timeout = 120

@@ -136,3 +136,47 @@ print("VAPID_PRIVATE_KEY=" + v.private_key.private_bytes(
 print("VAPID_PUBLIC_KEY=" + v.public_key)
 EOF
 ```
+
+
+## Web-Updates als Hintergrundjob
+
+ZIP-, Release- und Branch-Updates unter `/admin/system/update` laufen nach der
+Vorprüfung als detachter lokaler CLI-Prozess. Fortschritt und die letzten 40
+bereinigten Logzeilen werden alle zwei Sekunden angezeigt; Status bleibt unter
+`app_storage/update/status.json` über Neustarts erhalten. Parameter und ZIP haben
+0600, Token werden ausschließlich im Kind aus der DB gelesen. Nur ein Job ist aktiv.
+Der Abschluss wird über `system.update_job` auditiert. Keine neue Admin-Seite,
+keine Datenbankmigration, kein zusätzliches sudo-Recht.
+
+Die Unit `einsatzleiter.service` schreibt mit `--pid /run/einsatzleiter/gunicorn.pid`
+die Master-PID in `RuntimeDirectory=einsatzleiter` (0750). Dazu in `.env` setzen:
+
+```dotenv
+GUNICORN_PID_FILE=/run/einsatzleiter/gunicorn.pid
+UPDATE_VERIFY_TIMEOUT_S=300
+```
+
+Unit einmal als Betreiber übernehmen, `sudo systemctl daemon-reload` und
+`sudo systemctl restart einsatzleiter` ausführen. Der Multi-Worker-Vorschlag liest
+`GUNICORN_PID_FILE` ebenfalls aus der Umgebung. Bei gültiger PID erfolgt SIGHUP.
+Ohne Setting bleibt der bisherige Pfad `<APP_ROOT>/gunicorn.pid` aktiv; ohne gültige
+PID folgt `sudo -n systemctl restart einsatzleiter` (Timeout 15 Sekunden).
+`deploy/sudoers-einsatzleiter.example` dokumentiert ausschließlich das vorhandene
+Recht für diesen Restart. Mit `sudo visudo -f /etc/sudoers.d/einsatzleiter` bearbeiten,
+mit `sudo visudo -c` prüfen. Kein `systemd-run`, keine neue Update-Unit erforderlich.
+
+`start_new_session=True` schützt vor dem Ende des HTTP-Requests, aber **nicht vor
+systemds `KillMode=control-group`**: beim Restart wird auch der Update-Prozess
+beendet. Deshalb wird `restarting` mit Zielversion, Git-SHA und erwartetem
+Alembic-Head **vor** dem Restart dauerhaft geschrieben und das ZIP vorher gelöscht.
+Alle weiteren Schritte übernimmt die Nachprüfung im neuen App-Prozess.
+Beim Start prüft sie im Hintergrund mit DB-Leserechten; der geschützte Statusabruf
+prüft erneut und schreibt das Abschluss-Audit. `/health` wird nicht verändert.
+
+Erfolg erfordert einen nach Restartbeginn gestarteten Serverprozess, passenden
+DB-/Code-/erwarteten Alembic-Head und bei Git den erwarteten HEAD-SHA. Nach 300
+Sekunden ohne Bestätigung erscheint `unconfirmed`: Prozess, `alembic current`,
+`alembic heads`, `git rev-parse HEAD` und Journal manuell prüfen. Bei `failed` nach
+Neustartfehler sind Code und Migration bereits eingespielt; Dienst manuell starten.
+"Prozess unerwartet beendet" verlangt eine Prüfung von Code, DB und Pre-Update-Dump.
+Details: [Wiki Updates](../docs/wiki/Installation-Updates.md).

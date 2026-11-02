@@ -15,6 +15,11 @@ from app.config import settings
 from app.services import update_service as us
 
 
+@pytest.fixture(autouse=True)
+def isolated_root(monkeypatch, tmp_path):
+    monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+
+
 @pytest.fixture
 def host(monkeypatch, tmp_path):
     root = tmp_path / "installation"
@@ -343,21 +348,21 @@ def test_release_route_verwendet_formular_tag(host, monkeypatch):
     monkeypatch.setattr(ui, "check_github_release", lambda **kwargs: {"tag_name": "v2", "download_url": "url"})
     monkeypatch.setattr(us, "_github_json", lambda *a, **kw: {"tag_name": "v2"})
     monkeypatch.setattr(ui.templates, "TemplateResponse", lambda request, name, context: context)
-    deploy = MagicMock(return_value={"success": True})
-    monkeypatch.setattr(ui, "deploy_github_release", deploy)
+    deploy = MagicMock(return_value={"state": "queued"})
+    monkeypatch.setattr(ui.update_job, "start_job", deploy)
     result = ui.apply_github_update(**route_args(), prerelease=False, tag_name="v1", install_deps_raw="")
     assert not result["update_result"]["success"]
     deploy.assert_not_called()
     result = ui.apply_github_update(**route_args(), prerelease=False, tag_name="v2", install_deps_raw="1")
-    assert result["update_result"]["success"]
-    assert deploy.call_args.args == ("url", "v2")
+    assert result["job"]["state"] == "queued"
+    assert deploy.call_args.args == ("release", "v2", 12)
 
 
 def test_zip_audit_ohne_inhalt(host, monkeypatch):
     from app.routers import ui_settings as ui
     monkeypatch.setattr(ui, "is_docker", lambda: False)
     monkeypatch.setattr(ui.templates, "TemplateResponse", lambda request, name, context: context)
-    monkeypatch.setattr(ui, "apply_update", lambda *a, **kw: {"success": True})
+    monkeypatch.setattr(ui.update_job, "start_job", lambda *a, **kw: {"state": "queued"})
     audit = MagicMock()
     monkeypatch.setattr(ui, "write_audit", audit)
     content = b"Inhalt darf nicht im Audit stehen"
