@@ -21,7 +21,7 @@ Hier geht es um ein **vollständiges, tenant-gescoptes Archiv genau einer Organi
 
 Ein ZIP mit:
 
-- `manifest.json` — Format-Version, App-Version, Quell-Org, Zeitpunkt, Zeilenzahl je Tabelle.
+- `manifest.json` — Format-Version, App-Version, Alembic-Revision, Schema-Hinweis, Quell-Org, Zeitpunkt und Zeilenzahl je Tabelle.
 - `data/<tabelle>.jsonl` — die Datensätze der Organisation (Einsätze/Archiv, Mannschaft,
   Objekte, Teilnahme, Fahrtenbuch, GSL, Lageführung, Konfiguration …).
 - `media/…` — die zugehörigen Mediendateien (Einsatzfotos, Objektdokumente/-scans, GSL-Medien).
@@ -53,8 +53,8 @@ Unter **„Automatische Sicherung"** ein Ziel eintragen, testen und einen Zeitpl
 | `ftps` | FTP + TLS | Passwort |
 | `graph` | **Microsoft 365** | Azure-App (App-only), Ziel per **Drive-ID** (SharePoint-Dokumentbibliothek ODER OneDrive) |
 
-- **Zeitplan:** täglich (ab Stunde, UTC) oder wöchentlich (Wochentag + Stunde). Ein
-  Hintergrund-Loop schiebt fällige Sicherungen automatisch, höchstens einmal pro Tag.
+- **Zeitplan:** täglich (ab Stunde in der Ortszeit der Organisation) oder wöchentlich (lokaler Wochentag + Stunde). Ein
+  Hintergrund-Loop schiebt fällige Sicherungen automatisch, höchstens einmal pro lokalem Kalendertag. Die Zeitzone stammt aus der Organisation, andernfalls aus `DEFAULT_TIMEZONE` (Standard `Europe/Vienna`).
 - **Umfang (partielles Backup):** je Bereich (Einsätze, GSL, Objekte, Fahrtenbuch, UAS,
   Verleih, Wetter, Teilnahme, Mannschaft, SMS) ab-/anwählbar. **Stammdaten und Konfiguration
   sind immer enthalten.** Gilt für Download und Push.
@@ -121,6 +121,8 @@ Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-I
 |----------|---------|-----------|
 | `ORG_BACKUP_ENABLED` | `true` | Globaler Kill-Switch (false = Modul aus) |
 | `ORG_BACKUP_MAX_BYTES` | `2147483648` | Größenlimit je Archiv (0 = unbegrenzt) |
+| `ORG_SAFETY_KEEP` | `5` | Sicherheitsarchive je Organisation (mindestens 1) |
+| `ORG_RESTORE_MAX_UNCOMPRESSED_BYTES` | `8589934592` | Maximale unkomprimierte ZIP-Gesamtgröße (8 GiB) |
 | `ORG_BACKUP_LOOP_INTERVAL_S` | `900` | Prüfintervall für fällige geplante Backups |
 
 ---
@@ -142,3 +144,39 @@ Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-I
 
 - [Backup & Disaster-Recovery (serverweit)](Betrieb-Backup-und-Disaster-Recovery)
 - [Org-Konfig-Backup (JSON)](Administration-Backup-Import)
+
+
+## Hinweise zum Update: Restore und Zeitplan
+
+Bestehende Stunden gelten jetzt als **Ortszeit der Organisation**, bisher wurden sie als UTC
+verarbeitet. Es gibt kein Datenmigrationsskript. In `Europe/Vienna` startet derselbe gespeicherte
+Stundenwert damit im Winter eine Stunde, im Sommer zwei Stunden früher. Bitte bestehende
+Zeitpläne prüfen. Auch der Wochentag und die Begrenzung auf einen Lauf je Kalendertag gelten
+lokal. Beim Ende der Sommerzeit führt die doppelte Stunde zu keinem zweiten Tageslauf;
+eine beim Beginn der Sommerzeit übersprungene Stunde wird beim nächsten Loop nachgeholt.
+
+Beim **Ersetzen** muss zuerst eine vollständige, lesbare ZIP-Sicherung der Zielorganisation
+gelungen sein. Scheitert die Sicherung oder deren ZIP-/Manifestprüfung, wird nichts gelöscht.
+Unter `<BACKUP_DIR>/org-safety` bleiben nach erfolgreicher Sicherung die letzten
+`ORG_SAFETY_KEEP=5` Archive **je Org**. Das Verzeichnis hat Rechte 0700, Archive 0600.
+Die Oberfläche zeigt nur den Sicherungsdateinamen an.
+
+Restore und Export erlauben Medien nur innerhalb der jeweiligen Medienverzeichnisse,
+auch nach Auflösung von Symlinks. Ungültige Medienpfade werden übersprungen und im
+Restore-Ergebnis gezählt. Relative Restore-Medien erhalten einen eigenen Bereich der
+Zielorganisation. ZIP-Mitglieder werden gezielt gelesen, niemals pauschal extrahiert.
+Vor Schreibzugriffen wird die Summe aller unkomprimierten Mitgliedsgrößen gegen
+`ORG_RESTORE_MAX_UNCOMPRESSED_BYTES=8589934592` (8 GiB) geprüft.
+
+Uploads werden in eine temporäre Datei mit 0600 gestreamt; `ORG_BACKUP_MAX_BYTES=2147483648`
+(Standard 2 GiB) begrenzt die kopierte Größe. Temporäre Dateien werden auch bei Fehlern entfernt.
+Die nginx-Vorlagen enthalten für `/admin/org-backup/restore` eine eigene Location mit
+`client_max_body_size 2100m`, `proxy_request_buffering off` und `proxy_read_timeout 1800s`.
+Bei Änderung des App-Limits muss auch diese Proxy-Grenze angepasst werden. Der seltene
+Systemadmin-Import läuft weiterhin synchron im Request; die Antwort nach Abschluss abwarten.
+
+Neue Archive enthalten die Alembic-Revision des DB-Stands (ersatzweise Code-Head, bei Fehlern
+unbekannt). Weicht sie vom aktuellen Code-Head ab, zeigt die Vorschau eine deutliche Warnung.
+Zum Import ist zusätzlich **"Import trotz abweichendem Schema-Stand ausdrücklich bestätigen"**
+nötig. Diese Bestätigung garantiert keine Kompatibilität. Altarchive ohne Revision erhalten
+nur einen Hinweis und brauchen keine zusätzliche Schema-Bestätigung.

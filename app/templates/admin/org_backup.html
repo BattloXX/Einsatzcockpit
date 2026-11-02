@@ -159,11 +159,11 @@
         </select>
       </div>
       <div class="sys-field">
-        <label>Stunde (UTC)</label>
+        <label>Stunde (Ortszeit der Organisation) - {{ org_timezone }}</label>
         <input class="form-control" type="number" min="0" max="23" name="hour" value="{{ cfg.hour if cfg else 3 }}">
       </div>
       <div class="sys-field">
-        <label>Wochentag (0=Mo)</label>
+        <label>Wochentag (Ortszeit, 0=Mo)</label>
         <input class="form-control" type="number" min="0" max="6" name="weekday" value="{{ cfg.weekday if cfg and cfg.weekday is not none else '' }}">
       </div>
       <div class="sys-field">

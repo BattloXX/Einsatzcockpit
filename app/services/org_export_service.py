@@ -24,12 +24,14 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+import os
 import zipfile
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import Table, or_, select
+from sqlalchemy import Table, inspect, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.db import Base
@@ -304,6 +306,19 @@ def _serialisiere_tabelle(db: Session, table: Table, collected: dict[str, set]) 
     return zeilen
 
 
+def archiv_revision(db: Session) -> str | None:
+    """DB-Stand bevorzugen; ohne Versionstabelle den Code-Head verwenden."""
+    from app.services.backup_service import aktueller_alembic_head
+    try:
+        connection = db.connection()
+        if inspect(connection).has_table("alembic_version"):
+            return connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        return aktueller_alembic_head()
+    except Exception:
+        logging.getLogger(__name__).warning("Alembic-Stand fuer Org-Export nicht verfuegbar")
+        return None
+
+
 def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = True,
                areas: set[str] | None = None) -> Path:
     """Exportiert die Daten (+ optional Medien) einer Org als ZIP; gibt den Pfad zurueck.
@@ -319,7 +334,7 @@ def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = Tr
     collected = collect_ids(db, org_id, areas)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%fZ")
     ziel = out_dir / f"org-backup-{org_id}-{stamp}.zip"
 
     # Alle nicht ausgeschlossenen Tabellen (Roots, Kinder UND Assoziationstabellen).
@@ -328,16 +343,23 @@ def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = Tr
     tabellen_counts: dict[str, int] = {}
     medien_pfade: list[tuple[str, Path]] = []
 
+    revision = archiv_revision(db)
+    # Schon beim Anlegen nur fuer den App-Benutzer lesbar.
+    fd = os.open(ziel, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.close(fd)
     with zipfile.ZipFile(ziel, "w", zipfile.ZIP_DEFLATED) as zf:
         for table in exportierbar:
             zeilen = _serialisiere_tabelle(db, table, collected)
             if not zeilen:
                 continue
             tabellen_counts[table.name] = len(zeilen)
-            inhalt = "\n".join(json.dumps(z, ensure_ascii=False, default=str) for z in zeilen)
-            zf.writestr(f"data/{table.name}.jsonl", inhalt + "\n")
             if include_media:
                 medien_pfade.extend(_medien_aus_zeilen(table.name, zeilen))
+            for zeile in zeilen:
+                if zeile.get("stored_filename"):
+                    zeile["stored_filename"] = Path(str(zeile["stored_filename"])).name
+            inhalt = "\n".join(json.dumps(z, ensure_ascii=False, default=str) for z in zeilen)
+            zf.writestr(f"data/{table.name}.jsonl", inhalt + "\n")
 
         if include_media:
             _schreibe_medien(zf, medien_pfade)
@@ -349,6 +371,8 @@ def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = Tr
         manifest = {
             "format_version": FORMAT_VERSION,
             "app_version": settings.APP_VERSION,
+            "alembic_revision": revision,
+            "schema_hint": "Logischer Org-Export; Restore gegen denselben Alembic-Code-Head empfohlen.",
             "org_id": org_id,
             "exported_at": datetime.now(UTC).isoformat(),
             "tables": tabellen_counts,

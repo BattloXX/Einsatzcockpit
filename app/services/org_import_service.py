@@ -26,10 +26,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import shutil
 import zipfile
+from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
@@ -49,8 +52,32 @@ logger = logging.getLogger("einsatzleiter.org_import")
 _SCOPE_COLUMNS = ("org_id", "dept_id", "primary_org_id")
 
 
+class RestoreFehler(ValueError):
+    """Feste, fuer die Benutzeroberflaeche geeignete Fehlermeldung."""
+
+
+def _pruefe_groesse(zf: zipfile.ZipFile) -> None:
+    from app.config import settings
+    if sum(info.file_size for info in zf.infolist()) > settings.ORG_RESTORE_MAX_UNCOMPRESSED_BYTES:
+        raise RestoreFehler("Archiv überschreitet die erlaubte entpackte Gesamtgröße.")
+
+
+def schema_status(manifest: dict) -> str:
+    """Altarchive bleiben lesbar; abweichende Revisionen brauchen eine Bestaetigung."""
+    from app.services.backup_service import aktueller_alembic_head
+    revision = manifest.get("alembic_revision")
+    if not revision:
+        return "legacy"
+    try:
+        return "match" if revision == aktueller_alembic_head() else "mismatch"
+    except Exception:
+        logger.warning("Code-Head fuer Org-Restore nicht verfuegbar")
+        return "mismatch"
+
+
 def read_manifest(zip_path: Path) -> dict:
     with zipfile.ZipFile(zip_path) as zf:
+        _pruefe_groesse(zf)
         return json.loads(zf.read("manifest.json"))
 
 
@@ -97,25 +124,52 @@ def _dedupe_user(db: Session, values: dict) -> None:
         values["email"] = None  # Duplikat -> leeren (Nutzer kann es neu setzen)
 
 
-def _fk_checks(db: Session, on: bool) -> None:
-    if db.bind and db.bind.dialect.name == "mysql":
-        db.execute(sa.text(f"SET FOREIGN_KEY_CHECKS={1 if on else 0}"))
+@contextmanager
+def _fk_guard(connection):
+    """SET und Ruecksetzen vor commit/rollback auf derselben Pool-Verbindung."""
+    mysql = connection.dialect.name == "mysql"
+    try:
+        if mysql:
+            connection.execute(sa.text("SET FOREIGN_KEY_CHECKS=0"))
+        yield
+    finally:
+        if mysql:
+            try:
+                connection.execute(sa.text("SET FOREIGN_KEY_CHECKS=1"))
+            except Exception as exc:
+                connection.invalidate()
+                raise RestoreFehler(
+                    "Fremdschlüsselprüfung konnte nicht wieder aktiviert werden; Verbindung verworfen.") from exc
 
 
 def _safety_backup(db: Session, org_id: int) -> str | None:
-    """Sicherheits-Vollexport der Ziel-Org VOR einem Ersetzen (Pre-Image). Best-effort."""
+    """Geprueftes Pre-Image; erst danach alte Sicherheitsarchive derselben Org entfernen."""
     from app.config import settings
     from app.services.org_export_service import export_org
     try:
         ziel = Path(settings.BACKUP_DIR) / "org-safety"
-        return str(export_org(db, org_id, ziel, include_media=True))
-    except Exception:  # noqa: BLE001 — Sicherung darf den Restore nicht verhindern, nur warnen
+        ziel.mkdir(parents=True, exist_ok=True, mode=0o700)
+        ziel.chmod(0o700)
+        archiv = export_org(db, org_id, ziel, include_media=True)
+        archiv.chmod(0o600)
+        with zipfile.ZipFile(archiv) as zf:
+            if zf.testzip() is not None:
+                raise ValueError("ZIP-Pruefung fehlgeschlagen")
+            manifest = json.loads(zf.read("manifest.json"))
+            if manifest.get("format_version") != FORMAT_VERSION or manifest.get("org_id") != org_id:
+                raise ValueError("Sicherungsmanifest ungueltig")
+        archive = sorted(ziel.glob(f"org-backup-{org_id}-*.zip"), key=lambda p: p.name, reverse=True)
+        for alt in archive[max(1, settings.ORG_SAFETY_KEEP):]:
+            alt.unlink()
+        return str(archiv)
+    except Exception:
         logger.exception("Sicherheits-Autobackup vor Ersetzen fehlgeschlagen (org %s)", org_id)
         return None
 
 
-def _delete_org_data(db: Session, org_id: int) -> None:
+def _delete_org_data(db: Session, org_id: int, connection=None) -> None:
     """Loescht ALLE tenant-gescopten Daten der Org (Kind vor Eltern), FK-Checks aus."""
+    connection = connection if connection is not None else db.connection()
     md = Base.metadata
     collected = collect_ids(db, org_id)  # exakt dieselbe Scoping-Logik wie der Export
     for table in reversed(md.sorted_tables):
@@ -125,11 +179,11 @@ def _delete_org_data(db: Session, org_id: int) -> None:
         if pk is not None:
             ids = collected.get(table.name)
             if ids:
-                db.execute(table.delete().where(pk.in_(ids)))
+                connection.execute(table.delete().where(pk.in_(ids)))
         else:
             conds = _fk_bedingungen(table, collected)
             if conds:
-                db.execute(table.delete().where(sa.or_(*conds)))
+                connection.execute(table.delete().where(sa.or_(*conds)))
 
 
 def _import_reihenfolge(tabellen: list) -> list:
@@ -149,25 +203,49 @@ def _import_reihenfolge(tabellen: list) -> list:
     return result
 
 
-def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = False) -> dict:
+def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = False,
+               confirm_schema: bool = False) -> dict:
     """Importiert das Archiv in ziel_org_id (mit ID-Remapping). Gibt eine Zusammenfassung.
 
     replace=True: In-place-Restore — vorher ein Sicherheits-Autobackup, dann werden ALLE
     bestehenden Daten der Ziel-Org geloescht und durch den Archiv-Stand ersetzt.
     """
-    safety_pfad = _safety_backup(db, ziel_org_id) if replace else None
+    connection = db.connection()
+    safety_pfad = None
     md = Base.metadata
     with zipfile.ZipFile(zip_path) as zf:
+        _pruefe_groesse(zf)
         manifest = json.loads(zf.read("manifest.json"))
         if manifest.get("format_version") != FORMAT_VERSION:
-            raise ValueError(f"Unbekannte Archiv-Version: {manifest.get('format_version')!r}")
+            raise RestoreFehler("Unbekannte Archiv-Version.")
 
+        if schema_status(manifest) == "mismatch" and not confirm_schema:
+            raise RestoreFehler("Abweichender Schema-Stand: Bitte die zusätzliche Schema-Bestätigung aktivieren.")
         daten: dict[str, list[dict]] = {}
-        for name in zf.namelist():
-            if name.startswith("data/") and name.endswith(".jsonl"):
-                tname = name[len("data/"):-len(".jsonl")]
+        # Nur exakte Namen bekannter Tabellen aus dem Manifest lesen, nie extrahieren.
+        for tname in manifest.get("tables", {}):
+            if tname in md.tables and tname not in EXCLUDE_TABLES:
                 daten[tname] = [json.loads(x) for x in
-                                zf.read(name).decode("utf-8").splitlines() if x]
+                                zf.read(f"data/{tname}.jsonl").decode("utf-8").splitlines() if x]
+        if replace:
+            safety_pfad = _safety_backup(db, ziel_org_id)
+            if not safety_pfad:
+                raise RestoreFehler(
+                    "Ersetzen abgebrochen: Das erforderliche Sicherheits-Backup ist fehlgeschlagen. "
+                    "Es wurden keine Daten gelöscht.")
+            # Auch bei alternativen Backup-Implementierungen die Lesbarkeit erzwingen.
+            try:
+                with zipfile.ZipFile(safety_pfad) as safety:
+                    if safety.testzip() is not None:
+                        raise ValueError("ZIP-Pruefung fehlgeschlagen")
+                    sicher_manifest = json.loads(safety.read("manifest.json"))
+                    if (sicher_manifest.get("org_id") != ziel_org_id
+                            or sicher_manifest.get("format_version") != FORMAT_VERSION):
+                        raise ValueError("Falsche Sicherungsorganisation")
+            except Exception as exc:
+                raise RestoreFehler(
+                    "Ersetzen abgebrochen: Das Sicherheits-Backup ist nicht lesbar. "
+                    "Es wurden keine Daten gelöscht.") from exc
 
         tabellen = _import_reihenfolge([t for t in md.tables.values()
                                       if t.name in daten and t.name not in EXCLUDE_TABLES])
@@ -176,69 +254,75 @@ def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = Fa
         neu_rows: dict[str, list[tuple]] = {t.name: [] for t in tabellen}
         counts: dict[str, int] = {}
 
-        _fk_checks(db, False)
         try:
-            if replace:
-                _delete_org_data(db, ziel_org_id)
-            for table in tabellen:
-                pkcol = _single_pk(table)
-                pkname = pkcol.name if pkcol is not None else None
-                scope = _scope_col(table)
-                fkmap = {fk.parent.name: fk.column.table.name for fk in table.foreign_keys}
-                for lcol, ltgt in _EXTRA_LINKS.get(table.name, []):
-                    fkmap[lcol] = ltgt
-
-                for row in daten[table.name]:
-                    old_pk = row.get(pkname) if pkname else None
-                    values: dict = {}
-                    for column in table.columns:
-                        if column.name == pkname and pkname != scope:
-                            continue
-                        values[column.name] = _py_value(column, row.get(column.name))
-                    if scope and scope in values:
-                        values[scope] = ziel_org_id
-
-                    row_fixups = []
-                    for col, tgt in fkmap.items():
-                        if col == scope or values.get(col) is None or tgt not in idmap:
-                            continue  # Scope schon gesetzt; globale/leere Refs bleiben
-                        m = idmap[tgt]
-                        if values[col] in m:
-                            values[col] = m[values[col]]
-                        else:  # Vorwaerts-/Zyklus-Ref -> spaeter fixen (Spalte nullable)
-                            row_fixups.append((col, tgt, values[col]))
-                            values[col] = None
-
-                    if table.name == "user":
-                        _dedupe_user(db, values)
-
-                    res = db.execute(table.insert().values(**values))
-                    new_pk = res.inserted_primary_key[0] if pkname else None  # type: ignore[attr-defined]
-                    if pkname and old_pk is not None:
-                        idmap[table.name][old_pk] = new_pk
-                    for col, tgt, old_ref in row_fixups:
-                        if pkname:
-                            fixups.append((table, new_pk, col, tgt, old_ref))
-                    neu_rows[table.name].append(
-                        (old_pk, {**values, **({pkname: new_pk} if pkname else {})}))
-                counts[table.name] = len(daten[table.name])
-
-            for table, new_pk, col, tgt, old_ref in fixups:
-                new_ref = idmap.get(tgt, {}).get(old_ref)
-                if new_ref is not None:
+            with _fk_guard(connection):
+                if replace:
+                    _delete_org_data(db, ziel_org_id, connection)
+                for table in tabellen:
                     pkcol = _single_pk(table)
-                    db.execute(table.update().where(pkcol == new_pk).values({col: new_ref}))
+                    pkname = pkcol.name if pkcol is not None else None
+                    scope = _scope_col(table)
+                    fkmap = {fk.parent.name: fk.column.table.name for fk in table.foreign_keys}
+                    for lcol, ltgt in _EXTRA_LINKS.get(table.name, []):
+                        fkmap[lcol] = ltgt
 
-            media_count = 0
-            for tname, rows in neu_rows.items():
-                media_count += _restore_media(zf, tname, rows)
+                    for row in daten[table.name]:
+                        old_pk = row.get(pkname) if pkname else None
+                        values: dict = {}
+                        for column in table.columns:
+                            if column.name == pkname and pkname != scope:
+                                continue
+                            values[column.name] = _py_value(column, row.get(column.name))
+                        if scope and scope in values:
+                            values[scope] = ziel_org_id
 
+                        row_fixups = []
+                        for col, tgt in fkmap.items():
+                            if col == scope or values.get(col) is None or tgt not in idmap:
+                                continue  # Scope schon gesetzt; globale/leere Refs bleiben
+                            m = idmap[tgt]
+                            if values[col] in m:
+                                values[col] = m[values[col]]
+                            else:  # Vorwaerts-/Zyklus-Ref -> spaeter fixen (Spalte nullable)
+                                row_fixups.append((col, tgt, values[col]))
+                                values[col] = None
+
+                        if table.name == "user":
+                            _dedupe_user(db, values)
+
+                        # Relative Medien bekommen einen eigenen Ziel-Org-Namensraum.
+                        # So ueberschreibt auch ein gueltiger Archivpfad keine Quell-Org-Datei.
+                        from app.services.org_export_media import medien_referenzen
+                        if "stored_filename" not in values:
+                            for arc, pfad in medien_referenzen(table.name, [values]):
+                                col = arc.split("/")[2]
+                                values[col] = f"{ziel_org_id}/org-restore/{uuid4().hex}/{pfad.name}"
+                        res = connection.execute(table.insert().values(**values))
+                        inserted_pk = res.inserted_primary_key
+                        new_pk = inserted_pk[0] if pkname and inserted_pk is not None else None
+                        if pkname and old_pk is not None:
+                            idmap[table.name][old_pk] = new_pk
+                        for col, tgt, old_ref in row_fixups:
+                            if pkname:
+                                fixups.append((table, new_pk, col, tgt, old_ref))
+                        neu_rows[table.name].append(
+                            (old_pk, {**values, **({pkname: new_pk} if pkname else {})}))
+                    counts[table.name] = len(daten[table.name])
+
+                for table, new_pk, col, tgt, old_ref in fixups:
+                    new_ref = idmap.get(tgt, {}).get(old_ref)
+                    if new_ref is not None:
+                        pkcol = _single_pk(table)
+                        connection.execute(table.update().where(pkcol == new_pk).values({col: new_ref}))
+
+                media_count = 0
+                media_skipped: list[str] = []
+                for tname, rows in neu_rows.items():
+                    media_count += _restore_media(zf, tname, rows, media_skipped)
             db.commit()
         except Exception:
             db.rollback()
             raise
-        finally:
-            _fk_checks(db, True)
 
     return {
         "org_id": ziel_org_id,
@@ -246,12 +330,14 @@ def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = Fa
         "tables": counts,
         "rows_total": sum(counts.values()),
         "media_restored": media_count,
+        "media_skipped": len(media_skipped),
         "replaced": replace,
-        "safety_backup": safety_pfad,
+        "safety_backup": Path(safety_pfad).name if safety_pfad else None,
     }
 
 
-def _restore_media(zf: zipfile.ZipFile, table_name: str, neu_rows_for_table: list[tuple]) -> int:
+def _restore_media(zf: zipfile.ZipFile, table_name: str, neu_rows_for_table: list[tuple],
+                   skipped: list[str] | None = None) -> int:
     """Legt die Mediendateien der Tabelle an die neu gueltigen Zielpfade zurueck."""
     from app.services import org_export_media as oem
     if table_name not in oem.MEDIA_TABLES:
@@ -260,15 +346,18 @@ def _restore_media(zf: zipfile.ZipFile, table_name: str, neu_rows_for_table: lis
     n = 0
     for old_pk, new_row in neu_rows_for_table:
         new_pk = new_row.get("id")
-        for arc_new, abs_new in oem.medien_referenzen(table_name, [new_row]):
+        for arc_new, abs_new in oem.medien_referenzen(table_name, [new_row], skipped):
             old_arc = arc_new.replace(f"{table_name}/{new_pk}/", f"{table_name}/{old_pk}/", 1)
             member = f"media/{old_arc}"
             if member not in mitglieder:
                 continue
             try:
                 abs_new.parent.mkdir(parents=True, exist_ok=True)
-                abs_new.write_bytes(zf.read(member))
+                with zf.open(member) as source, abs_new.open("wb") as target:
+                    shutil.copyfileobj(source, target)
                 n += 1
             except OSError:
-                logger.warning("Restore: Mediendatei %s konnte nicht geschrieben werden", abs_new)
+                logger.warning("Restore: Mediendatei konnte nicht geschrieben werden (Tabelle %s)", table_name)
+                if skipped is not None:
+                    skipped.append(table_name)
     return n
