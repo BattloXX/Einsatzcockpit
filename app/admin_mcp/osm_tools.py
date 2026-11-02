@@ -54,7 +54,8 @@ async def _fehlerschutz(key: str) -> dict:
     wert = await hydrant_service._lesen(key, redis_zuerst=True) or {}
     bis = wert.get("offen_bis", 0)
     return {"status": "offen" if bis > time.time() else "geschlossen",
-            "offen_bis": datetime.fromtimestamp(bis, UTC).isoformat().replace("+00:00", "Z") if bis else None}
+            "offen_bis": datetime.fromtimestamp(bis, UTC).isoformat().replace("+00:00", "Z") if bis else None,
+            "code": wert.get("code")}
 
 
 async def _sammeln(live: bool, quellen: list[tuple[str, str]]) -> dict:
@@ -117,8 +118,10 @@ def collect_osm(*, live: bool = True) -> dict:
     erreichbar = any(p["status"] == "ok" for p in evidenz.get("endpoints", [])) if live else (
         bool(letzte["last_success"] and (not letzte["last_failure"] or letzte["last_success"] > letzte["last_failure"]))
         if letzte["last_success"] or letzte["last_failure"] else None)
+    alle_offen = all(z["status"] == "offen" for z in evidenz["circuit_breaker_status"]["endpunkte"])
     status = "fail" if fehlt and erreichbar is False else (
-        "warn" if fehlt or veraltet or pruefung or importfehler or fehler_24h or erreichbar is False else "ok")
+        "warn" if fehlt or veraltet or pruefung or importfehler or fehler_24h or erreichbar is False or alle_offen
+        else "ok")
     empfehlungen = []
     if fehlt:
         empfehlungen.append("Erstimport ausfuehren: python -m app.cli osm-gebaeude-import --erzwingen")
@@ -128,7 +131,10 @@ def collect_osm(*, live: bool = True) -> dict:
         empfehlungen.append("Bestand veraltet: Import pruefen")
     if importfehler:
         empfehlungen.append("Letzten Importfehler pruefen: python -m app.cli osm-gebaeude-status")
-    if erreichbar is False or fehler_24h:
+    if alle_offen and quellen and not fehlt and not veraltet and settings.OSM_GEBAEUDE_IMPORT_ENABLED:
+        evidenz["ursache_hypothese"] = "Oeffentliche Overpass-Endpunkte nach wiederholten Fehlern gesperrt."
+        empfehlungen.append("lokaler Bestand aktuell, Overpass nur Fallback; Endpunkte nach der Pause erneut pruefen")
+    elif erreichbar is False or fehler_24h:
         empfehlungen.append("Overpass oeffentlich nicht nutzbar - nur Rueckfall; lokale Quelle fuer Region ergaenzen")
     evidenz.update(overall_status=status, recommendations=empfehlungen)
     return {"status": status, "evidence": evidenz}

@@ -181,3 +181,17 @@ def test_status_ohne_live_und_24_stunden_fehler(umgebung, monkeypatch, fehlt, er
     daten.update(last_success=erfolg, last_failure=fehler)
     assert registry.collect(None, "admin_osm_pruefen", live=False)["status"] == status
     assert anfragen == []
+
+
+def test_offene_endpunkte_mit_aktuellem_bestand(umgebung, monkeypatch):
+    monkeypatch.setattr(hydrant_service, "_lesen", AsyncMock(return_value={
+        "offen_bis": datetime.now(UTC).timestamp() + 60, "code": "OVERPASS_TIMEOUT",
+    }))
+    ergebnis = registry.collect(None, "admin_osm_pruefen", live=False)
+    assert ergebnis["status"] == "warn"
+    evidenz = ergebnis["evidence"]
+    for z in evidenz["circuit_breaker_status"]["endpunkte"]:
+        assert z["status"] == "offen" and z["offen_bis"] and z["code"] == "OVERPASS_TIMEOUT"
+    assert "lokaler Bestand aktuell, Overpass nur Fallback" in " ".join(evidenz["recommendations"])
+    assert evidenz["ursache_hypothese"]
+    assert umgebung[2] == []

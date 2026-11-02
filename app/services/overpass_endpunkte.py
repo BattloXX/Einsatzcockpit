@@ -9,6 +9,7 @@ import math
 import socket
 import ssl
 import time
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 
@@ -28,6 +29,22 @@ def endpunkte(primaer: str) -> list[str]:
         url = wert.strip()
         if url.startswith("https://") and urlsplit(url).hostname and url not in ergebnis:
             ergebnis.append(url)
+    return ergebnis
+
+
+async def endpunkt_zustaende(primaer: str) -> list[dict]:
+    """Lesender Breaker-Snapshot, ohne Probeabfragen oder Zustandsaenderung."""
+    ergebnis = []
+    for url in endpunkte(primaer):
+        key = "overpass-endpunkt:" + hashlib.sha256(url.encode()).hexdigest()
+        wert = await hydrant_service._lesen(key, redis_zuerst=True) or {}
+        bis = wert.get("offen_bis", 0)
+        ergebnis.append({
+            "host": urlsplit(url).hostname,
+            "status": "offen" if bis > time.time() else "geschlossen",
+            "offen_bis": datetime.fromtimestamp(bis, UTC).isoformat().replace("+00:00", "Z") if bis else None,
+            "code": wert.get("code"),
+        })
     return ergebnis
 
 
@@ -111,6 +128,11 @@ async def abfragen(
     letzter_fehler: Exception | None = None
     versuchte = 0
     versuche: list[dict] = []
+    # Fehler ausserhalb des HTTP-Gesamtbudgets verbuchen: dessen Cancellation
+    # darf weder die Breaker-Aktualisierung abbrechen noch einen Versuch doppelt zaehlen.
+    fehlversuche: list[tuple[str, str, dict, Exception]] = []
+    laufend: tuple[str, str, dict, float] | None = None
+    http_status: int | None = None
     try:
         async with asyncio.timeout(max(0, budget_s)):
             for nummer, url in enumerate(endpunkte(primaer)):
@@ -129,6 +151,7 @@ async def abfragen(
                 versuchte += 1
                 versuch_start = time.monotonic()
                 http_status = None
+                laufend = (schluessel, url, versuch, versuch_start)
                 try:
                     zeitlimit = min(timeout_je_versuch, rest)
                     async with asyncio.timeout(zeitlimit):
@@ -146,6 +169,7 @@ async def abfragen(
                                 raise ValueError("Overpass-Zeitlimit erreicht")
                 except httpx.HTTPStatusError as exc:
                     if exc.response.status_code != 429 and not 500 <= exc.response.status_code <= 599:
+                        laufend = None
                         await geodienst_statistik.fehler(
                             "overpass", url, fehlercode(exc), http_status,
                             round((time.monotonic() - versuch_start) * 1000),
@@ -155,6 +179,7 @@ async def abfragen(
                 except (httpx.TransportError, TimeoutError, ValueError) as exc:
                     letzter_fehler = exc
                 else:
+                    laufend = None
                     await geodienst_statistik.erfolg(
                         "overpass", url, round((time.monotonic() - versuch_start) * 1000),
                     )
@@ -169,15 +194,20 @@ async def abfragen(
                                http_status=http_status,
                                dauer_ms=round((time.monotonic() - versuch_start) * 1000), uebersprungen=False)
                 versuche.append(versuch)
-                await geodienst_statistik.fehler(
-                    "overpass", url, versuch["code"], http_status, versuch["dauer_ms"],
-                )
-                await _fehler(schluessel, letzter_fehler)
+                fehlversuche.append((schluessel, url, versuch, letzter_fehler))
+                laufend = None
     except TimeoutError as exc:
         letzter_fehler = exc
-        if versuchte > sum(not v["uebersprungen"] for v in versuche):
-            versuch.update(code="OVERPASS_TIMEOUT", dauer_ms=round((time.monotonic() - versuch_start) * 1000),
-                           uebersprungen=False)
+        if laufend is not None:
+            schluessel, url, versuch, versuch_start = laufend
+            versuch.update(code="OVERPASS_TIMEOUT", http_status=http_status,
+                           dauer_ms=round((time.monotonic() - versuch_start) * 1000), uebersprungen=False)
             versuche.append(versuch)
-            await geodienst_statistik.fehler("overpass", url, "OVERPASS_TIMEOUT", http_status, versuch["dauer_ms"])
+            fehlversuche.append((schluessel, url, versuch, exc))
+    finally:
+        for schluessel, url, versuch, ursache in fehlversuche:
+            await _fehler(schluessel, ursache)
+            await geodienst_statistik.fehler(
+                "overpass", url, versuch["code"], versuch["http_status"], versuch["dauer_ms"],
+            )
     raise OverpassNichtVerfuegbar(letzter_fehler, versuchte, versuche)
