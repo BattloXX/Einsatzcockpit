@@ -49,10 +49,8 @@ Unter **„Automatische Sicherung"** ein Ziel eintragen, testen und einen Zeitpl
 
 | Protokoll | Transport | Auth |
 |-----------|-----------|------|
-| `sftp` / `scp` / `rsync` | SSH | **privater SSH-Key** (empfohlen) |
+| `sftp` | SSH | **privater SSH-Key** (empfohlen) |
 | `ftps` | FTP + TLS | Passwort |
-| `ftp` | FTP | Passwort — **unverschlüsselt, nur im LAN** |
-| `rclone` | rclone-Remote | rclone-Config (S3, WebDAV, Backblaze, Google Drive …) |
 | `graph` | **Microsoft 365** | Azure-App (App-only), Ziel per **Drive-ID** (SharePoint-Dokumentbibliothek ODER OneDrive) |
 
 - **Zeitplan:** täglich (ab Stunde, UTC) oder wöchentlich (Wochentag + Stunde). Ein
@@ -68,6 +66,20 @@ Unter **„Automatische Sicherung"** ein Ziel eintragen, testen und einen Zeitpl
   ein leeres Feld beim Speichern lässt das bestehende Secret unangetastet.
 - Der Status des letzten Laufs (OK/Fehler) wird angezeigt.
 
+### Sicherheitsregeln und Umstellung bestehender Ziele
+
+Org-Ziele erlauben ausschließlich **SFTP, FTPS und Microsoft Graph**. Bestehende Ziele
+mit SCP, rsync, rclone oder FTP werden nicht mehr ausgeführt; letzter Status und
+Fehlermeldung fordern zum erneuten Speichern auf. Im Formular ein erlaubtes Protokoll
+wählen, Zugangsdaten prüfen, neu speichern und die Verbindung testen.
+
+SFTP erlaubt die Hostkey-Prüfung `yes` oder `accept-new`, jedoch kein `no`.
+Hostnamen müssen auf öffentliche IP-Adressen auflösen; Loopback, private Netze,
+Link-Local und unspezifizierte Adressen sind gesperrt (auch als direkte IP-Eingabe).
+Nicht auflösbare Namen werden abgelehnt. Benutzername, Port und Pfad werden streng
+geprüft; Pfade dürfen keine Steuerzeichen oder Anführungszeichen enthalten und
+nicht mit `-` oder `!` beginnen. Das gilt auch für gespeicherte Ziele bei jedem Lauf.
+
 ### Microsoft 365 (SharePoint / OneDrive)
 
 Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-ID**:
@@ -79,7 +91,7 @@ Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-I
 3. Upload läuft als Graph-Upload-Session (beliebige Dateigröße), Retention über Graph-Listen/Löschen.
 
 > Ziel und Übertragung liegen in der Verantwortung der Organisation. Ein verschlüsseltes
-> Protokoll wählen (nicht `ftp` über offene Netze) und das Zielverzeichnis zugriffsbeschränkt
+> Protokoll wählen und das Zielverzeichnis zugriffsbeschränkt
 > halten.
 
 ---
@@ -120,7 +132,7 @@ Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-I
 | Modell | `OrgBackupConfig` (Ziel + Zeitplan + Bereiche + Graph, Fernet-Secrets); Migrationen `0166` (Basis), `0167` (`include_areas`), `0168` (Graph-Felder) |
 | Export | `app/services/org_export_service.py` (generischer FK-Collector, Secret-Redaktion, Bereiche `AREA_ROOTS`) + `org_export_media.py` |
 | Push/Zeitplan | `app/services/org_backup_loop.py` (reuse `remote_backup_service`) |
-| Off-Site-Ziele | `app/services/remote_backup_service.py` (SFTP/SCP/rsync/FTP/FTPS/rclone + Retention `prune_remote`) und `graph_backup_service.py` (SharePoint/OneDrive) |
+| Off-Site-Ziele | `app/services/remote_backup_service.py` (Org: SFTP/FTPS + Retention `prune_remote`) und `graph_backup_service.py` (SharePoint/OneDrive) |
 | Restore | `app/services/org_import_service.py` (ID-Remapping, Fixup, Medien; `replace=True` = In-place mit Sicherheits-Autobackup) |
 | UI | `app/routers/ui_org_backup.py` (`/admin/org-backup`, Restore `/admin/org-backup/restore`) |
 

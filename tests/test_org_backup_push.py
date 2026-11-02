@@ -59,7 +59,7 @@ def _config(slug: str, **kw) -> int:
             o = FireDept(slug=slug, name=slug)
             db.add(o)
             db.flush()
-        base = dict(org_id=o.id, enabled=True, protocol="rclone", rclone_remote="offsite:",
+        base = dict(org_id=o.id, enabled=True, protocol="sftp", host="8.8.8.8",
                     remote_path="ec")
         base.update(kw)
         cfg = OrgBackupConfig(**base)
@@ -89,6 +89,7 @@ def test_run_sync_ok(monkeypatch):
         return p
 
     hochgeladen = []
+    monkeypatch.setattr("app.services.remote_backup_service.prune_remote", lambda *a, **kw: [])
     monkeypatch.setattr("app.services.org_export_service.export_org", fake_export)
     monkeypatch.setattr("app.services.remote_backup_service.upload",
                         lambda remote, dateien, backup_dir, **kw: hochgeladen.append(dateien))
@@ -110,6 +111,7 @@ def test_run_sync_error_wird_vermerkt(monkeypatch):
     def boom(*a, **kw):
         raise RuntimeError("connection refused")
 
+    monkeypatch.setattr("app.services.remote_backup_service.prune_remote", lambda *a, **kw: [])
     monkeypatch.setattr("app.services.org_export_service.export_org", fake_export)
     monkeypatch.setattr("app.services.remote_backup_service.upload", boom)
 
@@ -157,7 +159,7 @@ def test_save_verschluesselt_passwort(client):
     _admin("push_save_user", ORG_A)
     csrf = _login(client, "push_save_user", "Test1234!")
     r = client.post("/admin/org-backup/save", data={
-        "_csrf": csrf, "enabled": "1", "protocol": "ftps", "host": "ftp.example.org",
+        "_csrf": csrf, "enabled": "1", "protocol": "ftps", "host": "8.8.8.8",
         "username": "ec", "password": "geheim123", "remote_path": "/up",
         "schedule": "daily", "hour": "2", "keep_count": "5", "include_media": "1",
     }, follow_redirects=False)
@@ -179,7 +181,7 @@ def test_run_now_route(client, monkeypatch):
     csrf = _login(client, "push_run_user", "Test1234!")
     # Ziel konfigurieren
     client.post("/admin/org-backup/save", data={
-        "_csrf": csrf, "enabled": "1", "protocol": "rclone", "rclone_remote": "offsite:",
+        "_csrf": csrf, "enabled": "1", "protocol": "sftp", "host": "8.8.8.8",
         "remote_path": "ec", "schedule": "daily", "hour": "3", "keep_count": "5",
     }, follow_redirects=False)
 
@@ -188,6 +190,7 @@ def test_run_now_route(client, monkeypatch):
         p.write_bytes(b"zip")
         return p
 
+    monkeypatch.setattr("app.services.remote_backup_service.prune_remote", lambda *a, **kw: [])
     monkeypatch.setattr("app.services.org_export_service.export_org", fake_export)
     monkeypatch.setattr("app.services.remote_backup_service.upload",
                         lambda remote, dateien, backup_dir, **kw: None)

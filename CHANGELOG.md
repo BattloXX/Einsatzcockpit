@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Sicherheitsfix / Org-Datensicherung:** Kommando-Injection durch strenge Remote-Validierung, sichere SSH-Argumente und maskierte SFTP-Batches geschlossen. Org-Ziele erlauben nur SFTP, FTPS und Microsoft Graph sowie öffentliche Zieladressen; SSH-Hostkey-Prüfung bleibt aktiv. Ungültige Bestandsziele werden mit Fehlerstatus gesperrt und müssen neu gespeichert werden. Serverweite Protokolle bleiben verfügbar. Keine Migration.
+
 - **Admin-MCP / Diagnose:** Strukturierte Logorte und Exception-Typen, datensparsame Logtemplates mit gemeinsamen Signaturen und UTC-Zeitstempel mit Z-Suffix. Konkrete Befundempfehlungen, Warnung bei fehlender Buildzeit mit gekennzeichnetem Ersatzzeitpunkt und Build-Args fuer lokale Compose-Builds. GitHub-Tokenablauf als Diagnosebefund (Info ab 30, Warnung ab 14 Tagen) ueber den bestehenden Benachrichtigungspfad. Keine Migration.
 
 - **OSM / Overpass:** Auch bei gleichzeitigem Ablauf von Gesamt- und Versuchszeitlimit zaehlt jeder fehlgeschlagene Versuch genau einmal fuer den Endpunkt-Breaker. Der lokale Gebaeudebestand bleibt primaer (veralteter Stand wird mit Warnung geliefert, die Georef-Alterssperre bleibt wirksam). Admincheck und Systemdiagnose zeigen offene Endpunkte samt Sperrfrist und letztem Fehlercode sowie eine Empfehlung bei gesundem lokalem Bestand. Keine Migration.

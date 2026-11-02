@@ -6,7 +6,7 @@ aller Orgs) sichert eine Organisation hier NUR ihre eigenen, tenant-gescopten Da
 
 Muster: OrgSmtpConfig (app/models/org_mail.py) — 1:1-Config je Org, Fernet-verschluesselte
 Secrets (app/core/crypto.py), enabled-Toggle, is_fully_configured-Property. Das Remote-Ziel
-nutzt dieselben Protokolle wie der zentrale Off-Site-Upload (app/services/remote_backup_service.py).
+erlaubt SFTP, FTPS und Graph ueber den zentralen Off-Site-Upload (app/services/remote_backup_service.py).
 """
 from __future__ import annotations
 

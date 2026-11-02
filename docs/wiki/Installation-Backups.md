@@ -71,6 +71,21 @@ Testen: `python -m app.cli backup-upload`. Details, rclone-Cloud-Ziele und
 Sicherheitshinweise (die Dumps sind unverschlüsselt und enthalten personenbezogene
 Daten) im [DR-Runbook, Abschnitt 7](Betrieb-Backup-und-Disaster-Recovery).
 
+## Org-Ziele und bestehende Konfigurationen
+
+Der [Org-Self-Service](Administration-Org-Datensicherung) erlaubt nur **SFTP, FTPS
+und Microsoft Graph** mit öffentlichen Zieladressen. Bestehende Org-Ziele mit SCP,
+rsync, rclone oder FTP sind gesperrt und erhalten einen Fehlerstatus. Org-Admins
+müssen ein erlaubtes Protokoll wählen, die SSH-Hostkey-Prüfung auf `yes` oder
+`accept-new` setzen, neu speichern und testen.
+
+Die serverweite `.env`-Konfiguration behält alle Protokolle (einschließlich SCP,
+rsync, rclone und FTP) und interne Ziele. Auch hier gelten strenge Eingabeprüfungen:
+SSH-Hostkey-Prüfung nur `yes`/`accept-new`/`no`, Port 0–65535, sichere Hostnamen und
+Benutzernamen sowie Pfade ohne Steuerzeichen oder Anführungszeichen und ohne
+führendes `-`/`!`. rclone akzeptiert ausschließlich benannte Remotes wie `offsite:`,
+keine Connection-Strings wie `:sftp,ssh=...:`.
+
 ---
 
 **Nächster Schritt:** [Updates einspielen](Installation-Updates)

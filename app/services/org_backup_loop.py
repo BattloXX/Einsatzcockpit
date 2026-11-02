@@ -79,9 +79,9 @@ def run_org_backup_sync(cfg_id: int) -> str:
         from app.services.org_export_service import areas_aus_string
         tmp = Path(tempfile.mkdtemp(prefix="orgbackup_push_"))
         try:
-            ziel = export_org(db, cfg.org_id, tmp, include_media=cfg.include_media,
-                              areas=areas_aus_string(cfg.include_areas))
             with rbs.org_remote_config(cfg) as remote:
+                ziel = export_org(db, cfg.org_id, tmp, include_media=cfg.include_media,
+                                  areas=areas_aus_string(cfg.include_areas))
                 rbs.upload(remote, [ziel], tmp)
                 # Alte Push-Archive am Ziel aufraeumen (behaelt keep_count neueste).
                 rbs.prune_remote(remote, f"org-backup-{cfg.org_id}-", cfg.keep_count)
