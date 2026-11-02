@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Systemadmin ohne Organisation:** Die Einstellungsseiten Allgemein, Wetter, Wetter-Infoscreen, SSO, DIBOS, LIS, Teams-Alarmierung, Org-Mail und Org-Backup leiten einen Systemadmin ohne eigene Organisation auf die erste Organisation weiter (`?org_id=`, relativ) statt "Keine Organisation ausgewaehlt" zu zeigen; die Organisationsauswahl auf der Seite bleibt. Die Modul-Seiten Planspiel und Strassensperren sind ohne Organisation weiterhin nicht aktiv (404), weil die Modul-Schalter an den Org-Einstellungen haengen.
+
 - **Systemstatus:** Ein organisationsloser Systemadmin bekam unter `/admin/systemstatus` den Fehler 400 "Keine Organisation ausgewaehlt". Die Seite waehlt jetzt die erste Organisation vor und bietet eine Organisationsauswahl.
 
 - **Verwaltungs-Startseite:** Inhaltlich an das Wiki angepasst: Uebersicht aller fuer die Rolle sichtbaren Hauptpunkte aus dem Navigationskatalog, Einrichtungsreihenfolge mit Wiki-Verweisen und die Dokumentation nach Themen (Grundeinrichtung, Alarmierung, Module, GSL, Schnittstellen, Sicherheit und Betrieb fuer Systemadmins). Quelle: `app/services/admin_startseite.py`; ein Test prueft, dass alle Wiki-Seiten existieren.

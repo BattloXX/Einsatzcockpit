@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
+from app.core.org_auswahl import erste_org_weiterleitung
 from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
@@ -54,6 +55,8 @@ def sso_settings_page(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
+    if (weiter := erste_org_weiterleitung(request, db, user, org_id)) is not None:
+        return weiter
     is_sysadmin = is_system_admin(user)
     effective_org_id = _get_org_id(user, org_id)
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []

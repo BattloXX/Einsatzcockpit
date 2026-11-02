@@ -20,6 +20,7 @@ from starlette.responses import FileResponse
 
 from app.core.async_bridge import run_async
 from app.core.crypto import encrypt_secret
+from app.core.org_auswahl import erste_org_weiterleitung
 from app.core.permissions import (
     is_system_admin,
     require_role,
@@ -61,6 +62,8 @@ def org_backup_page(
     from app.config import settings
     from app.services.org_export_service import AREA_LABELS, areas_aus_string
     user = request.state.user
+    if (weiter := erste_org_weiterleitung(request, db, user, org_id)) is not None:
+        return weiter
     is_sysadmin = is_system_admin(user)
     effective = _effective_org_id(user, org_id)
     org = db.get(FireDept, effective) if effective else None
