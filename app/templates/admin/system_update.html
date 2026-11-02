@@ -181,7 +181,7 @@
       <li>Abhängigkeiten installieren, wenn gewählt oder <code>pyproject.toml</code> geändert</li>
       <li><code>alembic upgrade head</code> wird ausgeführt (Datenbank-Migrationen)</li>
       <li>Gunicorn erhält SIGHUP (graceful reload – laufende Requests werden abgeschlossen)</li>
-      <li>Falls kein PID-File vorhanden: <code>systemctl restart einsatzleiter</code></li>
+      <li>Falls kein PID-File vorhanden: <code>systemctl restart {{ systemd_unit }}</code></li>
     </ol>
     <p>Bei pip-Fehlern wird der Code zurückgespielt. Bei Migrationsfehlern erfolgt das nur bei unverändertem Alembic-Stand. Die DB kann teilweise migriert sein; den angezeigten Dump-Pfad für einen Restore verwenden.</p>
   </div>

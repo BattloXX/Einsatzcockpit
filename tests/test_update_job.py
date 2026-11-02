@@ -25,6 +25,8 @@ def environment(monkeypatch, tmp_path):
     monkeypatch.setattr(us, "APP_ROOT", tmp_path)
     monkeypatch.setattr(us, "is_docker", lambda: False)
     monkeypatch.setattr(settings, "GUNICORN_PID_FILE", "")
+    monkeypatch.setattr(settings, "SYSTEMD_UNIT", "")
+    monkeypatch.setattr(us, "CGROUP_PATH", tmp_path / "cgroup")
     monkeypatch.setattr(job, "_alive", lambda pid: bool(pid))
     monkeypatch.setattr(job, "_audit", MagicMock())
     monkeypatch.setattr(us, "get_github_token", lambda db: "private-test-token")
@@ -232,6 +234,52 @@ def test_reload_sudo_n_and_failure(monkeypatch, tmp_path, content, returncode):
     assert module._reload_server() == (returncode == 0)
     assert runner.call_args.args[0] == ["sudo", "-n", "systemctl", "restart", "einsatzleiter"]
     assert runner.call_args.kwargs["timeout"] == 15
+
+
+@pytest.mark.parametrize("cgroup", [
+    "0::/system.slice/einsatzleiter-test.service\n",
+    "2:cpu:/\n1:name=systemd:/system.slice/einsatzleiter-test.service\n",
+    "0::/system.slice/parent.service/einsatzleiter-test.service/worker\n",
+])
+def test_reload_detected_systemd_unit(monkeypatch, cgroup):
+    module = _reloader(monkeypatch)
+    module.CGROUP_PATH.write_text(cgroup)
+    runner = MagicMock(return_value=subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(module.subprocess, "run", runner)
+    assert module.systemd_unit_name() == "einsatzleiter-test"
+    assert module._reload_server()
+    assert runner.call_args.args[0] == ["sudo", "-n", "systemctl", "restart", "einsatzleiter-test"]
+    assert module.reload_error_message() == (
+        "Neustart fehlgeschlagen, bitte manuell: sudo systemctl restart einsatzleiter-test"
+    )
+    assert module.RELOAD_ERROR in module.reload_error_message()
+
+
+@pytest.mark.parametrize("unit", ["foo", "foo.service"])
+def test_systemd_unit_setting_overrides_cgroup(monkeypatch, unit):
+    us.CGROUP_PATH.write_text("0::/system.slice/einsatzleiter-test.service\n")
+    monkeypatch.setattr(settings, "SYSTEMD_UNIT", unit)
+    assert us.systemd_unit_name() == "foo"
+
+
+@pytest.mark.parametrize("cgroup", [
+    None,
+    "0::/system.slice/no-service\n",
+    "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app.service\n",
+    "0::/system.slice/invalid name.service\n",
+    "0::/system.slice/invalid;name.service\n",
+])
+def test_systemd_unit_cgroup_fallback(cgroup):
+    if cgroup is not None:
+        us.CGROUP_PATH.write_text(cgroup)
+    assert us.systemd_unit_name() == "einsatzleiter"
+
+
+@pytest.mark.parametrize("unit", ["invalid name", "invalid;name.service", ".service"])
+def test_systemd_unit_invalid_setting(monkeypatch, unit):
+    us.CGROUP_PATH.write_text("0::/system.slice/einsatzleiter-test.service\n")
+    monkeypatch.setattr(settings, "SYSTEMD_UNIT", unit)
+    assert us.systemd_unit_name() == "einsatzleiter"
 
 
 def restarting(archive, monkeypatch, *, seconds=0):

@@ -378,7 +378,8 @@ def _run_job(job_id: str) -> None:
         progress("reload", "running")
         if not us._reload_server():
             with _guard():
-                _complete(status, "failed", us.RELOAD_ERROR + ". Code und Migration sind bereits eingespielt.")
+                _complete(status, "failed",
+                          us.reload_error_message() + ". Code und Migration sind bereits eingespielt.")
         # Bei SIGHUP beendet sich nur dieser Job. Die neue App bestätigt den Erfolg.
     except Exception:
         with _guard():
