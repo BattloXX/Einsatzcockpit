@@ -5,7 +5,7 @@ import json
 import subprocess
 import zipfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -109,6 +109,57 @@ def test_list_github_branches_fehler_leere_liste():
     from app.services import update_service
     with patch.object(update_service, "_github_json", side_effect=OSError("offline")):
         assert update_service.list_github_branches() == []
+
+
+@pytest.mark.parametrize("main_index", [0, 110])
+def test_list_github_branches_paginierung(main_index):
+    from app.services import update_service
+
+    names = [f"feature/{i:03d}" for i in range(131)]
+    names.insert(main_index, "main")
+    antwort = [{"name": name, "commit": {"sha": "abc1234567"}} for name in names]
+    repo = "test/repo"
+    urls = [f"https://api.github.com/repos/{repo}/branches?per_page=100&page={page}"
+            for page in (1, 2)]
+    with patch.object(update_service, "_github_json", side_effect=_fake_github_json({
+        urls[0]: antwort[:100], urls[1]: antwort[100:],
+    })) as api:
+        branches = update_service.list_github_branches(repo, token="test-token")
+
+    assert len(branches) == 132
+    assert branches[0] == {"name": "main", "sha": "abc1234"}
+    assert [b["name"] for b in branches[1:]] == [name for name in names if name != "main"]
+    assert api.call_args_list == [call(url, "test-token") for url in urls]
+
+
+def test_list_github_branches_fehler_auf_zweiter_seite():
+    from app.services import update_service
+
+    with patch.object(update_service, "_github_json", side_effect=[
+        [{"name": f"feature/{i}"} for i in range(100)], OSError("offline"),
+    ]):
+        assert update_service.list_github_branches() == []
+
+
+def test_branch_template_fehlender_branch_bleibt_ausgewaehlt():
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(loader=FileSystemLoader(Path(__file__).resolve().parents[1] / "app/templates"))
+    html = env.get_template("admin/_github_branch_update.html").render(
+        is_docker=False,
+        branches=[{"name": "feature/test", "sha": "def7654"}],
+        branch="main",
+        branch_info={"sha": "abc1234567", "sha_short": "abc1234"},
+        deployed_ref=None,
+        request={"state": {"csrf_token": "test-csrf"}},
+    )
+
+    fallback = '<option value="main" selected>main (nicht in Liste)</option>'
+    assert fallback in html
+    assert html.index(fallback) < html.index('<option value="feature/test"')
+    assert html.count(" selected") == 1
+    assert "main@abc1234" in html
+    assert '<input type="hidden" name="branch" value="main">' in html
 
 
 # ── Zipball-Validierung (GitHub-Root-Ordner) ─────────────────────────────────
