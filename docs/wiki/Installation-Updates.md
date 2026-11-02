@@ -12,12 +12,16 @@ Unter **`/admin/system/update`** (nur `system_admin`) gibt es drei Wege, ganz oh
 (optional inklusive Pre-Releases) und zeigt Release-Notes an. Auf einer Git-Installation
 wird der Release-Tag per `git fetch` geholt und als detached HEAD ausgecheckt. Nur bei
 Installationen ohne `.git` wird das Release-ZIP als geschütztes Overlay eingespielt.
+Der POST übernimmt den angezeigten Tag. Vor der Installation wird geprüft, ob er noch
+das aktuelle veröffentlichte Release ist; bei einem Wechsel muss erneut geprüft werden.
+Entwürfe werden auch bei eingeschlossenen Pre-Releases ignoriert.
 
 ### 2. Direkt vom Repository (Branch — Hotfixes & Testsysteme)
 
 Der Abschnitt **„Direkt vom Repository"** lädt den aktuellen Stand eines beliebigen
 Branches (Standard `main`) ein — ohne Release. Git-Installationen werden per
-`fetch`/`reset --hard` synchronisiert; ohne `.git` dient der Zipball als Fallback.
+`fetch` und `git checkout --force -B <branch> FETCH_HEAD` synchronisiert; ohne `.git` dient der Zipball als Fallback.
+Ein zuvor ausgecheckter anderer Branch (z. B. `main`) behält seinen Commit.
 Die Branch-Auswahl zeigt den letzten Commit (SHA, Nachricht, Autor); ein bereits
 eingespielter Stand wird erkannt und der Button deaktiviert. Der zuletzt eingespielte
 Branch-Stand (`branch@sha`) wird gespeichert und oben auf der Seite angezeigt.
@@ -33,39 +37,40 @@ der Server lehnt Uploads ohne Prüfsumme vor der Verarbeitung ab.
 ### Ablauf bei allen drei Wegen
 
 1. Ein exklusiver Update-Lock wird belegt; ein zweiter gleichzeitiger Versuch wird sofort abgelehnt.
-2. ZIPs werden strukturell validiert (Zip-Slip-/Symlink-Schutz; GitHub-Zipballs mit Root-Ordner werden erkannt).
-3. Geschützte Dateien bleiben im ZIP-Pfad unangetastet (`.env`, `alembic/versions/`,
-   `app/static/img/uploads/`, `app_storage/`). Git-Updates aktualisieren dagegen auch die
-   mit dem Release ausgelieferten Migrationen; ignorierte Nutzerdaten bleiben erhalten.
-4. Vor Migrationen wird automatisch ein DB-Backup erstellt.
-5. Optional **Abhängigkeiten installieren** (`pip install -e .`) — bei GitHub-Updates
-   standardmäßig aktiv, damit neue Dependencies (z. B. `pdf2image`) automatisch nachgezogen werden
-6. `alembic upgrade head`
-7. Gunicorn-Reload (SIGHUP) bzw. `systemctl restart`
+2. Vorprüfung: ZIP-Struktur und erwartete SHA256-Prüfsumme prüfen, sicher in ein temporäres
+   Staging-Verzeichnis extrahieren; bei Git den validierten Branch bzw. Tag per `fetch` holen.
+3. Pre-Update-DB-Backup erstellen, **bevor Dateien der Installation ersetzt werden**.
+4. Code austauschen. ZIPs sichern vorher alle zu ersetzenden bestehenden Dateien unter
+   `.update-rollback/<UTC-Stamp>/files/`; `manifest.json` merkt ersetzte und neue Dateien.
+   `.env`, `.env.local`, Uploads, `app_storage`, Git-/venv-Daten und die Update-Sperre bzw.
+   Rollback-Ablage bleiben geschützt. **`alembic/versions/` gehört zum Release und wird aktualisiert.**
+5. Abhängigkeiten installieren (`pip install -e .`), wenn gewählt. Bei ZIPs löst eine
+   geänderte `pyproject.toml` den Schritt automatisch aus (Hash-Vergleich).
+6. `alembic current` und `heads` erfassen und protokollieren, dann `alembic upgrade head`.
+   Die Ergebnisse enthalten `migrations_from` und `migrations_to`.
+   `UPDATE_MIGRATION_TIMEOUT_S=900` begrenzt die Migration (Sekunden); Fehlermeldungen
+   zeigen die letzten 800 Zeichen von stderr.
+7. Erst nach erfolgreichem Abschluss Gunicorn-Reload (SIGHUP) bzw. `systemctl restart` anfordern.
+   Der Ablauf bleibt synchron im Web-Request; die Neustartmechanik ist unverändert.
 
-### Automatisches Backup vor Migrationen
+### Automatisches Backup vor dem Code-Austausch
 
-`UPDATE_BACKUP_BEFORE_MIGRATE=true` erstellt vor jedem Migrationslauf DB-Dumps ohne
-Medienarchiv. Sie landen mit Präfix `pre-update-` in `BACKUP_DIR` und unterliegen
-separat `UPDATE_BACKUP_KEEP` (Standard 5 je DB). Mit dem
-Standard `UPDATE_REQUIRE_BACKUP=true` stoppt ein fehlgeschlagenes Backup das Update nach
-dem Code-Austausch bewusst vor Dependencies, Migration und Reload. Bei `false` wird die
-Backup-Warnung angezeigt, das Update läuft aber weiter. Restore-Anleitung und DR-Runbook:
-[Backups](Installation-Backups).
-
-> **Hinweis:** Der Code-Austausch (Schritt 1-3) passiert **vor** dem Backup-Schritt.
-> Schlägt das Backup fehl und wird das Update deswegen abgebrochen (`UPDATE_REQUIRE_BACKUP=true`),
-> bleibt der neue Code bereits aktiv, während Migration und Reload bewusst übersprungen wurden.
-> Nach Behebung der Backup-Ursache (z. B. fehlendes `mariadb-client`-Paket, siehe
-> [Server-Voraussetzungen](Installation-Server-Voraussetzungen)) das Update einfach erneut
-> auslösen, oder `alembic upgrade head` manuell nachholen.
+`UPDATE_BACKUP_BEFORE_MIGRATE=true` erstellt vor jedem Update DB-Dumps ohne Medienarchiv.
+Sie landen mit Präfix `pre-update-` in `BACKUP_DIR` und unterliegen separat
+`UPDATE_BACKUP_KEEP` (Standard 5 je DB). Mit `UPDATE_REQUIRE_BACKUP=true` (Standard)
+stoppt ein fehlgeschlagenes Backup das Update **bei unverändertem Code**, vor pip,
+Migration und Reload. Nach Behebung der Ursache kann das Update erneut gestartet werden.
+Bei `false` wird die Backup-Warnung angezeigt, das Update läuft weiter.
+Restore-Anleitung und DR-Runbook: [Backups](Installation-Backups).
 
 ### Privates Repository: GitHub-Token
 
 Ist das Repository privat, auf der Update-Seite einen **Fine-grained Personal Access Token**
 mit Berechtigung *Contents: Read* auf das Repo hinterlegen (Feld „GitHub-Zugriffstoken").
 Der Token wird Fernet-verschlüsselt in den SystemSettings gespeichert und für Release-Check,
-Branch-Check und Downloads verwendet. Leer speichern löscht ihn. Alle Update-Aktionen und
+Branch-Check und Downloads verwendet. Git erhält die Authentifizierung über
+`GIT_CONFIG_*`-Umgebungsvariablen als HTTP-Header; das Token steht weder in der
+Remote-URL noch in Subprozessargumenten. Leer speichern löscht ihn. Alle Update-Aktionen und
 Token-Änderungen landen im Audit-Log.
 
 ## Standard-Update-Prozess (SSH, Alternative)
@@ -122,12 +127,10 @@ Beim mitgelieferten Compose-Setup wird die App lokal gebaut. Nach dem Aktualisie
 des Repositories daher `docker compose up -d --build` verwenden. Der Entrypoint führt
 `alembic upgrade head` automatisch vor jedem App-Start aus.
 
-`.git` wird durch `.dockerignore` nicht ins Image kopiert. Deshalb ist
-`is_git_checkout()` im App-Container immer `False`: Release- und Branch-Installationen
-über das Webinterface verwenden in Docker stets den ZIP-Overlay-Pfad, niemals Git. Der
-empfohlene Docker-Updateweg bleibt `docker compose pull && docker compose up -d --build`.
-Backup vor Migrationen, `app_storage`-Schutz, Locking, Fehleranzeige und Hash-Pflicht
-gelten auch für ZIP-Updates im Container.
+In Docker sind alle In-App-Updates (ZIP, Release, Branch) deaktiviert. Die Erkennung
+nutzt `/.dockerenv` oder `EC_RUNTIME=docker`. Die Update-Seite zeigt statt Formularen
+`docker compose pull && docker compose up -d`; direkte Update-POSTs liefern ebenfalls
+einen verständlichen Hinweis. Bei lokalen Builds gilt der oben beschriebene Build-Befehl.
 
 Falls ein eigenes Image den mitgelieferten Entrypoint nicht verwendet, Migrationen
 vor der Freigabe manuell ausführen:
@@ -138,21 +141,27 @@ docker compose exec app alembic upgrade head
 
 ## Rollback nach fehlgeschlagenem Update
 
-Bei einem Dependency- oder Migrationsfehler wird **kein automatischer Reload** ausgelöst;
-der laufende Container/Prozess bleibt aktiv und der Fehler wird im Update-Ergebnis
-angezeigt. Nach Fehlerbehebung bzw. Restore aus `BACKUP_DIR` den Dienst manuell neu starten.
+Bei pip-Fehlern wird der Code automatisch zurückgespielt: ZIPs stellen ersetzte
+Dateien wieder her und entfernen neu angelegte Dateien. Git kehrt zum vorherigen
+Commit und zum vorherigen Branch bzw. Detached-Zustand zurück. Installierte Python-Pakete
+werden dabei nicht automatisch zurückgesetzt; nach Prüfung die zum Code passenden
+Abhängigkeiten installieren.
 
-```bash
-# Zur vorherigen Alembic-Revision:
-alembic downgrade -1
+Bei Migrationsfehlern wird `alembic current` vor und nach dem Lauf verglichen.
+Nur bei sicher unverändertem Revisionsstand erfolgt ein automatischer Code-Rollback.
+Wurden bereits Revisionen angewendet oder ist der Stand nicht lesbar, bleibt der neue
+Code liegen; die Meldung erklärt das und nennt den Pre-Update-Dump für den Restore.
+**MariaDB-DDL ist nicht transaktional:** Auch bei unveränderter Revision kann die DB
+teilweise geändert sein. Vor dem manuellen Neustart DB-Zustand prüfen und nötigenfalls
+Dump und passenden Code gemeinsam wiederherstellen; kein blindes `alembic downgrade`.
+Bei Fehlern wird kein automatischer Reload angefordert.
 
-# Code auf vorherigen Stand zurück:
-git log --oneline -5
-git checkout <commit-hash>
-
-# Dienst neu starten:
-sudo systemctl restart einsatzleiter
-```
+Die ZIP-Rollback-Ablage bleibt nach Erfolg erhalten. Nach jedem erfolgreichen Update
+werden nur die letzten drei Verzeichnisse unter `.update-rollback/` behalten;
+ältere werden entfernt. `.update-rollback/` und `.update.lock` sind Git-ignoriert.
+Die Dateisicherung ersetzt kein Datenbank-Backup. Dump-Downloads und Änderungen der
+Backup-Aufbewahrung werden ebenso wie ZIP-Uploads (Name, Größe, SHA256-Präfix, kein Inhalt)
+im Audit-Log erfasst.
 
 ## Update-Frequenz
 
@@ -191,5 +200,5 @@ Datenbank × 1,5; ohne Vorgänger kein Check). Ein Platzfehler oder das Gesamtze
 Remote-Prozesse verwenden `BACKUP_REMOTE_TIMEOUT_S=1800`, SSH zusätzlich 30 Sekunden
 Verbindungszeitlimit. Details: [Backups](Installation-Backups#robuste-db-sicherungen-und-grenzen).
 
-Diese Härtung ändert die oben beschriebene Update-Reihenfolge nicht; der sichere
-Codeaustausch und Rollback sind ein eigener Umsetzungsschritt.
+Das Pre-Update-Backup läuft vor dem Code-Austausch; die getrennte Aufbewahrung
+bleibt dabei erhalten.

@@ -37,3 +37,5 @@ app_storage/
 .update.lock
 .env.board-e2e
 e2e/artifacts/
+
+.update-rollback/

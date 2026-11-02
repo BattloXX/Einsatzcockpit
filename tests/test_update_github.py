@@ -10,6 +10,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def host_update_environment(monkeypatch, tmp_path):
+    from app.services import update_service as us
+    # Eigener Lock je Test: parallele xdist-Worker teilen sonst .update.lock im Repo.
+    monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+    from app.routers import ui_settings
+    monkeypatch.setattr(us, "is_docker", lambda: False)
+    monkeypatch.setattr(ui_settings, "is_docker", lambda: False)
+    monkeypatch.setattr(us, "_alembic_state", lambda command: "old")
+
+
 # ── Header / Token ────────────────────────────────────────────────────────────
 
 def test_github_headers_ohne_und_mit_token():
@@ -220,15 +231,14 @@ def test_deploy_github_branch_falls_back_to_zip_without_git(monkeypatch):
     assert res["via"] == "zip"
 
 
-def test_git_update_runs_fetch_and_hard_reset(monkeypatch):
-    """git_update fetcht und setzt hart auf FETCH_HEAD zurück → sauberer Baum,
-    identisch zu `git fetch && git reset --hard` auf der Konsole."""
+def test_git_update_runs_fetch_and_branch_checkout(monkeypatch):
+    """Fetch und Branch-Checkout ohne reset auf dem vorherigen Branch."""
     from app.services import update_service as us
 
     monkeypatch.setattr(us, "is_git_checkout", lambda: True)
     cmds = []
 
-    def fake_git(args, timeout=300):
+    def fake_git(args, timeout=300, env=None):
         cmds.append(args)
         if args[:1] == ["rev-parse"]:
             return 0, "aaaaaaa" if len(cmds) < 3 else "bbbbbbb", ""
@@ -247,17 +257,17 @@ def test_git_update_runs_fetch_and_hard_reset(monkeypatch):
     assert res["success"] is True
     assert res["via"] == "git"
     assert res["files_updated"] == 2
-    # Kernablauf: fetch dann reset --hard FETCH_HEAD
-    assert ["fetch", "--force", "https://x-access-token:secrettoken@github.com/BattloXX/Einsatzcockpit.git", "main"] in cmds
-    assert ["reset", "--hard", "FETCH_HEAD"] in cmds
-    assert ["checkout", "-B", "main"] in cmds
+    # Kernablauf: fetch, Backup, einzelner Branch-Checkout
+    assert ["fetch", "--force", "https://github.com/BattloXX/Einsatzcockpit.git", "--", "main"] in cmds
+    assert not any(cmd[0] == "reset" for cmd in cmds)
+    assert ["checkout", "--force", "-B", "main", "FETCH_HEAD"] in cmds
 
 
 def test_git_update_fetch_failure_scrubs_token(monkeypatch):
     from app.services import update_service as us
     monkeypatch.setattr(us, "is_git_checkout", lambda: True)
 
-    def fake_git(args, timeout=300):
+    def fake_git(args, timeout=300, env=None):
         if args[:1] == ["rev-parse"]:
             return 0, "aaaaaaa", ""
         if args[:1] == ["fetch"]:
@@ -287,6 +297,7 @@ def _write_update_zip(path: Path, entries: dict[str, bytes]) -> None:
 
 
 def _mock_update_tail(monkeypatch, us):
+    monkeypatch.setattr(us, "_run_pip_install", lambda: (True, "OK"))
     monkeypatch.setattr(us, "_run_pre_migration_backup", lambda: {
         "success": True, "required": True, "message": "OK", "files": []})
     monkeypatch.setattr(us, "_run_migrations", lambda: (True, "OK"))
@@ -344,6 +355,7 @@ def test_backup_gate_required_or_warning(tmp_path, monkeypatch, required, expect
         "success": False, "required": required, "message": "dump kaputt", "files": []})
     monkeypatch.setattr(us, "_run_migrations", lambda: (True, "OK"))
     monkeypatch.setattr(us, "_reload_server", lambda: True)
+    monkeypatch.setattr(us, "_run_pip_install", lambda: (True, "OK"))
     result = us.apply_update(archive)
     assert result["success"] is expected
 
@@ -399,14 +411,16 @@ def test_git_release_detached_and_checkout_failure(monkeypatch):
     from app.services import update_service as us
     monkeypatch.setattr(us, "is_git_checkout", lambda: True)
     commands = []
-    def fake_git(args, timeout=300):
+    def fake_git(args, timeout=300, env=None):
         commands.append(args)
         if args[:1] == ["checkout"]:
             return 1, "", "checkout kaputt"
         return 0, "abc1234" if args[:1] == ["rev-parse"] else "", ""
     monkeypatch.setattr(us, "_run_git", fake_git)
+    monkeypatch.setattr(us, "_run_pre_migration_backup", lambda: {
+        "success": True, "required": True, "message": "OK", "files": []})
     result = us.git_update_release("v2.0")
-    assert ["fetch", "--force", "https://github.com/BattloXX/Einsatzcockpit.git", "v2.0"] in commands
+    assert ["fetch", "--force", "https://github.com/BattloXX/Einsatzcockpit.git", "--", "v2.0"] in commands
     assert ["checkout", "--force", "--detach", "FETCH_HEAD"] in commands
     assert result["success"] is False
 
@@ -414,7 +428,7 @@ def test_git_release_detached_and_checkout_failure(monkeypatch):
 def test_git_migration_failure_does_not_reload(monkeypatch):
     from app.services import update_service as us
     monkeypatch.setattr(us, "is_git_checkout", lambda: True)
-    monkeypatch.setattr(us, "_run_git", lambda args, timeout=300: (0, "abc1234", ""))
+    monkeypatch.setattr(us, "_run_git", lambda args, timeout=300, env=None: (0, "abc1234", ""))
     monkeypatch.setattr(us, "_run_pre_migration_backup", lambda: {
         "success": True, "required": True, "message": "OK", "files": []})
     monkeypatch.setattr(us, "_run_migrations", lambda: (False, "kaputt"))

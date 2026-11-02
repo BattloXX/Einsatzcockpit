@@ -177,6 +177,7 @@ class Settings(BaseSettings):
     UPDATE_BACKUP_KEEP: int = Field(default=5, ge=1)
     UPDATE_BACKUP_BEFORE_MIGRATE: bool = True
     UPDATE_REQUIRE_BACKUP: bool = True
+    UPDATE_MIGRATION_TIMEOUT_S: int = Field(default=900, ge=1)
 
     # Media-Upload (Auftrag-Anhaenge)
     # Storage liegt bewusst AUSSERHALB von app/static, damit Dateien nur ueber

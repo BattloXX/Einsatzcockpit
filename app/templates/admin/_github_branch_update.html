@@ -1,3 +1,6 @@
+{% if is_docker %}
+<div class="alert alert--info">Updates im Container mit <code>docker compose pull &amp;&amp; docker compose up -d</code> ausführen.</div>
+{% else %}
 {# HTMX-Partial: direktes Repo-Update (Branch) – wird in #github-branch-box geswapped #}
 <div class="sys-row sys-between sys-mb-2">
   <form hx-get="/admin/system/update/check-branch"
@@ -86,4 +89,6 @@
   {% if update_result.backup is defined %}<br>Backup: {{ update_result.backup.message }}{% endif %}
 </div>
 {% endif %}
+{% endif %}
+
 {% endif %}

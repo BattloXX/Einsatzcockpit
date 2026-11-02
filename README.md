@@ -218,7 +218,7 @@ Der optionale Assistent liefert Auftragsvorschläge, Lage-Hinweise, Lagebilder, 
 
 ## In-App-Update
 
-Systemadministratoren können ein geprüftes Release-ZIP einspielen; die App schützt vor Zip-Slip, migriert die Datenbank und lädt Gunicorn graceful neu. Der vollständige Ablauf steht unter [Updates](docs/wiki/Installation-Updates.md).
+Systemadministratoren können Releases, Branches oder geprüfte ZIPs einspielen. Nach der Vorprüfung läuft das Backup vor dem Code-Austausch; bei Fehlern wird abhängig vom Migrationsstand der Code wiederhergestellt. In Docker sind In-App-Updates gesperrt: `docker compose pull && docker compose up -d` verwenden (bei lokalen Builds mit `--build`). Der vollständige Ablauf steht unter [Updates](docs/wiki/Installation-Updates.md).
 
 ## Betrieb
 

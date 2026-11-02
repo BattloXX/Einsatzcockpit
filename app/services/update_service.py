@@ -1,26 +1,22 @@
-"""In-app ZIP-Update-Mechanismus.
+"""Updates: Vorprüfung, Backup, Code-Austausch, Dependencies, Migration, Reload."""
 
-Ablauf:
-1. system_admin lädt ein Release-ZIP hoch (POST /admin/system/update)
-2. ZIP wird strukturell validiert (muss app/, pyproject.toml enthalten)
-3. Optional: erwarteter SHA256 wird gegen die Upload-Datei geprüft (Manipulationsschutz)
-4. Inhalt wird sicher (ohne Zip-Slip) in ein temporäres Verzeichnis extrahiert
-5. Kritische Dateien (.env, alembic/versions/, Uploads, app_storage/) bleiben unangetastet
-6. Neue Dateien werden über die bestehende Installation kopiert
-7. alembic upgrade head wird ausgeführt
-8. Gunicorn erhält SIGHUP (graceful reload) oder systemctl restart
-"""
-
+import base64
 import fcntl
 import hashlib
+import json
+import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
 import tempfile
 import zipfile
+from collections.abc import Callable
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 APP_ROOT = Path(__file__).parent.parent.parent  # Projektverzeichnis
 
@@ -28,10 +24,80 @@ APP_ROOT = Path(__file__).parent.parent.parent  # Projektverzeichnis
 PROTECTED_PATHS = {
     ".env",
     ".env.local",
-    "alembic/versions",     # eigene Migrationen bleiben
+    ".git",
+    ".venv",
+    ".update-rollback",
+    ".update.lock",
     "app/static/img/uploads",  # hochgeladene Logos etc.
     "app_storage",          # Nutzerdaten, Medien und Backups
 }
+
+
+DOCKER_MESSAGE = "Updates im Container bitte mit docker compose pull && docker compose up -d ausführen."
+logger = logging.getLogger(__name__)
+
+
+def is_docker() -> bool:
+    return Path("/.dockerenv").exists() or os.environ.get("EC_RUNTIME", "").lower() == "docker"
+
+
+def _backup_gate(backup: dict) -> dict | None:
+    if not backup["success"] and backup["required"]:
+        return {"success": False,
+                "message": "Update abgebrochen, Backup fehlgeschlagen, Code unverändert: " + backup["message"],
+                "files_updated": 0, "files_skipped": 0, "deps_installed": "übersprungen",
+                "migrations_applied": "übersprungen", "server_reloaded": False, "backup": backup}
+    return None
+
+
+def _dump_hint(backup: dict) -> str:
+    return "DB-Restore aus dem Pre-Update-Dump: " + (
+        ", ".join(backup.get("files", [])) or "kein Dump verfügbar (Backup-Konfiguration prüfen)"
+    )
+
+
+def _alembic_state(command: str) -> str | None:
+    python = APP_ROOT / ".venv" / "bin" / "python"
+    try:
+        result = subprocess.run(
+            [str(python) if python.exists() else "python", "-m", "alembic", command],
+            cwd=str(APP_ROOT), capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode == 0:
+            # Nur Revisions-IDs vergleichen; '(head)' ändert sich durch neue Skripte.
+            return "\n".join(sorted(line.split()[0] for line in result.stdout.splitlines() if line.strip()))
+        logger.warning("alembic %s fehlgeschlagen: %s", command, result.stderr[-800:])
+    except Exception:
+        logger.exception("alembic %s nicht abrufbar", command)
+    return None
+
+
+def _finish_update(result: dict, install_deps: bool, rollback: Callable[[], str]) -> dict:
+    deps_ok, deps = _run_pip_install() if install_deps else (True, "übersprungen")
+    result.update(deps_installed=deps, migrations_applied="übersprungen", server_reloaded=False)
+    if not deps_ok:
+        result.update(success=False, message=f"Abhängigkeiten konnten nicht installiert werden: {deps}. "
+                      + rollback() + " " + _dump_hint(result["backup"]))
+        return result
+    before = _alembic_state("current")
+    heads = _alembic_state("heads")
+    result.update(migrations_from=before, migrations_to=heads)
+    logger.info("Update-Migration: current=%s heads=%s", before, heads)
+    ok, message = _run_migrations()
+    result["migrations_applied"] = message
+    if not ok:
+        after = _alembic_state("current")
+        result["migrations_after"] = after
+        if before is not None and after is not None and before == after:
+            recovery = rollback()
+        else:
+            recovery = "Kein automatischer Code-Rollback: Revisionen angewendet oder Revisionsstand unbekannt."
+        result.update(success=False, message=f"Migration fehlgeschlagen: {message}. {recovery} "
+                      "Die DB kann teilweise migriert sein (MariaDB-DDL ist nicht transaktional). "
+                      + _dump_hint(result["backup"]))
+        return result
+    result.update(success=True, server_reloaded=_reload_server())
+    return result
 
 
 @contextmanager
@@ -104,9 +170,11 @@ def apply_update(zip_path: Path, expected_sha256: str | None = None, install_dep
     Sicherheit:
     - validate_zip prüft strukturell und gegen Zip-Slip / Symlinks.
     - Falls expected_sha256 angegeben ist, muss er exakt mit dem Datei-Hash übereinstimmen.
-    - Beim Extrahieren wird jeder Zielpfad mit os.path.commonpath gegen das Tmp-Verzeichnis
-      verglichen, sodass auch kaputt geprüfte ZIPs nichts außerhalb schreiben können.
+    - Staging und Zielpfade werden vor dem Austausch geprüft.
+    - Bestehende Dateien werden für einen Code-Rollback gesichert.
     """
+    if is_docker():
+        return {"success": False, "message": DOCKER_MESSAGE}
     with _update_lock() as acquired:
         if not acquired:
             return {"success": False, "locked": True, "message": "Update bereits in Arbeit"}
@@ -128,106 +196,85 @@ def _apply_update_locked(zip_path: Path, expected_sha256: str | None, install_de
                 f"{expected_sha256[:16]}…, tatsächlich: {actual[:16]}…",
             }
 
-    files_updated: list[str] = []
     skipped: list[str] = []
-
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir).resolve()
-
-        # Sichere Extraktion: jeder Member einzeln gegen Zip-Slip prüfen
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            for member in zf.infolist():
-                # Ziel-Pfad berechnen
-                target_path = (tmp / member.filename).resolve()
-                # Muss innerhalb des Tmp-Verzeichnisses liegen
-                try:
-                    common = Path(os.path.commonpath([str(tmp), str(target_path)]))
-                except ValueError:
-                    return {"success": False, "message": f"Unsicherer Pfad abgelehnt: {member.filename}"}
-                if common != tmp:
-                    return {"success": False, "message": f"Zip-Slip-Versuch abgelehnt: {member.filename}"}
-                # Symlinks ablehnen
-                if member.external_attr >> 16 & 0o170000 == 0o120000:
-                    return {"success": False, "message": f"Symlink im ZIP nicht erlaubt: {member.filename}"}
-                # Extrahieren
-                zf.extract(member, tmp)
-
-        # Falls das ZIP einen Root-Ordner hat (z.B. release-2.0.0/), diesen als Basis nehmen
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                for member in zf.infolist():
+                    if not (tmp / member.filename).resolve().is_relative_to(tmp):
+                        return {"success": False, "message": "Unsicherer ZIP-Zielpfad"}
+                    zf.extract(member, tmp)
+        except (OSError, zipfile.BadZipFile) as exc:
+            return {"success": False, "message": f"ZIP konnte nicht bereitgestellt werden: {exc}"}
         entries = list(tmp.iterdir())
-        if len(entries) == 1 and entries[0].is_dir():
-            src_root = entries[0]
-        else:
-            src_root = tmp
-
-        # Dateien kopieren
-        for src_file in src_root.rglob("*"):
-            if src_file.is_dir():
+        src_root = entries[0] if len(entries) == 1 and entries[0].is_dir() else tmp
+        if not (src_root / "app").is_dir() or not (src_root / "pyproject.toml").is_file():
+            return {"success": False, "message": "ZIP muss app/ und pyproject.toml auf derselben Ebene enthalten."}
+        files: list[tuple[Path, str]] = []
+        for src in src_root.rglob("*"):
+            if not src.is_file():
                 continue
-            if src_file.is_symlink():
-                # Defensive: sollte schon vorher rausgefiltert sein
-                continue
-            rel = src_file.relative_to(src_root).as_posix()
-            if _is_protected(rel):
-                skipped.append(rel)
-                continue
+            rel = src.relative_to(src_root).as_posix()
             dst = APP_ROOT / rel
-            # Zusätzlicher Schutz: dst muss unter APP_ROOT liegen
+            symlink = any(path.is_symlink() for path in [dst, *dst.parents] if path != APP_ROOT)
+            if _is_protected(rel) or symlink or not dst.resolve().is_relative_to(APP_ROOT.resolve()):
+                skipped.append(rel)
+                continue
+            files.append((src, rel))
+
+        backup = _run_pre_migration_backup()
+        blocked = _backup_gate(backup)
+        if blocked:
+            return blocked
+        project = APP_ROOT / "pyproject.toml"
+        old_hash = compute_sha256(project) if project.is_file() else None
+        rollback_root = APP_ROOT / ".update-rollback"
+        rollback_dir = rollback_root / datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        rollback_dir.mkdir(parents=True, mode=0o700)
+        replaced: list[str] = []
+        created: list[str] = []
+        # Zuerst sämtliche Originale sichern, erst danach die erste Datei ersetzen.
+        for _src, rel in files:
+            dst = APP_ROOT / rel
+            if dst.exists():
+                saved = rollback_dir / "files" / rel
+                saved.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dst, saved)
+                replaced.append(rel)
+            else:
+                created.append(rel)
+        (rollback_dir / "manifest.json").write_text(json.dumps({"replaced": replaced, "created": created}))
+
+        def rollback() -> str:
             try:
-                dst_resolved = dst.resolve()
-                common = Path(os.path.commonpath([str(APP_ROOT.resolve()), str(dst_resolved)]))
-            except ValueError:
-                skipped.append(rel)
-                continue
-            if common != APP_ROOT.resolve():
-                skipped.append(rel)
-                continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_file, dst)
-            files_updated.append(rel)
+                for rel in replaced:
+                    shutil.copy2(rollback_dir / "files" / rel, APP_ROOT / rel)
+                for rel in created:
+                    (APP_ROOT / rel).unlink(missing_ok=True)
+                return f"Code wiederhergestellt aus {rollback_dir}."
+            except OSError as exc:
+                return f"Code-Rollback fehlgeschlagen: {exc}; Sicherung: {rollback_dir}."
 
-    backup = _run_pre_migration_backup()
-    if not backup["success"] and backup["required"]:
-        return {
-            "success": False,
-            "message": "Code bereits aktualisiert, Migration bewusst übersprungen: " + backup["message"],
-            "files_updated": len(files_updated), "files_skipped": len(skipped),
-            "deps_installed": "übersprungen", "migrations_applied": "übersprungen",
-            "server_reloaded": False, "backup": backup,
-        }
+        try:
+            for src, rel in files:
+                dst = APP_ROOT / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+        except OSError as exc:
+            return {"success": False, "message": f"Code-Austausch fehlgeschlagen: {exc}. "
+                    + rollback() + " " + _dump_hint(backup), "backup": backup}
+        changed_project = old_hash != compute_sha256(project)
 
-    # Optional: Python-Abhängigkeiten nachziehen (z. B. neue pyproject-Dependencies)
-    deps_ok, deps_installed = _run_pip_install() if install_deps else (True, "übersprungen")
-    if not deps_ok:
-        return {
-            "success": False, "message": f"Abhängigkeiten konnten nicht installiert werden: {deps_installed}",
-            "files_updated": len(files_updated), "files_skipped": len(skipped),
-            "deps_installed": deps_installed, "migrations_applied": "übersprungen",
-            "server_reloaded": False, "backup": backup,
-        }
-
-    # Migrationen ausführen
-    migrations_ok, migrations_applied = _run_migrations()
-    if not migrations_ok:
-        return {
-            "success": False, "message": f"Migration fehlgeschlagen: {migrations_applied}",
-            "files_updated": len(files_updated), "files_skipped": len(skipped),
-            "deps_installed": deps_installed, "migrations_applied": migrations_applied,
-            "server_reloaded": False, "backup": backup,
-        }
-
-    # Gunicorn graceful reload (SIGHUP)
-    reloaded = _reload_server()
-
-    return {
-        "success": True,
-        "message": "Update erfolgreich eingespielt",
-        "files_updated": len(files_updated),
-        "files_skipped": len(skipped),
-        "deps_installed": deps_installed,
-        "migrations_applied": migrations_applied,
-        "server_reloaded": reloaded,
-        "backup": backup,
-    }
+    result = _finish_update({
+        "success": True, "message": "Update erfolgreich eingespielt",
+        "files_updated": len(files), "files_skipped": len(skipped), "backup": backup,
+        "rollback_dir": str(rollback_dir),
+    }, install_deps or changed_project, rollback)
+    if result["success"]:
+        for old in sorted((p for p in rollback_root.iterdir() if p.is_dir() and not p.is_symlink()), reverse=True)[3:]:
+            shutil.rmtree(old)
+    return result
 
 
 def _run_pip_install() -> tuple[bool, str]:
@@ -275,6 +322,8 @@ def _run_pip_install() -> tuple[bool, str]:
 
 def _run_migrations() -> tuple[bool, str]:
     """Führt alembic upgrade head aus. Gibt Ausgabe oder Fehlermeldung zurück."""
+    from app.config import settings
+
     python = APP_ROOT / ".venv" / "bin" / "python"
     if not python.exists():
         python = Path("python")  # Fallback: System-Python
@@ -284,11 +333,16 @@ def _run_migrations() -> tuple[bool, str]:
             cwd=str(APP_ROOT),
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=settings.UPDATE_MIGRATION_TIMEOUT_S,
         )
         if result.returncode == 0:
             return True, "OK"
-        return False, f"Fehler: {result.stderr[:500]}"
+        return False, f"Fehler: {result.stderr[-800:]}"
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr or ""
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        return False, f"Zeitlimit der Migration überschritten: {stderr[-800:]}"
     except Exception as e:
         return False, f"Fehler: {e}"
 
@@ -406,12 +460,13 @@ def check_github_release(
     """
     current = get_current_version()
     try:
+        data: dict
         if prerelease:
             # Alle Releases abrufen (sortiert nach Datum absteigend) – erster Treffer ist neuester
             releases = _github_json(
                 f"https://api.github.com/repos/{repo}/releases?per_page=10", token
             )
-            data = releases[0] if releases else {}
+            data = next((release for release in releases if not release.get("draft")), {})
         else:
             data = _github_json(
                 f"https://api.github.com/repos/{repo}/releases/latest", token
@@ -453,6 +508,25 @@ def check_github_release(
         }
 
 
+def validate_release_tag(tag: str, current: dict, token: str | None = None) -> dict | None:
+    """Bindet die Installation an das angezeigte, weiterhin aktuelle veröffentlichte Release."""
+    if not _valid_ref(tag):
+        return {"success": False, "message": "Ungültiger oder fehlender Release-Tag. Bitte erneut prüfen."}
+    try:
+        release = _github_json(
+            f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{quote(tag, safe='/')}", token
+        )
+        if release.get("draft") or release.get("tag_name") != tag:
+            return {"success": False, "message": "Release existiert nicht oder ist ein Entwurf. Bitte erneut prüfen."}
+        if current.get("tag_name") != tag:
+            return {"success": False,
+                    "message": "Das aktuelle Release weicht vom angezeigten Tag ab. Bitte erneut prüfen."}
+    except Exception as exc:
+        return {"success": False,
+                "message": f"Release-Tag konnte nicht geprüft werden: {_scrub(str(exc), token)[:200]}"}
+    return None
+
+
 def list_github_branches(repo: str = GITHUB_REPO, token: str | None = None) -> list[dict]:
     """Listet Branches des Repos (Name + Commit-SHA). Leere Liste bei Fehlern."""
     try:
@@ -477,8 +551,11 @@ def check_github_branch(
     für private Repos und folgt der CDN-Weiterleitung).
     """
     try:
+        if not _valid_ref(branch):
+            raise ValueError("Ungültiger Branch-Name")
+        segment = quote(branch, safe="/")
         data = _github_json(
-            f"https://api.github.com/repos/{repo}/commits/{branch}", token
+            f"https://api.github.com/repos/{repo}/commits/{segment}", token
         )
         commit = data.get("commit") or {}
         author = commit.get("author") or {}
@@ -490,7 +567,7 @@ def check_github_branch(
             "commit_message": message[:120],
             "commit_date": author.get("date", ""),
             "commit_author": author.get("name", ""),
-            "download_url": f"https://api.github.com/repos/{repo}/zipball/{branch}",
+            "download_url": f"https://api.github.com/repos/{repo}/zipball/{segment}",
         }
     except Exception as exc:
         return {"branch": branch, "sha": None, "error": str(exc)[:200]}
@@ -503,12 +580,13 @@ def is_git_checkout() -> bool:
 
 def _scrub(text: str, token: str | None) -> str:
     """Entfernt ein evtl. in Git-Fehlermeldungen enthaltenes Token."""
-    if token and token in text:
-        text = text.replace(token, "***")
+    if token:
+        encoded = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        text = text.replace(token, "***").replace(encoded, "***")
     return text
 
 
-def _run_git(args: list[str], timeout: int = 300) -> tuple[int, str, str]:
+def _run_git(args: list[str], timeout: int = 300, env: dict[str, str] | None = None) -> tuple[int, str, str]:
     try:
         result = subprocess.run(
             ["git", *args],
@@ -516,6 +594,7 @@ def _run_git(args: list[str], timeout: int = 300) -> tuple[int, str, str]:
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
     except Exception as exc:  # git fehlt / Timeout
@@ -523,16 +602,7 @@ def _run_git(args: list[str], timeout: int = 300) -> tuple[int, str, str]:
 
 
 def git_update(branch: str, token: str | None = None, install_deps: bool = False) -> dict:
-    """Aktualisiert eine Git-Installation exakt auf origin/<branch>.
-
-    Nutzt `git fetch` + `git reset --hard` → der Arbeitsbaum entspricht danach
-    BYTE-genau dem Remote-Stand (inkl. gelöschter/umbenannter Dateien, die das
-    ZIP-Overlay liegen ließ) und ist SAUBER: ein anschließendes `git pull` /
-    `git status` auf der Konsole läuft konfliktfrei weiter (kein "local changes
-    would be overwritten" mehr). Git-ignorierte bzw. nicht getrackte Dateien
-    (.env, DBs, Uploads, app_storage) bleiben unberührt — reset --hard fasst nur
-    getrackte Dateien an, `git clean` wird bewusst NICHT ausgeführt.
-    """
+    """Aktualisiert per fetch und einzelnem Branch-Checkout, ohne andere Branches zu ändern."""
     return _git_sync(branch, token=token, install_deps=install_deps, branch_checkout=branch)
 
 
@@ -544,6 +614,9 @@ def git_update_release(tag: str, token: str | None = None, install_deps: bool = 
 def _git_sync(ref: str, *, token: str | None, install_deps: bool,
               branch_checkout: str | None) -> dict:
     """Synchronisiert einen Branch oder Release-Tag unter exklusivem Update-Lock."""
+    if is_docker():
+        return {"success": False, "message": DOCKER_MESSAGE}
+
     if not is_git_checkout():
         return {"success": False, "message": "Kein Git-Arbeitsverzeichnis – bitte ZIP-Update verwenden."}
 
@@ -557,65 +630,55 @@ def _git_sync(ref: str, *, token: str | None, install_deps: bool,
 def _git_sync_locked(ref: str, *, token: str | None, install_deps: bool,
                      branch_checkout: str | None) -> dict:
 
+    if not _valid_ref(ref) or _run_git(["check-ref-format", "--branch", ref])[0] != 0:
+        return {"success": False, "message": "Ungültiger Branch-/Tag-Name"}
     remote = f"https://github.com/{GITHUB_REPO}.git"
+    rc, before, err = _run_git(["rev-parse", "HEAD"])
+    if rc:
+        return {"success": False, "message": f"Git-Ausgangsstand nicht lesbar: {_scrub(err, token)}"}
+    previous_branch = _run_git(["symbolic-ref", "-q", "--short", "HEAD"])[1]
+    env = dict(os.environ)
     if token:
-        remote = f"https://x-access-token:{token}@github.com/{GITHUB_REPO}.git"
-
-    before = _run_git(["rev-parse", "HEAD"])[1]
-
-    rc, _out, err = _run_git(["fetch", "--force", remote, ref])
-    if rc != 0:
+        auth = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.https://github.com/.extraheader",
+                   GIT_CONFIG_VALUE_0=f"AUTHORIZATION: basic {auth}")
+    rc, _out, err = _run_git(["fetch", "--force", remote, "--", ref], env=env)
+    if rc:
         return {"success": False, "message": f"git fetch fehlgeschlagen: {_scrub(err, token)[:300]}"}
-
-    if branch_checkout is not None:
-        rc, _out, err = _run_git(["reset", "--hard", "FETCH_HEAD"])
-        if rc != 0:
-            return {"success": False, "message": f"git reset fehlgeschlagen: {_scrub(err, token)[:300]}"}
-        rc, _out, err = _run_git(["checkout", "-B", branch_checkout])
-    else:
-        rc, _out, err = _run_git(["checkout", "--force", "--detach", "FETCH_HEAD"])
-    if rc != 0:
-        return {"success": False, "message": f"git checkout fehlgeschlagen: {_scrub(err, token)[:300]}"}
-
-    after = _run_git(["rev-parse", "HEAD"])[1]
-    changed = 0
-    if before and after and before != after:
-        rc2, out2, _ = _run_git(["diff", "--name-only", before, after])
-        if rc2 == 0:
-            changed = len([ln for ln in out2.splitlines() if ln.strip()])
-
     backup = _run_pre_migration_backup()
-    if not backup["success"] and backup["required"]:
-        return {"success": False,
-                "message": "Code bereits aktualisiert, Migration bewusst übersprungen: " + backup["message"],
-                "files_updated": changed, "files_skipped": 0, "deps_installed": "übersprungen",
-                "migrations_applied": "übersprungen", "server_reloaded": False,
-                "backup": backup, "via": "git"}
-    deps_ok, deps_installed = _run_pip_install() if install_deps else (True, "übersprungen")
-    if not deps_ok:
-        return {"success": False, "message": f"Abhängigkeiten konnten nicht installiert werden: {deps_installed}",
-                "files_updated": changed, "files_skipped": 0, "deps_installed": deps_installed,
-                "migrations_applied": "übersprungen", "server_reloaded": False,
-                "backup": backup, "via": "git"}
-    migrations_ok, migrations_applied = _run_migrations()
-    if not migrations_ok:
-        return {"success": False, "message": f"Migration fehlgeschlagen: {migrations_applied}",
-                "files_updated": changed, "files_skipped": 0, "deps_installed": deps_installed,
-                "migrations_applied": migrations_applied, "server_reloaded": False,
-                "backup": backup, "via": "git"}
-    reloaded = _reload_server()
+    blocked = _backup_gate(backup)
+    if blocked:
+        return {**blocked, "via": "git"}
+    args = (["checkout", "--force", "-B", branch_checkout, "FETCH_HEAD"] if branch_checkout is not None
+            else ["checkout", "--force", "--detach", "FETCH_HEAD"])
+    rc, _out, err = _run_git(args)
+    if rc:
+        return {"success": False, "message": f"git checkout fehlgeschlagen: {_scrub(err, token)[:300]}",
+                "backup": backup}
+    after = _run_git(["rev-parse", "HEAD"])[1]
+    changed = len(_run_git(["diff", "--name-only", before, after])[1].splitlines())
 
-    return {
-        "success": True,
-        "message": f"Git-Update auf {ref} @ {after[:7]} eingespielt" if after else "Git-Update eingespielt",
-        "files_updated": changed,
-        "files_skipped": 0,
-        "deps_installed": deps_installed,
-        "migrations_applied": migrations_applied,
-        "server_reloaded": reloaded,
-        "via": "git",
-        "backup": backup,
-    }
+    def rollback() -> str:
+        args = (["checkout", "--force", "-B", previous_branch, before] if previous_branch
+                else ["checkout", "--force", "--detach", before])
+        rc, _out, err = _run_git(args)
+        if rc:
+            return f"Git-Rollback auf {before} fehlgeschlagen: {_scrub(err, token)[:300]}."
+        return f"Code auf {before} wiederhergestellt."
+
+    return _finish_update({
+        "success": True, "message": f"Git-Update auf {ref} @ {after[:7]} eingespielt",
+        "files_updated": changed, "files_skipped": 0, "via": "git", "backup": backup,
+    }, install_deps, rollback)
+
+
+def _valid_ref(ref: str) -> bool:
+    # Bewusst enger als Git: keine Optionsfragmente oder Reflog-Ausdrücke akzeptieren.
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_./-]*", ref) or "--" in ref or ".." in ref:
+        return False
+    # Auch Nicht-Git-Installationen ohne git-Binary müssen ZIP-Deploys prüfen können.
+    return all(part and not part.startswith(".") and not part.endswith((".", ".lock"))
+               for part in ref.split("/"))
 
 
 def deploy_github_branch(
@@ -627,6 +690,12 @@ def deploy_github_branch(
     Damit machen Web-Update und `git pull` auf der Konsole DASSELBE und stören
     sich nicht mehr gegenseitig.
     """
+    if is_docker():
+        return {"success": False, "message": DOCKER_MESSAGE}
+
+    if not _valid_ref(branch):
+        return {"success": False, "message": "Ungültiger Branch-Name"}
+    download_url = f"https://api.github.com/repos/{GITHUB_REPO}/zipball/{quote(branch, safe='/')}"
     if is_git_checkout():
         return git_update(branch, token=token, install_deps=install_deps)
     return download_and_apply_github_update(download_url, token=token, install_deps=install_deps)
@@ -636,6 +705,11 @@ def deploy_github_release(
     download_url: str, tag_name: str, token: str | None = None, install_deps: bool = False,
 ) -> dict:
     """Installiert Releases in Git-Checkouts per Tag, sonst als geschuetztes ZIP-Overlay."""
+    if is_docker():
+        return {"success": False, "message": DOCKER_MESSAGE}
+
+    if not _valid_ref(tag_name):
+        return {"success": False, "message": "Ungültiger Tag-Name"}
     if is_git_checkout():
         return git_update_release(tag_name, token=token, install_deps=install_deps)
     return download_and_apply_github_update(download_url, token=token, install_deps=install_deps)
@@ -649,6 +723,9 @@ def download_and_apply_github_update(
     Folgt Weiterleitungen (zipball_url leitet auf CDN um). Schreibt in eine temporäre
     Datei, ruft apply_update() auf und löscht die Datei anschließend.
     """
+    if is_docker():
+        return {"success": False, "message": DOCKER_MESSAGE}
+
     import urllib.request as _req
 
     tmp_path: Path | None = None
