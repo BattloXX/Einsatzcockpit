@@ -39,15 +39,19 @@ from app.services.seed_service import apply_seed_profile, copy_default_prompts, 
 from app.services.sms_service import sms_available
 from app.services.update_service import (
     DEPLOYED_REF_KEY,
+    DOCKER_MESSAGE,
     GITHUB_TOKEN_KEY,
     apply_update,
     check_github_branch,
     check_github_release,
+    compute_sha256,
     deploy_github_branch,
     deploy_github_release,
     get_current_version,
     get_github_token,
+    is_docker,
     list_github_branches,
+    validate_release_tag,
 )
 
 router = APIRouter(prefix="/admin")
@@ -2537,6 +2541,13 @@ def _save_deployed_ref(db, user_id: int, branch: str, sha: str) -> None:
         row.updated_by_user_id = user_id
 
 
+def _docker_update_response(request: Request, user: User, template: str):
+    return templates.TemplateResponse(request, template, {
+        "user": user, "version": get_current_version(), "is_docker": True,
+        "update_result": {"success": False, "message": DOCKER_MESSAGE},
+    })
+
+
 @router.get("/system/update", response_class=HTMLResponse)
 def update_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
     version = get_current_version()
@@ -2545,6 +2556,7 @@ def update_page(request: Request, db=Depends(get_db), user: User = Depends(requi
         "admin/system_update.html",
         {
             "user": user,
+            "is_docker": is_docker(),
             "version": version,
             "token_configured": get_github_token(db) is not None,
             "deployed_ref": _deployed_ref(db),
@@ -2560,13 +2572,17 @@ def apply_system_update(
     user: User = Depends(require_system_admin),
     release_zip: UploadFile = File(...),
     expected_sha256: str = Form(""),
+    install_deps_raw: str = Form(""),
 ):
+    if is_docker():
+        return _docker_update_response(request, user, "admin/system_update.html")
     if not release_zip.filename or not release_zip.filename.endswith(".zip"):
         return templates.TemplateResponse(
             request,
             "admin/system_update.html",
             {
                 "user": user,
+                "is_docker": is_docker(),
                 "version": get_current_version(),
                 "error": "Bitte eine .zip-Datei hochladen",
             },
@@ -2578,6 +2594,7 @@ def apply_system_update(
             "admin/system_update.html",
             {
                 "user": user,
+                "is_docker": is_docker(),
                 "version": get_current_version(),
                 "error": "Bei manuellen ZIP-Updates ist eine erwartete SHA256-Prüfsumme erforderlich.",
             },
@@ -2588,7 +2605,13 @@ def apply_system_update(
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
             shutil.copyfileobj(release_zip.file, tmp)
             tmp_path = Path(tmp.name)
-        result = apply_update(tmp_path, expected_sha256=expected_sha256.strip() or None)
+        write_audit(db, "system.update_zip", user_id=user.id,
+                    payload={"filename": release_zip.filename, "size": tmp_path.stat().st_size,
+                             "sha256_prefix": compute_sha256(tmp_path)[:16]},
+                    ip=request.client.host if request.client else None)
+        db.commit()
+        result = apply_update(tmp_path, expected_sha256=expected_sha256.strip() or None,
+                              install_deps=install_deps_raw in ("1", "true", "on"))
     finally:
         if tmp_path:
             tmp_path.unlink(missing_ok=True)
@@ -2598,6 +2621,7 @@ def apply_system_update(
         "admin/system_update.html",
         {
             "user": user,
+            "is_docker": is_docker(),
             "version": get_current_version(),
             "update_result": result,
         },
@@ -2612,12 +2636,16 @@ def check_github_update(
     prerelease: bool = Query(False),
 ):
     """HTMX-Partial: GitHub auf neuere Releases prüfen."""
+    if is_docker():
+        return _docker_update_response(request, user, "admin/_github_update.html")
+
     github = check_github_release(prerelease=prerelease, token=get_github_token(db))
     return templates.TemplateResponse(
         request,
         "admin/_github_update.html",
         {
             "user": user,
+            "is_docker": is_docker(),
             "github": github,
             "prerelease": prerelease,
         },
@@ -2630,20 +2658,26 @@ def apply_github_update(
     db=Depends(get_db),
     user: User = Depends(require_system_admin),
     prerelease: bool = Query(False),
+    tag_name: str = Form(""),
     install_deps_raw: str = Form(""),
 ):
     """HTMX-Partial: Release von GitHub herunterladen und einspielen (def → Threadpool)."""
+    if is_docker():
+        return _docker_update_response(request, user, "admin/_github_update.html")
     token = get_github_token(db)
     github = check_github_release(prerelease=prerelease, token=token)
-    if not github.get("download_url") or not github.get("tag_name"):
+    validation = validate_release_tag(tag_name, github, token=token)
+    if validation or not github.get("download_url") or not github.get("tag_name"):
         return templates.TemplateResponse(
             request,
             "admin/_github_update.html",
             {
                 "user": user,
+                "is_docker": is_docker(),
                 "github": github,
                 "prerelease": prerelease,
-                "update_result": {"success": False, "message": "Kein Download-Link im aktuellen Release gefunden."},
+                "update_result": validation or {
+                    "success": False, "message": "Kein Download-Link im aktuellen Release gefunden."},
             },
         )
     from app.core.audit import write_audit
@@ -2652,13 +2686,13 @@ def apply_github_update(
         db,
         "system.update_github_release",
         user_id=user.id,
-        payload={"tag": github.get("latest_tag"), "prerelease": prerelease},
+        payload={"tag": tag_name, "prerelease": prerelease},
         ip=request.client.host if request.client else None,
     )
     db.commit()
     result = deploy_github_release(
         github["download_url"],
-        github["tag_name"],
+        tag_name,
         token=token,
         install_deps=install_deps_raw in ("1", "true", "on"),
     )
@@ -2668,6 +2702,7 @@ def apply_github_update(
         "admin/_github_update.html",
         {
             "user": user,
+            "is_docker": is_docker(),
             "github": github_after,
             "prerelease": prerelease,
             "update_result": result,
@@ -2686,12 +2721,16 @@ def check_branch_update(
     branch: str = Query("main"),
 ):
     """HTMX-Partial: letzten Commit eines Branches anzeigen (direktes Repo-Update)."""
+    if is_docker():
+        return _docker_update_response(request, user, "admin/_github_branch_update.html")
+
     token = get_github_token(db)
     return templates.TemplateResponse(
         request,
         "admin/_github_branch_update.html",
         {
             "user": user,
+            "is_docker": is_docker(),
             "branch_info": check_github_branch(branch, token=token),
             "branches": list_github_branches(token=token),
             "branch": branch,
@@ -2713,6 +2752,8 @@ def apply_github_branch_update(
     Für Sysadmins, die Fixes ohne Release-Zeremonie ausrollen wollen
     (z. B. feature-Branch am Testsystem, main als Hotfix-Kanal).
     """
+    if is_docker():
+        return _docker_update_response(request, user, "admin/_github_branch_update.html")
     token = get_github_token(db)
     branch_info = check_github_branch(branch, token=token)
     if branch_info.get("error") or not branch_info.get("sha"):
@@ -2721,6 +2762,7 @@ def apply_github_branch_update(
             "admin/_github_branch_update.html",
             {
                 "user": user,
+                "is_docker": is_docker(),
                 "branch_info": branch_info,
                 "branches": list_github_branches(token=token),
                 "branch": branch,
@@ -2758,6 +2800,7 @@ def apply_github_branch_update(
         "admin/_github_branch_update.html",
         {
             "user": user,
+            "is_docker": is_docker(),
             "branch_info": check_github_branch(branch, token=token),
             "branches": list_github_branches(token=token),
             "branch": branch,

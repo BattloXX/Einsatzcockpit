@@ -1,3 +1,6 @@
+{% if is_docker %}
+<div class="alert alert--info">Updates im Container mit <code>docker compose pull &amp;&amp; docker compose up -d</code> ausführen.</div>
+{% else %}
 {# HTMX-Partial: GitHub-Update-Status – wird in #github-update-box geswapped #}
 <div class="sys-row sys-between sys-mb-2">
   <div class="sys-row sys-gap-sm">
@@ -48,6 +51,7 @@
       hx-target="#github-update-box"
       hx-swap="innerHTML"
       onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('button[type=submit]').textContent='Wird heruntergeladen…'">
+  <input type="hidden" name="tag_name" value="{{ github.tag_name }}">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <div class="sys-row">
     <button type="submit" class="btn btn--danger">Server-Update einspielen</button>
@@ -124,4 +128,6 @@
   {% if update_result.backup is defined %}<br>Backup: {{ update_result.backup.message }}{% endif %}
 </div>
 {% endif %}
+{% endif %}
+
 {% endif %}

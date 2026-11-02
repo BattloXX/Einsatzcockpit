@@ -132,6 +132,8 @@ def db_backups_speichern(
         row.value = str(value)
         row.updated_at = datetime.now(UTC)
         row.updated_by_user_id = user.id
+    write_audit(db, "admin.db_backup.policy_changed", user_id=user.id,
+                payload={"retention_days": retention_days, "max_count": max_count})
     db.commit()
     return RedirectResponse("/admin/db-backups?saved=1", status_code=303)
 
@@ -139,9 +141,9 @@ def db_backups_speichern(
 @router.get("/db-backups/{dateiname}")
 def db_backup_download(
     dateiname: str,
+    db: Session = Depends(get_db),
     user: User = Depends(require_system_admin),
 ):
-    del user
     erlaubte_namen = {item["name"] for item in _dump_liste()}
     if dateiname not in erlaubte_namen:
         raise HTTPException(status_code=404, detail="DB-Dump nicht gefunden")
@@ -149,4 +151,6 @@ def db_backup_download(
     pfad = (basis / dateiname).resolve()
     if pfad.parent != basis or not pfad.is_file() or pfad.is_symlink():
         raise HTTPException(status_code=404, detail="DB-Dump nicht gefunden")
+    write_audit(db, "admin.db_backup.download", user_id=user.id, payload={"filename": dateiname})
+    db.commit()
     return FileResponse(pfad, media_type="application/gzip", filename=dateiname)
