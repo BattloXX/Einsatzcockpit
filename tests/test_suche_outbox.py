@@ -423,3 +423,55 @@ def test_kindmodelle_und_retry_dedupe(daten):
     db.commit()
     assert _jobs(db, org)[-1].status == "pending"
     _lauf(db, org)
+
+
+@pytest.mark.parametrize("jetzt, letzter, verzoegerung, erwartet", [
+    (100, None, 300, False),
+    (399, None, 300, False),
+    (400, None, 300, True),
+    (100, None, 0, True),
+    (3999, 400, 300, False),
+    (4000, 400, 300, True),
+])
+def test_abgleich_zeitlogik(jetzt, letzter, verzoegerung, erwartet):
+    assert outbox._abgleich_faellig(jetzt, 100, letzter, verzoegerung, 3600) is erwartet
+
+
+def test_outbox_start_verarbeitet_jobs_ohne_abgleich(monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(settings, "SEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "SEARCH_INDEX_WORKER_ENABLED", True)
+    monkeypatch.setattr(settings, "SEARCH_ABGLEICH_START_VERZOEGERUNG_S", 300)
+    zeiten = iter([100, 100, 400, 3999, 4000])
+    aufrufe = []
+
+    async def im_thread(fn, *args):
+        fn(*args)
+
+    async def schlafen(sekunden):
+        assert sekunden == 10
+        if len(aufrufe) == 4:
+            raise asyncio.CancelledError
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(outbox, "SessionLocal", Session)
+    monkeypatch.setattr(outbox, "verarbeite_faellige", lambda db: aufrufe.append("jobs"))
+    abgleiche = []
+    monkeypatch.setattr(outbox, "abgleich", lambda db: abgleiche.append("abgleich"))
+    monkeypatch.setattr(outbox, "raeume_auf", lambda db: abgleiche.append("aufraeumen"))
+    monkeypatch.setattr(outbox.asyncio, "to_thread", im_thread)
+    monkeypatch.setattr(outbox.asyncio, "sleep", schlafen)
+    # Eventloop braucht selbst monotonic(); gezielt nur outbox.time ersetzen.
+    from types import SimpleNamespace
+    monkeypatch.setattr(outbox, "time", SimpleNamespace(monotonic=lambda: next(zeiten)))
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(outbox.suche_outbox_loop())
+    assert aufrufe == ["jobs"] * 4
+    assert abgleiche == ["abgleich", "aufraeumen"] * 2

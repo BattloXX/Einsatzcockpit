@@ -280,13 +280,28 @@ def _iteration(mit_abgleich: bool) -> None:
             raeume_auf(db)
 
 
+def _abgleich_faellig(
+    jetzt: float, start: float, letzter_abgleich: float | None,
+    start_verzoegerung_s: float, intervall_s: float,
+) -> bool:
+    """Monotone Zeit: zuerst Startfrist, danach Abstand zum letzten Abgleich."""
+    if letzter_abgleich is None:
+        return jetzt - start >= start_verzoegerung_s
+    return jetzt - letzter_abgleich >= intervall_s
+
+
 async def suche_outbox_loop() -> None:
     letzter_abgleich: float | None = None
+    start = time.monotonic()
     while True:
         try:
             if settings.SEARCH_ENABLED and settings.SEARCH_INDEX_WORKER_ENABLED:
                 jetzt = time.monotonic()
-                faellig = letzter_abgleich is None or jetzt - letzter_abgleich >= settings.SEARCH_ABGLEICH_MINUTEN * 60
+                faellig = _abgleich_faellig(
+                    jetzt, start, letzter_abgleich,
+                    settings.SEARCH_ABGLEICH_START_VERZOEGERUNG_S,
+                    settings.SEARCH_ABGLEICH_MINUTEN * 60,
+                )
                 await asyncio.to_thread(_iteration, faellig)
                 if faellig:
                     letzter_abgleich = jetzt

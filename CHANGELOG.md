@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Multi-Worker / Startlast:** Nachschlagewerke synchronisieren beim Leader-Start nur fehlende oder mehr als 24 Stunden alte Daten; der taegliche 03:00-Lauf bleibt bestehen. Gefahrgut-Worker erkennen geaenderte CSV-Dateien ueber Pfad und mtime. Der erste Such-Vollabgleich wartet standardmaessig 300 Sekunden (`SEARCH_ABGLEICH_START_VERZOEGERUNG_S`), faellige Outbox-Jobs laufen sofort. Queryfreie App-Imports sind mit isolierten Subprozess-Tests abgesichert. Keine Migration.
+
 - **Backup-Monitoring:** Private, atomare Statusdateien für Backup und Restore-Probe; Alter, Off-Site-Ergebnis und Speicher werden in Systemdiagnose und `admin_backup_pruefen` sichtbar. Standardgrenzen 26 Stunden und 8 Tage, danach Warnung bis zur doppelten Grenze, anschließend Fehler. Dauerhafte Diagnosebefunde schließen nach Behebung automatisch. Optionale systemd-Fehleralarmierung dokumentiert, standardmäßig deaktiviert. Keine Migration.
 
 - **Release-Versionen:** Der manuell gestartete Workflow `release.yml` setzt CalVer in Code und README vor Commit, Tag und Veröffentlichung. Der bisherige Bump-Workflow prüft nur noch die Version am Release-Tag. Der Update-Check vergleicht CalVer numerisch, behandelt ältere Releases nicht als Updates und zeigt einen Hinweis bei neuerem installiertem Stand. Bestätigte Release-Updates speichern atomar private Metadaten (`installed.json`), damit auch alte Releases mit verspätetem Versionsbump korrekt erkannt werden; Git-SHA beziehungsweise ZIP-Code-Version begrenzen deren Gültigkeit. Keine Migration.

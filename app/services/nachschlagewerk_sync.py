@@ -6,7 +6,7 @@ NACHSCHLAGEWERK_DATA_DIR/bam_gefahrgut.csv ab. gefahrgut_service bevorzugt diese
 Datei vor dem gebuendelten Seed (siehe gefahrgut_service._csv_pfad()), sodass die
 Offline-Nutzung erhalten bleibt.
 
-Kein DB-Zugriff -> reine Datei-/Netzarbeit, daher kein asyncio.to_thread noetig.
+Katalog-Pruefung und -Sync laufen mit eigener DB-Session in einem Thread.
 Best-effort: Fehler werden geloggt, der bestehende Datenstand bleibt unangetastet.
 """
 from __future__ import annotations
@@ -216,6 +216,35 @@ async def sync_rettungskarten_katalog() -> int:
     return await asyncio.to_thread(_lauf)
 
 
+def _katalog_start_sync_noetig(aktualisiert_am: datetime | None, jetzt: datetime) -> bool:
+    """Leerer oder mehr als 24 Stunden alter Katalog (naive UTC)."""
+    return aktualisiert_am is None or jetzt - aktualisiert_am > timedelta(hours=24)
+
+
+def _gefahrgut_start_sync_noetig(mtime: float | None, jetzt: float) -> bool:
+    """Fehlende oder mehr als 24 Stunden alte gesyncte CSV; Seed zaehlt nicht."""
+    return mtime is None or jetzt - mtime > 24 * 60 * 60
+
+
+def _katalog_veraltet() -> bool:
+    from sqlalchemy import func, select
+
+    from app.db import SessionLocal
+    from app.models.nachschlagewerk import RettungskartenKatalog
+
+    with SessionLocal() as db:
+        stand = db.scalar(select(func.max(RettungskartenKatalog.aktualisiert_am)))
+    return _katalog_start_sync_noetig(stand, datetime.now(UTC).replace(tzinfo=None))
+
+
+def _gefahrgut_veraltet() -> bool:
+    try:
+        mtime = _ziel_pfad().stat().st_mtime
+    except FileNotFoundError:
+        mtime = None
+    return _gefahrgut_start_sync_noetig(mtime, datetime.now(UTC).timestamp())
+
+
 async def nachschlagewerk_sync_loop() -> None:
     """Taeglicher Loop (03:00 Europe/Vienna): Gefahrgut-Datensatz + Rettungskarten-Katalog."""
     if not settings.NACHSCHLAGEWERK_SYNC_ENABLED:
@@ -227,15 +256,15 @@ async def nachschlagewerk_sync_loop() -> None:
         logger.info("Nachschlagewerk-Sync: keine Quell-URLs - Loop startet nicht.")
         return
 
-    async def _sync_alle() -> None:
-        if gefahrgut_url:
+    async def _sync_alle(nur_veraltet: bool = False) -> None:
+        if gefahrgut_url and (not nur_veraltet or _gefahrgut_veraltet()):
             await sync_gefahrgut()
-        if katalog_url:
+        if katalog_url and (not nur_veraltet or await asyncio.to_thread(_katalog_veraltet)):
             await sync_rettungskarten_katalog()
 
-    # Beim Start einmal synchronisieren (frischer Datenstand ohne bis 03:00 zu warten).
+    # Beim Leader-Start nur fehlende oder veraltete Daten synchronisieren.
     try:
-        await _sync_alle()
+        await _sync_alle(nur_veraltet=True)
     except Exception:
         logger.exception("Nachschlagewerk-Sync: initialer Lauf fehlgeschlagen")
     while True:

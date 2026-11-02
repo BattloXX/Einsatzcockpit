@@ -200,3 +200,81 @@ def test_sync_uebernimmt_bam_txt_zip(monkeypatch, tmp_path):
                         lambda **kw: _FakeClient(_FakeResp(payload)))
     assert asyncio.run(sync.sync_gefahrgut()) is True
     assert gg.suche("1000")
+
+
+@pytest.mark.parametrize("alter_s, erwartet", [(None, True), (0, False), (86400, False), (86401, True), (-1, False)])
+def test_start_sync_altersgrenzen(alter_s, erwartet):
+    from datetime import datetime, timedelta
+
+    jetzt = datetime(2026, 11, 2, 12)
+    stand = None if alter_s is None else jetzt - timedelta(seconds=alter_s)
+    assert sync._katalog_start_sync_noetig(stand, jetzt) is erwartet
+    mtime = None if alter_s is None else 100000 - alter_s
+    assert sync._gefahrgut_start_sync_noetig(mtime, 100000) is erwartet
+
+
+def test_gefahrgut_start_sync_seed_zaehlt_nicht(monkeypatch, tmp_path):
+    import os
+    import time
+
+    monkeypatch.setattr(sync.settings, "NACHSCHLAGEWERK_DATA_DIR", str(tmp_path))
+    assert gg._csv_pfad() == gg._SEED_CSV_PFAD
+    assert sync._gefahrgut_veraltet()
+    ziel = tmp_path / "bam_gefahrgut.csv"
+    ziel.write_text(_csv_text(1))
+    assert not sync._gefahrgut_veraltet()
+    alt = time.time() - 86401
+    os.utime(ziel, (alt, alt))
+    assert sync._gefahrgut_veraltet()
+
+
+def test_cache_erkennt_csv_ersatz_und_pfadwechsel(monkeypatch, tmp_path):
+    import os
+
+    monkeypatch.setattr(sync.settings, "NACHSCHLAGEWERK_DATA_DIR", str(tmp_path))
+    seed = tmp_path / "seed.csv"
+    seed.write_text(_csv_text(1), encoding="utf-8")
+    monkeypatch.setattr(gg, "_SEED_CSV_PFAD", seed)
+    assert gg.lookup_un("1000")["stoffname"] == "Testsoff 0"
+    stand = seed.stat().st_mtime_ns
+    ziel = tmp_path / "bam_gefahrgut.csv"
+    ziel.write_text(_csv_text(1).replace("Testsoff 0", "Gesynct"), encoding="utf-8")
+    os.utime(ziel, ns=(stand, stand))  # Gleiche mtime, anderer Pfad.
+    assert gg.lookup_un("1000")["stoffname"] == "Gesynct"
+    ersatz = tmp_path / "ersatz.csv"
+    ersatz.write_text(_csv_text(1).replace("Testsoff 0", "Neu"), encoding="utf-8")
+    os.utime(ersatz, ns=(stand + 1000000, stand + 1000000))
+    ersatz.replace(ziel)
+    assert gg.lookup_un("1000")["stoffname"] == "Neu"
+    assert gg.lookup_un("1000")["stoffname"] == "Neu"
+    ziel.unlink()
+    assert gg.lookup_un("1000")["stoffname"] == "Testsoff 0"
+
+
+@pytest.mark.parametrize("veraltet", [False, True])
+def test_loop_start_nur_veraltet_03_uhr_immer(monkeypatch, veraltet):
+    monkeypatch.setattr(sync.settings, "NACHSCHLAGEWERK_SYNC_ENABLED", True)
+    monkeypatch.setattr(sync.settings, "NACHSCHLAGEWERK_GEFAHRGUT_URL", "https://example.test/g.csv")
+    monkeypatch.setattr(sync.settings, "NACHSCHLAGEWERK_RETTUNGSKARTEN_KATALOG_URL", "https://example.test/k")
+    monkeypatch.setattr(sync, "_gefahrgut_veraltet", lambda: veraltet)
+    monkeypatch.setattr(sync, "_katalog_veraltet", lambda: veraltet)
+    aufrufe = []
+
+    async def gefahrgut():
+        aufrufe.append("gefahrgut")
+
+    async def katalog():
+        aufrufe.append("katalog")
+
+    async def schlafen(sekunden):
+        if schlafen.anzahl:
+            raise asyncio.CancelledError
+        assert aufrufe == (["gefahrgut", "katalog"] if veraltet else [])
+        schlafen.anzahl += 1
+
+    schlafen.anzahl = 0
+    monkeypatch.setattr(sync, "sync_gefahrgut", gefahrgut)
+    monkeypatch.setattr(sync, "sync_rettungskarten_katalog", katalog)
+    monkeypatch.setattr(sync.asyncio, "sleep", schlafen)
+    asyncio.run(sync.nachschlagewerk_sync_loop())
+    assert aufrufe == ["gefahrgut", "katalog"] * (2 if veraltet else 1)
