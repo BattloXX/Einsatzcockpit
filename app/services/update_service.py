@@ -612,14 +612,20 @@ def validate_release_tag(tag: str, current: dict, token: str | None = None) -> d
 def list_github_branches(repo: str = GITHUB_REPO, token: str | None = None) -> list[dict]:
     """Listet Branches des Repos (Name + Commit-SHA). Leere Liste bei Fehlern."""
     try:
-        branches = _github_json(
-            f"https://api.github.com/repos/{repo}/branches?per_page=50", token
-        )
-        return [
+        branches = []
+        for page in range(1, 11):
+            batch = _github_json(
+                f"https://api.github.com/repos/{repo}/branches?per_page=100&page={page}", token
+            )
+            branches.extend(batch)
+            if len(batch) < 100:
+                break
+        result = [
             {"name": b.get("name", ""), "sha": (b.get("commit") or {}).get("sha", "")[:7]}
             for b in branches
             if b.get("name")
         ]
+        return sorted(result, key=lambda b: b["name"] != "main")
     except Exception:
         return []
 

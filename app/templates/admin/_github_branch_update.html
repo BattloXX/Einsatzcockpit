@@ -10,6 +10,9 @@
     {% if branches %}
     <select name="branch" class="form-control sys-select-narrow"
             onchange="this.form.requestSubmit()">
+      {% if branch not in branches | map(attribute='name') | list %}
+      <option value="{{ branch }}" selected>{{ branch }} (nicht in Liste)</option>
+      {% endif %}
       {% for b in branches %}
       <option value="{{ b.name }}" {% if b.name == branch %}selected{% endif %}>{{ b.name }} ({{ b.sha }})</option>
       {% endfor %}
