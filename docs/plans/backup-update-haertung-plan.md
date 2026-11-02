@@ -180,3 +180,23 @@ durch Claude. Vor dem Merge laufen `ruff`, `mypy` und `pytest -n auto`. CHANGELO
   Host-Pruefung gegen interne Ziele (Loopback, Link-Local, private Netze) bei Org-Konfig, gegen SSRF.
 - **Version: vor dem Tag setzen** (neuer Release-Workflow bumpt, committet, taggt, veroeffentlicht).
   `git describe` nur als Fallback fuer Entwicklungsstaende. Begruendung siehe Phase 4.
+
+## Umsetzungsstand
+
+| Phase | PR | Stand |
+| --- | --- | --- |
+| 1 – Org-Remote-Ziel | #860 | gemergt |
+| 2 – Sicherer Update-Ablauf | #862 | gemergt |
+| 3 – Neustart und Hintergrundausführung | #866 | gemergt |
+| 4 – Versionsquelle | #867 | gemergt |
+| 5 – Robuste DB-Sicherung | #861 | gemergt |
+| 6 – Org-Restore | #868 | gemergt |
+| 7 – Monitoring und Doku | dieser PR | implementiert; Review/Merge ausständig |
+
+Offene Betriebspunkte:
+
+- sudoers-Regeln, PID-Datei, Unit-Dateien und nginx-Location aus dem Deployment übernehmen.
+- Org-Konfigurationen auf `sftp`/`ftps`/`graph` umstellen.
+- Ersten Lauf von `release.yml` durchführen und Ergebnis kontrollieren.
+- Echten Neustart-Test auf dem Zielsystem durchführen.
+- `UPDATE_*`-/`BACKUP_*`-Variablen prüfen, einschließlich Monitoring-Schwellen.

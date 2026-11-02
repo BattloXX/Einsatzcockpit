@@ -128,6 +128,10 @@ RESPONSE_TEXTE = {
             "Geraet ausloesen und ACK abgleichen."
         ),
     ),
+    "backup": (
+        "Backup, Restore-Probe oder Off-Site sind veraltet, fehlgeschlagen oder unbekannt.",
+        "Empfehlungen der Evidenz ausfuehren; Timer und journalctl -u ec-backup.service pruefen.",
+    ),
     "osm": (
         "Lokaler OSM-Import oder Overpass-Fallback ist eingeschraenkt.",
         ("recommendations in der Evidenz ausfuehren; lokalen Importstatus vor erneuter Live-Probe pruefen."),
@@ -253,6 +257,11 @@ async def admin_dienste_pruefen() -> dict:
 @server.tool(description=ADMIN_TOOLS["admin_worker_pruefen"].description)
 async def admin_worker_pruefen() -> dict:
     return await call_tool("admin_worker_pruefen")
+
+
+@server.tool(description=ADMIN_TOOLS["admin_backup_pruefen"].description)
+async def admin_backup_pruefen() -> dict:
+    return await call_tool("admin_backup_pruefen")
 
 
 @server.tool(description=ADMIN_TOOLS["admin_osm_pruefen"].description)

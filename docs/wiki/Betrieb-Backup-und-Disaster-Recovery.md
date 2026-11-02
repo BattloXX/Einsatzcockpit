@@ -329,3 +329,87 @@ zulässig. CREATE/DROP-Rechte müssen auch für die zweite Wegwerf-DB vorhanden 
 Beide Scratch-Namen werden gegen die Produktionsdatenbanken geprüft. Das neueste
 fertige Medienarchiv wird vollständig gelesen, einschließlich gzip-Prüfsumme und
 TAR-Inhalt. Fehlende Wetter-Dumps oder Medienarchive werden nicht geprüft.
+
+## Monitoring
+
+Der Gesamtzustand der [Systemdiagnose](Administration-Systemdiagnose) und das
+parameterlose, lesende MCP-Tool `admin_backup_pruefen` prüfen dieselben lokalen
+Statusdateien. Der Diagnose-Runner registriert den Check `backup`; seine Befunde
+erscheinen in `admin_fehler_liste` und schließen bei erfolgreicher vollständiger
+Nachprüfung automatisch. Es werden keine Fachdaten verändert.
+
+| Indikator | ok | warn | fail |
+| --- | --- | --- | --- |
+| Backup-Alter | ≤ `BACKUP_MAX_AGE_H` (26 Stunden) | >26 bis einschließlich 52 Stunden | >52 Stunden |
+| Restore-Probe | ≤ `BACKUP_RESTORE_MAX_AGE_D` (8 Tage) | >8 bis einschließlich 16 Tage | >16 Tage |
+| Letzter Lauf fehlgeschlagen | — | — | unabhängig vom Alter |
+| Off-Site aktiviert | letzter Upload erfolgreich | Upload fehlgeschlagen oder nicht belegt | — |
+| Freier Speicher | mindestens zweimal Größe des letzten Dumps | darunter | — |
+
+Die Grenzen sind konfigurierbar; Warnung reicht jeweils bis einschließlich des
+doppelten Werts. Ein veraltetes Medienarchiv ist nur ein Hinweis. Fehlende oder
+beschädigte Statusdaten ergeben `unbekannt`, sofern kein belegter Fehler oder
+Warnindikator Vorrang hat. Unbekannte Sicherung/Probe erzeugen dennoch einen
+Warnbefund mit Handlungsanweisung, also keine stillschweigende Entwarnung.
+
+`BACKUP_DIR/.status-backup.json` enthält UTC-Abschlusszeit mit Z, Ergebnis,
+Typ (`daily`/`pre-update`), erzeugte Dateinamen und Größen, bereinigte Fehler
+und Off-Site-Ergebnis (`enabled`, `ok`, neutrale Zielbeschreibung ohne Zugangsdaten).
+`BACKUP_DIR/.status-restore.json` enthält Abschlusszeit, Ergebnis, Haupt-Dump-Dateiname,
+Namen der versuchten DB-Prüfungen und Warnungen (etwa fehlendes Medienarchiv).
+Statusdateien werden atomar mit 0600 ersetzt, Backup-Status noch unter dem
+Backup-Lock. Schreibfehler werden gewarnt und ändern den Rückgabecode des Laufs
+nicht. Retention, Dump-Liste, Medien-Prune und Upload ignorieren die Punktdateien.
+Das Monitoring gibt nur erlaubte Felder aus, keine beliebigen Fehlertexte,
+Datenbankinhalte, URLs oder externen Pfade.
+
+Ohne gültigen erfolgreichen Backup-Status dient der jüngste gültig benannte
+Dump nach **mtime** als Altersbeleg; `.partial` zählt nie. Dies ist ein historischer
+Dateibeleg und keine Integritätsgarantie. Kopieren/Ändern der mtime beeinflusst
+diesen Rückfall. Ein explizit fehlgeschlagener letzter Lauf bleibt `fail`.
+`backup-upload` allein erneuert den Laufstatus nicht; zur Bestätigung einen
+vollständigen Backup-Lauf ausführen. Off-Site-Alter ist nur bei belegtem Erfolg
+im letzten Backup-Lauf bekannt.
+
+| Fehlerbild / stabiler Befundschlüssel | Nächster Schritt |
+| --- | --- |
+| `backup_zu_alt` | `systemctl status ec-backup.timer`, danach `python -m app.cli backup` |
+| `backup_fehlgeschlagen` | `journalctl -u ec-backup.service`, Ursache beheben und Backup wiederholen |
+| `restore_probe_zu_alt` | `python -m app.cli restore-test`, Wegwerf-DB-Rechte und Dump prüfen |
+| `offsite_fehlgeschlagen` | Remote-Konfiguration und Dienstjournal prüfen, Backup wiederholen |
+| `speicher_knapp` | Speicher erweitern oder kontrolliert freigeben, Retention prüfen |
+
+Die Karte im Gesamtzustand zeigt Backup-Alter, Restore-Probe, Off-Site und
+Empfehlungen. Für aktive Benachrichtigungen geplante Diagnose und Sammelmail
+mit passendem Schweregrad einrichten. Die Sammelmail benötigt einen gespeicherten
+Diagnoselauf; es gibt keinen separaten CLI-Befehl `backup-melden`.
+
+### Optionaler systemd-Fehler-Hook
+
+Die ausgelieferten Units aktivieren **kein** `OnFailure`. Für vom App-Prozess und
+der DB unabhängige Alarmierung kann der Betreiber ein lokales Drop-in verwenden:
+
+```ini
+# systemctl edit ec-backup.service (analog ec-restore-test.service)
+[Unit]
+OnFailure=ec-backup-failure@%n.service
+```
+
+Beispiel einer **lokal anzulegenden** `/etc/systemd/system/ec-backup-failure@.service`:
+
+```ini
+[Unit]
+Description=Backup-Fehler ins Betriebsmonitoring melden
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-cat -t ec-backup-failure -p err /usr/bin/echo Sicherungs-Unit fehlgeschlagen: %i
+```
+
+Alternativ im lokalen Hook einen eingerichteten Mailversand nutzen, etwa
+`printf '%s\n' "Sicherungs-Unit fehlgeschlagen: $1" | mail -s 'Backup-Fehler' betrieb@example.org`
+in einem betreiberseitigen Skript mit Unit als Argument. Mailprogramm, MTA und
+Empfänger müssen installiert bzw. eingerichtet sein. Danach `systemctl daemon-reload`
+und den lokalen Hook kontrolliert testen. `systemd-cat` schreibt nur ins Journal;
+erst ein externes Journal-Monitoring oder Mailtransport stellt aktiv zu. Ein
+komplett ausbleibender Timer-Lauf löst `OnFailure` nicht aus: dafür Alterscheck
+regelmäßig abrufen oder die Tagesdiagnose aktivieren.

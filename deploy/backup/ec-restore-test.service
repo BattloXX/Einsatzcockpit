@@ -2,6 +2,10 @@
 Description=Einsatzcockpit Restore-Probe (spielt den neuesten Dump testweise ein)
 After=network.target mariadb.service
 Wants=mariadb.service
+# Optionaler Fehler-Hook, nur Beispiel fuer ein lokales Drop-in unter [Unit]:
+# OnFailure=ec-backup-failure@%n.service
+# Eigene Alarmierungs-Unit mit systemd-cat oder Mail einrichten und testen.
+# Beispiel und Grenzen: Wiki Betrieb-Backup-und-Disaster-Recovery, Monitoring.
 
 [Service]
 Type=oneshot

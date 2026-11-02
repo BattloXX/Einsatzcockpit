@@ -136,6 +136,13 @@ def test_discovery_and_cross_server(client, admin_env):
     listed = admin_call(client, admin_token["access_token"])
     assert listed.status_code == 200, listed.text
     assert all(name in listed.text for name in ADMIN_TOOLS)
+    body = listed.text
+    if body.startswith("event:"):
+        body = next(line[6:] for line in body.splitlines() if line.startswith("data: "))
+    tools = json.loads(body)["result"]["tools"]
+    assert len(tools) == len(ADMIN_TOOLS)
+    assert next(tool for tool in tools if tool["name"] == "admin_backup_pruefen")["inputSchema"].get(
+        "properties", {}) == {}
     assert "mcp_whoami" not in listed.text
 
 

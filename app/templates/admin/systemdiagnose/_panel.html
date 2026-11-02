@@ -32,13 +32,21 @@
 <div class="sys-kpi"><dt>Build</dt><dd>{{ github_date(summary.evidence.version.BUILD_TIME)|local_datetime }}</dd></div>
 </dl>
 </section>
-{% set part_labels = {'admin_worker_pruefen':'Worker / Leader','admin_redis_pruefen':'Redis','admin_datenbank_pruefen':'MariaDB','admin_gateway_pruefen':'Gateway / Alarmierung','admin_dienste_pruefen':'Dienste'} %}
-{% set part_icons = {'admin_worker_pruefen':'users-group','admin_redis_pruefen':'bolt','admin_datenbank_pruefen':'server','admin_gateway_pruefen':'antenna','admin_dienste_pruefen':'settings'} %}
+{% set part_labels = {'admin_backup_pruefen':'Datensicherung','admin_worker_pruefen':'Worker / Leader','admin_redis_pruefen':'Redis','admin_datenbank_pruefen':'MariaDB','admin_gateway_pruefen':'Gateway / Alarmierung','admin_dienste_pruefen':'Dienste'} %}
+{% set part_icons = {'admin_backup_pruefen':'server','admin_worker_pruefen':'users-group','admin_redis_pruefen':'bolt','admin_datenbank_pruefen':'server','admin_gateway_pruefen':'antenna','admin_dienste_pruefen':'settings'} %}
 <div class="sys-grid">
 {% for name,part in parts.items() %}
 <article class="sys-card">
 <header class="sys-card__head"><h3>{{ icon(part_icons[name]) }} {{ part_labels[name] }}</h3>{{ status_pill(part.status) }}</header>
-{{ kv(part.evidence) }}
+{% if name == 'admin_backup_pruefen' %}
+<dl class="sys-kv">
+<div><dt>Letztes Backup</dt><dd>{{ part.evidence.backup.alter_stunden|round(1) if part.evidence.backup.alter_stunden is not none else 'unbekannt' }} Stunden</dd></div>
+<div><dt>Letzte Restore-Probe</dt><dd>{{ part.evidence.restore.alter_stunden|round(1) if part.evidence.restore.alter_stunden is not none else 'unbekannt' }} Stunden ({{ part.evidence.restore.status }})</dd></div>
+<div><dt>Off-Site</dt><dd>{{ part.evidence.offsite.status }}</dd></div>
+</dl>
+<ul class="sys-list">{% for text in part.evidence.empfehlungen %}<li>{{ text }}</li>{% endfor %}</ul>
+{% for text in part.evidence.hinweise %}<p class="sys-muted">{{ text }}</p>{% endfor %}
+{% else %}{{ kv(part.evidence) }}{% endif %}
 <details class="sys-details"><summary>Rohdaten</summary><pre>{{ part.evidence|tojson(indent=2) }}</pre></details>
 </article>
 {% endfor %}

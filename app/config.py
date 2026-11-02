@@ -463,6 +463,8 @@ class Settings(BaseSettings):
     # zusaetzlich an einen zweiten Ort spiegeln — 3-2-1-Regel).
     BACKUP_DIR: str = "app_storage/backups"
     # Aufbewahrung: so viele der neuesten Dumps je Datenbank/Medien behalten.
+    BACKUP_MAX_AGE_H: int = Field(default=26, ge=1)
+    BACKUP_RESTORE_MAX_AGE_D: int = Field(default=8, ge=1)
     BACKUP_KEEP_DAILY: int = 14
     # Medien (app_storage) mitsichern (Einsatzfotos, Objektdokumente, Nachschlagewerke).
     BACKUP_INCLUDE_MEDIA: bool = True

@@ -222,3 +222,19 @@ Der Check `db.snapshot_isolation` prüft die zentrale MariaDB-Session-Regel und
 zeigt die prozesslokalen Konfliktzähler des ausführenden Workers für 1020,
 1205 und 1213. Schalter, Warnschwelle und Notfall-Rücknahme stehen unter
 [Datenbank: Snapshot-Isolation](Administration-Datenbank-Snapshot-Isolation).
+
+## Datensicherung im Gesamtzustand
+
+Die bestehende Übersicht enthält eine Karte **Datensicherung** mit Alter des
+letzten Backups, letzter Restore-Probe, Off-Site-Status und konkreten Empfehlungen.
+Sie verwendet denselben Service wie `admin_backup_pruefen`. Standardgrenzen sind
+26 Stunden (`BACKUP_MAX_AGE_H`) und 8 Tage (`BACKUP_RESTORE_MAX_AGE_D`); nach der
+doppelten Grenze wird aus der Warnung ein Fehler. Fehlgeschlagene Läufe sind
+sofort Fehler; unbekannte Daten sind keine Entwarnung. Off-Site ohne belegten
+Erfolg und knapper Speicher warnen, alte Medienarchive liefern nur einen Hinweis.
+
+Der lesende Diagnose-Check `backup` erzeugt stabile Befunde
+`backup_zu_alt`, `backup_fehlgeschlagen`, `restore_probe_zu_alt`,
+`offsite_fehlgeschlagen`, `speicher_knapp`. Behobene Befunde schließen durch den
+bestehenden Runner automatisch. Geplante Diagnose/Sammelmail können darüber
+alarmieren. [Schwellen, Statusdateien und Betriebsschritte](Betrieb-Backup-und-Disaster-Recovery#monitoring).

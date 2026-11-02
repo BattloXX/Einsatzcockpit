@@ -97,6 +97,9 @@ def test_tar_erfolg_rechte_und_ausschluss(tmp_path):
 
 def test_partial_ignoriert_von_liste_retention_upload_restore(backup_env, monkeypatch):
     from app.routers import ui_db_backup
+    statusdateien = [backup_env / name for name in (".status-backup.json", ".status-restore.json")]
+    for path in statusdateien:
+        path.write_text("{}")
     partial = backup_env / "einsatzleiter-20990101-000000Z.sql.gz.partial"
     partial.write_bytes(b"halb")
     normal = backup_env / "einsatzleiter-20261102-000000Z.sql.gz"
@@ -116,6 +119,8 @@ def test_partial_ignoriert_von_liste_retention_upload_restore(backup_env, monkey
     assert restored == [normal]
     bs.prune_backups(backup_env, "einsatzleiter", 1)
     assert partial.exists()
+    bs.prune_backups(backup_env, "medien", 1)
+    assert all(path.exists() for path in statusdateien)
 
 
 def test_alte_partial_aufraeumen(backup_env, monkeypatch):

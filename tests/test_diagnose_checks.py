@@ -80,6 +80,12 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
                heartbeat_at=utcnow(), expires_at=utcnow() + timedelta(seconds=20), is_leader=True,
                redis=redis, loops={})
         org = insert(db, "fire_dept", name="PRIVATE-NAME", slug="test")
+    if check_id == "backup":
+        from app.services.backup_status import schreibe_status
+        monkeypatch.setattr(settings, "BACKUP_DIR", str(tmp_path))
+        monkeypatch.setattr(settings, "BACKUP_REMOTE_ENABLED", False)
+        for typ in ("backup", "restore"):
+            schreibe_status(tmp_path, f".status-{typ}.json", {"ok": True})
     if check_id == "osm.gebaeude_bestand":
         monkeypatch.setattr(settings, "OSM_GEBAEUDE_QUELLEN", "")
     if check_id == "deploy.version":
@@ -95,7 +101,9 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
     assert result.findings == [], (check_id, result)
     assert snapshot(diag_engine) == before
     with factory() as db:
-        if check_id == "deploy.version":
+        if check_id == "backup":
+            schreibe_status(tmp_path, ".status-backup.json", {"ok": False})
+        elif check_id == "deploy.version":
             monkeypatch.setattr(settings, "GIT_SHA", "")
         elif check_id == "osm.gebaeude_bestand":
             monkeypatch.setattr(settings, "OSM_GEBAEUDE_QUELLEN", "region=https://osm.test/region.pbf")

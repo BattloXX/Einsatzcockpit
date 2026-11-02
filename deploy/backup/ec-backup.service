@@ -2,7 +2,10 @@
 Description=Einsatzcockpit Datenbank- und Medien-Backup
 After=network.target mariadb.service
 Wants=mariadb.service
-# Optional im lokalen Drop-in: OnFailure=<eigene Alarmierungs-Unit> (Abschnitt [Unit]).
+# Optionaler Fehler-Hook, nur Beispiel fuer ein lokales Drop-in unter [Unit]:
+# OnFailure=ec-backup-failure@%n.service
+# Eigene Alarmierungs-Unit mit systemd-cat oder Mail einrichten und testen.
+# Beispiel und Grenzen: Wiki Betrieb-Backup-und-Disaster-Recovery, Monitoring.
 
 [Service]
 Type=oneshot

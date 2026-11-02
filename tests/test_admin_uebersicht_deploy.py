@@ -20,6 +20,7 @@ def test_deploy_und_befunde(monkeypatch, behind):
         monkeypatch.setattr(diagnose, name, lambda *a: {
             "status": "ok", "evidence": {"workers": [], "worker_count": 0, "expired_workers": [], "leader_workers": []}})
     monkeypatch.setattr(registry, "collect_osm", lambda **kw: {"status": "ok", "evidence": {}})
+    monkeypatch.setattr(registry, "collect_backup", lambda **kw: {"status": "ok", "evidence": {}})
     monkeypatch.setattr(GitHubReadonly, "head_of_main", lambda self: {"status": "ok", "daten": {"sha": "b" * 40}})
 
     def compare(self, sha):
