@@ -607,3 +607,6 @@ dialog.modal.sys-dialog-wide { max-width: 720px; }
 .sys-step > div { flex: 1; min-width: 0; }
 .sys-step { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: .35rem 0; border-bottom: 1px solid var(--border); }
 .sys-step:last-child { border-bottom: 0; }
+
+/* Lange Update-Meldungen dürfen auch mobil die Karte nicht verbreitern. */
+.update-status-body { min-width: 0; overflow-wrap: anywhere; }

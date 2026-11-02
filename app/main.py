@@ -418,6 +418,15 @@ async def lifespan(app: FastAPI):
                 await runtime.start()
             else:
                 logger.info("Hintergrund-Loops im Testmodus deaktiviert")
+            # Nachprüfung erst nach erfolgreichem Startup, ohne DB-Schreibrechte.
+            from threading import Thread
+
+            from app.services.update_job import verify_after_restart
+
+            try:
+                Thread(target=verify_after_restart, kwargs={"audit": False}, daemon=True).start()
+            except RuntimeError:
+                logger.warning("Update-Nachprüfung konnte nicht gestartet werden")
             yield
         finally:
             if watchdog is not None:

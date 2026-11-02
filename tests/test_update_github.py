@@ -469,7 +469,7 @@ def test_manual_zip_hash_required_rejects_before_processing(monkeypatch):
     assert not inspect.iscoroutinefunction(router_module.apply_system_update)
     monkeypatch.setattr(router_module.app_settings, "UPDATE_ZIP_REQUIRE_HASH", True)
     apply_mock = MagicMock()
-    monkeypatch.setattr(router_module, "apply_update", apply_mock)
+    monkeypatch.setattr(router_module.update_job, "start_job", apply_mock)
     monkeypatch.setattr(router_module.templates, "TemplateResponse",
                         lambda request, name, context: context)
     response = router_module.apply_system_update(**_router_args(), expected_sha256="")
@@ -480,12 +480,12 @@ def test_manual_zip_hash_required_rejects_before_processing(monkeypatch):
 def test_manual_zip_hash_optional_when_setting_disabled(monkeypatch):
     from app.routers import ui_settings as router_module
     monkeypatch.setattr(router_module.app_settings, "UPDATE_ZIP_REQUIRE_HASH", False)
-    apply_mock = MagicMock(return_value={"success": True})
-    monkeypatch.setattr(router_module, "apply_update", apply_mock)
+    apply_mock = MagicMock(return_value={"state": "queued"})
+    monkeypatch.setattr(router_module.update_job, "start_job", apply_mock)
     monkeypatch.setattr(router_module.templates, "TemplateResponse",
                         lambda request, name, context: context)
     response = router_module.apply_system_update(**_router_args(), expected_sha256="")
-    assert response["update_result"]["success"] is True
+    assert response["job"]["state"] == "queued"
     assert apply_mock.call_args.kwargs["expected_sha256"] is None
 
 
@@ -493,12 +493,13 @@ def test_manual_zip_tempfile_removed_when_apply_raises(monkeypatch):
     from app.routers import ui_settings as router_module
     monkeypatch.setattr(router_module.app_settings, "UPDATE_ZIP_REQUIRE_HASH", True)
     seen = {}
-    def explode(path, **kwargs):
+    def explode(*args, **kwargs):
+        path = kwargs["zip_path"]
         seen["path"] = path
         seen["hash"] = kwargs["expected_sha256"]
         assert path.exists()
         raise RuntimeError("boom")
-    monkeypatch.setattr(router_module, "apply_update", explode)
+    monkeypatch.setattr(router_module.update_job, "start_job", explode)
     digest = "a" * 64
     with pytest.raises(RuntimeError, match="boom"):
         router_module.apply_system_update(**_router_args(), expected_sha256=digest)

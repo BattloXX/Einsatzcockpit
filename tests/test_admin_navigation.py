@@ -517,3 +517,9 @@ def test_app_geraete_gehoeren_zur_systemdiagnose(path):
     nav = _nav(path, role="system_admin")
     assert nav.eintrag("systemstatus").ist_aktiv(path)
     assert next(t for t in nav.eintrag("systemstatus").tabs if t.id == "systemdiagnose").ist_aktiv(path)
+
+
+@pytest.fixture(autouse=True)
+def isolated_update_status(monkeypatch, tmp_path):
+    from app.services import update_service
+    monkeypatch.setattr(update_service, "APP_ROOT", tmp_path)

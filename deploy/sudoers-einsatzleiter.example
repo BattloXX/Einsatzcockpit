@@ -1,0 +1,3 @@
+# Mit sudo visudo -f /etc/sudoers.d/einsatzleiter installieren und prüfen.
+# Nur das bereits benötigte Neustartrecht, keine zusätzlichen sudo-Rechte.
+clp-einsatz ALL=(root) NOPASSWD: /usr/bin/systemctl restart einsatzleiter

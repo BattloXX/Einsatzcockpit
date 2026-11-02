@@ -27,6 +27,7 @@ from app.models.major_incident import LageEinheitZugang
 from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, SystemSettings
 from app.models.user import User
 from app.models.wordpress_report import WordPressReportConfig
+from app.services import update_job
 from app.services.gk_zugang_service import (
     STANDARD_AUFTRAG_NACHRICHT,
     STANDARDNACHRICHT,
@@ -41,12 +42,9 @@ from app.services.update_service import (
     DEPLOYED_REF_KEY,
     DOCKER_MESSAGE,
     GITHUB_TOKEN_KEY,
-    apply_update,
     check_github_branch,
     check_github_release,
     compute_sha256,
-    deploy_github_branch,
-    deploy_github_release,
     get_current_version,
     get_github_token,
     is_docker,
@@ -2542,14 +2540,37 @@ def _save_deployed_ref(db, user_id: int, branch: str, sha: str) -> None:
 
 
 def _docker_update_response(request: Request, user: User, template: str):
+    if request.method == "POST":
+        template = "admin/_update_status.html"
     return templates.TemplateResponse(request, template, {
         "user": user, "version": get_current_version(), "is_docker": True,
         "update_result": {"success": False, "message": DOCKER_MESSAGE},
     })
 
 
+def _start_update_response(request: Request, user: User, kind: str, ziel: str, **kwargs):
+    try:
+        job = update_job.start_job(kind, ziel, user.id, **kwargs)
+    except ValueError as exc:
+        return templates.TemplateResponse(request, "admin/_update_status.html", {
+            "user": user, "error": str(exc), "job": update_job.public_status(),
+        }, status_code=409 if "bereits in Arbeit" in str(exc) else 400)
+    return templates.TemplateResponse(request, "admin/_update_status.html", {"user": user, "job": job})
+
+
+@router.get("/system/update/status")
+def update_status(request: Request, user: User = Depends(require_system_admin)):
+    update_job.verify_after_restart()
+    job = update_job.public_status()
+    if request.headers.get("HX-Request") != "true" and "text/html" not in request.headers.get("accept", ""):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"job": job})
+    return templates.TemplateResponse(request, "admin/_update_status.html", {"user": user, "job": job})
+
+
 @router.get("/system/update", response_class=HTMLResponse)
 def update_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
+    update_job.verify_after_restart()
     version = get_current_version()
     return templates.TemplateResponse(
         request,
@@ -2561,6 +2582,7 @@ def update_page(request: Request, db=Depends(get_db), user: User = Depends(requi
             "token_configured": get_github_token(db) is not None,
             "deployed_ref": _deployed_ref(db),
             "token_saved": request.query_params.get("token_saved"),
+            "job": update_job.public_status(),
         },
     )
 
@@ -2579,7 +2601,7 @@ def apply_system_update(
     if not release_zip.filename or not release_zip.filename.endswith(".zip"):
         return templates.TemplateResponse(
             request,
-            "admin/system_update.html",
+            "admin/_update_status.html",
             {
                 "user": user,
                 "is_docker": is_docker(),
@@ -2591,7 +2613,7 @@ def apply_system_update(
     if app_settings.UPDATE_ZIP_REQUIRE_HASH and not expected_sha256.strip():
         return templates.TemplateResponse(
             request,
-            "admin/system_update.html",
+            "admin/_update_status.html",
             {
                 "user": user,
                 "is_docker": is_docker(),
@@ -2610,22 +2632,12 @@ def apply_system_update(
                              "sha256_prefix": compute_sha256(tmp_path)[:16]},
                     ip=request.client.host if request.client else None)
         db.commit()
-        result = apply_update(tmp_path, expected_sha256=expected_sha256.strip() or None,
-                              install_deps=install_deps_raw in ("1", "true", "on"))
+        return _start_update_response(request, user, "zip", "ZIP", zip_path=tmp_path,
+                                      expected_sha256=expected_sha256.strip() or None,
+                                      install_deps=install_deps_raw in ("1", "true", "on"))
     finally:
         if tmp_path:
             tmp_path.unlink(missing_ok=True)
-
-    return templates.TemplateResponse(
-        request,
-        "admin/system_update.html",
-        {
-            "user": user,
-            "is_docker": is_docker(),
-            "version": get_current_version(),
-            "update_result": result,
-        },
-    )
 
 
 @router.get("/system/update/check-github", response_class=HTMLResponse)
@@ -2670,7 +2682,7 @@ def apply_github_update(
     if validation or not github.get("download_url") or not github.get("tag_name"):
         return templates.TemplateResponse(
             request,
-            "admin/_github_update.html",
+            "admin/_update_status.html",
             {
                 "user": user,
                 "is_docker": is_docker(),
@@ -2690,24 +2702,8 @@ def apply_github_update(
         ip=request.client.host if request.client else None,
     )
     db.commit()
-    result = deploy_github_release(
-        github["download_url"],
-        tag_name,
-        token=token,
-        install_deps=install_deps_raw in ("1", "true", "on"),
-    )
-    github_after = check_github_release(prerelease=prerelease, token=token)
-    return templates.TemplateResponse(
-        request,
-        "admin/_github_update.html",
-        {
-            "user": user,
-            "is_docker": is_docker(),
-            "github": github_after,
-            "prerelease": prerelease,
-            "update_result": result,
-        },
-    )
+    return _start_update_response(request, user, "release", tag_name,
+                                  install_deps=install_deps_raw in ("1", "true", "on"))
 
 
 # ── Direktes Repo-Update (Branch-Zipball, system_admin) ──────────────────────
@@ -2759,7 +2755,7 @@ def apply_github_branch_update(
     if branch_info.get("error") or not branch_info.get("sha"):
         return templates.TemplateResponse(
             request,
-            "admin/_github_branch_update.html",
+            "admin/_update_status.html",
             {
                 "user": user,
                 "is_docker": is_docker(),
@@ -2785,29 +2781,8 @@ def apply_github_branch_update(
     )
     db.commit()
 
-    result = deploy_github_branch(
-        branch,
-        branch_info["download_url"],
-        token=token,
-        install_deps=install_deps_raw in ("1", "true", "on"),
-    )
-    if result.get("success"):
-        _save_deployed_ref(db, user.id, branch, branch_info["sha"])
-        db.commit()
-
-    return templates.TemplateResponse(
-        request,
-        "admin/_github_branch_update.html",
-        {
-            "user": user,
-            "is_docker": is_docker(),
-            "branch_info": check_github_branch(branch, token=token),
-            "branches": list_github_branches(token=token),
-            "branch": branch,
-            "deployed_ref": _deployed_ref(db),
-            "update_result": result,
-        },
-    )
+    return _start_update_response(request, user, "branch", branch,
+                                  install_deps=install_deps_raw in ("1", "true", "on"))
 
 
 @router.post("/system/update/github-token")

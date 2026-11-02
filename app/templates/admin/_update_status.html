@@ -1,0 +1,38 @@
+<div id="update-status" class="sys-card" aria-live="polite"
+     hx-on::before-swap="if ([400, 409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+     {% if job and job.state not in ['success', 'failed', 'unconfirmed'] %}
+     hx-get="/admin/system/update/status" hx-trigger="every 2s" hx-swap="outerHTML"
+     {% endif %}>
+  <div class="card-body update-status-body">
+    {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+    {% if update_result is defined %}<div class="alert alert--error">{{ update_result.message }}</div>{% endif %}
+    {% if job %}
+    <h2>{{ icon("refresh") }} Update-Fortschritt</h2>
+    <p><strong>{{ job.message }}</strong></p>
+    {% set job_states = {'queued': 'Eingereiht', 'running': 'Läuft', 'restarting': 'Neustart', 'verifying': 'Nachprüfung', 'success': 'Erfolgreich', 'failed': 'Fehlgeschlagen', 'unconfirmed': 'Nicht bestätigt'} %}
+    <p class="text-muted">Ziel: {{ job.ziel }} | Status: {{ job_states.get(job.state, job.state) }}</p>
+    {% set labels = {'backup': 'Sicherung', 'code': 'Code einspielen', 'dependencies': 'Abhängigkeiten', 'migration': 'Datenbank-Migration', 'reload': 'Neustart'} %}
+    {% set states = {'queued': 'Wartet', 'running': 'Läuft', 'success': 'Abgeschlossen', 'failed': 'Fehlgeschlagen'} %}
+    <ol>
+      {% for step in job.steps %}
+      <li>{{ labels[step.name] }}: {{ states.get(step.status, step.status) }}</li>
+      {% endfor %}
+    </ol>
+    {% if job.state in ['success', 'failed', 'unconfirmed'] and job.result %}
+    <dl class="sys-kv">
+      <div><dt>Dateien aktualisiert</dt><dd>{{ job.result.files_updated | default('-') }}</dd></div>
+      <div><dt>Geschützt übersprungen</dt><dd>{{ job.result.files_skipped | default('-') }}</dd></div>
+      <div><dt>Backup</dt><dd>{{ job.result.backup.message if job.result.backup is defined else '-' }}</dd></div>
+      <div><dt>Abhängigkeiten</dt><dd>{{ job.result.deps_installed | default('-') }}</dd></div>
+      <div><dt>Migrationen</dt><dd>{{ job.result.migrations_applied | default('-') }}</dd></div>
+      <div><dt>Server-Reload</dt><dd>{{ 'Bestätigt' if job.state == 'success' else 'Bitte prüfen' }}</dd></div>
+    </dl>
+    {% endif %}
+    {% if job.log %}
+    <details><summary>Protokoll (letzte 40 Zeilen)</summary>
+      <pre class="sys-notes">{{ job.log }}</pre>
+    </details>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>

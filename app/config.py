@@ -173,6 +173,8 @@ class Settings(BaseSettings):
 
     # Update-Mechanismus: erwarteter SHA256 der nächsten Release-ZIP (optional;
     # wenn gesetzt, muss er auch im Upload-Form vom Admin angegeben werden)
+    GUNICORN_PID_FILE: str = ""
+    UPDATE_VERIFY_TIMEOUT_S: int = Field(default=300, ge=1)
     UPDATE_ZIP_REQUIRE_HASH: bool = True
     UPDATE_BACKUP_KEEP: int = Field(default=5, ge=1)
     UPDATE_BACKUP_BEFORE_MIGRATE: bool = True

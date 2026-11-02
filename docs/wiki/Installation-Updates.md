@@ -51,7 +51,69 @@ der Server lehnt Uploads ohne Prüfsumme vor der Verarbeitung ab.
    `UPDATE_MIGRATION_TIMEOUT_S=900` begrenzt die Migration (Sekunden); Fehlermeldungen
    zeigen die letzten 800 Zeichen von stderr.
 7. Erst nach erfolgreichem Abschluss Gunicorn-Reload (SIGHUP) bzw. `systemctl restart` anfordern.
-   Der Ablauf bleibt synchron im Web-Request; die Neustartmechanik ist unverändert.
+   Der Ablauf läuft als eigener Hintergrundprozess; die HTTP-Antwort enthält sofort die Fortschrittsanzeige.
+8. Nach dem Neustart bestätigt die App den neuen Prozess, Alembic-Stand und bei Git den erwarteten Commit.
+
+### Fortschritt und Nachprüfung
+
+Nach der Vorprüfung startet der Request `.venv/bin/python -m app.cli update-run <job_id>`
+als eigenen Prozess mit neuer Session. pip und Migration laufen unabhängig von Browser-
+und Proxy-Timeouts weiter. Die bestehende Update-Seite zeigt Sicherung, Code,
+Abhängigkeiten, Migration und Neustart sowie die letzten 40 bereinigten Protokollzeilen.
+Sie fragt alle zwei Sekunden den Status ab und stoppt bei einem Endzustand.
+Auch beim erneuten Öffnen der Seite bleibt der letzte Job sichtbar.
+
+Unter `app_storage/update/` liegen der atomar geschriebene `status.json` und
+`<job_id>.log`. ZIP und Parameterdatei haben Rechte 0600. Die Parameterdatei wird
+im Kind unmittelbar nach dem Einlesen gelöscht, das ZIP bei Abschluss und bereits
+vor dem Neustart. Das GitHub-Token wird mit eigener DB-Session neu geladen;
+es steht weder in Jobargumenten noch in Status oder Protokoll. Pro Installation
+läuft nur ein Job; ein unerwartet beendeter Prozess wird als fehlgeschlagen markiert.
+
+Vor dem Neustart wird `restarting` samt erwartetem Git-SHA und Alembic-Head gespeichert.
+**systemd mit dem Standard `KillMode=control-group` beendet beim Restart auch den
+Update-Prozess**, obwohl dieser eine eigene Session hat. Daher erledigt der Job
+nach dem Neustart keine weiteren Arbeiten. Ein neuer App-Prozess prüft best-effort
+beim Start (nur DB-lesend) und beim Statusabruf: neuer Prozess nach Restartbeginn,
+DB-Revision gleich Code-Head gleich erwartetem Head sowie Git-HEAD gleich erwartetem SHA.
+Erst dann gilt `success`. `/health` bleibt unverändert.
+
+Nach `UPDATE_VERIFY_TIMEOUT_S=300` ohne Bestätigung gilt `unconfirmed`.
+Das bedeutet: Ergebnis offen, keine automatische Wiederholung. Serverprozess,
+`alembic current`, `alembic heads` und `git rev-parse HEAD` prüfen. Eine abweichende
+Revision, ein alter Prozess oder ein anderer Commit verhindern die Erfolgsanzeige.
+`system.update_job` auditiert Job-ID, Art, Ziel und Endzustand beim Statusabruf;
+die bestehenden Aktionsaudits bleiben bestehen.
+
+### PID-Datei und sudoers
+
+Die mitgelieferte Unit verwendet `--pid /run/einsatzleiter/gunicorn.pid`,
+`RuntimeDirectory=einsatzleiter` und `RuntimeDirectoryMode=0750`.
+In `.env` dazu setzen:
+
+```dotenv
+GUNICORN_PID_FILE=/run/einsatzleiter/gunicorn.pid
+UPDATE_VERIFY_TIMEOUT_S=300
+```
+
+Nach Änderung der Unit als Betreiber `sudo systemctl daemon-reload` und einen
+manuellen Neustart ausführen. Bei erreichbarer Master-PID nutzt die App SIGHUP
+für einen graceful Reload. Ohne Setting wird wie bisher `gunicorn.pid` im
+Projektverzeichnis versucht; ohne gültige PID greift `sudo -n systemctl restart einsatzleiter`
+mit 15 Sekunden Zeitlimit. Es werden keine zusätzlichen sudo-Rechte benötigt.
+Das minimale Beispiel in `deploy/sudoers-einsatzleiter.example` lautet:
+
+```sudoers
+clp-einsatz ALL=(root) NOPASSWD: /usr/bin/systemctl restart einsatzleiter
+```
+
+Mit `sudo visudo -f /etc/sudoers.d/einsatzleiter` bearbeiten und mit `sudo visudo -c`
+prüfen. Es wird kein Recht für `systemd-run` oder eine zusätzliche Update-Unit benötigt.
+Bei Fehler erscheint "Neustart fehlgeschlagen, bitte manuell: sudo systemctl restart einsatzleiter".
+**Code und Migration sind dann bereits eingespielt.** Neustartrecht, Dienst und
+Journal prüfen und den Neustart manuell ausführen. Ein Job mit "Prozess unerwartet
+beendet" kann einen halbfertigen Code-/DB-Zustand hinterlassen: vor erneutem Update
+Protokoll, Pre-Update-Dump und Migrationsstand prüfen.
 
 ### Automatisches Backup vor dem Code-Austausch
 

@@ -48,10 +48,9 @@
 </div>
 
 <form hx-post="/admin/system/update/github-branch"
-      hx-target="#github-branch-box" hx-swap="innerHTML"
-      onsubmit="return confirm('Branch {{ branch }}@{{ branch_info.sha_short }} direkt einspielen? Empfehlung: vorher DB-Backup.') &&
-                (this.querySelector('button[type=submit]').disabled=true,
-                 this.querySelector('button[type=submit]').textContent='Wird eingespielt…', true)">
+      hx-target="#update-status" hx-swap="outerHTML"
+      hx-confirm="Branch {{ branch }}@{{ branch_info.sha_short }} direkt einspielen? Empfehlung: vorher DB-Backup."
+      hx-disabled-elt="find button[type='submit']">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <input type="hidden" name="branch" value="{{ branch }}">
   <div class="sys-row">
