@@ -376,6 +376,8 @@ async def _complete_vision(
             "Bitte pip install -e . ausführen."
         ) from exc
     client = AsyncAnthropic(api_key=api_key)
+    # Bewusst Any: die SDK-Typen fuer Nachrichten-Inhalte unterscheiden sich je Hauptversion.
+    nachrichten: list[Any] = [{"role": "user", "content": content}]
 
     try:
         response = await asyncio.wait_for(
@@ -383,7 +385,7 @@ async def _complete_vision(
                 model=model,
                 max_tokens=tokens,
                 system=system,
-                messages=[{"role": "user", "content": content}],  # type: ignore[typeddict-item]
+                messages=nachrichten,
             ),
             timeout=float(platform_cfg["timeout"]),
         )
