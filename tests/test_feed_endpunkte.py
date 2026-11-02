@@ -86,7 +86,7 @@ def test_feed_list_detail_head_and_etag(client):
     headers = {"X-API-Key": _key(org_id)}
 
     since = (started_at - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
-    listing = client.get(f"/api/v1/feed/einsaetze?since={since}", headers=headers)
+    listing = client.get(f"/api/v1/feed/einsaetze?since={since}&limit=200", headers=headers)
     assert listing.status_code == 200
     assert listing.headers["Cache-Control"] == "private, no-cache"
     assert "X-API-Key" in listing.headers["Vary"]
@@ -100,7 +100,7 @@ def test_feed_list_detail_head_and_etag(client):
     assert body["server_time"].endswith("Z")
 
     etag = listing.headers["ETag"]
-    path = f"/api/v1/feed/einsaetze?since={since}"
+    path = f"/api/v1/feed/einsaetze?since={since}&limit=200"
     conditional = client.get(path, headers={**headers, "If-None-Match": f'W/{etag}, "other"'})
     assert conditional.headers["ETag"] == etag
     assert conditional.status_code == 304
