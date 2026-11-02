@@ -247,12 +247,20 @@ def restarting(archive, monkeypatch, *, seconds=0):
     return status, db
 
 
-def test_verify_success(archive, monkeypatch):
-    restarting(archive, monkeypatch)
+@pytest.mark.parametrize("kind", ["zip", "release"])
+def test_verify_success(archive, monkeypatch, kind):
+    status, _ = restarting(archive, monkeypatch)
+    status.update(kind=kind, ziel="v2026.11.02")
+    job._save(status)
     job.verify_after_restart()
     status = job.get_status()
     assert status["state"] == "success" and status["result"]["server_reloaded"]
     assert status["finished_at"]
+    path = job.directory() / "installed.json"
+    assert path.exists() == (kind == "release")
+    if kind == "release":
+        assert json.loads(path.read_text())["tag"] == "v2026.11.02"
+        assert path.stat().st_mode & 0o777 == 0o600
     job._audit.assert_called_once()
 
 

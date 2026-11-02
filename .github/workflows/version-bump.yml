@@ -1,78 +1,32 @@
-name: Version Bump nach Release
+name: Release-Version prüfen
 
-on:
+"on":
   release:
     types: [published]
 
-jobs:
-  bump:
-    name: CalVer-Version aktualisieren
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+permissions:
+  contents: read
 
+jobs:
+  verify:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Dateien aktualisieren
+          ref: ${{ github.event.release.tag_name }}
+      - name: Version des Tag-Standes prüfen
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           python3 - <<'EOF'
-          import datetime
-          import re
+          import os
           import sys
+          import tomllib
 
-          content = open("pyproject.toml").read()
-          m = re.search(r'^version = "([\d.]+)"', content, re.MULTILINE)
-          if not m:
-              sys.exit("Version nicht gefunden in pyproject.toml")
-
-          old_ver = m.group(1)
-          today = datetime.date.today().strftime("%Y.%m.%d")
-          if old_ver == today:
-              new_ver = f"{today}.1"
-          elif old_ver.startswith(f"{today}."):
-              suffix = old_ver.removeprefix(f"{today}.")
-              if not suffix.isdigit():
-                  sys.exit(f"Ungueltiger CalVer-Suffix: {old_ver}")
-              new_ver = f"{today}.{int(suffix) + 1}"
-          else:
-              new_ver = today
-          print(f"Bump: {old_ver} -> {new_ver}")
-
-          def replace_first(path, pattern, repl):
-              text = open(path, encoding="utf-8").read()
-              new_text, n = re.subn(pattern, repl, text, count=1, flags=re.MULTILINE)
-              if n == 0:
-                  sys.exit(f"Pattern nicht gefunden in {path}")
-              open(path, "w", encoding="utf-8").write(new_text)
-
-          replace_first("pyproject.toml",
-              r'^version = "[\d.]+"',
-              f'version = "{new_ver}"')
-          replace_first("app/config.py",
-              r'APP_VERSION: str = "[\d.]+"',
-              f'APP_VERSION: str = "{new_ver}"')
-          replace_first("README.md",
-              r'!\[Version\]\(https://img\.shields\.io/badge/version-[\d.]+-orange\)',
-              f'![Version](https://img.shields.io/badge/version-{new_ver}-orange)')
-          replace_first("README.md",
-              r'^Aktuell: \*\*[\d.]+\*\* · → \[Vollständige Versionshistorie\]\(CHANGELOG\.md\)$',
-              f'Aktuell: **{new_ver}** · → [Vollständige Versionshistorie](CHANGELOG.md)')
+          with open("pyproject.toml", "rb") as source:
+              version = tomllib.load(source)["project"]["version"]
+          if os.environ["RELEASE_TAG"].removeprefix("v") != version:
+              print("::error::Release-Tag und pyproject.toml-Version stimmen nicht überein. "
+                    "Releases über release.yml erstellen: Version vor dem Tag setzen.")
+              sys.exit(1)
           EOF
-
-      - name: Neue Version lesen
-        id: ver
-        run: |
-          V=$(python3 -c "import re; m=re.search(r'^version = \"([\d.]+)\"', open('pyproject.toml').read(), re.MULTILINE); print(m.group(1))")
-          echo "new_version=$V" >> "$GITHUB_OUTPUT"
-
-      - name: Commit und Push
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml app/config.py README.md
-          git commit -m "chore: Version auf ${{ steps.ver.outputs.new_version }} aktualisieren (nach Release)"
-          git push origin HEAD:main

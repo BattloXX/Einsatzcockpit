@@ -6,6 +6,8 @@
   <div class="sys-row sys-gap-sm">
     {% if github.get('error') %}
     <span class="sys-pill sys-status--fail">{{ icon("alert-triangle", size="sm") }} Fehler beim Abrufen</span>
+    {% elif github.get('is_downgrade') %}
+    <span class="sys-pill sys-status--ok">Installierte Version ist neuer als das letzte Release</span>
     {% elif github.has_update %}
     <span class="sys-pill sys-status--warn">{{ icon("refresh", size="sm") }} Update verfügbar: v{{ github.latest_tag }}</span>
     {% if github.is_prerelease %}

@@ -15,6 +15,15 @@ Installationen ohne `.git` wird das Release-ZIP als geschütztes Overlay eingesp
 Der POST übernimmt den angezeigten Tag. Vor der Installation wird geprüft, ob er noch
 das aktuelle veröffentlichte Release ist; bei einem Wechsel muss erneut geprüft werden.
 Entwürfe werden auch bei eingeschlossenen Pre-Releases ignoriert.
+Der Vergleich erfolgt numerisch nach CalVer (z. B. `2026.11.02.1` > `2026.11.02`).
+Ist der installierte Stand neuer, erscheint „Installierte Version ist neuer als das letzte Release"
+und kein Server-Update-Button.
+
+Nach bestätigtem Neustart speichern Release-Updates `app_storage/update/installed.json`
+atomar mit Dateirechten 0600 (`kind`, `tag`, `sha`, `installed_at`). Damit zeigen auch alte
+Release-Tags mit einer Vorversion in `pyproject.toml` die tatsächlich installierte Version.
+Bei Git gilt die Datei nur für denselben HEAD; ohne Git nur, wenn die Code-Version
+parsbar und nicht neuer als der gespeicherte Tag ist. Sonst gilt wieder `pyproject.toml`.
 
 ### 2. Direkt vom Repository (Branch — Hotfixes & Testsysteme)
 
@@ -224,6 +233,31 @@ werden nur die letzten drei Verzeichnisse unter `.update-rollback/` behalten;
 Die Dateisicherung ersetzt kein Datenbank-Backup. Dump-Downloads und Änderungen der
 Backup-Aufbewahrung werden ebenso wie ZIP-Uploads (Name, Größe, SHA256-Präfix, kein Inhalt)
 im Audit-Log erfasst.
+
+## Release erstellen
+
+Releases über **GitHub → Actions → Release → Run workflow** oder die GitHub-CLI starten:
+
+```bash
+gh workflow run release.yml -f notes="Fehlerbehebungen und Verbesserungen im Update-Verfahren."
+```
+
+`notes` enthält die deutschen Release-Notes; über die CLI sind auch mehrzeilige Werte
+möglich. Optional: `-f version=2026.11.02.1`, `-f prerelease=true` und `-f target=main`.
+Ohne `version` berechnet der Workflow das heutige Datum als `YYYY.MM.DD` und ergänzt
+bei gleicher Code-Version oder belegtem Tag einen freien `.N`-Suffix. Explizite Versionen
+müssen `YYYY.MM.DD` oder `YYYY.MM.DD.N` entsprechen; vorhandene Tags werden abgelehnt.
+
+Der Workflow liest `target` (Standard `main`), aktualisiert `pyproject.toml`, `APP_VERSION`
+und beide README-Versionsangaben, committet als `github-actions[bot]` und pusht diesen
+Commit auf `main`. Ein anderer Quellstand muss sich daher ohne Force-Push auf `main`
+übernehmen lassen. Erst danach setzt und pusht er `v<version>` auf genau diesen Commit
+und erstellt das Release mit den eingegebenen Notes. Die Gruppe `release` serialisiert
+Release-Läufe. Der vorhandene `GITHUB_TOKEN` genügt; kein neuer Secret ist nötig.
+
+Tags und Releases nicht mehr manuell vor dem Versionscommit anlegen. Der bisherige
+Workflow `version-bump.yml` verändert keine Dateien mehr: Bei `release: published`
+prüft er die `pyproject.toml` des Tags und meldet Abweichungen mit Hinweis auf `release.yml`.
 
 ## Update-Frequenz
 

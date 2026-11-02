@@ -445,16 +445,48 @@ def _reload_server() -> bool:
     return False
 
 
+def parse_calver(text: str) -> tuple[int, ...] | None:
+    """CalVer mit optionalem v-Präfix und Tages-Suffix lesen."""
+    if not re.fullmatch(r"v?[0-9]{4}\.[0-9]{2}\.[0-9]{2}(?:\.[0-9]+)?", text):
+        return None
+    return tuple(int(part) for part in text.removeprefix("v").split("."))
+
+
+def is_newer(latest: str, current: str) -> bool:
+    """CalVer numerisch vergleichen; unbekannte Versionen wie bisher behandeln."""
+    left, right = parse_calver(latest), parse_calver(current)
+    if left is None or right is None:
+        return latest.removeprefix("v") != current.removeprefix("v")
+    return (*left[:3], left[3] if len(left) == 4 else 0) > (
+        *right[:3], right[3] if len(right) == 4 else 0
+    )
+
+
 def get_current_version() -> str:
-    """Liest die aktuelle Version aus pyproject.toml."""
+    """Code-Version lesen; bestätigte alte Releases über lokale Metadaten erkennen."""
+    current = "unbekannt"
     try:
         content = (APP_ROOT / "pyproject.toml").read_text()
         for line in content.splitlines():
             if line.strip().startswith("version"):
-                return line.split("=")[1].strip().strip('"').strip("'")
+                current = line.split("=")[1].strip().strip('"').strip("'")
+                break
     except Exception:
-        pass
-    return "unbekannt"
+        return current
+    try:
+        installed = json.loads((APP_ROOT / "app_storage/update/installed.json").read_text())
+        tag = installed.get("tag")
+        if installed.get("kind") != "release" or not isinstance(tag, str) or parse_calver(tag) is None:
+            return current
+        if is_git_checkout():
+            rc, sha, _ = _run_git(["rev-parse", "HEAD"], timeout=2)
+            if rc or not sha or sha != installed.get("sha"):
+                return current
+        elif parse_calver(current) is None or is_newer(current, tag):
+            return current
+        return tag.removeprefix("v")
+    except Exception:
+        return current
 
 
 GITHUB_REPO = "BattloXX/Einsatzcockpit"
@@ -520,7 +552,7 @@ def check_github_release(
             )
 
         tag_name = data.get("tag_name", "")
-        tag = tag_name.lstrip("v")
+        tag = tag_name.removeprefix("v")
         assets = data.get("assets", [])
 
         # Server-ZIP: eigenes Release-Asset bevorzugen; Fallback: GitHub-Quellcode-ZIP
@@ -535,7 +567,9 @@ def check_github_release(
             "latest_tag": tag,
             "tag_name": tag_name,
             "download_url": download_url,
-            "has_update": bool(tag) and tag != current,
+            "has_update": bool(tag) and is_newer(tag_name, current),
+            "is_downgrade": (parse_calver(tag_name) is not None and parse_calver(current) is not None
+                             and is_newer(current, tag_name)),
             "is_prerelease": bool(data.get("prerelease", False)),
             "release_name": data.get("name", ""),
             "release_notes": (data.get("body") or "")[:500],
@@ -550,6 +584,7 @@ def check_github_release(
             "tag_name": None,
             "download_url": None,
             "has_update": False,
+            "is_downgrade": False,
             "is_prerelease": False,
             "error": str(exc)[:200],
         }

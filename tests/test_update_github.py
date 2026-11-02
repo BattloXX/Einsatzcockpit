@@ -515,7 +515,6 @@ def test_reload_server_reports_failure_when_sudo_restart_fails(monkeypatch):
     "Server-Reload: Ja", obwohl der laufende Prozess nie neu gestartet wurde)."""
     from app.services import update_service as us
 
-    monkeypatch.setattr(us, "APP_ROOT", Path("/nonexistent-app-root"))
     monkeypatch.setattr(
         us.subprocess, "run",
         lambda *a, **k: subprocess.CompletedProcess(a, returncode=1, stdout=b"", stderr=b"sudo: a password is required"),
@@ -526,7 +525,6 @@ def test_reload_server_reports_failure_when_sudo_restart_fails(monkeypatch):
 def test_reload_server_reports_success_when_sudo_restart_succeeds(monkeypatch):
     from app.services import update_service as us
 
-    monkeypatch.setattr(us, "APP_ROOT", Path("/nonexistent-app-root"))
     monkeypatch.setattr(
         us.subprocess, "run",
         lambda *a, **k: subprocess.CompletedProcess(a, returncode=0, stdout=b"", stderr=b""),

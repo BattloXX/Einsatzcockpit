@@ -1,0 +1,142 @@
+name: Release
+
+"on":
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (leer: heutige CalVer mit freiem Suffix)"
+        type: string
+        required: false
+      notes:
+        description: "Release-Notes auf Deutsch (mehrzeilig möglich)"
+        type: string
+        required: true
+      prerelease:
+        description: "Als Pre-Release veröffentlichen"
+        type: boolean
+        default: false
+      target:
+        description: "Quellstand für den Release-Commit auf main"
+        type: string
+        default: main
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target }}
+          fetch-depth: 0
+
+      - name: Version berechnen und Dateien aktualisieren
+        id: ver
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'EOF'
+          import datetime
+          import os
+          import re
+          import subprocess
+          import sys
+
+          content = open("pyproject.toml", encoding="utf-8").read()
+          m = re.search(r'^version = "([\d.]+)"', content, re.MULTILINE)
+          if not m:
+              sys.exit("Version nicht gefunden in pyproject.toml")
+          old_ver = m.group(1)
+          tags = set(subprocess.check_output(["git", "tag", "--list"], text=True).splitlines())
+          new_ver = os.environ["REQUESTED_VERSION"].strip()
+          if not new_ver:
+              today = datetime.date.today().strftime("%Y.%m.%d")
+              suffix = 0
+              if old_ver == today:
+                  suffix = 1
+              elif old_ver.startswith(f"{today}."):
+                  suffix = int(old_ver.removeprefix(f"{today}.")) + 1
+              new_ver = today if suffix == 0 else f"{today}.{suffix}"
+              while f"v{new_ver}" in tags:
+                  suffix += 1
+                  new_ver = f"{today}.{suffix}"
+          if not re.fullmatch(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?", new_ver):
+              sys.exit("Ungültiges Versionsformat: erwartet YYYY.MM.DD oder YYYY.MM.DD.N")
+          if f"v{new_ver}" in tags:
+              sys.exit(f"Tag v{new_ver} existiert bereits")
+          print(f"Version: {old_ver} -> {new_ver}")
+          def replace_first(path, pattern, repl):
+              text = open(path, encoding="utf-8").read()
+              new_text, n = re.subn(pattern, repl, text, count=1, flags=re.MULTILINE)
+              if n == 0:
+                  sys.exit(f"Pattern nicht gefunden in {path}")
+              open(path, "w", encoding="utf-8").write(new_text)
+
+          replace_first("pyproject.toml",
+              r'^version = "[\d.]+"',
+              f'version = "{new_ver}"')
+          replace_first("app/config.py",
+              r'APP_VERSION: str = "[\d.]+"',
+              f'APP_VERSION: str = "{new_ver}"')
+          replace_first("README.md",
+              r'!\[Version\]\(https://img\.shields\.io/badge/version-[\d.]+-orange\)',
+              f'![Version](https://img.shields.io/badge/version-{new_ver}-orange)')
+          replace_first("README.md",
+              r'^Aktuell: \*\*[\d.]+\*\* · → \[Vollständige Versionshistorie\]\(CHANGELOG\.md\)$',
+              f'Aktuell: **{new_ver}** · → [Vollständige Versionshistorie](CHANGELOG.md)')
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"version={new_ver}\n")
+          EOF
+
+      - name: Version committen und auf main pushen
+        id: commit
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml app/config.py README.md
+          git commit --allow-empty -m "chore: Version auf $VERSION setzen (Release)"
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Release-Commit taggen und Tag pushen
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          RELEASE_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          git tag "v$VERSION" "$RELEASE_SHA"
+          git push origin "refs/tags/v$VERSION"
+
+      - name: Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          RELEASE_SHA: ${{ steps.commit.outputs.sha }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes.md"
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "v$VERSION" --target "$RELEASE_SHA" --verify-tag \
+            --title "Einsatzcockpit $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" "${flags[@]}"
+
+      # Mit GITHUB_TOKEN gepushte Tags/Commits loesen keine weiteren Workflows aus;
+      # der Docker-Build wird deshalb ausdruecklich angestossen (Versions-Image + latest).
+      - name: Docker-Images bauen lassen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          gh workflow run docker-build.yml --ref "v$VERSION"
+          gh workflow run docker-build.yml --ref main
