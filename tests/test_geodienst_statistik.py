@@ -112,7 +112,7 @@ async def test_gebaeude_abfrage_zaehlt_cacheart(redis, monkeypatch, cacheart):
     from app.services import objekt_gebaeude_service as gebaeude
 
     monkeypatch.setattr(settings, "OSM_GEBAEUDE_IMPORT_ENABLED", True)
-    monkeypatch.setattr(gebaeude, "_lokale_umrisse", lambda *a: {"gebaeude": []} if cacheart == "cache_lokal" else None)
+    monkeypatch.setattr(gebaeude, "_lokale_umrisse", lambda *a: {"gebaeude": [], "veraltet": False} if cacheart == "cache_lokal" else None)
     antworten = [{"gebaeude": []}] if cacheart == "cache_hit" else [None, {"bis": time.time() + 60}
                  if cacheart == "negativ_cache" else {}]
     monkeypatch.setattr(hydrant_service, "_lesen", AsyncMock(side_effect=antworten))

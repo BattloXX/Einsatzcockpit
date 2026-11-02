@@ -47,3 +47,26 @@ def test_bestand_findings(diag_engine, factory, monkeypatch, fall, kern, schwere
         assert not ergebnis.findings
     with factory() as db:
         assert list(db.scalars(select(OsmImportLauf))) or fall == "fehlt"
+
+
+def test_offene_endpunkte_bei_aktuellem_bestand(diag_engine, factory, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.services import overpass_endpunkte
+
+    monkeypatch.setattr(settings, "OSM_GEBAEUDE_QUELLEN", "region=https://osm.test/region.pbf")
+    monkeypatch.setattr(settings, "OSM_GEBAEUDE_IMPORT_ENABLED", True)
+    endpunkte = [{"host": host, "status": "offen", "offen_bis": "2099-01-01T00:00:00Z",
+                  "code": "OVERPASS_TIMEOUT"} for host in ("eins.test", "zwei.test")]
+    monkeypatch.setattr(overpass_endpunkte, "endpunkt_zustaende", AsyncMock(return_value=endpunkte))
+    with factory() as db:
+        insert(db, "osm_import_lauf", id=1, quelle="region", status="aktiv", datenstand=utcnow(),
+               gestartet_am=utcnow())
+    vorher = snapshot(diag_engine)
+    ergebnis = execute_check(diag_engine, CHECKS["osm.gebaeude_bestand"])
+    assert snapshot(diag_engine) == vorher
+    assert ergebnis.vollstaendig and len(ergebnis.findings) == 1
+    befund = ergebnis.findings[0]
+    assert befund.evidenz["endpunkte"] == endpunkte
+    assert "lokaler Bestand aktuell, Overpass nur Fallback" in befund.empfehlung
+    assert "externe Fehler" in befund.ursache_hypothese

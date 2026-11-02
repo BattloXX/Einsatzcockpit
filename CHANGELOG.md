@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **OSM / Overpass:** Auch bei gleichzeitigem Ablauf von Gesamt- und Versuchszeitlimit zaehlt jeder fehlgeschlagene Versuch genau einmal fuer den Endpunkt-Breaker. Der lokale Gebaeudebestand bleibt primaer (veralteter Stand wird mit Warnung geliefert, die Georef-Alterssperre bleibt wirksam). Admincheck und Systemdiagnose zeigen offene Endpunkte samt Sperrfrist und letztem Fehlercode sowie eine Empfehlung bei gesundem lokalem Bestand. Keine Migration.
+
 - **Monitoring:** Versions-, Android- und WebView-Angaben bleiben fuer Vergleiche erhalten. Fehlgeschlagene Diagnosechecks zeigen maskierte Ursache und Dauer; geplante Laeufe wiederholen einmal. Befunde schliessen nach drei erfolgreichen Pruefungen ohne erneutes Auftreten auch bei unvollstaendiger Datenbasis (Migration 0343). Nicht eingerichtete Dienste werden separat ausgewiesen; abgelaufene Worker verschwinden nach 24 Stunden aus Warnungen und werden bereinigt.
 
 - **Geraete-API:** Neuer authentifizierter Endpunkt `GET /api/v1/device/capabilities` liefert API-Version 1, Server-Version und vorhandene Funktionen mit expliziter Routen-Zuordnung; Sitzung oder Bearer-Geraetetoken wie beim FCM-Token-Status. Keine Migration.

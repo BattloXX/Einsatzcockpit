@@ -146,9 +146,24 @@ verwenden. Gebaeude: 25 Sekunden je Versuch, 45 Sekunden Gesamtbudget;
 Hydranten: 8 Sekunden je Versuch, 10 Sekunden insgesamt. Reserven fuer Cache und
 Aufbereitung koennen das fuer HTTP verfuegbare Budget verkuerzen.
 
+Der lokale Bestand enthaelt nur Gebaeude-Way-IDs und Ecken, keine Hydranten,
+Strassennetze oder Adress-/Nutzungstags. `objekt_gebaeude_service` nutzt ihn zuerst,
+auch bei leeren Treffern; nur fehlende Abdeckung oder deaktivierter Import fuehren zu Overpass; veralteter Stand wird mit Warnung geliefert. `hydrant_service` und
+`osm_street_service` haben keine lokale Extrakt-Alternative. Auch
+`planspiel_ort_service` benoetigt Adress-/Nutzungstags, Strassen, Gewaesser und
+Bahnlinien, die dieser Bestand nicht liefern kann. Diese bestehenden Nutzer
+behalten ihre Abfragen und Caches. `admin_mcp/osm_tools` liest Bestand und
+Breaker-Zustaende; seine Live-Proben fragen nur den Dienststatus ab.
+
 Jeder Endpunkt hat einen gemeinsamen Fehlerschutz aus Fehlerfenster, Schwelle und
 Pause (`OVERPASS_ENDPUNKT_FENSTER_SECONDS`, `OVERPASS_ENDPUNKT_FEHLER`,
 `OVERPASS_ENDPUNKT_PAUSE_SECONDS`). Offene Endpunkte werden uebersprungen.
+Jeder fehlgeschlagene Versuch zaehlt genau einmal, auch wenn das Gesamtbudget
+vor dem inneren Versuchszeitlimit ablaeuft. Die Verbuchung erfolgt ausserhalb
+des HTTP-Zeitbudgets. Mit REDIS_URL sind Zustand und Sperre workeruebergreifend;
+ohne Redis oder bei Redis-Ausfall gilt der lokale TTL-Zustand nur pro Prozess,
+die lokale asyncio-Sperre nur pro Event-Loop. Dieser Ausfallzustand ist nicht
+neustartfest.
 HTTP 429 beruecksichtigt Retry-After. Erfolg schliesst den Endpunkt-Fehlerschutz;
 der getrennte Hydranten-Breaker sperrt keine Gebaeudeabfragen. Wiederholungen
 bleiben im Gesamtbudget, 4xx ausser 429 brechen sofort ab.
@@ -190,7 +205,7 @@ nicht in hit/(hit+miss) ein. Tageszaehler aggregieren UTC-Kalendertage, die
 24-Stunden-Warnung nutzt die letzten Host-Fehlerzeitpunkte.
 
 Das System-Admin-MCP-Werkzeug `admin_osm_pruefen(live=true)` liest Bestand,
-Statistik und beide Fehlerschutzarten. Parallele GET-Status-/HEAD-PBF-Proben
+Statistik und beide Fehlerschutzarten inklusive offen_bis und letztem Code. Parallele GET-Status-/HEAD-PBF-Proben
 verwenden den ehrlichen User-Agent, maximal 5 Sekunden je Probe und insgesamt
 weniger als 15 Sekunden. Sie schreiben weder Statistik noch Fehlerschutz.
 `admin_system_uebersicht` verwendet ausschliesslich `live=false`.
@@ -202,5 +217,8 @@ in der Systemdiagnose und ist ueber `admin_diagnose_starten` anforderbar.
 Er arbeitet hinter der SELECT-Sperre mit begrenzten Abfragen je Quelle:
 fehlender aktiver Bestand ist `fail`, veralteter/unbekannter Stand, wartender
 Prueflauf und ein juengerer Fehlerlauf als der aktive Lauf sind `warn`.
-Die Empfehlungen nennen Import-, Status- und Aktivierungs-CLI. Weder dieser
+Der Check liest auch den Endpunkt-Fehlerschutz und meldet offene Endpunkte
+mit offen_bis und letztem Code. Sind alle Endpunkte offen und die lokalen
+Quellen aktuell, lautet die Empfehlung: "lokaler Bestand aktuell, Overpass nur Fallback".
+Die Empfehlungen nennen sonst Import-, Status- und Aktivierungs-CLI. Weder dieser
 Check noch das MCP-Tool veraendern Georeferenzen, Vorschlaege oder Marker.

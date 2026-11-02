@@ -206,3 +206,64 @@ async def test_uebersprungene_endpunkte(monkeypatch):
     assert ausfall.value.versuchte == 0
     assert len(ausfall.value.versuche) == 2
     assert all(v["uebersprungen"] and v["code"] == "OVERPASS_HTTP_5XX" for v in ausfall.value.versuche)
+
+
+@pytest.mark.parametrize("timeout_je_versuch,budget", [(1.1, 1.1), (0.02, 2)])
+async def test_timeout_zaehlt_genau_einmal_und_sperrt(umgebung, monkeypatch, timeout_je_versuch, budget):
+    import asyncio
+
+    monkeypatch.setattr(settings, "OVERPASS_FALLBACK_URLS", "")
+    statistik = AsyncMock()
+    monkeypatch.setattr(oe.geodienst_statistik, "fehler", statistik)
+
+    async def langsam(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    post = AsyncMock(side_effect=langsam)
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    key = "overpass-endpunkt:" + hashlib.sha256(PRIMAER.encode()).hexdigest()
+    for anzahl in range(1, settings.OVERPASS_ENDPUNKT_FEHLER + 1):
+        with pytest.raises(oe.OverpassNichtVerfuegbar) as ausfall:
+            await oe.abfragen("query", primaer=PRIMAER, timeout_je_versuch=timeout_je_versuch,
+                              budget_s=budget, zweck="test")
+        assert ausfall.value.versuchte == 1
+        assert len(ausfall.value.versuche) == 1
+        assert ausfall.value.versuche[0]["code"] == "OVERPASS_TIMEOUT"
+        assert len((await hs._lesen(key))["fehler"]) == anzahl
+        assert statistik.await_count == anzahl
+    assert (await hs._lesen(key))["offen_bis"] > umgebung[0]
+    with pytest.raises(oe.OverpassNichtVerfuegbar) as ausfall:
+        await _abfragen()
+    assert ausfall.value.versuchte == 0
+    assert ausfall.value.versuche[0]["uebersprungen"]
+    assert post.await_count == settings.OVERPASS_ENDPUNKT_FEHLER
+
+
+async def test_aeusserer_timeout_zaehlt_fallback_statt_vorherigem_endpunkt(monkeypatch):
+    import asyncio
+
+    async def post(self, url, **kwargs):
+        if url == PRIMAER:
+            return _antwort(502)
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    with pytest.raises(oe.OverpassNichtVerfuegbar) as ausfall:
+        await oe.abfragen("query", primaer=PRIMAER, timeout_je_versuch=2, budget_s=2, zweck="test")
+    assert [v["code"] for v in ausfall.value.versuche] == ["OVERPASS_HTTP_5XX", "OVERPASS_TIMEOUT"]
+    for url, code in ((PRIMAER, "OVERPASS_HTTP_5XX"), (FALLBACK, "OVERPASS_TIMEOUT")):
+        key = "overpass-endpunkt:" + hashlib.sha256(url.encode()).hexdigest()
+        zustand = await hs._lesen(key)
+        assert len(zustand["fehler"]) == 1 and zustand["code"] == code
+
+
+async def test_timeout_vor_versuch_ohne_ungebundene_variablen(monkeypatch):
+    import asyncio
+
+    async def langsam(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(hs, "_lesen", langsam)
+    with pytest.raises(oe.OverpassNichtVerfuegbar) as ausfall:
+        await _abfragen(budget=0.02)
+    assert ausfall.value.versuchte == 0 and ausfall.value.versuche == []
