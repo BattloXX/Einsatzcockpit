@@ -16,6 +16,7 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.user import User
 from app.services import annotation_service as ann_svc
+from app.services.objekt_service import objekt_effective_enabled
 
 router = APIRouter(tags=["annotation"])
 
@@ -81,6 +82,7 @@ def annotate_editor(
             f"/objekte/{media.objekt_id}/dokumente/viewer?seite={media_id}"
             if media_typ == "objekt_seite" else None
         ),
+        "objekt_symbole": objekt_effective_enabled(user.org_id, db),
         "can_write": can_write,
         "lock_other": lock["locked_by_other"],
         "lock_name": lock["name"] or "",

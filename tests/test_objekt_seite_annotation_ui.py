@@ -62,6 +62,7 @@ def test_editor_objektseite_konfiguration_und_gedrehtes_original(client, env, ro
     assert '<title>Dokumentseite bearbeiten' in response.text
     assert 'plan.pdf - Seite 1' in response.text
     assert 'overlay: true' in response.text
+    assert 'objektSymbole: true' in response.text
     assert f'backUrl: "/objekte/{env.objekt.id}/dokumente/viewer?seite={env.seite.id}"' in response.text
     assert 'document.referrer' not in response.text
     config = re.search(r"annotationJson: (.*),", response.text)
@@ -98,3 +99,31 @@ def test_drehen_konflikt_als_htmx_toast_detail(client, env):
     )
     assert response.status_code == 409
     assert response.json()["detail"].startswith("Seite enthält Einzeichnungen")
+
+
+@pytest.mark.parametrize("system_aktiv,org_aktiv", [(True, True), (True, False), (False, True)])
+def test_editor_objektsymbole_modulflag_auch_im_einsatz(client, env, system_aktiv, org_aktiv):
+    from datetime import UTC, datetime
+
+    from app.models.incident import Incident, Task, TaskMedia
+    from app.models.master import OrgSettings, SystemSettings
+
+    env.db.get(SystemSettings, "objekt_module_enabled").value = "true" if system_aktiv else "false"
+    env.db.query(OrgSettings).filter_by(org_id=env.org.id).one().objekt_module_enabled = org_aktiv
+    incident = Incident(primary_org_id=env.org.id, alarm_type_code="T1", status="active",
+                        started_at=datetime.now(UTC).replace(tzinfo=None))
+    env.db.add(incident)
+    env.db.flush()
+    task = Task(incident_id=incident.id, title="Symbolbibliothek")
+    env.db.add(task)
+    env.db.flush()
+    media = TaskMedia(task_id=task.id, incident_id=incident.id, kind="image", original_filename="foto.png",
+                      storage_path="symbol-test.png", mime_type="image/png", bytes=0)
+    env.db.add(media)
+    env.db.commit()
+    _login(client, env.users["recorder"].username)
+    response = client.get(f"/annotieren/task/{media.id}")
+    assert response.status_code == 200
+    enabled = "true" if system_aktiv and org_aktiv else "false"
+    assert f"objektSymbole: {enabled}" in response.text
+    assert 'aria-label="Symbolbibliothek (taktische Zeichen, Objekt-Symbole)"' in response.text

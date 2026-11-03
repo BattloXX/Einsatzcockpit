@@ -36,6 +36,15 @@
                     border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: #242c24; color: #dce5d9;
                     cursor: pointer; font-size: 1rem; line-height: 1; }
   .anno-tz__close:hover { border-color: rgba(147,197,253,.5); }
+  .anno-tz__tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+  .anno-tz__tab { min-height: 44px; padding: 6px 10px; border: 1px solid rgba(255,255,255,.18);
+                  border-radius: 8px; background: #242c24; color: #dce5d9; cursor: pointer; }
+  .anno-tz__tab[aria-pressed="true"] { background: rgba(147,197,253,.18); border-color: #93c5fd; }
+  @media (max-width: 760px) {
+    .anno-tz__tabs { flex-wrap: wrap; }
+    .anno-tz__tab { flex: 1 1 200px; }
+    .anno__grp[aria-label="Werkzeug"] { flex-wrap: wrap; }
+  }
   .anno-tz__search { width: 100%; max-width: 300px; padding: 7px 10px; margin-bottom: 6px;
                      border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: #0d150f; color: #dce5d9; }
   .anno-tz__h { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa3b2; margin: 8px 0 4px; }
@@ -62,8 +71,8 @@
       <button type="button" class="anno-btn" data-anno-tool="x" aria-label="X-Markierung" title="X-Markierung">{{ icon("x", size="sm") }}</button>
       <button type="button" class="anno-btn" data-anno-tool="text" aria-label="Text" title="Text">T</button>
       <button type="button" class="anno-btn" data-anno-tool="eraser" aria-label="Element löschen" title="Element löschen">{{ icon("eraser", size="sm") }}</button>
-      <button type="button" class="anno-btn" data-anno-panel="tz" aria-label="Taktische Zeichen / Flächen" title="Taktische Zeichen / Flächen"
-              style="font-size:.92rem; font-weight:700; letter-spacing:.03em;">TZ</button>
+      <button type="button" class="anno-btn" data-anno-panel="tz" aria-label="Symbolbibliothek (taktische Zeichen, Objekt-Symbole)" title="Symbole"
+              style="font-size:.92rem; font-weight:700; letter-spacing:.03em;">Symbole</button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp" aria-label="Farbe">
@@ -107,6 +116,7 @@
     saveUrl: "/api/annotation/{{ media_typ }}/{{ media_id }}",
     lockUrl: "/api/annotation/{{ media_typ }}/{{ media_id }}/lock",
     annotationJson: {{ annotation_json | tojson }},
+    objektSymbole: {{ 'true' if objekt_symbole else 'false' }},
     canWrite: {{ 'true' if can_write else 'false' }},
     lockOther: {{ 'true' if lock_other else 'false' }},
     lockName: {{ lock_name | tojson }},

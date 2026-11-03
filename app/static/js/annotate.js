@@ -21,6 +21,7 @@
 
   // Taktische Zeichen / Flaechen (aus /static/tz/tz-manifest.json)
   var TZ = { symbole: {}, flaechen: {} };
+  var pickerManifest = { symbole: [], flaechen: [] }, objektItems = null, pickerTab = "tz";
   var imgCache = {};
   var aktSymbol = null, aktFlaeche = null;
 
@@ -290,6 +291,7 @@
     // zusammen verschoben/skaliert werden.
     var g = new Konva.Group({ x: p.x, y: p.y });
     g.setAttr("annoType", "symbol"); g.setAttr("symbolSrc", item.datei);
+    if (item.objektSymbolCode) { g.setAttr("objektSymbolCode", item.objektSymbolCode); }
     var node = new Konva.Image({ image: img, x: -s / 2, y: -s / 2, width: s, height: s, name: "tzimg" });
     g.add(node);
     if (!img.complete) { img.onload = function () { annLayer.batchDraw(); }; }
@@ -608,14 +610,62 @@
   function togglePanel(show) {
     var el = byId("anno-tz"); if (!el) { return; }
     var open = (show === undefined) ? (el.style.display === "none" || !el.style.display) : show;
+    if (open) { renderPicker(pickerManifest); }
     el.style.display = open ? "block" : "none";
   }
-  function recentAdd(kind, id) {
-    var r;
-    try { r = JSON.parse(localStorage.getItem("anno_tz_recent") || "[]"); } catch (e) { r = []; }
-    r = r.filter(function (x) { return !(x.kind === kind && x.id === id); });
+  function recentKey(tab) { return tab === "objekt" ? "anno_objekt_recent" : "anno_tz_recent"; }
+  function recentRead(tab) {
+    try {
+      var r = JSON.parse(localStorage.getItem(recentKey(tab)) || "[]");
+      return Array.isArray(r) ? r : [];
+    } catch (e) { return []; }
+  }
+  function recentAdd(kind, id, tab) {
+    tab = tab || "tz";
+    var r = recentRead(tab).filter(function (x) { return !(x.kind === kind && x.id === id); });
     r.unshift({ kind: kind, id: id });
-    try { localStorage.setItem("anno_tz_recent", JSON.stringify(r.slice(0, 8))); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(recentKey(tab), JSON.stringify(r.slice(0, 8))); } catch (e) { /* ignore */ }
+  }
+
+  // Reine Helfer: eigenstaendige SVGs ohne HTML/foreignObject oder externe Fonts.
+  function symbolMatches(item, query) {
+    var text = [item.name, item.code, item.such].join(" ").toLowerCase();
+    return text.indexOf(query.toLowerCase().trim()) !== -1;
+  }
+  function objektSymbolSrc(item) {
+    if (item.stil === "bild" && item.bild) { return item.bild; }
+    function xml(value) {
+      return String(value || "").replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c];
+      });
+    }
+    // Entspricht objekt_karte.js und den oks-Stilen in tailwind.input.css.
+    var stil = item.stil, text = item.text || "", fill = "#fff", ink = "#b71921";
+    var shape = "", font = 11, y = 18, opacity = 1;
+    var w = Math.max(32, text.length * 8 + 12), h = 32;
+    if (stil === "dreieck") {
+      w = 32; shape = '<path d="M16 3L31 29H1Z" fill="#facc15"/>';
+      ink = "#000"; font = 8; y = 23;
+    } else if (stil === "hydrant") {
+      w = 32; shape = '<circle cx="16" cy="16" r="11" fill="#dc2626" stroke="#7f1d1d" stroke-width="2"/>';
+      ink = "#fff"; font = 9;
+    } else if (stil === "pfeil-voll" || stil === "pfeil-leer") {
+      w = Math.max(32, text.length * 20); font = 20; y = 19;
+      if (stil === "pfeil-leer") { ink = "#f87171"; opacity = 0.75; }
+    } else {
+      if (stil === "gruen") { ink = "#15803d"; }
+      if (stil === "rot") { fill = "#b71921"; ink = "#fff"; }
+      shape = '<rect x="1" y="6" width="' + (w - 2) + '" height="20" rx="2" fill="' + fill +
+        '" stroke="' + (stil === "rot" ? fill : ink) + '" stroke-width="2"/>';
+    }
+    var side = Math.max(w, h);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + (side * 4) + '" height="' + (side * 4) +
+      '" viewBox="0 0 ' + side + ' ' + side + '"><g transform="translate(' + ((side - w) / 2) + ' ' +
+      ((side - h) / 2) + ')" opacity="' + opacity + '">' + shape +
+      '<text x="' + (w / 2) + '" y="' + y + '" text-anchor="middle" dominant-baseline="middle"' +
+      ' font-family="Arial, sans-serif" font-size="' + font + '" font-weight="700" fill="' + ink + '">' +
+      xml(text) + '</text></g></svg>';
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   }
   function flaecheSwatch(f) {
     var c = document.createElement("canvas"); c.width = 30; c.height = 24;
@@ -626,22 +676,35 @@
     x.strokeRect(1, 1, 28, 22);
     return c.toDataURL();
   }
-  function pickSymbol(item) { aktSymbol = item; setTool("symbol"); recentAdd("symbole", item.id); togglePanel(false); }
+  function pickSymbol(item) { aktSymbol = item; setTool("symbol"); recentAdd("symbole", item.id, item.objektSymbolCode ? "objekt" : "tz"); togglePanel(false); }
   function pickFlaeche(item) { aktFlaeche = item; setTool("area"); recentAdd("flaechen", item.id); togglePanel(false); }
   function itemEl(kind, item) {
     var b = document.createElement("button");
     b.type = "button"; b.className = "anno-tz__item"; b.title = item.name;
-    b.setAttribute("data-such", item.such || "");
+    b.setAttribute("data-such", [item.such || "", item.code || ""].join(" "));
     var media = kind === "symbole" ? item.datei : flaecheSwatch(item);
-    b.innerHTML = '<img src="' + media + '" alt=""><span>' + item.name + "</span>";
+    var img = document.createElement("img"); img.src = media; img.alt = "";
+    var label = document.createElement("span"); label.textContent = item.name;
+    b.appendChild(img); b.appendChild(label);
     b.addEventListener("click", function () { kind === "symbole" ? pickSymbol(item) : pickFlaeche(item); });
     return b;
   }
   function renderPicker(m) {
     var el = byId("anno-tz"); if (!el) { return; }
-    el.innerHTML = '<div class="anno-tz__bar"><span class="anno-tz__title">Taktische Zeichen / Flächen</span>' +
+    var oldSearch = el.querySelector(".anno-tz__search"), query = oldSearch ? oldSearch.value : "";
+    el.innerHTML = '<div class="anno-tz__bar"><span class="anno-tz__title">Symbole</span>' +
       '<button type="button" class="anno-tz__close" aria-label="Schließen" title="Schließen (Esc)">' + ecpIcon('x', {size: 'sm'}) + '</button></div>' +
       '<input type="text" class="anno-tz__search" placeholder="Suchen …">';
+    var tabs = document.createElement("div"); tabs.className = "anno-tz__tabs";
+    function tab(id, name) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "anno-tz__tab";
+      b.textContent = name; b.setAttribute("aria-pressed", String(pickerTab === id));
+      b.addEventListener("click", function () { pickerTab = id; renderPicker(m); });
+      tabs.appendChild(b);
+    }
+    tab("tz", "Taktische Zeichen (Lageführung)");
+    if (objektItems !== null) { tab("objekt", "Objekt-Symbole"); }
+    el.insertBefore(tabs, el.querySelector(".anno-tz__search"));
     function section(titel, kind, items) {
       var box = document.createElement("div");
       box.innerHTML = '<div class="anno-tz__h">' + titel + "</div>";
@@ -650,31 +713,55 @@
       box.appendChild(grid);
       return box;
     }
+    var katalog = pickerTab === "objekt" ? { symbole: objektItems || [], flaechen: [] } : m;
+    var recent = recentRead(pickerTab).map(function (r) {
+      var item = (katalog[r.kind] || []).find(function (it) { return it.id === r.id; });
+      return item ? { kind: r.kind, item: item } : null;
+    }).filter(Boolean);
+    if (recent.length) {
+      var box = section("Zuletzt verwendet", "symbole", []);
+      recent.forEach(function (r) { box.querySelector(".anno-tz__grid").appendChild(itemEl(r.kind, r.item)); });
+      el.appendChild(box);
+    }
     // Symbole nach Kategorie gruppieren (Reihenfolge des ersten Auftretens)
-    var syms = m.symbole || [], gruppen = [], byKat = {};
+    var syms = katalog.symbole || [], gruppen = [], byKat = {};
     syms.forEach(function (s) {
       var k = s.kat || "Symbole";
       if (!byKat[k]) { byKat[k] = []; gruppen.push(k); }
       byKat[k].push(s);
     });
     gruppen.forEach(function (k) { el.appendChild(section(k, "symbole", byKat[k])); });
-    el.appendChild(section("Flächen", "flaechen", m.flaechen || []));
+    if (pickerTab === "tz") { el.appendChild(section("Flächen", "flaechen", m.flaechen || [])); }
     var such = el.querySelector(".anno-tz__search");
-    such.addEventListener("input", function () {
+    such.value = query;
+    function filter() {
       var q = such.value.toLowerCase().trim();
       el.querySelectorAll(".anno-tz__item").forEach(function (b) {
-        var txt = b.title.toLowerCase() + " " + (b.getAttribute("data-such") || "");
-        b.style.display = (!q || txt.indexOf(q) !== -1) ? "" : "none";
+        b.style.display = symbolMatches({ name: b.title, such: b.getAttribute("data-such") }, q) ? "" : "none";
       });
-    });
+    }
+    such.addEventListener("input", filter); filter();
     el.querySelector(".anno-tz__close").addEventListener("click", function () { togglePanel(false); });
   }
   function loadManifest() {
+    renderPicker(pickerManifest);
+    if (cfg.objektSymbole) {
+      fetch("/objekte/karten-symbole.json").then(function (r) {
+        if (!r.ok) { throw new Error("Symbolkatalog nicht verfuegbar"); }
+        return r.json();
+      }).then(function (data) {
+        if (!data || !Array.isArray(data.symbole)) { return; }
+        objektItems = data.symbole.map(function (s) {
+          return { id: s.code, code: s.code, name: s.name, datei: objektSymbolSrc(s), objektSymbolCode: s.code };
+        });
+        renderPicker(pickerManifest);
+      }).catch(function () { /* Optionaler Reiter bleibt bei Fehlern ausgeblendet. */ });
+    }
     var url = cfg.tzManifest || "/static/tz/tz-manifest.json";
     fetch(url).then(function (r) { return r.json(); }).then(function (m) {
       (m.symbole || []).forEach(function (s) { TZ.symbole[s.id] = s; var im = new Image(); im.src = s.datei; imgCache[s.datei] = im; });
       (m.flaechen || []).forEach(function (f) { TZ.flaechen[f.id] = f; });
-      renderPicker(m);
+      pickerManifest = m; renderPicker(m);
     }).catch(function () { /* Picker optional */ });
   }
 
