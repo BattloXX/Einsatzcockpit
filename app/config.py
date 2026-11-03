@@ -204,6 +204,7 @@ class Settings(BaseSettings):
     # Objektverwaltung: Dokumenten-Pipeline (PDF-Zerlegung + Rasterung)
     OBJEKT_MEDIA_DIR: str = "app_storage/objekt_media"
     OBJEKT_PDF_MAX_BYTES: int = 100 * 1024 * 1024  # 100 MB je Datei
+    OBJEKT_BILD_MAX_BYTES: int = 40 * 1024 * 1024  # 40 MB je Bild vor der PDF-Umwandlung
     OBJEKT_PDF_MAX_SEITEN: int = 300  # Seiten je Datei
     OBJEKT_SEITE_RENDER_DPI: int = 150  # Hi-Res-Rasterung (pdf2image/Poppler)
     OBJEKT_SYMBOL_MAX_BYTES: int = 512 * 1024  # 512 KB je hochgeladenem Symbolbild (SVG/PNG)

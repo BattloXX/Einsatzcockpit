@@ -230,6 +230,7 @@ Optionale `.env`-/SystemSettings-Parameter:
 |-----------|---------|-------------|
 | `OBJEKT_MEDIA_DIR` | `app_storage/objekt_media` | Ablage der Original-PDFs, Einzelseiten und Renderings (außerhalb `static`, Auslieferung nur über Auth-Route) |
 | `OBJEKT_PDF_MAX_BYTES` | 100 MB | Maximale Dateigröße je Upload (SystemSettings-Override: `objekt_pdf_max_bytes`) |
+| `OBJEKT_BILD_MAX_BYTES` | 40 MB | Maximale Bildgröße vor der Umwandlung in PDF |
 | `OBJEKT_PDF_MAX_SEITEN` | 300 | Maximale Seitenzahl je PDF (Override: `objekt_pdf_max_seiten`) |
 | `OBJEKT_SEITE_RENDER_DPI` | 150 | Auflösung der Hi-Res-Renderings |
 | `OBJEKT_OCR_ENABLED` | `true` | OCR-Fallback (Tesseract) für Scan-PDFs ohne Textlayer |

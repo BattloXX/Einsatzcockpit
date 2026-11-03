@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import anyio.to_thread
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -43,6 +44,7 @@ from app.models.objekt import (
 from app.models.user import User
 from app.services import pdf_seiten_pipeline
 from app.services.db_transactions import ist_wiederholbar
+from app.services.objekt_bild_normalisierung import BildFehler, bild_zu_pdf, ist_bild
 from app.services.objekt_service import lade_auswahl, write_objekt_change
 from app.services.storage_service import release_storage, reserve_storage
 
@@ -127,15 +129,20 @@ async def store_dokument_upload(
     user: User | None,
     db: Session,
 ) -> ObjektDokument:
-    """Speichert ein Original-PDF und legt den ObjektDokument-Datensatz an.
+    """Normalisiert Bilder zu PDF und legt den ObjektDokument-Datensatz an.
 
-    Wirft HTTPException 415 (kein PDF), 413 (zu gross / zu viele Seiten / Quota).
+    Wirft HTTPException 415 (kein PDF/Bild), 413 (zu gross / zu viele Seiten / Quota).
     Die Zerlegung laeuft anschliessend als Background-Task (verarbeite_dokument).
     """
     data = await file.read()
+    dateiname = file.filename or ""
     try:
-        return store_dokument_bytes(data, file.filename or "dokument.pdf", objekt, user, db)
-    except ObjektDokumentFehler as exc:
+        if ist_bild(data):
+            if len(data) > settings.OBJEKT_BILD_MAX_BYTES:
+                raise BildFehler("Bild zu groß", 413)
+            data, dateiname = await anyio.to_thread.run_sync(bild_zu_pdf, data, dateiname)
+        return store_dokument_bytes(data, dateiname or "dokument.pdf", objekt, user, db)
+    except (ObjektDokumentFehler, BildFehler) as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
@@ -148,13 +155,23 @@ def store_dokument_bytes(
     *,
     ersetzt_dokument_id: int | None = None,
 ) -> ObjektDokument:
-    """Request-freie Variante des PDF-Uploads.
+    """Request-freie Variante des PDF-/Bild-Uploads.
 
     Der Aufrufer commitet weiterhin selbst. Bei einer Ersatzversion wird die
     produktive Vorgaengerversion bis zu einer expliziten Freigabe nicht veraendert.
     """
     if not data:
         raise ObjektDokumentFehler("Leere Datei")
+
+    if ist_bild(data):
+        if len(data) > settings.OBJEKT_BILD_MAX_BYTES:
+            raise ObjektDokumentFehler("Bild zu groß", 413)
+        try:
+            data, dateiname = bild_zu_pdf(data, dateiname)
+        except BildFehler as exc:
+            raise ObjektDokumentFehler(exc.detail, exc.status_code) from exc
+    elif _detect_mime(data) != "application/pdf":
+        raise ObjektDokumentFehler("Nur PDF- oder Bilddateien (JPG, PNG, WebP, HEIC) erlaubt", 415)
 
     max_bytes = _system_int(db, "objekt_pdf_max_bytes", settings.OBJEKT_PDF_MAX_BYTES)
     max_seiten = _system_int(db, "objekt_pdf_max_seiten", settings.OBJEKT_PDF_MAX_SEITEN)

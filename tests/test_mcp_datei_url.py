@@ -79,7 +79,7 @@ def test_datei_url_service_prueft_pdf_status_und_liefert_bytes(monkeypatch):
 
 def test_mcp_dateianhang_faellt_auf_dateiname_zurueck(client, monkeypatch):
     seed = _seed("mcp-datei-url", {"u": "objekt_verwalter"})
-    monkeypatch.setattr("app.mcp.tools.objekt_dokumente.lade_datei_von_url", lambda *args: _pdf())
+    monkeypatch.setattr("app.mcp.tools.objekt_dokumente.lade_datei_von_url", lambda *args, **kwargs: _pdf())
     result = _rufe(
         client, _token(client, seed, "u"), "objekt_dokument_uebergeben",
         objekt_id=seed["objekt_id"],

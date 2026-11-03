@@ -1813,8 +1813,10 @@ class ChatGPTDatei(BaseModel):
 @server.tool(
     name="objekt_dokument_uebergeben",
     description=(
-        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64, upload_id oder datei angeben. "
-        "datei ist fuer einen in ChatGPT angehaengten PDF-Anhang vorgesehen. "
+        "Uebergibt ein PDF oder Bild (JPG/PNG/WebP/HEIC) an ein Objekt. "
+        "Genau eines von inhalt_base64, upload_id oder datei angeben. "
+        "Bilder werden serverseitig in ein einseitiges A4-PDF umgewandelt; eine seiten-Analyse bezieht sich "
+        "dann auf Seite 1. datei ist fuer einen in ChatGPT angehaengten PDF- oder Bild-Anhang vorgesehen. "
         "Fuer upload_id zuerst objekt_dokument_upload_vorbereiten aufrufen, dann die Datei mit dessen curl-Beispiel "
         "hochladen. seiten ist optional: [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; "
         "optional sind volltext, melderlinien, stand (YYYY-MM-DD), bei_einsatz_drucken. Fehlende Seiten werden "
@@ -1847,7 +1849,11 @@ async def objekt_dokument_uebergeben(
 
 @server.tool(
     name="objekt_dokument_upload_vorbereiten",
-    description="Bereitet einen kurzlebigen Bearer-Upload fuer ein Objekt-PDF vor.",
+    description=(
+        "Bereitet einen kurzlebigen Bearer-Upload fuer ein Objekt-PDF oder Bild (JPG/PNG/WebP/HEIC) vor. "
+        "Bilder werden serverseitig in ein einseitiges A4-PDF umgewandelt; eine seiten-Analyse bezieht sich "
+        "dann auf Seite 1."
+    ),
 )
 async def objekt_dokument_upload_vorbereiten(
     objekt_id: int, dateiname: str, groesse_bytes: int | None = None, ctx: Context | None = None

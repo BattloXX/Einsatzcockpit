@@ -1,4 +1,8 @@
-"""MCP-Werkzeuge fuer fertig analysierte Objekt-PDFs."""
+"""MCP-Werkzeuge fuer Objekt-PDFs und Bilder (JPG/PNG/WebP/HEIC).
+
+Bilder werden serverseitig in ein einseitiges A4-PDF umgewandelt;
+eine seiten-Analyse bezieht sich dann auf Seite 1.
+"""
 
 from __future__ import annotations
 
@@ -165,6 +169,7 @@ def _uebergabe_sync(
                 _ki_klassifizierung_starten(objekt.id)
         return {
             "dokument_id": dokument.id,
+            "dateiname": dokument.dateiname_original,
             "seitenzahl": dokument.seitenzahl,
             "freigabe_status": dokument.freigabe_status,
             "wartet_freigabe": dokument.freigabe_status == "wartet_freigabe",
@@ -185,8 +190,10 @@ def _uebergabe_sync(
 @register_tool(
     name="objekt_dokument_uebergeben",
     description=(
-        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64, upload_id oder datei angeben. "
-        "datei ist fuer einen in ChatGPT angehaengten PDF-Anhang vorgesehen. "
+        "Uebergibt ein PDF oder Bild (JPG/PNG/WebP/HEIC) an ein Objekt. "
+        "Genau eines von inhalt_base64, upload_id oder datei angeben. "
+        "Bilder werden serverseitig in ein einseitiges A4-PDF umgewandelt; eine seiten-Analyse bezieht sich "
+        "dann auf Seite 1. datei ist fuer einen in ChatGPT angehaengten PDF- oder Bild-Anhang vorgesehen. "
         "Fuer grosse Dateien zuerst objekt_dokument_upload_vorbereiten aufrufen, die Datei mit dem dort "
         "gelieferten curl-Beispiel hochladen und danach upload_id uebergeben. seiten ist optional und hat "
         "das Format [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; optional pro Seite: "
@@ -219,7 +226,7 @@ async def objekt_dokument_uebergeben(
     data = _decode_inhalt(inhalt_base64) if inhalt_base64 is not None else None
     if datei is not None:
         limit = effektives_limit(context.db)
-        data = await asyncio.to_thread(lade_datei_von_url, datei["download_url"], limit)
+        data = await asyncio.to_thread(lade_datei_von_url, datei["download_url"], limit, bilder_erlaubt=True)
     return await asyncio.to_thread(
         _uebergabe_sync,
         context.org_id,
@@ -235,7 +242,11 @@ async def objekt_dokument_uebergeben(
 
 @register_tool(
     name="objekt_dokument_upload_vorbereiten",
-    description="Bereitet einen kurzlebigen Bearer-Upload fuer ein Objekt-PDF vor.",
+    description=(
+        "Bereitet einen kurzlebigen Bearer-Upload fuer ein Objekt-PDF oder Bild (JPG/PNG/WebP/HEIC) vor. "
+        "Bilder werden serverseitig in ein einseitiges A4-PDF umgewandelt; eine seiten-Analyse bezieht sich "
+        "dann auf Seite 1."
+    ),
     required_roles=("objekt_verwalter",),
     module_check=objekt_modul_aktiv,
 )

@@ -16,6 +16,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
+import anyio
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -765,7 +766,13 @@ async def dokumente_upload_verarbeiten(
     from app.config import settings
     from app.services.bma_import.bma_pdf_parser import ist_bma_datenblatt, parse_datenblatt_pdf
     from app.services.bma_import.bma_sync import hole_oder_erstelle_config, verarbeite_pdf_anlage
-    from app.services.objekt_dokument_service import _detect_mime, store_dokument_upload, verarbeite_dokument
+    from app.services.objekt_bild_normalisierung import BildFehler, bild_zu_pdf, ist_bild
+    from app.services.objekt_dokument_service import (
+        ObjektDokumentFehler,
+        _detect_mime,
+        store_dokument_bytes,
+        verarbeite_dokument,
+    )
     from app.services.objekt_ki_service import analysiere_unklassifizierte_seiten, ki_klassifikation_enabled
     from app.services.objekt_plan_upload_service import (
         erstelle_objekt_aus_identitaet,
@@ -783,13 +790,22 @@ async def dokumente_upload_verarbeiten(
     for datei in dateien:
         name = datei.filename or "dokument.pdf"
         data = await datei.read()
+        if ist_bild(data):
+            if len(data) > settings.OBJEKT_BILD_MAX_BYTES:
+                ergebnisse.append({"dateiname": name, "ok": False, "meldung": "Bild ist zu groß"})
+                continue
+            try:
+                data, name = await anyio.to_thread.run_sync(bild_zu_pdf, data, name)
+            except BildFehler as exc:
+                ergebnisse.append({"dateiname": name, "ok": False, "meldung": exc.detail})
+                continue
         if not data or len(data) > settings.OBJEKT_PDF_MAX_BYTES or _detect_mime(data) != "application/pdf":
             meldung = (
                 "Leere Datei"
                 if not data
                 else "Datei ist zu groß"
                 if len(data) > settings.OBJEKT_PDF_MAX_BYTES
-                else "Nur PDF-Dateien sind erlaubt"
+                else "Nur PDF- oder Bilddateien (JPG, PNG, WebP, HEIC) sind erlaubt"
             )
             ergebnisse.append({"dateiname": name, "ok": False, "meldung": meldung})
             continue
@@ -806,7 +822,6 @@ async def dokumente_upload_verarbeiten(
                 )
                 continue
             identitaet = None if datenblatt else await identifiziere_objekt(data, name, org_id)
-            await datei.seek(0)
             with db.begin_nested():
                 neu = False
                 quelle: str | None
@@ -836,7 +851,7 @@ async def dokumente_upload_verarbeiten(
                         objekt = erstelle_objekt_aus_identitaet(db, user, identitaet)
                     status = "neu" if neu else "ergaenzt"
                     quelle = identitaet.get("quelle")
-                dokument = await store_dokument_upload(datei, objekt, user, db)
+                dokument = store_dokument_bytes(data, name, objekt, user, db)
                 objekt_id, dokument_id = objekt.id, dokument.id
                 write_objekt_change(
                     db,
@@ -880,9 +895,12 @@ async def dokumente_upload_verarbeiten(
                         "dokument_id": dokument_id,
                     }
                 )
-        except (HTTPException, ValueError) as exc:
+        except (HTTPException, ObjektDokumentFehler, ValueError) as exc:
             ergebnisse.append(
-                {"dateiname": name, "ok": False, "meldung": str(exc.detail if isinstance(exc, HTTPException) else exc)}
+                {
+                    "dateiname": name, "ok": False,
+                    "meldung": str(exc.detail if isinstance(exc, (HTTPException, ObjektDokumentFehler)) else exc),
+                }
             )
     db.commit()
     for dokument_id, objekt_id, analyse, strasse, hausnummer, ort in nacharbeiten:
