@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image
+from sqlalchemy.orm import Session
 
 from app.services.objekt_dokument_service import absolute_pfad
+from app.services.objekt_seite_annotation import annotierte_seiten, seite_bild_datei, seite_thumb_datei
 
 SEITE_ANSEHEN_HINWEIS = "Kein gerendertes Seitenbild vorhanden."
 
 
-def seite_ergebnis(dokument: Any, seite: Any) -> dict[str, object]:
+def seite_ergebnis(dokument: Any, seite: Any, db: Session) -> dict[str, object]:
     """Metadaten und OCR-Text einer Seite fuer die MCP-Ansicht."""
     return {
         "dokument_id": dokument.id,
@@ -30,6 +32,7 @@ def seite_ergebnis(dokument: Any, seite: Any) -> dict[str, object]:
         "volltext": seite.volltext,
         "text_quelle": seite.text_quelle,
         "hat_bild": bool(seite.bild_pfad or seite.thumb_pfad),
+        "hat_einzeichnung": bool(annotierte_seiten(db, [seite.id])),
     }
 
 
@@ -45,23 +48,22 @@ def _ausschnitt_pruefen(ausschnitt: list[float] | None) -> None:
         raise ValueError("Ausschnitt: x0 < x1 und y0 < y1; Breite und Hoehe mindestens 0.02")
 
 
-def _bildpfad(seite: Any) -> Path | None:
-    for relativ in (seite.bild_pfad, seite.thumb_pfad):
-        if relativ:
-            pfad = absolute_pfad(relativ)
-            if pfad.is_file():
-                return pfad
+def _bildpfad(seite: Any, db: Session | None = None) -> Path | None:
+    for helfer, relativ in ((seite_bild_datei, seite.bild_pfad), (seite_thumb_datei, seite.thumb_pfad)):
+        pfad = helfer(db, seite) if db is not None else (absolute_pfad(relativ) if relativ else None)
+        if pfad is not None and pfad.is_file():
+            return pfad
     return None
 
 
 def bild_anhaengen(ergebnis: dict[str, object], seite: Any, max_kante_px: int,
-                   ausschnitt: list[float] | None = None) -> None:
+                   ausschnitt: list[float] | None = None, *, db: Session | None = None) -> None:
     """Haengt das gedrehte, gegebenenfalls zugeschnittene Seitenbild an."""
-    daten, vorhanden = seiten_bild(seite, max_kante_px, ausschnitt)
+    daten, vorhanden = seiten_bild(seite, max_kante_px, ausschnitt, db=db)
     rotation = getattr(seite, "rotation", 0) or 0
     ergebnis["rotation"] = rotation
     ergebnis["bildgroesse"] = None
-    pfad = _bildpfad(seite)
+    pfad = _bildpfad(seite, db)
     if pfad:
         with Image.open(pfad) as bild:
             breite, hoehe = bild.size
@@ -81,11 +83,11 @@ def bild_anhaengen(ergebnis: dict[str, object], seite: Any, max_kante_px: int,
 
 
 def seiten_bild(seite: Any, max_kante_px: int,
-                ausschnitt: list[float] | None = None) -> tuple[str | None, bool]:
+                ausschnitt: list[float] | None = None, *, db: Session | None = None) -> tuple[str | None, bool]:
     """Dreht und schneidet vor dem Verkleinern zu, auch beim Thumbnail-Fallback."""
     _ausschnitt_pruefen(ausschnitt)
     max_kante_px = max(400, min(2400, max_kante_px))
-    pfad = _bildpfad(seite)
+    pfad = _bildpfad(seite, db)
     if pfad is None:
         return None, False
     with Image.open(pfad) as bild:

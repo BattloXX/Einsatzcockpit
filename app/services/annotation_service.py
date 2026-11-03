@@ -56,6 +56,11 @@ def _access_org(db: Session, user: User, media) -> bool:  # type: ignore[no-unty
     return has_role(user, "system_admin") or bool(user.org_id and media.org_id == user.org_id)
 
 
+def _access_objekt_seite(db: Session, user: User, media) -> bool:  # type: ignore[no-untyped-def]
+    from app.services.objekt_service import objekt_effective_enabled
+    return _access_org(db, user, media) and objekt_effective_enabled(user.org_id, db)
+
+
 def _org_of_incident(db: Session, media) -> int | None:  # type: ignore[no-untyped-def]
     """Org-Ermittlung fuer Task/Message/Person-Medien: keine eigene org_id-Spalte,
     Org kommt ueber den verknuepften Einsatz."""
@@ -75,6 +80,7 @@ def _org_of_direct(db: Session, media) -> int | None:  # type: ignore[no-untyped
 def _build_registry() -> dict[str, MediaSpec]:
     from app.models.incident import MessageMedia, PersonMedia, TaskMedia
     from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
+    from app.models.objekt import ObjektDokumentSeite
     from app.models.probenplanung import ProbeMedia
     from app.services.lage_media_service import (
         cross_media_path,
@@ -85,6 +91,7 @@ def _build_registry() -> dict[str, MediaSpec]:
         site_thumb_path,
     )
     from app.services.media_service import absolute_path, absolute_thumb_path
+    from app.services.objekt_dokument_service import absolute_pfad
     from app.services.probe_media_service import probe_media_path, probe_thumb_path
 
     def kind_ec(m): return getattr(m, "kind", None)          # task/message/person
@@ -92,6 +99,11 @@ def _build_registry() -> dict[str, MediaSpec]:
     def kind_probe(m): return getattr(m, "kind", None)
 
     return {
+        "objekt_seite": MediaSpec(
+            "objekt_seite", ObjektDokumentSeite, lambda m: "image" if getattr(m, "bild_pfad", None) else "pdf",
+            lambda m: absolute_pfad(m.bild_pfad), _access_objekt_seite,
+            lambda m: None, _org_of_direct,
+        ),
         "task":         MediaSpec("task", TaskMedia, kind_ec, absolute_path,
                                    _access_incident, absolute_thumb_path, _org_of_incident),
         "message":      MediaSpec("message", MessageMedia, kind_ec, absolute_path,
@@ -141,6 +153,8 @@ def can_read(db: Session, user: User, media_typ: str, media) -> bool:  # type: i
 def can_write(db: Session, user: User, media_typ: str, media) -> bool:  # type: ignore[no-untyped-def]
     if not can_read(db, user, media_typ, media):
         return False
+    if media_typ == "objekt_seite":
+        return has_role(user, "objekt_verwalter")
     if media_typ == "probe":
         from app.core.permissions import can_edit_proben
         return can_edit_proben(user)
@@ -257,6 +271,10 @@ def delete_annotation_and_files(db: Session, media_typ: str, media) -> None:  # 
     2026-07-12). Muss von JEDER Medien-Loeschfunktion aufgerufen werden, die
     ein annotierbares Bild (Task/Message/Person/Site/CrossMarker/LageJournal)
     entfernt."""
+    if media_typ == "objekt_seite":
+        from app.services.objekt_seite_annotation import entferne_objekt_seite_annotation
+        entferne_objekt_seite_annotation(db, media)
+        return
     ann = get_annotation(db, media_typ, media.id)
     if ann is None:
         return
@@ -291,9 +309,13 @@ def total_annotated_bytes(db: Session, org_id: int) -> int:
             continue
         if spec.org_of(db, media) != org_id:
             continue
-        abs_path = _annotated_abs_path(ann.media_typ, media)
-        if abs_path.exists():
-            total += abs_path.stat().st_size
+        if ann.media_typ == "objekt_seite":
+            from app.services.objekt_seite_annotation import annotations_dateien
+            total += sum(p.stat().st_size for p in annotations_dateien(media) if p.is_file())
+        else:
+            abs_path = _annotated_abs_path(ann.media_typ, media)
+            if abs_path.exists():
+                total += abs_path.stat().st_size
     return total
 
 

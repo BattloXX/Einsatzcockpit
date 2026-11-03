@@ -190,7 +190,7 @@ def test_sammel_pdf_reihenfolge(pr3_env):
         .order_by(ObjektDokumentSeite.seiten_nr.desc())  # bewusst umgekehrt
         .all()
     )
-    pdf = sammel_pdf(seiten)
+    pdf = sammel_pdf(seiten, db)
     reader = PdfReader(io.BytesIO(pdf))
     assert len(reader.pages) == 3
 

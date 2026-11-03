@@ -866,9 +866,9 @@ async def einsatz_objekt_dokument_seite_ansehen(context: MCPContext, incident_id
            ObjektDokumentSeite.seiten_nr == seite).first())
     if row is None:
         raise ValueError("Seite nicht gefunden.")
-    result: dict[str, object] = {"incident_id": incident_id, **seite_ergebnis(dokument, row)}
+    result: dict[str, object] = {"incident_id": incident_id, **seite_ergebnis(dokument, row, context.db)}
     if bild:
-        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px)
+        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px, db=context.db)
     write_audit(context.db, "objekt.mcp_seite_angesehen", org_id=context.org_id, user_id=context.user.id,
                 entity_type="objekt_dokument", entity_id=dokument.id,
                 payload={"incident_id": incident_id, "objekt_id": dokument.objekt_id, "seite": row.seiten_nr})

@@ -274,6 +274,7 @@ def _bildgroesse(seite: ObjektDokumentSeite) -> tuple[int, int]:
     from app.config import settings
 
     root = Path(settings.OBJEKT_MEDIA_DIR).resolve()
+    # bewusst Original (keine Einzeichnung)
     pfad = (root / (seite.bild_pfad or "")).resolve()
     if not seite.bild_pfad or not pfad.is_relative_to(root):
         raise ObjektKartenFehler("Plan-Rendering fehlt")

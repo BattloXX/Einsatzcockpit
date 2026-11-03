@@ -113,7 +113,7 @@ def test_produktive_sicht_ignoriert_alte_versionen(version_db, monkeypatch, tmp_
     monkeypatch.setattr("app.routers.ui_objekt_dokumente._objekt_or_404", lambda *args: objekt)
     monkeypatch.setattr(
         "app.routers.ui_objekt_dokumente.sammel_pdf",
-        lambda seiten: gemergte_seiten.extend(seiten) or b"pdf",
+        lambda seiten, db: gemergte_seiten.extend(seiten) or b"pdf",
     )
     response = dokumente_sammel_pdf(objekt.id, request, db, user)
     assert response.body == b"pdf"
@@ -124,6 +124,6 @@ def test_produktive_sicht_ignoriert_alte_versionen(version_db, monkeypatch, tmp_
 
     old_pdf = tmp_path / "alt.pdf"
     old_pdf.write_bytes(b"%PDF-1.4")
-    monkeypatch.setattr("app.routers.ui_objekt_dokumente.absolute_pfad", lambda _: old_pdf)
+    monkeypatch.setattr("app.services.objekt_seite_annotation.absolute_pfad", lambda _: old_pdf)
     assert _seite_fuer_user(db, alte_seiten[0].id, user).id == alte_seiten[0].id
     assert seite_pdf(alte_seiten[0].id, request, db, user).status_code == 200

@@ -276,6 +276,13 @@ def extrahiere_seitentext(
     return pdf_seiten_pipeline.extrahiere_seitentext(page, png, ocr_func or _ocr_tesseract)
 
 
+def _entferne_original_seitendateien(verzeichnis: Path) -> None:
+    """Neuverarbeitung behaelt die separat gebuchten Annotationsdateien."""
+    for pfad in verzeichnis.glob("seite_*"):
+        if "_annotated" not in pfad.name:
+            pfad.unlink(missing_ok=True)
+
+
 def verarbeite_dokument(
     dokument_id: int,
     render_func: RenderFunc | None = None,
@@ -307,10 +314,6 @@ def verarbeite_dokument(
                 dest_dir = original.parent
                 dokument.status = DOKUMENT_STATUS_VERARBEITUNG
                 dokument.fehler_text = None
-                for seite in db.query(ObjektDokumentSeite).filter_by(
-                    org_id=org_id, dokument_id=dokument_id,
-                ).all():
-                    db.delete(seite)
                 if org_id is not None:
                     release_storage(db, org_id, max(0, dokument.belegt_bytes - dokument.groesse_bytes))
                 dokument.belegt_bytes = dokument.groesse_bytes
@@ -328,7 +331,7 @@ def verarbeite_dokument(
         # vor dem minutenlangen Rendern einen neuen REPEATABLE-READ-Snapshot oeffnen.
         db.close()
         assert dest_dir is not None
-        pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
+        _entferne_original_seitendateien(dest_dir)
         ergebnisse = pdf_seiten_pipeline.zerlege_pdf(
             original, dest_dir, render_func=render_func or _render_page_png_poppler,
             ocr_func=ocr_func or _ocr_tesseract,
@@ -344,19 +347,27 @@ def verarbeite_dokument(
                     id=dokument_id, org_id=org_id,
                 ).with_for_update().first()
                 if dokument is None:
-                    pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
+                    _entferne_original_seitendateien(dest_dir)
                     return
                 if org_id is not None:
                     reserve_storage(db, org_id, neu_belegt)
+                from app.services.objekt_seite_annotation import ersetze_seiten
+                alte_seiten = db.query(ObjektDokumentSeite).filter_by(
+                    org_id=org_id, dokument_id=dokument_id,
+                ).all()
+                neue_seiten = []
                 basis = pfad.rsplit("/", 1)[0]
                 for e in ergebnisse:
-                    db.add(ObjektDokumentSeite(
+                    neue_seite = ObjektDokumentSeite(
                         org_id=org_id, objekt_id=objekt_id, dokument_id=dokument_id,
                         seiten_nr=e.seiten_nr, einzel_pdf_pfad=f"{basis}/{e.einzel_pdf_name}",
                         bild_pfad=f"{basis}/{e.bild_name}" if e.bild_name else None,
                         thumb_pfad=f"{basis}/{e.thumb_name}" if e.thumb_name else None,
                         volltext=e.volltext, text_quelle=e.text_quelle,
-                    ))
+                    )
+                    db.add(neue_seite)
+                    neue_seiten.append(neue_seite)
+                ersetze_seiten(db, alte_seiten, neue_seiten)
                 dokument.belegt_bytes = dokument.groesse_bytes + neu_belegt
                 dokument.status = DOKUMENT_STATUS_FERTIG
                 dokument.fehler_text = None
@@ -374,7 +385,7 @@ def verarbeite_dokument(
         db.rollback()
         db.close()
         if beansprucht and dest_dir is not None:
-            pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
+            _entferne_original_seitendateien(dest_dir)
         db = SessionLocal()
         set_tenant_context(db, None)
         try:
@@ -492,10 +503,15 @@ def verarbeite_dokument_mit_analyse(
             raise ObjektDokumentFehler("PDF-Seitenzahl hat sich seit dem Upload geaendert")
         dokument.status = DOKUMENT_STATUS_VERARBEITUNG
         db.flush()
-        for alte_seite in db.query(ObjektDokumentSeite).filter(
-            ObjektDokumentSeite.dokument_id == dokument.id
-        ).all():
-            db.delete(alte_seite)
+        from app.services.objekt_seite_annotation import ersetze_seiten
+        alte_seiten = db.query(ObjektDokumentSeite).filter_by(
+            org_id=dokument.org_id, dokument_id=dokument.id,
+        ).all()
+        neue_seiten = []
+        if dokument.org_id is not None:
+            release_storage(db, dokument.org_id, max(0, dokument.belegt_bytes - dokument.groesse_bytes))
+        dokument.belegt_bytes = dokument.groesse_bytes
+        _entferne_original_seitendateien(verzeichnis)
         neu_belegt = 0
         jetzt = datetime.now(UTC)
         for i, (page, analyse) in enumerate(zip(reader.pages, analysen), start=1):
@@ -524,7 +540,7 @@ def verarbeite_dokument_mit_analyse(
                     thumb_pfad_rel = f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}_thumb.jpg"
                 except Exception:
                     logger.exception("Thumb-Erzeugung fehlgeschlagen (Dokument %d Seite %d)", dokument.id, i)
-            db.add(ObjektDokumentSeite(
+            neue_seite = ObjektDokumentSeite(
                 org_id=dokument.org_id, objekt_id=dokument.objekt_id, dokument_id=dokument.id,
                 seiten_nr=i, einzel_pdf_pfad=f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}.pdf",
                 bild_pfad=bild_pfad_rel, thumb_pfad=thumb_pfad_rel,
@@ -532,7 +548,10 @@ def verarbeite_dokument_mit_analyse(
                 titel=analyse["titel"], melderlinien=analyse["melderlinien"], stand=analyse["stand"],
                 bei_einsatz_drucken=analyse["bei_einsatz_drucken"],
                 klassifiziert_von_id=analyse["user_id"], klassifiziert_am=jetzt,
-            ))
+            )
+            db.add(neue_seite)
+            neue_seiten.append(neue_seite)
+        ersetze_seiten(db, alte_seiten, neue_seiten)
         if neu_belegt:
             try:
                 if dokument.org_id is None:
@@ -621,16 +640,16 @@ def reindex_objekt(objekt_id: int, ocr_func: OcrFunc | None = None) -> int:
         db.close()
 
 
-def sammel_pdf(seiten: list[ObjektDokumentSeite]) -> bytes:
+def sammel_pdf(seiten: list[ObjektDokumentSeite], db: Session) -> bytes:
     """Fuegt Einzelseiten-PDFs in gegebener Reihenfolge zu einem Sammel-PDF zusammen."""
     from pypdf import PdfReader, PdfWriter
 
+    from app.services.objekt_seite_annotation import seite_pdf_datei
+
     writer = PdfWriter()
     for seite in seiten:
-        if not seite.einzel_pdf_pfad:
-            continue
-        pfad = absolute_pfad(seite.einzel_pdf_pfad)
-        if not pfad.exists():
+        pfad = seite_pdf_datei(db, seite)
+        if pfad is None or not pfad.exists():
             continue
         reader = PdfReader(str(pfad))
         for page in reader.pages:
@@ -649,8 +668,12 @@ def delete_dokument(dokument: ObjektDokument, db: Session) -> Path:
     zuerst geloescht, koennte ein spaeter fehlschlagender Commit die DB-Aenderung
     zurueckrollen, waehrend die Dateien bereits unwiderruflich weg sind.
     """
+    from app.services.objekt_seite_annotation import entferne_objekt_seite_annotation
+
     org_id = dokument.org_id
     verzeichnis = absolute_pfad(dokument.pfad).parent
+    for seite in db.query(ObjektDokumentSeite).filter_by(org_id=org_id, dokument_id=dokument.id).all():
+        entferne_objekt_seite_annotation(db, seite)
     if org_id is not None and dokument.belegt_bytes > 0:
         release_storage(db, org_id, dokument.belegt_bytes)
     db.delete(dokument)

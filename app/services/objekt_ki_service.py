@@ -96,6 +96,7 @@ def _lade_bild_fuer_ki(seite: ObjektDokumentSeite) -> bytes | None:
     (Tokenkosten). None, wenn (noch) kein Rendering existiert."""
     from app.services.objekt_dokument_service import absolute_pfad
 
+    # bewusst Original (keine Einzeichnung)
     bild_pfad = seite.bild_pfad or seite.thumb_pfad
     if not bild_pfad:
         return None

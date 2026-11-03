@@ -273,6 +273,7 @@ def raster_erzeugen(db: Session, overlay: ObjektBspOverlay, user_id: int | None 
     ausschnitt = ausschnitt_validieren(json.loads(overlay.ausschnitt_json))
     seite = geo._seite(db, objekt, overlay.dokument_id, overlay.seite)
     try:
+        # bewusst Original (keine Einzeichnung)
         with Image.open(_pfad(seite.bild_pfad)) as original:
             bild = original.convert("RGBA").rotate(-seite.rotation, expand=True)
         p = json.loads(g.parameter_json or "{}")

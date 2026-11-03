@@ -58,6 +58,23 @@ am Tablet steht ein Kamera-Button bereit. Bild-Uploads funktionieren auch im Obj
 beim Upload ohne Objekt-Auswahl und per MCP (Seitenanalyse eines Bildes: Seite 1).
 Die Einstellung `OBJEKT_BILD_MAX_BYTES` begrenzt Bilder vor der Umwandlung auf standardmäßig 40 MB.
 
+### Dokumentseiten einzeichnen und beschriften
+
+Objektverwalter können jede Dokumentseite mit dem Button **„Einzeichnen“** (im Viewer oder in der
+Galerie) bearbeiten – mit demselben Editor wie bei Fotos an Aufträgen, Meldungen oder Übungen:
+Stift, Pfeil, Linie, Rechteck, Ellipse, X, Text, Flächen und die **Symbolbibliothek** mit den
+taktischen Zeichen der Lageführung sowie den Objekt-Symbolen der Organisation (z. B. BMZ, FSD).
+Gespeichert wird automatisch.
+
+- Das Original bleibt erhalten. Bearbeitete Seiten tragen das Badge **„Bearbeitet“**; im Viewer
+  schaltet **„Original anzeigen“** um, **„Einzeichnung entfernen“** stellt das Original wieder her.
+- Viewer, Galerie, Sammel-PDF, Objektblatt-Anhang, Einsatzdruck, Einheitenansicht, Übernahme in
+  Aufträge/Meldungen und die MCP-Seitenansicht verwenden die Einzeichnung. Volltext, KI-Klassifizierung,
+  Georeferenzierung und BSP-Overlays arbeiten weiter mit dem Original.
+- Die Einzelseiten-PDF behält den Originalinhalt (Text bleibt scharf), die Einzeichnung liegt darüber.
+- Eine eingezeichnete Seite kann nicht mehr dauerhaft gedreht werden – vorher drehen oder die
+  Einzeichnung entfernen. Bei einer neuen Dokumentversion werden Einzeichnungen nicht übernommen.
+
 Unterlagen kommen fast immer als Sammel-PDF (150+ Seiten Brandschutzpläne und Melderpläne).
 Der Ablauf:
 

@@ -182,7 +182,7 @@ def objektblatt_mit_anhang(
     """Objektblatt + optional alle 'bei Einsatz drucken'-Seiten als ein PDF."""
     from pypdf import PdfReader, PdfWriter
 
-    from app.services.objekt_dokument_service import absolute_pfad
+    from app.services.objekt_seite_annotation import seite_pdf_datei
 
     blatt = render_objektblatt_pdf(objekt, org, base_url, mit_hinweisen=mit_hinweisen, mit_kontakten=mit_kontakten)
     if not mit_anhang:
@@ -192,10 +192,8 @@ def objektblatt_mit_anhang(
     for page in PdfReader(io.BytesIO(blatt)).pages:
         writer.add_page(page)
     for seite in _einsatzdruck_seiten(db, objekt.id):
-        if not seite.einzel_pdf_pfad:
-            continue
-        pfad = absolute_pfad(seite.einzel_pdf_pfad)
-        if not pfad.exists():
+        pfad = seite_pdf_datei(db, seite)
+        if pfad is None or not pfad.exists():
             continue
         for page in PdfReader(str(pfad)).pages:
             writer.add_page(page)
