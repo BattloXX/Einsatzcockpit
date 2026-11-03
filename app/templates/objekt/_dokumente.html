@@ -188,10 +188,19 @@
         @drop.prevent="dragging = false; $refs.dateien.files = $event.dataTransfer.files; $el.requestSubmit()"
         :class="dragging ? 'objekt-dropzone--active' : ''">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <p style="margin:0 0 8px;">PDF-Dateien hierher ziehen oder auswählen (mehrere möglich, max. 100 MB / 300 Seiten je Datei)</p>
-    <input type="file" name="dateien" x-ref="dateien" accept="application/pdf" multiple
-           class="form-input" style="max-width:420px;display:inline-block;"
-           @change="$el.form.requestSubmit()">
+    <p style="margin:0 0 8px;">PDF-Dateien oder Fotos/Bilder hierher ziehen oder auswählen (mehrere möglich; PDF max. 100 MB / 300 Seiten, Bilder max. 40 MB – Bilder werden automatisch verkleinert und als A4-Seite abgelegt)</p>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;">
+      <input type="checkbox" name="bilder_zusammenfassen" value="1">
+      <span>Ausgewählte Bilder zu einem Dokument zusammenfassen (eine Seite je Bild)</span>
+    </label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="file" name="dateien" x-ref="dateien" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple
+             class="form-input" style="width:420px;max-width:100%;min-width:0;"
+             @change="$el.form.requestSubmit()">
+      <button type="button" class="btn btn--ghost btn--sm" style="max-width:100%;" @click="$refs.kamera.click()">{{ icon("camera", size="sm") }} Foto aufnehmen</button>
+      <input type="file" name="dateien" x-ref="kamera" accept="image/*" capture="environment" hidden
+             @change="$el.form.requestSubmit()">
+    </div>
   </form>
   {% endif %}
 

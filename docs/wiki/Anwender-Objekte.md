@@ -49,7 +49,14 @@ Objekte erscheinen im Alarm-Matching, im Offline-Sync und für normale Benutzer.
 **Revisionsdatum** erinnert automatisch (Benachrichtigung + Filter „Revision fällig"), wenn ein
 Objekt nachgefasst werden soll.
 
-## Dokumente: PDF hochladen und klassifizieren
+## Dokumente: PDF oder Fotos hochladen und klassifizieren
+
+Auch Fotos/Bilder (JPG, PNG, WebP, HEIC) können hochgeladen werden: Sie werden automatisch
+verkleinert, von EXIF-/GPS-Daten bereinigt und als A4-PDF-Seite abgelegt. Das Originalbild
+wird nicht aufbewahrt. Mehrere Bilder lassen sich optional zu einem Dokument zusammenfassen;
+am Tablet steht ein Kamera-Button bereit. Bild-Uploads funktionieren auch im Objektpflege-Portal,
+beim Upload ohne Objekt-Auswahl und per MCP (Seitenanalyse eines Bildes: Seite 1).
+Die Einstellung `OBJEKT_BILD_MAX_BYTES` begrenzt Bilder vor der Umwandlung auf standardmäßig 40 MB.
 
 Unterlagen kommen fast immer als Sammel-PDF (150+ Seiten Brandschutzpläne und Melderpläne).
 Der Ablauf:

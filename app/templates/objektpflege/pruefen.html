@@ -73,7 +73,7 @@
         </div>
         <form class="pflege-document__upload" method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/version" enctype="multipart/form-data">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <label class="file-picker"><span>Datei auswählen</span><input type="file" name="datei" accept="application/pdf" required></label>
+          <label class="file-picker"><span>PDF oder Foto auswählen</span><input type="file" name="datei" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" required></label>
           <button class="secondary">Neue Version hochladen</button>
         </form>
         <form class="pflege-document__invalidate" method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/ungueltig-melden">
@@ -85,7 +85,7 @@
       <form class="upload-form pflege-document__new" method="post" action="/objektpflege/{{ token }}/dokumente/neu" enctype="multipart/form-data">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <strong>Weiteres Dokument hinzufügen</strong>
-        <label class="file-picker"><span>PDF auswählen</span><input type="file" name="datei" accept="application/pdf" required></label>
+        <label class="file-picker"><span>PDF oder Foto auswählen</span><input type="file" name="datei" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" required></label>
         <button>Dokument hochladen</button>
         <div class="upload-progress"><i></i></div>
       </form>

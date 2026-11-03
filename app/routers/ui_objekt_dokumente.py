@@ -8,11 +8,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import anyio
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.audit import write_audit
 from app.core.permissions import EINSATZ_LESE_ROLLEN, is_objekt_verwalter, require_role, require_role_or_device
 from app.core.templating import templates
@@ -27,6 +29,7 @@ from app.models.objekt import (
 )
 from app.models.user import User
 from app.routers.ui_objekt import _objekt_or_404, require_objekt_enabled
+from app.services.objekt_bild_normalisierung import BildFehler, bild_zu_pdf, bilder_zu_pdf, ist_bild
 from app.services.objekt_dokument_service import (
     ObjektDokumentFehler,
     absolute_pfad,
@@ -38,7 +41,7 @@ from app.services.objekt_dokument_service import (
     raeume_dokument_verzeichnis_auf,
     reindex_objekt,
     sammel_pdf,
-    store_dokument_upload,
+    store_dokument_bytes,
     verarbeite_dokument,
     verwirf_wartendes_dokument,
 )
@@ -265,23 +268,57 @@ async def dokumente_upload(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
-    dateien: list[UploadFile] = File(...),
+    dateien: list[UploadFile | str] = File(...),
+    bilder_zusammenfassen: str | None = Form(None),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     fehler: list[str] = []
     neu: list[int] = []
+    uploads: list[tuple[bytes, str, bool]] = []
     for datei in dateien:
+        # Manche Multipart-Clients senden unbenutzte Dateifelder als leeren Text.
+        if isinstance(datei, str):
+            if datei:
+                fehler.append("Ungültiges Dateifeld")
+            continue
+        data = await datei.read()
+        if not datei.filename and not data:
+            continue
+        uploads.append((data, datei.filename or "dokument.pdf", ist_bild(data)))
+    bilder = [(data, name) for data, name, bild in uploads if bild]
+    zusammenfassen = bool(bilder_zusammenfassen) and len(bilder) >= 2
+    zusammengefasst = 0
+    if zusammenfassen:
         try:
-            dokument = await store_dokument_upload(datei, objekt, user, db)
+            for data, name in bilder:
+                if len(data) > settings.OBJEKT_BILD_MAX_BYTES:
+                    raise BildFehler(f"{name}: Bild zu groß", 413)
+            pdf, name = await anyio.to_thread.run_sync(bilder_zu_pdf, bilder)
+            dokument = store_dokument_bytes(pdf, name, objekt, user, db)
             neu.append(dokument.id)
-        except HTTPException as exc:
-            fehler.append(f"{datei.filename}: {exc.detail}")
+            zusammengefasst = len(bilder)
+        except (ObjektDokumentFehler, BildFehler) as exc:
+            fehler.append(f"Bilder zusammenfassen: {exc.detail}")
+    for data, name, bild in uploads:
+        if zusammenfassen and bild:
+            continue
+        try:
+            if bild:
+                if len(data) > settings.OBJEKT_BILD_MAX_BYTES:
+                    raise BildFehler("Bild zu groß", 413)
+                data, name = await anyio.to_thread.run_sync(bild_zu_pdf, data, name)
+            dokument = store_dokument_bytes(data, name, objekt, user, db)
+            neu.append(dokument.id)
+        except (ObjektDokumentFehler, BildFehler) as exc:
+            fehler.append(f"{name}: {exc.detail}")
     if neu:
         write_objekt_change(db, objekt.id, objekt.org_id, "dokumente", "dokument_upload",
-                            before=None, after=f"{len(neu)} Datei(en)", user_id=user.id)
+                            before=None, after=f"{len(neu)} Dokument(e)", user_id=user.id)
         write_audit(db, "objekt.dokument_uploaded", org_id=user.org_id, user_id=user.id,
                     entity_type="objekt", entity_id=objekt.id,
-                    payload={"anzahl": len(neu)})
+                    payload={"anzahl": len(neu), **(
+                        {"bilder_zusammengefasst": zusammengefasst} if zusammengefasst else {}
+                    )})
     db.commit()
     for dokument_id in neu:
         background_tasks.add_task(verarbeite_dokument, dokument_id)

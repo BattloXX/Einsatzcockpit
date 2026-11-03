@@ -230,6 +230,9 @@ class _FakeUpload:
     def __init__(self, filename: str):
         self.filename = filename
 
+    async def read(self) -> bytes:
+        return b"%PDF-1.4 fake"
+
 
 @pytest.mark.asyncio
 async def test_router_upload_und_bulk_behalten_fehlermeldungen(mcp_db, monkeypatch):
@@ -243,15 +246,15 @@ async def test_router_upload_und_bulk_behalten_fehlermeldungen(mcp_db, monkeypat
     monkeypatch.setattr(router, "write_objekt_change", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(router, "write_audit", lambda *_args, **_kwargs: None)
 
-    async def _store(datei, *_args):
-        if datei.filename == "bad.pdf":
-            raise HTTPException(status_code=415, detail="Nur PDF-Dateien erlaubt")
+    def _store(_data, name, *_args):
+        if name == "bad.pdf":
+            raise ObjektDokumentFehler("Nur PDF-Dateien erlaubt", 415)
         return SimpleNamespace(id=77)
 
-    monkeypatch.setattr(router, "store_dokument_upload", _store)
+    monkeypatch.setattr(router, "store_dokument_bytes", _store)
     result = await router.dokumente_upload(
         entwurf.id, SimpleNamespace(), BackgroundTasks(), db, user, None,
-        [_FakeUpload("bad.pdf"), _FakeUpload("gut.pdf")],
+        [_FakeUpload("bad.pdf"), _FakeUpload("gut.pdf")], None,
     )
     assert result["upload_fehler"] == ["bad.pdf: Nur PDF-Dateien erlaubt"]
     with pytest.raises(HTTPException, match="Ungueltige Seiten-Auswahl"):

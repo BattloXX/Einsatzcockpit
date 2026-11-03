@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- Objektdokumente: Fotos/Bilder (JPG, PNG, WebP, HEIC) hochladen - automatisch verkleinert, EXIF/GPS entfernt, als A4-PDF-Seite abgelegt; mehrere Bilder optional zu einem Dokument zusammenfassen; Kamera-Button am Tablet; auch im Objektpflege-Portal, beim Upload ohne Objekt-Auswahl und per MCP. Neue Einstellung `OBJEKT_BILD_MAX_BYTES` (40 MB) begrenzt die Bildgröße vor der Umwandlung.
+
 - **Multi-Worker / Startlast:** Nachschlagewerke synchronisieren beim Leader-Start nur fehlende oder mehr als 24 Stunden alte Daten; der taegliche 03:00-Lauf bleibt bestehen. Gefahrgut-Worker erkennen geaenderte CSV-Dateien ueber Pfad und mtime. Der erste Such-Vollabgleich wartet standardmaessig 300 Sekunden (`SEARCH_ABGLEICH_START_VERZOEGERUNG_S`), faellige Outbox-Jobs laufen sofort. Queryfreie App-Imports sind mit isolierten Subprozess-Tests abgesichert. Keine Migration.
 
 - **Backup-Monitoring:** Private, atomare Statusdateien für Backup und Restore-Probe; Alter, Off-Site-Ergebnis und Speicher werden in Systemdiagnose und `admin_backup_pruefen` sichtbar. Standardgrenzen 26 Stunden und 8 Tage, danach Warnung bis zur doppelten Grenze, anschließend Fehler. Dauerhafte Diagnosebefunde schließen nach Behebung automatisch. Optionale systemd-Fehleralarmierung dokumentiert, standardmäßig deaktiviert. Keine Migration.

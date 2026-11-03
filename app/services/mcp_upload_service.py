@@ -20,6 +20,7 @@ from app.models.master import SystemSettings
 from app.models.mcp import MCPUpload
 from app.models.user import User
 from app.services.media_service import IMAGE_MIMES
+from app.services.objekt_bild_normalisierung import BILD_MIMES
 from app.services.objekt_dokument_service import _detect_mime
 
 logger = logging.getLogger("einsatzleiter.mcp_upload")
@@ -111,9 +112,13 @@ def speichere_upload(db: Session, upload_id: str, token: str, stream: BinaryIO) 
         elif row.zweck == "gsl_site_media":
             if _detect_mime(first) not in IMAGE_MIMES:
                 raise MCPUploadFehler("Nur Bilder erlaubt.", 415)
+        elif row.zweck == "objekt" and _detect_mime(first) in BILD_MIMES:
+            row.seitenzahl = 1
         else:
             if not first.startswith(b"%PDF") or _detect_mime(first) != "application/pdf":
-                raise MCPUploadFehler("Nur PDF-Dateien erlaubt.", 415)
+                raise MCPUploadFehler(
+                    "Nur PDF- oder Bilddateien erlaubt." if row.zweck == "objekt" else "Nur PDF-Dateien erlaubt.", 415
+                )
             try:
                 from pypdf import PdfReader
                 row.seitenzahl = len(PdfReader(str(ziel)).pages)

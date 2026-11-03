@@ -41,10 +41,11 @@ def lade_datei_von_url(
     url: str,
     max_bytes: int,
     *,
+    bilder_erlaubt: bool = False,
     transport: httpx.BaseTransport | None = None,
     client: httpx.Client | None = None,
 ) -> bytes:
-    """Laedt eine PDF mit URL-, Redirect- und Groessenbegrenzung."""
+    """Laedt eine PDF (optional auch Bilder) mit URL-, Redirect- und Groessenbegrenzung."""
     if max_bytes < 0:
         raise ValueError("max_bytes muss nicht-negativ sein.")
     eigener_client = client is None
@@ -75,7 +76,10 @@ def lade_datei_von_url(
                         raise ValueError(f"Datei zu gross (max. {max_bytes} Bytes).")
                 ergebnis = bytes(daten)
                 if not ergebnis.startswith(b"%PDF-"):
-                    raise ValueError("Datei ist kein PDF.")
+                    from app.services.objekt_bild_normalisierung import ist_bild
+
+                    if not bilder_erlaubt or not ist_bild(ergebnis):
+                        raise ValueError("Datei ist kein PDF oder Bild." if bilder_erlaubt else "Datei ist kein PDF.")
                 return ergebnis
         raise ValueError("Datei-Weiterleitung ist ungueltig.")
     finally:

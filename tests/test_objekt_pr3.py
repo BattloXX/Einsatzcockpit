@@ -148,13 +148,13 @@ def test_verarbeitung_ohne_rasterung(pr3_env):
     assert all(s.einzel_pdf_pfad for s in seiten)
 
 
-def test_upload_kein_pdf_abgelehnt(pr3_env):
+def test_upload_kein_pdf_oder_bild_abgelehnt(pr3_env):
     from fastapi import HTTPException
 
     from app.services.objekt_dokument_service import store_dokument_upload
     db, _, _, objekt = pr3_env
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(store_dokument_upload(_FakeUpload(_fake_png(), "bild.png"), objekt, None, db))
+        asyncio.run(store_dokument_upload(_FakeUpload(b"<html>kein Dokument</html>", "datei.html"), objekt, None, db))
     assert exc.value.status_code == 415
 
 
