@@ -166,15 +166,15 @@ def _render_objektblatt(db, job: PrintJob, base_url: str) -> bytes:
 def _render_objekt_dokument(db, job: PrintJob) -> bytes:
     """Einzelne Objekt-Dokumentseite (artifact_ref = ObjektDokumentSeite.id)."""
     from app.models.objekt import ObjektDokumentSeite
-    from app.services.objekt_dokument_service import absolute_pfad
+    from app.services.objekt_seite_annotation import seite_pdf_datei
 
     if not job.artifact_ref:
         raise ArtifactError("Objekt-Dokument ohne artifact_ref (Seiten-ID)")
     seite = db.get(ObjektDokumentSeite, int(job.artifact_ref))
     if seite is None or not seite.einzel_pdf_pfad:
         raise ArtifactError("Dokumentseite oder Einzel-PDF nicht gefunden")
-    pfad = absolute_pfad(seite.einzel_pdf_pfad)
-    if not pfad.exists():
+    pfad = seite_pdf_datei(db, seite)
+    if pfad is None or not pfad.exists():
         raise ArtifactError("Einzel-PDF-Datei fehlt")
     return pfad.read_bytes()
 
@@ -509,7 +509,7 @@ def _render_objekt_sammel(db, job: PrintJob) -> bytes:
     seiten = q.execution_options(include_all_tenants=True).all()
     if not seiten:
         raise ArtifactError("Keine Seiten für die Sammelmappe")
-    return sammel_pdf(seiten)
+    return sammel_pdf(seiten, db)
 
 
 def _render_uas(db, job: PrintJob) -> bytes:

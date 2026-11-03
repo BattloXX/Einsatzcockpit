@@ -412,9 +412,9 @@ async def objekt_dokument_seite_ansehen(context: MCPContext, dokument_id: int, s
                                         ausschnitt: list[float] | None = None) -> dict[str, object]:
     dokument = _lesbares_dokument(context, dokument_id)
     row = _seite(dokument, seite, context)
-    result = seite_ergebnis(dokument, row)
+    result = seite_ergebnis(dokument, row, context.db)
     if bild:
-        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px, ausschnitt)
+        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px, ausschnitt, db=context.db)
     write_audit(context.db, "objekt.mcp_seite_angesehen", org_id=context.org_id, user_id=context.user.id,
                 entity_type="objekt_dokument", entity_id=dokument.id,
                 payload={"objekt_id": dokument.objekt_id, "seite": row.seiten_nr})

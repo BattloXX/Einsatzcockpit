@@ -45,6 +45,12 @@ from app.services.objekt_dokument_service import (
     verarbeite_dokument,
     verwirf_wartendes_dokument,
 )
+from app.services.objekt_seite_annotation import (
+    annotierte_seiten,
+    seite_bild_datei,
+    seite_pdf_datei,
+    seite_thumb_datei,
+)
 from app.services.objekt_service import STANDARD_MERKMALE, lade_auswahl, write_objekt_change
 
 router = APIRouter(tags=["objekt-dokumente"])
@@ -739,14 +745,15 @@ def dokumente_sammel_pdf(
     if not seiten:
         raise HTTPException(status_code=404, detail="Keine Seiten fuer Sammel-PDF")
 
-    pdf = sammel_pdf(seiten)
+    pdf = sammel_pdf(seiten, db)
     disposition = "attachment" if request.query_params.get("download") == "1" else "inline"
     dokumentarten = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
     name = f"{objekt.anzeige_nummer}_{dokumentarten.get(art, 'dokumente')}.pdf".replace(" ", "_")
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'{disposition}; filename="{name}"'},
+        headers={"Content-Disposition": f'{disposition}; filename="{name}"',
+                 **({"Cache-Control": "no-cache"} if annotierte_seiten(db, [s.id for s in seiten]) else {})},
     )
 
 
@@ -827,16 +834,20 @@ def seite_thumb(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
+    original: bool = False,
 ):
     seite = _seite_fuer_user(db, seite_id, user)
-    if not seite.thumb_pfad:
+    pfad = seite_thumb_datei(db, seite, original=original)
+    if pfad is None:
         raise HTTPException(status_code=404, detail="Kein Thumbnail vorhanden")
-    pfad = absolute_pfad(seite.thumb_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
     rotation = seite.rotation
+    headers = {"Cache-Control": "no-cache"} if annotierte_seiten(db, [seite.id]) else {}
     db.close()
-    return _bild_response(pfad, "image/jpeg", rotation)
+    response = _bild_response(pfad, "image/jpeg", rotation)
+    response.headers.update(headers)
+    return response
 
 
 @router.get("/objekt-medien/seite/{seite_id}/bild")
@@ -846,16 +857,20 @@ def seite_bild(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
+    original: bool = False,
 ):
     seite = _seite_fuer_user(db, seite_id, user)
-    if not seite.bild_pfad:
+    pfad = seite_bild_datei(db, seite, original=original)
+    if pfad is None:
         raise HTTPException(status_code=404, detail="Kein Rendering vorhanden")
-    pfad = absolute_pfad(seite.bild_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
     rotation = seite.rotation
+    headers = {"Cache-Control": "no-cache"} if annotierte_seiten(db, [seite.id]) else {}
     db.close()
-    return _bild_response(pfad, "image/png", rotation)
+    response = _bild_response(pfad, "image/png", rotation)
+    response.headers.update(headers)
+    return response
 
 
 @router.get("/objekt-medien/seite/{seite_id}/pdf")
@@ -865,18 +880,20 @@ def seite_pdf(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
+    original: bool = False,
 ):
     seite = _seite_fuer_user(db, seite_id, user)
-    if not seite.einzel_pdf_pfad:
+    pfad = seite_pdf_datei(db, seite, original=original)
+    if pfad is None:
         raise HTTPException(status_code=404, detail="Keine Einzelseite vorhanden")
-    pfad = absolute_pfad(seite.einzel_pdf_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
     dateiname = f"seite_{seite.seiten_nr:04d}.pdf"
+    headers = {"Cache-Control": "no-cache"} if annotierte_seiten(db, [seite.id]) else {}
     db.close()
     return FileResponse(
         pfad, media_type="application/pdf",
-        filename=dateiname,
+        filename=dateiname, headers=headers,
         content_disposition_type="attachment" if request.query_params.get("download") == "1" else "inline",
     )
 

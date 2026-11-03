@@ -1579,9 +1579,10 @@ def _medium(media_id: int, thumb: bool, ctx: EinheitKontext, db: Session):
 def auftrag_plan(
     dispatch_id: int, seite_id: int, format: Literal["pdf", "bild", "thumb"],
     ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db),
+    original: bool = False,
 ):
     from app.services.einheit_vorschau_service import einsatzobjekte, einsatzseiten
-    from app.services.objekt_dokument_service import absolute_pfad
+    from app.services.objekt_seite_annotation import seite_bild_datei, seite_pdf_datei, seite_thumb_datei
 
     try:
         dispatch = auftrag_laden(db, ctx, dispatch_id)
@@ -1591,13 +1592,15 @@ def auftrag_plan(
     seite = einsatzseiten(db, ctx, [objekt.id for objekt in objekte]).filter(ObjektDokumentSeite.id == seite_id).first()
     if not seite:
         raise HTTPException(status_code=404)
-    relativ = {"pdf": seite.einzel_pdf_pfad, "bild": seite.bild_pfad, "thumb": seite.thumb_pfad}[format]
-    if not relativ or not absolute_pfad(relativ).is_file():
+    helfer = {"pdf": seite_pdf_datei, "bild": seite_bild_datei, "thumb": seite_thumb_datei}[format]
+    pfad = helfer(db, seite, original=original)
+    if pfad is None or not pfad.is_file():
         raise HTTPException(status_code=404)
-    pfad = absolute_pfad(relativ)
     if format != "pdf":
         from app.routers.ui_objekt_dokumente import _bild_response
-        return _bild_response(pfad, "image/jpeg" if format == "thumb" else "image/png", seite.rotation)
+        response = _bild_response(pfad, "image/jpeg" if format == "thumb" else "image/png", seite.rotation)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
     return FileResponse(pfad, media_type="application/pdf", headers={"Cache-Control": "no-cache"},
                         content_disposition_type="inline")
 

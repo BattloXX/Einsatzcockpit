@@ -53,7 +53,7 @@ def _quell_request(user: User, url: str) -> Request:
     if parsed.scheme or parsed.netloc or len(url) > 2048:
         raise HTTPException(422, "Nur interne Dokumentreferenzen sind zulässig.")
     parameter = dict(parse_qsl(parsed.query))
-    if set(parameter) - {"version_id", "seiten", "auswahl", "auszug", "entwurf", "gliederung", "akteur"}:
+    if set(parameter) - {"version_id", "seiten", "auswahl", "auszug", "entwurf", "gliederung", "akteur", "original"}:
         raise HTTPException(422, "Ungültige Dokumentparameter.")
     return Request({"type": "http", "method": "GET", "path": parsed.path,
                     "raw_path": parsed.path.encode(), "query_string": urlencode(parameter).encode(),
@@ -127,9 +127,10 @@ def quell_datei(db: Session, user: User, url: str,
             pfad, _ = obj.dokument_original_datei(db, int(match[1]), user)
         else:
             seite = obj._seite_fuer_user(db, int(match[2]), user)
-            if not seite.einzel_pdf_pfad:
+            seiten_pfad = obj.seite_pdf_datei(db, seite, original=params.get("original") == "1")
+            if seiten_pfad is None:
                 raise HTTPException(404, "Keine Einzelseite vorhanden.")
-            pfad = obj.absolute_pfad(seite.einzel_pdf_pfad)
+            pfad = seiten_pfad
         if not pfad.exists():
             raise HTTPException(404, "Datei fehlt.")
         response = FileResponse(pfad, media_type="application/pdf")

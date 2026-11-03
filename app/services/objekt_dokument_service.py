@@ -640,16 +640,16 @@ def reindex_objekt(objekt_id: int, ocr_func: OcrFunc | None = None) -> int:
         db.close()
 
 
-def sammel_pdf(seiten: list[ObjektDokumentSeite]) -> bytes:
+def sammel_pdf(seiten: list[ObjektDokumentSeite], db: Session) -> bytes:
     """Fuegt Einzelseiten-PDFs in gegebener Reihenfolge zu einem Sammel-PDF zusammen."""
     from pypdf import PdfReader, PdfWriter
 
+    from app.services.objekt_seite_annotation import seite_pdf_datei
+
     writer = PdfWriter()
     for seite in seiten:
-        if not seite.einzel_pdf_pfad:
-            continue
-        pfad = absolute_pfad(seite.einzel_pdf_pfad)
-        if not pfad.exists():
+        pfad = seite_pdf_datei(db, seite)
+        if pfad is None or not pfad.exists():
             continue
         reader = PdfReader(str(pfad))
         for page in reader.pages:

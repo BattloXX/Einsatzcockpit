@@ -5,7 +5,7 @@ Datensatz), nie eine Referenz auf die Objektdatei. Die Kopie gehört genau diese
 Einsatz (Task/Message). Herkunft (source_*) wird in media_annotation festgehalten
 und im UI angezeigt. Es gibt bewusst keinen Rückweg ins Objekt.
 
-Quelle ist das bereits gerenderte Seitenbild (objekt_dokument_seite.bild_pfad) —
+Quelle ist das flache Seitenbild inklusive vorhandener Einzeichnung —
 kein erneutes PDF-Rendering nötig.
 """
 from __future__ import annotations
@@ -38,7 +38,7 @@ def uebernehme_seiten(
         _storage_root,
         _task_dir,
     )
-    from app.services.objekt_dokument_service import absolute_pfad
+    from app.services.objekt_seite_annotation import seite_bild_datei
 
     ids = list(dict.fromkeys(seiten_ids))[:MAX_SEITEN]  # dedup + Deckel
     rows = (
@@ -57,8 +57,8 @@ def uebernehme_seiten(
             continue
         if org_id is not None and seite.org_id != org_id:
             continue  # Tenant-Grenze
-        src = absolute_pfad(seite.bild_pfad)
-        if not src.exists():
+        src = seite_bild_datei(db, seite)
+        if src is None or not src.exists():
             continue
         data = src.read_bytes()
 
