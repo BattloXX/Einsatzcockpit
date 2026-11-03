@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Bild bearbeiten{% endblock %}
+{% block title %}{{ 'Dokumentseite bearbeiten' if media_typ == 'objekt_seite' else 'Bild bearbeiten' }}{% endblock %}
 {% block head_extra %}
 <style>
   .anno { position: fixed; inset: 0; z-index: 4000; background: #0d150f; display: flex; flex-direction: column; }
@@ -51,6 +51,7 @@
 {% block content %}
 <div class="anno">
   <div class="anno__bar">
+    {% if media_typ == 'objekt_seite' %}<span class="anno__status" style="white-space:normal;overflow-wrap:anywhere;" title="{{ dateiname }}">Dokumentseite bearbeiten · {{ dateiname }}</span>{% endif %}
     <div class="anno__grp" aria-label="Werkzeug">
       <button type="button" class="anno-btn" data-anno-tool="select" aria-label="Auswahl / Verschieben" title="Auswahl / Verschieben">{{ icon("pointer", size="sm") }}</button>
       <button type="button" class="anno-btn is-active" data-anno-tool="pen" aria-label="Stift (Freihand)" title="Stift (Freihand)">{{ icon("pencil", size="sm") }}</button>
@@ -110,7 +111,8 @@
     lockOther: {{ 'true' if lock_other else 'false' }},
     lockName: {{ lock_name | tojson }},
     csrf: {{ request.state.csrf_token | tojson }},
-    backUrl: document.referrer || "/"
+    {% if media_typ == 'objekt_seite' %}overlay: true,{% endif %}
+    backUrl: {% if back_url %}{{ back_url | tojson }}{% else %}document.referrer || "/"{% endif %}
   };
 </script>
 {% endblock %}

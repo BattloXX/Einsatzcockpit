@@ -223,6 +223,7 @@ def _galerie_context(
         "user": user,
         "objekt": objekt,
         "seiten": seiten,
+        "annotierte_seiten": annotierte_seiten(db, [s.id for s in seiten]),
         "georef_status": georef_status,
         "dokumente": dokumente,
         "dokumentarten": lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART),

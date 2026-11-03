@@ -73,7 +73,14 @@ def annotate_editor(
         "media_id": media_id,
         "bild_url": f"/annotieren/{media_typ}/{media_id}/original",
         "annotation_json": (ann.annotation_json if ann else "") or "",
-        "dateiname": getattr(media, "original_filename", ""),
+        "dateiname": (
+            f"{media.dokument.dateiname_original} - Seite {media.seiten_nr}"
+            if media_typ == "objekt_seite" else getattr(media, "original_filename", "")
+        ),
+        "back_url": (
+            f"/objekte/{media.objekt_id}/dokumente/viewer?seite={media_id}"
+            if media_typ == "objekt_seite" else None
+        ),
         "can_write": can_write,
         "lock_other": lock["locked_by_other"],
         "lock_name": lock["name"] or "",

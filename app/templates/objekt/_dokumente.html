@@ -1,3 +1,8 @@
+<style>
+  @media (max-width: 760px) {
+    .objekt-seite-aktionen .btn { min-height: 44px; min-width: 44px; }
+  }
+</style>
 <div class="card" style="padding:16px;"
      x-data="{ auswahl: [], toggle(id) { this.auswahl.includes(id) ? this.auswahl = this.auswahl.filter(x => x !== id) : this.auswahl.push(id) } }">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
@@ -252,20 +257,24 @@
       <a href="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ s.id }}&art={{ filter_art }}&suche={{ filter_suche }}">
         {% if s.thumb_pfad %}
         {# ?r={{ s.rotation }} = Cache-Buster: nach dem Drehen laedt das (serverseitig gedrehte) Thumb neu #}
-        <img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Seite {{ s.seiten_nr }}" loading="lazy" decoding="async">
+        <img src="/objekt-medien/seite/{{ s.id }}/thumb?{% if annotierte_seiten.get(s.id) %}v={{ annotierte_seiten[s.id] }}&{% endif %}r={{ s.rotation }}" alt="Seite {{ s.seiten_nr }}" loading="lazy" decoding="async">
         {% else %}
         <div class="objekt-seite-kachel__platzhalter">{{ icon("file-text", size="lg") }}<br>S. {{ s.seiten_nr }}</div>
         {% endif %}
       </a>
+      {% if annotierte_seiten.get(s.id) %}
+      <span class="badge-pill badge-pill--amber" style="position:absolute;top:8px;right:8px;" aria-label="Bearbeitet" title="Bearbeitet">{{ icon("pencil", size="xs") }}</span>
+      {% endif %}
       {% if ist_verwalter %}
-      <form hx-post="/objekte/{{ objekt.id }}/dokumente/seite/{{ s.id }}/drehen"
+      <form class="objekt-seite-aktionen" hx-post="/objekte/{{ objekt.id }}/dokumente/seite/{{ s.id }}/drehen"
             hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
-            style="display:flex;gap:4px;justify-content:center;padding:4px 0 0;">
+            style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;padding:4px 0 0;">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="art" value="{{ filter_art }}">
         <input type="hidden" name="suche" value="{{ filter_suche }}">
-        <button type="submit" name="richtung" value="links" class="btn btn--ghost btn--xs" title="90° nach links drehen" aria-label="90° nach links drehen">{{ icon("rotate", size="xs") }}</button>
-        <button type="submit" name="richtung" value="rechts" class="btn btn--ghost btn--xs" title="90° nach rechts drehen" aria-label="90° nach rechts drehen">{{ icon("refresh", size="xs") }}</button>
+        <button type="submit" name="richtung" value="links" class="btn btn--ghost btn--xs" {% if annotierte_seiten.get(s.id) %}disabled title="Seite enthält Einzeichnungen"{% else %}title="90° nach links drehen"{% endif %} aria-label="90° nach links drehen">{{ icon("rotate", size="xs") }}</button>
+        <button type="submit" name="richtung" value="rechts" class="btn btn--ghost btn--xs" {% if annotierte_seiten.get(s.id) %}disabled title="Seite enthält Einzeichnungen"{% else %}title="90° nach rechts drehen"{% endif %} aria-label="90° nach rechts drehen">{{ icon("refresh", size="xs") }}</button>
+        <a href="/annotieren/objekt_seite/{{ s.id }}" class="btn btn--ghost btn--xs" style="min-height:44px;">{{ icon("pencil", size="xs") }} Einzeichnen</a>
         <button type="button" class="btn btn--ghost btn--xs" onclick="document.getElementById('seiteBearbeiten{{ s.id }}').showModal()">Bearbeiten</button>
       </form>
       <div style="padding:4px;">

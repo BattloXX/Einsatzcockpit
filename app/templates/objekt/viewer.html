@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Dokumente – {{ objekt.anzeige_nummer }} {{ objekt.name }}{% endblock %}
 {% block content %}
+<style>
+  .objekt-viewer__zoomctrls { flex-wrap: wrap; max-width: 100%; }
+  @media (max-width: 760px) {
+    .objekt-viewer__top .btn { min-height: 44px; min-width: 44px; }
+  }
+</style>
 <script>
   window.objektViewerDaten = function () {
     return {
@@ -8,6 +14,38 @@
       infos: {{ seiten | map(attribute="titel") | list | tojson }},
       nummern: {{ seiten | map(attribute="seiten_nr") | list | tojson }},
       idx: {{ start_index }},
+      bearbeitet: {{ annotierte_seiten | tojson }},
+      original: false,
+      bildVersionen: {},
+      entfernenLaeuft: false,
+      fehler: '',
+      seitenUrl(sid, typ) {
+        return '/objekt-medien/seite/' + sid + '/' + typ + '?r=' + (this.rotationen[this.seiten.indexOf(sid)] || 0)
+          + '&v=' + (this.bearbeitet[sid] || this.bildVersionen[sid] || 0)
+          + (this.original && this.bearbeitet[sid] ? '&original=1' : '');
+      },
+      {% if ist_verwalter %}
+      async einzeichnungEntfernen() {
+        if (this.entfernenLaeuft || !confirm('Einzeichnung dieser Seite entfernen?')) return;
+        var sid = this.seiten[this.idx];
+        this.entfernenLaeuft = true;
+        this.fehler = '';
+        try {
+          var r = await fetch('/api/annotation/objekt_seite/' + sid, {
+            method: 'DELETE', headers: { 'X-CSRF-Token': {{ request.state.csrf_token | tojson }} }
+          });
+          if (!r.ok) {
+            var data = await r.json();
+            throw new Error(data.detail || 'Einzeichnung konnte nicht entfernt werden.');
+          }
+          delete this.bearbeitet[sid];
+          this.bildVersionen[sid] = Date.now();
+          this.original = false;
+        } catch (e) {
+          this.fehler = e.message || 'Einzeichnung konnte nicht entfernt werden.';
+        } finally { this.entfernenLaeuft = false; }
+      },
+      {% endif %}
       zoom: 1,
       panX: 0,
       panY: 0,
@@ -142,15 +180,26 @@
       <button type="submit" class="btn btn--ghost btn--xs" aria-label="Suchen">{{ icon("search", size="xs") }}</button>
     </form>
     <div class="objekt-viewer__zoomctrls" x-show="seiten.length > 0">
+      {% if ist_verwalter %}
+      <a :href="'/annotieren/objekt_seite/' + seiten[idx]" class="btn btn--ghost btn--xs">{{ icon("pencil", size="xs") }} Einzeichnen</a>
+      {% endif %}
+      <span x-show="bearbeitet[seiten[idx]]" x-cloak class="badge-pill badge-pill--amber">Bearbeitet</span>
+      <button type="button" x-show="bearbeitet[seiten[idx]]" x-cloak class="btn btn--ghost btn--xs"
+              :aria-pressed="original" @click="original = !original" x-text="original ? 'Einzeichnung anzeigen' : 'Original anzeigen'"></button>
+      {% if ist_verwalter %}
+      <button type="button" x-show="bearbeitet[seiten[idx]]" x-cloak class="btn btn--ghost btn--xs"
+              :disabled="entfernenLaeuft" @click="einzeichnungEntfernen()">Einzeichnung entfernen</button>
+      {% endif %}
       <button type="button" class="btn btn--ghost btn--xs" @click="dreheLinks()" title="90° nach links drehen" aria-label="90° nach links drehen">{{ icon("rotate", size="xs") }}</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="dreheRechts()" title="90° nach rechts drehen" aria-label="90° nach rechts drehen">{{ icon("refresh", size="xs") }}</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoomOut()" aria-label="Verkleinern">{{ icon("minus", size="xs") }}</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoomIn()">+ Zoom</button>
-      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'"
-         @click.prevent="openDocumentViewer([{url: '/objekt-medien/seite/' + seiten[idx] + '/pdf', kind: 'pdf', title: infos[idx] || ('Seite ' + nummern[idx])}], 0)"
+      <a :href="seitenUrl(seiten[idx], 'pdf')"
+         @click.prevent="openDocumentViewer([{url: seitenUrl(seiten[idx], 'pdf'), kind: 'pdf', title: infos[idx] || ('Seite ' + nummern[idx])}], 0)"
          class="btn btn--ghost btn--xs">{{ icon("file-text", size="xs") }} PDF</a>
     </div>
   </div>
+  <p x-show="fehler" x-cloak x-text="fehler" class="alert alert--error" role="alert"></p>
 
   <template x-if="seiten.length === 0">
     <div class="card" style="padding:24px;text-align:center;">
@@ -169,7 +218,7 @@
       <template x-for="(sid, i) in seiten" :key="sid">
         <img x-show="i === idx"
              :data-akt="i === idx ? '1' : '0'"
-             :src="'/objekt-medien/seite/' + sid + '/bild?r=' + (rotationen[i] || 0)"
+             :src="seitenUrl(sid, 'bild')"
              :style="{
                transform: 'translate(' + panX + 'px,' + panY + 'px) scale(' + (zoom * rotFit) + ') rotate(' + tempRot + 'deg)',
                transition: (isDragging || isPinching) ? 'none' : 'transform 0.15s ease'

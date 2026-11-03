@@ -502,20 +502,35 @@
     if (saveTimer) { clearTimeout(saveTimer); }
     saveTimer = setTimeout(save, 10000);
   }
-  function flachesPng() {
+  function flachesPng(overlay) {
     var visTr = tr && tr.visible();
+    var visBild = imageLayer.visible();
     if (tr) { tr.hide(); }
     var longNat = Math.max(natW, natH);
     var target = Math.min(longNat, 2400);
     var longStage = Math.max(stage.width(), stage.height()) || 1;
-    var url = stage.toDataURL({ pixelRatio: target / longStage, mimeType: "image/png" });
-    if (tr && visTr) { tr.show(); }
-    return url;
+    var opts = { pixelRatio: target / longStage, mimeType: "image/png" };
+    if (cfg.overlay) {
+      // Ganze (bereits gedrehte) Seite exportieren, auch bei Zoom/Pan.
+      opts.x = stage.x(); opts.y = stage.y();
+      opts.width = natW * stage.scaleX(); opts.height = natH * stage.scaleY();
+      opts.pixelRatio = target / (longNat * stage.scaleX());
+    }
+    try {
+      if (overlay) { imageLayer.hide(); }
+      return stage.toDataURL(opts);
+    } finally {
+      imageLayer.visible(visBild);
+      if (tr && visTr) { tr.show(); }
+    }
   }
   function save(useKeepalive) {
     if (!dirty || saving || !cfg.canWrite) { return; }
     saving = true; setStatus("speichert …");
-    var body = JSON.stringify({ annotation_json: snapshot(), png: flachesPng() });
+    var payload = { annotation_json: snapshot(), png: flachesPng() };
+    if (cfg.overlay) { payload.overlay_png = flachesPng(true); }
+    // Den kompletten Payload inklusive Overlay auch offline puffern.
+    var body = JSON.stringify(payload);
     var opts = { method: "PUT", headers: { "Content-Type": "application/json", "X-CSRF-Token": cfg.csrf }, body: body };
     if (useKeepalive) { opts.keepalive = true; }
     return fetch(cfg.saveUrl, opts).then(function (r) {
@@ -675,7 +690,14 @@
     stage.add(imageLayer);
 
     if (cfg.annotationJson) {
-      try { annLayer = Konva.Node.create(cfg.annotationJson); }
+      try {
+        var annotation = cfg.annotationJson;
+        if (cfg.overlay) {
+          var gespeichert = typeof annotation === "string" ? JSON.parse(annotation) : annotation;
+          annotation = gespeichert.stage !== undefined ? gespeichert.stage : gespeichert;
+        }
+        annLayer = Konva.Node.create(annotation);
+      }
       catch (e) { annLayer = new Konva.Layer(); }
     } else {
       annLayer = new Konva.Layer();
