@@ -225,3 +225,9 @@ Kennzeichnung der unveränderten Bibliotheken als `.min.js` behoben und mit den
 Icon-Wächtern im abschließenden Lauf geprüft. Ein bestehender Anhangstest grenzt
 seine Protokollabfrage jetzt auf den geprüften Plan ein, damit vorausgehende
 Dokumentverknüpfungstests seine Ergebnisse nicht verfälschen.
+
+## Nachtrag: Einzeichnungen auf Objektseiten
+
+Seit dem Plan [Objektdokumente einzeichnen](../plans/objekt-dokumente-einzeichnen.md) liefern
+`/objekt-medien/seite/{id}/bild|thumb|pdf` bei vorhandener Einzeichnung die bearbeitete Fassung
+(`Cache-Control: no-cache`); `?original=1` liefert das unveränderte Original.
