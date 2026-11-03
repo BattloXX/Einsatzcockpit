@@ -32,15 +32,15 @@ factory = diagnose_fixtures.factory
 NOW = datetime(2026, 11, 2, 12, tzinfo=UTC)
 
 
-def speichern(out, name="backup", age=0, ok=True, **extra):
-    daten = {"finished_at": (NOW - timedelta(hours=age)).isoformat().replace("+00:00", "Z"),
+def speichern(out, name="backup", age=0, ok=True, basis=NOW, **extra):
+    daten = {"finished_at": (basis - timedelta(hours=age)).isoformat().replace("+00:00", "Z"),
              "ok": ok, **extra}
     (out / f".status-{name}.json").write_text(json.dumps(daten))
 
 
-def gesund(out):
-    speichern(out)
-    speichern(out, "restore")
+def gesund(out, basis=NOW):
+    speichern(out, basis=basis)
+    speichern(out, "restore", basis=basis)
 
 
 @pytest.mark.parametrize("typ,grenze", [("backup", 26), ("restore", 192)])
@@ -213,10 +213,12 @@ def test_status_schreibfehler_beeinflusst_laeufe_nicht(backup_env, monkeypatch, 
 
 
 def test_mcp_evidenz_erlaubte_felder(backup_env):
-    gesund(backup_env)
-    speichern(backup_env, dump="/private/password", failures=["GEHEIM"],
+    # Ohne now-Parameter prueft collect() gegen die echte Uhr -> Zeitstempel relativ zu jetzt.
+    jetzt = datetime.now(UTC)
+    gesund(backup_env, basis=jetzt)
+    speichern(backup_env, dump="/private/password", failures=["GEHEIM"], basis=jetzt,
               offsite={"enabled": True, "ok": True, "ziel_beschreibung": "https://u:GEHEIM@host/private"})
-    speichern(backup_env, "restore", dump="../../GEHEIM", db_checks=["GEHEIM"])
+    speichern(backup_env, "restore", dump="../../GEHEIM", db_checks=["GEHEIM"], basis=jetzt)
     result = registry.collect(None, "admin_backup_pruefen")
     answer = server.response("admin_backup_pruefen", "korrelation", result)
     assert answer["modul"] == "backup" and answer["status"] == "ok"
@@ -227,7 +229,7 @@ def test_mcp_evidenz_erlaubte_felder(backup_env):
 
 
 def test_mcp_wrapper(client, admin_env, backup_env):
-    gesund(backup_env)
+    gesund(backup_env, basis=datetime.now(UTC))
     token = tokens(client, admin_env)["access_token"]
     assert "admin_backup_pruefen" in oauth.admin_call(client, token, "tools/list").text
     result = call(client, token, "admin_backup_pruefen")
