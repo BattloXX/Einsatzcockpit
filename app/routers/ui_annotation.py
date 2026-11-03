@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import CurrentOrgId
-from app.core.permissions import has_role, require_role
+from app.core.permissions import EINSATZ_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.user import User
@@ -21,12 +21,26 @@ router = APIRouter(tags=["annotation"])
 
 
 def _guard_probe(request: Request, media_typ: str) -> None:
+    if media_typ == "objekt_seite":
+        from app.routers.ui_objekt import require_objekt_enabled
+        require_objekt_enabled(request)
     if media_typ == "probe" and not getattr(request.state, "probenplanung_enabled", False):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
 
 
-def _lade_media(db: Session, media_typ: str, media_id: int):  # type: ignore[no-untyped-def]
-    media = ann_svc.resolve_media(db, media_typ, media_id)
+def _annotation_read_user(request: Request, media_typ: str) -> User:
+    rollen = EINSATZ_LESE_ROLLEN if media_typ == "objekt_seite" else (
+        "incident_leader", "admin", "recorder", "readonly", "probenverwalter", "objekt_verwalter",
+    )
+    return require_role(*rollen)(request)
+
+
+def _lade_media(db: Session, media_typ: str, media_id: int, user: User):  # type: ignore[no-untyped-def]
+    if media_typ == "objekt_seite":
+        from app.routers.ui_objekt_dokumente import _seite_fuer_user
+        media = _seite_fuer_user(db, media_id, user)
+    else:
+        media = ann_svc.resolve_media(db, media_typ, media_id)
     if media is None:
         raise HTTPException(status_code=404, detail="Medium nicht gefunden")
     if not ann_svc.is_annotatable(media_typ, media):
@@ -40,11 +54,11 @@ def annotate_editor(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly", "probenverwalter")),
+    user: User = Depends(_annotation_read_user),
     _: CurrentOrgId = None,
 ):
     _guard_probe(request, media_typ)
-    media = _lade_media(db, media_typ, media_id)
+    media = _lade_media(db, media_typ, media_id, user)
     if not ann_svc.can_read(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Zugriff")
     ann = ann_svc.get_annotation(db, media_typ, media_id)
@@ -69,6 +83,7 @@ def annotate_editor(
 class AnnotationPayload(BaseModel):
     annotation_json: str
     png: str | None = None  # data:image/png;base64,…
+    overlay_png: str | None = None
 
 
 @router.put("/api/annotation/{media_typ}/{media_id}")
@@ -78,14 +93,18 @@ def annotate_save(
     payload: AnnotationPayload,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter", "objekt_verwalter")),
     _: CurrentOrgId = None,
 ):
     _guard_probe(request, media_typ)
-    media = _lade_media(db, media_typ, media_id)
+    media = _lade_media(db, media_typ, media_id, user)
     if not ann_svc.can_write(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Schreibrecht")
-    ann = ann_svc.save_annotation(db, user, media_typ, media, payload.annotation_json, payload.png)
+    if media_typ == "objekt_seite":
+        from app.services.objekt_seite_annotation import speichere_objekt_seite
+        ann = speichere_objekt_seite(db, user, media, payload.annotation_json, payload.png, payload.overlay_png)
+    else:
+        ann = ann_svc.save_annotation(db, user, media_typ, media, payload.annotation_json, payload.png)
     db.commit()
     return JSONResponse({"ok": True, "annotated": bool(ann.annotated_file)})
 
@@ -96,12 +115,12 @@ def annotate_display(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly", "probenverwalter")),
+    user: User = Depends(_annotation_read_user),
     _: CurrentOrgId = None,
 ):
     """Liefert die annotierte Version (flaches PNG) falls vorhanden, sonst das Original."""
     _guard_probe(request, media_typ)
-    media = _lade_media(db, media_typ, media_id)
+    media = _lade_media(db, media_typ, media_id, user)
     if not ann_svc.can_read(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Zugriff")
     path = ann_svc.display_abs_path(db, media_typ, media)
@@ -111,6 +130,11 @@ def annotate_display(
     mime = "image/png" if path.suffix.lower() == ".png" else getattr(media, "mime_type", "image/jpeg")
     # no-cache: nach einer erneuten Bearbeitung liegt unter derselben URL sofort ein
     # neues PNG -- Revalidierung statt Browser-Cache erzwingen (siehe ui_media.py).
+    if media_typ == "objekt_seite":
+        from app.routers.ui_objekt_dokumente import _bild_response
+        response = _bild_response(path, "image/png", media.rotation)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
     return FileResponse(path, media_type=mime, headers={"Cache-Control": "no-cache"})
 
 
@@ -120,17 +144,20 @@ def annotate_original(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly", "probenverwalter")),
+    user: User = Depends(_annotation_read_user),
     _: CurrentOrgId = None,
 ):
     """Original-Bild (Editor-Hintergrund) — immer das Original, nie die annotierte Version."""
     _guard_probe(request, media_typ)
-    media = _lade_media(db, media_typ, media_id)
+    media = _lade_media(db, media_typ, media_id, user)
     if not ann_svc.can_read(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Zugriff")
     p = ann_svc.original_abs_path(media_typ, media)
     if not p or not p.exists():
         return Response(status_code=404)
+    if media_typ == "objekt_seite":
+        from app.routers.ui_objekt_dokumente import _bild_response
+        return _bild_response(p, "image/png", media.rotation)
     return FileResponse(p, media_type=getattr(media, "mime_type", None) or "image/jpeg")
 
 
@@ -140,11 +167,11 @@ def annotate_lock(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter", "objekt_verwalter")),
     _: CurrentOrgId = None,
 ):
     _guard_probe(request, media_typ)
-    media = _lade_media(db, media_typ, media_id)
+    media = _lade_media(db, media_typ, media_id, user)
     if not ann_svc.can_write(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Schreibrecht")
     info = ann_svc.acquire_lock(db, media_typ, media_id, getattr(media, "org_id", None), user)
@@ -158,14 +185,34 @@ def annotate_unlock(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter", "objekt_verwalter")),
     _: CurrentOrgId = None,
 ):
     _guard_probe(request, media_typ)
-    media = _lade_media(db, media_typ, media_id)
+    media = _lade_media(db, media_typ, media_id, user)
     if not ann_svc.can_write(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Schreibrecht")
     ann_svc.release_lock(db, media_typ, media_id, user)
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@router.delete("/api/annotation/objekt_seite/{media_id}")
+def objekt_seite_annotation_entfernen(
+    media_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _: CurrentOrgId = None,
+):
+    from app.routers.ui_objekt_dokumente import _seite_fuer_user
+    from app.services.objekt_seite_annotation import entferne_objekt_seite_annotation
+
+    _guard_probe(request, "objekt_seite")
+    seite = _seite_fuer_user(db, media_id, user)
+    if not ann_svc.can_write(db, user, "objekt_seite", seite):
+        raise HTTPException(403, "Kein Schreibrecht")
+    entferne_objekt_seite_annotation(db, seite)
     db.commit()
     return JSONResponse({"ok": True})
 

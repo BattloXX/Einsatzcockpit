@@ -48,7 +48,7 @@ _USER = SimpleNamespace(id=7)
 
 def test_registry_und_annotatable():
     assert set(ann.registry()) == {
-        "task", "message", "person", "site", "cross_marker", "lage_journal", "probe",
+        "task", "message", "person", "site", "cross_marker", "lage_journal", "probe", "objekt_seite",
     }
     assert ann.is_annotatable("task", SimpleNamespace(kind="image"))
     assert not ann.is_annotatable("task", SimpleNamespace(kind="pdf"))

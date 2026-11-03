@@ -567,6 +567,12 @@ def seite_drehen(
     )
     if seite is None:
         raise HTTPException(status_code=404, detail="Seite nicht gefunden")
+    from app.services.annotation_service import get_annotation
+    ann = get_annotation(db, "objekt_seite", seite.id)
+    if ann and (ann.annotated_file or ann.annotation_json):
+        raise HTTPException(
+            409, "Seite enthält Einzeichnungen - vor dem Einzeichnen drehen oder Einzeichnung entfernen",
+        )
     from app.services.objekt_georef_service import seiten_sperrabfrage, seitenstand_pruefen
     from app.services.objekt_karte_service import ObjektKartenFehler
 
