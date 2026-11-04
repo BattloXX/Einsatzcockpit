@@ -203,13 +203,15 @@ ADMIN_GRUPPEN = (
                 gruppe="verwaltung",
                 icon="user-cog",
                 href="/admin/benutzer",
-                aktiv_praefixe=("/admin/benutzer", "/admin/audit"),
+                aktiv_praefixe=("/admin/benutzer", "/admin/audit", "/admin/sicherheit"),
                 tooltip="Login-Accounts, Rollen, Passwörter",
                 tabs=(
                     AdminTab(
                         id="benutzer", label="Benutzer", href="/admin/benutzer", aktiv_praefixe=("/admin/benutzer",)
                     ),
                     AdminTab(id="audit", label="Audit-Log", href="/admin/audit", aktiv_praefixe=("/admin/audit",)),
+                    AdminTab(id="sicherheit", label="Anmeldung & 2FA", href="/admin/sicherheit",
+                             aktiv_praefixe=("/admin/sicherheit",), rollen=("admin", "org_admin", "system_admin")),
                 ),
             ),
             AdminEintrag(

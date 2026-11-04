@@ -19,7 +19,7 @@ Im Verwaltungsmenü gibt es pro Fachgebiet **einen** Menüpunkt. Die zugehörige
 
 | Menüpunkt | Tabs |
 |---|---|
-| Benutzer & Rechte | Benutzer · Audit-Log |
+| Benutzer & Rechte | Benutzer · Audit-Log · Anmeldung & 2FA |
 | Probenplanung | Probearten · Checklisten-Vorlagen · Öffentlicher Plan |
 | Infoscreens | Alarm-Infoscreen · Wetter-Infoscreen · Statistik · Straßensperren |
 | Alarmierung | SMS senden · SMS-Versandweg · SMS-Empfang · SMS-Einsatzinfo · Einsatzinfo-Mail · Teams-Alarmierung · Push-Nachrichten |
@@ -67,3 +67,9 @@ Die Startseite unter `/admin` zeigt Kennzahlen (aktive und alle Einsätze, Mitgl
 Die Systemdiagnose enthaelt den lesenden Bereich **App-Geraete** mit HTMX-Detailansicht
 `/admin/systemdiagnose/geraet/{geraet_id}` (nur persoenliche Systemadmin-Konten).
 Er gehoert zum vorhandenen Hauptpunkt Systemstatus, Tab Systemdiagnose.
+
+Unter **Benutzer & Rechte** fuehrt der Tab **Anmeldung & 2FA** (`/admin/sicherheit`,
+`admin`/`org_admin`/`system_admin`) zur Org-Richtlinie (aus, optional, Admin-Rollen, alle),
+SMS-Freigabe und SSO-Ausnahme. Systemadmins waehlen die Organisation; Org-Admins
+aendern nur ihre eigene. Die Vorschau zaehlt aktive persoenliche Benutzer ohne
+bestaetigten Faktor nach der gewaehlten Richtlinie.

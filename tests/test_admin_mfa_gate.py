@@ -83,7 +83,7 @@ def test_login_paths_gate(mfa_env, monkeypatch, kind, global_enabled):
         assert response.status_code == 302 and response.headers["location"] == "/"
     response = client.get("/admin/system-einstellungen", follow_redirects=False)
     if global_enabled:
-        assert response.status_code == 303 and response.headers["location"] == "/mfa/verify"
+        assert response.status_code == 303 and response.headers["location"].startswith("/mfa/verify?next=")
         assert client.get("/mfa/verify").status_code == 200
     else:
         assert response.status_code == 200
@@ -122,7 +122,7 @@ def test_old_marker_epoch_and_legacy_revocation(mfa_env):
     db, user, _, client = mfa_env
     activate(db, user)
     set_session(client, sign_session(user.id, mfa_at=int(time.time()) - 10))
-    assert client.get("/admin/system-einstellungen", follow_redirects=False).headers["location"] == "/mfa/verify"
+    assert client.get("/admin/system-einstellungen", follow_redirects=False).headers["location"].startswith("/mfa/verify?next=")
     service.set_enabled(db, False, user.id, int(time.time()))
     db.commit()
     for token in (_signer.dumps(user.id), sign_session(user.id), sign_session(user.id, mfa_at=int(time.time()))):
@@ -147,12 +147,13 @@ def test_setup_confirmation_and_one_time_display(mfa_env):
     set_session(client, sign_session(user.id))
     response = client.get("/mfa/einrichten")
     assert "data:image/png;base64," in response.text and response.headers["cache-control"] == "no-store"
+    assert "10 Recovery-Codes" in response.text
     db.expire_all()
     from app.core.crypto import decrypt_secret
     secret = decrypt_secret(db.get(AdminTotp, user.id).secret_enc)
     response = client.post("/mfa/bestaetigen", data={"code": service.totp(secret, int(time.time()) // 30)},
                            headers=csrf(client), follow_redirects=False)
-    assert "10 Recovery-Codes" in response.text and response.headers["cache-control"] == "no-store"
+    assert response.status_code == 303 and response.headers["location"] == "/admin/system-einstellungen"
     assert "10 Recovery-Codes" not in client.get("/mfa/einrichten").text
     assert client.post("/mfa/bestaetigen", data={"code": "123456"}, headers=csrf(client)).status_code == 400
 
@@ -288,7 +289,7 @@ def test_native_handoff_cannot_inherit_mfa_from_revoked_cookie(mfa_env):
     path = "/admin/system-einstellungen"
     handoff = sign_native_link_token(path, user.id)
     response = client.get(path, params={"nt": handoff}, follow_redirects=False)
-    assert response.status_code == 303 and response.headers["location"] == "/mfa/verify"
+    assert response.status_code == 303 and response.headers["location"].startswith("/mfa/verify?next=")
 
 
 def test_legacy_remember_and_nonadmin_epoch(mfa_env):
@@ -302,7 +303,7 @@ def test_legacy_remember_and_nonadmin_epoch(mfa_env):
     # Auch normale Benutzer mit widerrufener Epoche werden nicht authentifiziert.
     assert client.get("/mfa/einrichten", follow_redirects=False).status_code in (401, 302)
     set_session(client, sign_session(regular.id, session_epoch=1))
-    assert client.get("/mfa/einrichten", follow_redirects=False).status_code == 403
+    assert client.get("/mfa/einrichten", follow_redirects=False).status_code == 200
 
 
 def test_verify_does_not_redirect_to_secret_page(mfa_env):

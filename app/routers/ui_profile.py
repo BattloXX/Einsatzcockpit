@@ -4,7 +4,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -13,8 +13,11 @@ from app.core.async_bridge import run_async
 from app.core.security import hash_password, verify_password
 from app.core.templating import templates
 from app.db import get_db
+from app.models.admin_security import AdminTotp, utcnow
 from app.models.mcp import MCPOAuthToken
 from app.models.user import User
+from app.routers.ui_mfa import _page, _user
+from app.services import mfa_service
 from app.services.benutzer_mail_service import send_passwort_geaendert
 
 logger = logging.getLogger("einsatzleiter.profile")
@@ -44,6 +47,12 @@ def profile_page(request: Request, db: Session = Depends(get_db)):
     )
     return templates.TemplateResponse(request, "profile/index.html", {
         "profile_user": db_user,
+        "mfa_personal": not (request.state.is_device or user.is_device
+                             or request.state.qr_incident_id is not None or request.state.qr_lage_id is not None
+                             or user.username.startswith("alarmlink-gast@org")),
+        "mfa_factor": db.get(AdminTotp, user.id),
+        "mfa_required": mfa_service.required_for(db, db_user) if db_user else False,
+        "mfa_now": utcnow(),
         "avatar_url": _avatar_url(db_user),  # type: ignore[arg-type]
         "saved": request.query_params.get("saved"),
         "error": request.query_params.get("error"),
@@ -188,3 +197,36 @@ async def serve_avatar(filename: str, request: Request):
     import mimetypes
     mime = mimetypes.guess_type(str(path))[0] or "image/jpeg"
     return FileResponse(path, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.post("/profil/mfa/recovery-codes")
+def mfa_recovery_codes(request: Request, code: str = Form(""), db: Session = Depends(get_db)):
+    user = _user(request, db)
+    # Recovery-Codes duerfen keine weiteren Recovery-Codes erzeugen.
+    clean_code = code.strip()
+    if len(clean_code) != 6 or not clean_code.isascii() or not clean_code.isdigit():
+        raise HTTPException(403, "Gueltiger TOTP-Code erforderlich")
+    success = mfa_service.verify(db, user.id, clean_code)
+    db.commit()
+    if not success:
+        raise HTTPException(403, "Gueltiger TOTP-Code erforderlich")
+    codes = mfa_service.create_recovery_codes(db, user.id)
+    db.commit()
+    return _page(request, "recovery", codes=codes, next="/profil")
+
+
+@router.post("/profil/mfa/entfernen")
+def mfa_remove(request: Request, code: str = Form(""), db: Session = Depends(get_db)):
+    user = _user(request, db)
+    if mfa_service.required_for(db, user):
+        raise HTTPException(400, "Die Zwei-Faktor-Authentifizierung ist vorgeschrieben und kann nicht entfernt werden.")
+    success = mfa_service.verify(db, user.id, code)
+    db.commit()
+    if not success:
+        raise HTTPException(403, "Gueltiger TOTP- oder Recovery-Code erforderlich")
+    mfa_service.reset(db, user, user.id)
+    db.commit()
+    mfa_service.notify_reset(db, user)
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie("session", path="/")
+    return response

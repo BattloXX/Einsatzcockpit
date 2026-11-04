@@ -1,0 +1,66 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Anmeldung & 2FA{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Anmeldung & 2FA'}]) }}{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+
+{% block admin_content %}
+<div class="sys-page sys-settings">
+{% with section_id='benutzer' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+<header class="sys-hero">
+  <div class="sys-hero__head">
+    <div>
+      <h1>{{ icon("shield-lock") }} Anmeldung &amp; 2FA</h1>
+      <p class="sys-muted">Zwei-Faktor-Richtlinie fuer persoenliche Benutzer dieser Organisation</p>
+    </div>
+  </div>
+</header>
+  {% if all_orgs %}
+  <form method="get" action="/admin/sicherheit" class="sys-card sys-row">
+    <label for="security-org">Organisation</label>
+    <select id="security-org" name="org_id" class="form-control sys-grow">
+      {% for item in all_orgs %}<option value="{{ item.id }}" {% if item.id == org.id %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn--secondary">Auswaehlen</button>
+  </form>
+  {% endif %}
+  <h2>{{ org.name }}</h2>
+  {% if saved %}<p class="alert alert--success" role="status">Einstellungen gespeichert.</p>{% endif %}
+  {% if warning %}<div class="alert alert--warn" role="alert"><strong>Ihre Anmeldung benoetigt jetzt 2FA.</strong> Sie haben noch keinen bestaetigten Faktor und muessen beim naechsten Seitenaufruf die Zwei-Faktor-Authentifizierung einrichten. <a href="/mfa/einrichten">Jetzt einrichten</a></div>{% endif %}
+  <form method="post" action="/admin/sicherheit" class="sys-card">
+    <div class="sys-fieldset-stack">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="org_id" value="{{ org.id }}">
+      <label for="mfa-policy">Richtlinie</label>
+      <select id="mfa-policy" class="form-control" name="mfa_policy" aria-describedby="policy-help">
+        {% for value, label in [('aus', 'Aus'), ('optional', 'Optional'), ('admins', 'Pflicht fuer Admin-Rollen'), ('alle', 'Pflicht fuer alle')] %}
+        <option value="{{ value }}" {% if (config.mfa_policy if config else 'aus') == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p id="policy-help" class="sys-muted">Aus und Optional erzwingen keinen zweiten Faktor. Admin-Rollen verpflichtet Org-Admins; Alle verpflichtet alle persoenlichen Benutzer. Geraete und QR-Zugaenge sind ausgenommen. Systemadmins unterliegen weiterhin dem globalen Schalter.</p>
+      <label class="sys-check"><input id="mfa-sms" type="checkbox" name="mfa_sms_erlaubt" value="true" {% if not config or config.mfa_sms_erlaubt %}checked{% endif %}> SMS als zweiter Faktor erlaubt</label>
+      <p>Wirkt ab Verfuegbarkeit des SMS-Faktors. Systemadmins verwenden niemals SMS.</p>
+      <label class="sys-check"><input id="mfa-sso" type="checkbox" name="mfa_sso_ausgenommen" value="true" {% if not config or config.mfa_sso_ausgenommen %}checked{% endif %}> SSO-Benutzer ausgenommen</label>
+      {% set key = (config.mfa_policy if config else 'aus') + ('_sso' if not config or config.mfa_sso_ausgenommen else '') %}
+      <p role="status" aria-live="polite"><strong id="mfa-missing">{{ counts[key] }}</strong> aktive persoenliche Benutzer brauchen nach der gewaehlten Richtlinie 2FA und haben noch keinen bestaetigten Faktor.</p>
+      <p>Ohne eigenen Faktor muessen auch Sie bei Wahl von Admin-Rollen oder Alle beim naechsten Seitenaufruf 2FA einrichten.</p>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </form>
+</div>
+<script>
+(function () {
+  const counts = {{ counts|tojson }};
+  const policy = document.getElementById('mfa-policy');
+  const sso = document.getElementById('mfa-sso');
+  function updateCount() {
+    document.getElementById('mfa-missing').textContent = counts[policy.value + (sso.checked ? '_sso' : '')];
+  }
+  policy.addEventListener('change', updateCount);
+  sso.addEventListener('change', updateCount);
+})();
+</script>
+{% endblock %}

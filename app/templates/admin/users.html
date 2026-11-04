@@ -35,7 +35,8 @@
   <br><small>Bitte notieren – wird nur einmal angezeigt.</small>
 </div>
 {% endif %}
-{% if saved %}<div class="alert alert--success">Gespeichert.{% if mail_sent %} Eine Reset-Mail wurde versendet.{% endif %}</div>{% endif %}
+{% if saved %}<div class="alert alert--success">{% if saved == 'mfa_reset' %}2FA zurückgesetzt. Der Benutzer muss sie innerhalb von 24 Stunden neu einrichten.
+{% elif saved == 'mfa_unlock' %}2FA-Sperre aufgehoben.{% else %}Gespeichert.{% endif %}{% if mail_sent %} Eine Reset-Mail wurde versendet.{% endif %}</div>{% endif %}
 {% if deleted %}<div class="alert alert--success">Benutzer gelöscht.</div>{% endif %}
 {% if error == 'email_exists' %}
 <div class="alert alert--error">Diese E-Mail-Adresse ist bereits einem anderen Benutzer zugeordnet.</div>
@@ -51,6 +52,9 @@
 <div class="alert alert--error">Die Reset-Mail konnte nicht versendet werden. Bitte SMTP-Konfiguration prüfen.</div>
 {% elif error == 'invite_mail_failed' %}
 <div class="alert alert--error">Benutzer angelegt, Einladung konnte nicht gesendet werden. Bitte SMTP-Konfiguration prüfen.</div>
+{% elif error == 'mfa_grund' %}<div class="alert alert--error">Bitte einen Grund mit 3 bis 500 Zeichen angeben.</div>
+{% elif error == 'mfa_kein_faktor' %}<div class="alert alert--error">Für diesen Benutzer ist keine 2FA eingerichtet.</div>
+{% elif error == 'mfa_verweigert' %}<div class="alert alert--error">2FA-Aktion für diesen Benutzer nicht erlaubt.</div>
 {% endif %}
 
 <form method="post" action="/admin/benutzer/bulk-loeschen" id="bulkUserForm"
@@ -76,11 +80,13 @@
       <th>Rollen</th>
       <th>Letzter Login</th>
       <th>Status</th>
+      <th>2FA</th>
       <th>Aktionen</th>
     </tr>
   </thead>
   <tbody>
     {% for u in users %}
+    {% set mfa = mfa_status.get(u.id, {}) %}
     {% set protected_system_admin = not is_sysadmin and 'system_admin' in (u.roles|map(attribute='code')|list) %}
     <tr>
       <td data-label="">
@@ -102,6 +108,12 @@
         {% if invitation_status.get(u.id) == 'offen' %}<br><span class="badge-pill badge-pill--green">Einladung offen</span>
         {% elif invitation_status.get(u.id) == 'abgelaufen' %}<br><span class="badge-pill badge-pill--gray">Einladung abgelaufen</span>{% endif %}
         {% if u.locked_until %}<br><span class="badge-pill badge-pill--red" {{ tip('Account ist temporär gesperrt') }}>Gesperrt</span>{% endif %}
+      </td>
+      <td data-label="2FA">
+        {% if mfa.gesperrt_bis %}<span class="badge-pill badge-pill--red">Gesperrt bis {{ mfa.gesperrt_bis|local_datetime }}</span>
+        {% elif mfa.reset_offen %}<span class="badge-pill badge-pill--gray">Neueinrichtung offen</span>
+        {% elif mfa.aktiv %}<span class="badge-pill badge-pill--green">TOTP</span>
+        {% else %}<span class="badge-pill badge-pill--gray">Aus</span>{% endif %}
       </td>
       <td data-label="Aktionen">
         <div class="sys-row sys-gap-sm">
@@ -136,6 +148,14 @@
                 onclick="if(confirm('Sofort neues Zufallspasswort für {{ u.username }} setzen?')) postAction('/admin/benutzer/{{ u.id }}/passwort')"
                 {{ tip('Setzt sofort ein neues Zufallspasswort und zeigt es einmalig an') }}>PW Reset</button>
         {% if u.id != user.id %}
+        {% if mfa.faktor_vorhanden or mfa.reset_offen %}
+        <button type="button" class="btn btn--ghost btn--xs" data-mfa-user-id="{{ u.id }}"
+                onclick="openMfaReset(this)">2FA zurücksetzen</button>
+        {% endif %}
+        {% if mfa.gesperrt_bis %}
+        <button type="button" class="btn btn--ghost btn--xs"
+                onclick="postAction('/admin/benutzer/{{ u.id }}/mfa-entsperren')">Sperre aufheben</button>
+        {% endif %}
         <button type="button" class="btn btn--ghost btn--xs"
                 onclick="if(confirm('Benutzer {{ 'aktivieren' if not u.active else 'deaktivieren' }}?')) postAction('/admin/benutzer/{{ u.id }}/loeschen')"
                 {{ tip('Account aktivieren/deaktivieren – keine Datenlöschung') }}>
@@ -156,6 +176,27 @@
 </table>
 </div>
 </form>
+
+<dialog class="modal" id="mfaResetModal">
+  <form method="post" id="mfaResetForm" class="modal__content">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="modal__header">
+      <h3>2FA zurücksetzen</h3>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
+    </div>
+    <div class="modal__body">
+      <p>Der Benutzer wird abgemeldet, muss seine 2FA innerhalb von 24 Stunden neu einrichten und erhält eine Mail.</p>
+      <div class="form-group">
+        <label for="mfa-reset-grund" class="form-label">Grund</label>
+        <textarea id="mfa-reset-grund" name="grund" class="form-input" required minlength="3" maxlength="500"></textarea>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
+      <button type="submit" class="btn btn--danger">2FA zurücksetzen</button>
+    </div>
+  </form>
+</dialog>
 
 <!-- Neuer Benutzer -->
 <dialog class="modal" id="newUserModal">
@@ -313,6 +354,12 @@ function updateMemberOptions(selectId, orgId, selectedId = '') {
     option.selected = String(member.id) === String(selectedId);
     select.appendChild(option);
   });
+}
+
+function openMfaReset(btn) {
+  document.getElementById('mfaResetForm').action = `/admin/benutzer/${btn.dataset.mfaUserId}/mfa-zuruecksetzen`;
+  document.getElementById('mfa-reset-grund').value = '';
+  document.getElementById('mfaResetModal').showModal();
 }
 
 function getCsrfToken() {

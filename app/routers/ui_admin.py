@@ -23,6 +23,7 @@ from app.core.permissions import (
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.templating import templates
 from app.db import get_db
+from app.models.admin_security import AdminTotp
 from app.models.master import (
     BOS_VALUES,
     AlarmDispatchVehicle,
@@ -60,7 +61,7 @@ from app.models.user import (
     UserRole,
 )
 from app.routers.ws import connected_gateway_token_ids
-from app.services import benutzer_service
+from app.services import benutzer_service, mfa_service
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.benutzer_mail_service import (
     MAIL_VORSCHAU_TYPEN,
@@ -133,6 +134,14 @@ def _validate_user_member(
 
 # ── Benutzer ──────────────────────────────────────────────────────────────────
 
+def _users_mfa_status(db: Session, users: list[User]) -> dict[int, dict]:
+    factors = {row.user_id: row for row in db.query(AdminTotp).filter(
+        AdminTotp.user_id.in_([u.id for u in users]),
+    ).all()} if users else {}
+    return {u.id: {**mfa_service.status_from_totp(u, factors.get(u.id)), "faktor_vorhanden": u.id in factors}
+            for u in users}
+
+
 @router.get("/benutzer", response_class=HTMLResponse)
 def users_list(request: Request, db: Session = Depends(get_db),
                      _=Depends(require_role("admin"))):
@@ -162,6 +171,7 @@ def users_list(request: Request, db: Session = Depends(get_db),
         "user": user,
         "users": users, "roles": roles,
         "einladungs_status": einladungs_status,
+        "mfa_status": _users_mfa_status(db, users),
         "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
@@ -324,6 +334,7 @@ async def create_user(
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": current_user,
         "users": users, "roles": roles_list,
+        "mfa_status": _users_mfa_status(db, users),
         "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
         "org_sso_enabled": org_sso_enabled,
@@ -1103,7 +1114,47 @@ async def reset_user_password(
         "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
         "new_password": new_pw, "new_password_user": u.username,
+        "mfa_status": _users_mfa_status(db, users),
     })
+
+
+def _user_mfa_action(user_id: int, request: Request, db: Session, *, grund: str | None = None):
+    actor = request.state.user
+    query = db.query(User)
+    if actor.is_system_admin:
+        query = query.execution_options(include_all_tenants=True)
+    target = query.filter(User.id == user_id).first()
+    if target is None:
+        raise HTTPException(404, "Benutzer nicht gefunden")
+    try:
+        if grund is not None:
+            mfa_service.admin_reset(db, actor, target, grund, request.state.mfa_at)
+        else:
+            mfa_service.admin_unlock(db, actor, target, request.state.mfa_at)
+    except (HTTPException, ValueError) as exc:
+        detail = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
+        if detail == "Zuerst 2FA erneut bestaetigen":
+            return RedirectResponse("/mfa/verify?next=/admin/benutzer", status_code=303)
+        code = ("mfa_grund" if detail.startswith("Grund") else "mfa_kein_faktor" if detail == "Keine 2FA eingerichtet"
+                else "mfa_verweigert")
+        return RedirectResponse("/admin/benutzer?error=" + code, status_code=303)
+    db.commit()
+    if grund is not None:
+        mfa_service.notify_reset(db, target)
+    return RedirectResponse("/admin/benutzer?saved=" + ("mfa_reset" if grund is not None else "mfa_unlock"),
+                            status_code=303)
+
+
+@router.post("/benutzer/{user_id}/mfa-zuruecksetzen")
+def reset_user_mfa(user_id: int, request: Request, grund: str = Form(""), db: Session = Depends(get_db),
+                   _=Depends(require_role("admin"))):
+    return _user_mfa_action(user_id, request, db, grund=grund)
+
+
+@router.post("/benutzer/{user_id}/mfa-entsperren")
+def unlock_user_mfa(user_id: int, request: Request, db: Session = Depends(get_db),
+                    _=Depends(require_role("admin"))):
+    return _user_mfa_action(user_id, request, db)
 
 
 # ── Fahrzeuge CRUD ────────────────────────────────────────────────────────────

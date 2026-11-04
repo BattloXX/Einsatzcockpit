@@ -1,4 +1,4 @@
-"""Optionale 2FA fuer Systemadministratoren; alle Mutationen sind CSRF-geschuetzt."""
+"""2FA fuer persoenliche Benutzer; alle Mutationen sind CSRF-geschuetzt."""
 import time
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -7,31 +7,45 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.crypto import decrypt_secret
-from app.core.permissions import require_role
 from app.core.security import session_login_method, sign_session, unsign_session
 from app.core.templating import templates
 from app.db import get_db
 from app.models.admin_security import AdminTotp
 from app.models.user import User
-from app.routers.auth import _set_session_cookie
-from app.services import totp_service as totp
+from app.routers.auth import _safe_next, _set_session_cookie
+from app.services import mfa_service as totp
 
-router = APIRouter(prefix="/mfa", dependencies=[Depends(require_role("system_admin"))])
+
+def require_personal_user(request: Request) -> User:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(401, "Nicht angemeldet")
+    if (user.is_device or request.state.is_device or request.state.qr_incident_id is not None
+            or request.state.qr_lage_id is not None or user.username.startswith("alarmlink-gast@org")):
+        raise HTTPException(403, "Nur persoenliche Benutzerkonten")
+    return user
+
+
+router = APIRouter(prefix="/mfa", dependencies=[Depends(require_personal_user)])
 
 
 def _user(request: Request, db: Session) -> User:
-    if request.state.is_device or request.state.qr_incident_id or request.state.qr_lage_id:
-        raise HTTPException(403, "Nur persoenliche Admin-Konten")
+    require_personal_user(request)
     user = db.get(User, request.state.user.id)
     if user is None:
         raise HTTPException(401)
     return user
 
 
-def _page(request: Request, mode: str, **context):
+def _destination(user: User, next_url: str) -> str:
+    return _safe_next(next_url) if next_url else ("/admin/system-einstellungen" if user.is_system_admin else "/")
+
+
+def _page(request: Request, mode: str, *, status_code: int = 200, **context):
     response = templates.TemplateResponse(request, "mfa/form.html", {
-        "user": request.state.user, "mode": mode, **context,
-    })
+        "user": request.state.user, "mode": mode, "next": _safe_next(request.query_params.get("next"))
+        if request.query_params.get("next") else "", **context,
+    }, status_code=status_code)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -59,13 +73,15 @@ def verify_page(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/verify")
-def verify_submit(request: Request, code: str = Form(...), db: Session = Depends(get_db)):
+def verify_submit(request: Request, code: str = Form(...), next: str = Form(""), db: Session = Depends(get_db)):
     user = _user(request, db)
     success = totp.verify(db, user.id, code)
     db.commit()
     if not success:
-        return _page(request, "verify", error="Code ungueltig, bereits verwendet oder Zugang voruebergehend gesperrt.")
-    response = RedirectResponse("/admin/system-einstellungen", status_code=303)
+        return _page(request, "verify",
+                     error="Code ungueltig, bereits verwendet oder Zugang voruebergehend gesperrt.",
+                     next=_safe_next(next))
+    response = RedirectResponse(_destination(user, next), status_code=303)
     _verified_cookie(request, user, response)
     return response
 
@@ -73,48 +89,59 @@ def verify_submit(request: Request, code: str = Form(...), db: Session = Depends
 @router.get("/einrichten")
 def setup_page(request: Request, db: Session = Depends(get_db)):
     user = _user(request, db)
+    if totp.setup_expired(db, user):
+        return _page(request, "expired", status_code=403)
     row = totp.start_setup(db, user)
-    db.commit()
     if row.confirmed_at:
+        db.commit()
         return _page(request, "confirmed")
+    # Vor der Bestaetigung einmal anzeigen; nachher direkt zum urspruenglichen Ziel.
+    codes = totp.create_recovery_codes(db, user.id)
+    db.commit()
     secret = decrypt_secret(row.secret_enc)
-    return _page(request, "setup", secret=secret, qr=totp.qr_data_uri(totp.provisioning_uri(secret, user.username)))
+    return _page(request, "setup", secret=secret, codes=codes,
+                 qr=totp.qr_data_uri(totp.provisioning_uri(secret, user.username)))
 
 
 @router.post("/bestaetigen")
-def confirm_submit(request: Request, code: str = Form(...), db: Session = Depends(get_db)):
+def confirm_submit(request: Request, code: str = Form(...), next: str = Form(""), db: Session = Depends(get_db)):
     user = _user(request, db)
+    if totp.setup_expired(db, user):
+        return _page(request, "expired", status_code=403)
     row = db.get(AdminTotp, user.id)
     if row is None or row.confirmed_at:
         raise HTTPException(400, "Keine offene Einrichtung")
     if not totp.verify(db, user.id, code, confirming=True):
         db.commit()
-        return _page(request, "retry", error="Code ungueltig oder Zugang voruebergehend gesperrt.")
-    codes = totp.create_recovery_codes(db, user.id)
+        return _page(request, "retry", error="Code ungueltig oder Zugang voruebergehend gesperrt.",
+                     next=_safe_next(next))
     db.commit()
-    response = _page(request, "recovery", codes=codes)
+    response = RedirectResponse(_destination(user, next), status_code=303)
     _verified_cookie(request, user, response)
     return response
 
 
 @router.post("/zuruecksetzen")
 def reset_submit(
-    request: Request, code: str = Form(""), user_id: int | None = Form(None), db: Session = Depends(get_db),
+    request: Request, code: str = Form(""), user_id: int | None = Form(None),
+    grund: str = Form("Systemadministration"), db: Session = Depends(get_db),
 ):
     actor = _user(request, db)
+    if not actor.is_system_admin:
+        raise HTTPException(403, "Nur Systemadministratoren haben Zugriff")
     target = db.query(User).execution_options(include_all_tenants=True).filter(
         User.id == (user_id or actor.id),
     ).first()
-    if not target or not target.is_system_admin or target.is_device:
+    if not target or target.is_device:
         raise HTTPException(404)
     if target.id == actor.id:
         success = totp.verify(db, actor.id, code)
         db.commit()
         if not success:
             raise HTTPException(403, "Gueltiger TOTP- oder Recovery-Code erforderlich")
-    elif totp.enabled(db) and not totp.fresh(request.state.mfa_at):
-        raise HTTPException(403, "Zuerst 2FA erneut bestaetigen (maximal 5 Minuten)")
-    totp.reset(db, target, actor.id)
+        totp.reset(db, target, actor.id)
+    else:
+        totp.admin_reset(db, actor, target, grund, request.state.mfa_at)
     db.commit()
     totp.notify_reset(db, target)
     response = RedirectResponse("/login" if target.id == actor.id else "/admin/system-einstellungen", status_code=303)
@@ -126,6 +153,8 @@ def reset_submit(
 @router.post("/global")
 def global_submit(request: Request, enabled: str = Form("false"), db: Session = Depends(get_db)):
     actor = _user(request, db)
+    if not actor.is_system_admin:
+        raise HTTPException(403, "Nur Systemadministratoren haben Zugriff")
     try:
         totp.set_enabled(db, enabled == "true", actor.id, request.state.mfa_at)
     except ValueError as exc:

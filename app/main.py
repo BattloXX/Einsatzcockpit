@@ -138,6 +138,7 @@ from app.routers import (
     ui_road_closure,
     ui_road_closure_admin,
     ui_road_closure_public,
+    ui_security,
     ui_settings,
     ui_sms,
     ui_sso,
@@ -809,18 +810,13 @@ async def _session_mit_kontext(request: Request, call_next):
     # Zentral fuer Passwort, SSO, Kontowechsel, PIN und Native-Link-Handoff.
     # Ein MFA-Marker gilt fuer die urspruengliche Session, nicht den Sliding-Refresh.
     _gate_user = request.state.user
-    if _gate_user and _gate_user.is_system_admin and not request.state.is_device and not (
+    if _gate_user and not _gate_user.is_device and not request.state.is_device and not (
         request.state.qr_incident_id is not None or request.state.qr_lage_id is not None
     ):
-        from app.services.totp_service import enabled as _mfa_enabled
+        from app.services import mfa_service
 
         if valid_mfa(_mfa_at, _started_at):
             request.state.mfa_at = _mfa_at
-        _mfa_db = SessionLocal()
-        try:
-            _requires_mfa = _mfa_enabled(_mfa_db) and request.state.mfa_at is None
-        finally:
-            _mfa_db.close()
         _mfa_exempt = (
             _path.startswith(("/mfa/", "/sso/", "/pin-login/", "/health/"))
             or _path in {
@@ -828,6 +824,13 @@ async def _session_mit_kontext(request: Request, call_next):
                 "/geraet-login", "/geraet-login-pin", "/qr-login", "/qr-pin", "/qr-name",
             }
         )
+        _requires_mfa = False
+        if not _mfa_exempt and request.state.mfa_at is None:
+            _policy = mfa_service.required_for_cached(_gate_user)
+            if _policy is None:
+                with SessionLocal() as _mfa_db:
+                    _policy = mfa_service.required_for(_mfa_db, _gate_user)
+            _requires_mfa = _policy
         if _requires_mfa and not _mfa_exempt:
             reset_request_client_id(client_token)
             if (
@@ -837,7 +840,15 @@ async def _session_mit_kontext(request: Request, call_next):
             ):
                 return JSONResponse({"code": "mfa_required", "detail": "mfa_required"}, status_code=403,
                                     headers={"HX-Redirect": "/mfa/verify"})
-            return RedirectResponse("/mfa/verify", status_code=303)
+            from urllib.parse import quote
+
+            from app.routers.auth import _safe_next
+
+            _target = "/mfa/verify"
+            if request.method == "GET":
+                _next = _safe_next(_path + ("?" + request.url.query if request.url.query else ""))
+                _target += "?next=" + quote(_next, safe="")
+            return RedirectResponse(_target, status_code=303)
 
     _bereinigte_accounts = []
     if (
@@ -920,7 +931,9 @@ async def _session_mit_kontext(request: Request, call_next):
         _refresh_user_id is not None
         and request.state.user is not None
         and not request.url.path.startswith(("/mfa/", "/sso/", "/pin-login"))
-        and request.url.path not in {"/logout", "/logout/alle", "/login", "/benutzer/wechseln"}
+        and request.url.path not in {
+            "/logout", "/logout/alle", "/login", "/benutzer/wechseln", "/profil/mfa/entfernen",
+        }
     ):
         from app.core.security import sign_session as _sign
 
@@ -1099,6 +1112,7 @@ app.include_router(ui_dienst_monitor.router)
 app.include_router(monitoring_api.router)
 app.include_router(ui_ai_prompts.router)
 app.include_router(ui_profile.router)
+app.include_router(ui_security.router)
 app.include_router(ui_weather.router)
 app.include_router(ui_termin.router)
 app.include_router(ui_probenplanung_public.public_router)

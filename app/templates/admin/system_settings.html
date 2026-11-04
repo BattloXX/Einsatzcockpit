@@ -82,6 +82,7 @@
         <form method="post" action="/mfa/zuruecksetzen" class="sys-inline-form">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="user_id" value="{{ admin.id }}">
+          <label class="form-label">Grund <input class="form-input" name="grund" required minlength="3" maxlength="500"></label>
           <button class="btn btn--secondary" type="submit">2FA zurücksetzen</button>
         </form>
         {% endif %}
@@ -121,6 +122,7 @@
         <form method="post" action="/admin/system-einstellungen/admin-mcp/zugang" class="sys-inline-form">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="user_id" value="{{ admin.id }}">
+          <label class="form-label">Grund <input class="form-input" name="grund" required minlength="3" maxlength="500"></label>
           <input type="hidden" name="enabled" value="{{ 'false' if admin.admin_mcp_access else 'true' }}">
           <button class="btn btn--secondary" type="submit">{{ 'Sperren' if admin.admin_mcp_access else 'Freigeben' }}</button>
         </form>
