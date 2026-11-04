@@ -52,6 +52,7 @@ def anmelden_submit(
     username: str = Form(...),
     password: str = Form(...),
     code: str = Form(""),
+    aktion: str = Form(""),
     db: Session = Depends(get_db),
 ):
     row = db.query(MCPOAuthCode).filter(MCPOAuthCode.code_hash == hash_api_key(vorgang)).first()
@@ -69,11 +70,30 @@ def anmelden_submit(
     from app.services import mfa_service
 
     if not user.is_system_admin and mfa_service.required_for(db, user):
+        from app.services import mfa_sms_service
+
         factor = db.get(AdminTotp, user.id)
-        if factor is None or factor.confirmed_at is None:
+        has_totp = factor is not None and factor.confirmed_at is not None
+        if not mfa_service.status(db, user)["aktiv"]:
             return _anmeldeseite(request, row, vorgang,
                                 "Bitte zuerst im Einsatzcockpit die Zwei-Faktor-Authentifizierung einrichten.", 403)
-        success = mfa_service.verify(db, user.id, code)
+        if aktion == "sms":
+            if has_totp:
+                return _anmeldeseite(request, row, vorgang, "Bitte TOTP oder Recovery-Code verwenden.", 403)
+            try:
+                mfa_sms_service.send_code(db, user, "mfa")
+            except ValueError as exc:
+                from app.routers.ui_mfa import _sms_error
+
+                db.commit()
+                return _anmeldeseite(request, row, vorgang, _sms_error(exc), 400)
+            db.commit()
+            return _anmeldeseite(request, row, vorgang, "SMS-Code versendet. Bitte Zugangsdaten und Code eingeben.")
+        # Numerische Codes pruefen wir bei reinem SMS-Faktor als SMS; Recovery
+        # bleibt auch bei deaktiviertem Gateway moeglich.
+        success = (mfa_sms_service.verify_sms(db, user, code, "mfa")
+                   if not has_totp and len(code.strip()) == 6 and code.strip().isascii() and code.strip().isdigit()
+                   else mfa_service.verify(db, user.id, code))
         db.commit()
         if not success:
             return _anmeldeseite(request, row, vorgang,

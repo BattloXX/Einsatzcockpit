@@ -10,14 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.async_bridge import run_async
+from app.core.crypto import decrypt_secret
 from app.core.security import hash_password, verify_password
+from app.core.telefon import telefon_maske
 from app.core.templating import templates
 from app.db import get_db
-from app.models.admin_security import AdminTotp, utcnow
+from app.models.admin_security import AdminTotp, UserMfaSms, utcnow
 from app.models.mcp import MCPOAuthToken
 from app.models.user import User
 from app.routers.ui_mfa import _page, _user
-from app.services import mfa_service
+from app.services import mfa_service, mfa_sms_service
 from app.services.benutzer_mail_service import send_passwort_geaendert
 
 logger = logging.getLogger("einsatzleiter.profile")
@@ -45,12 +47,17 @@ def profile_page(request: Request, db: Session = Depends(get_db)):
         .distinct()
         .all()
     )
+    sms_factor = db.get(UserMfaSms, user.id)
     return templates.TemplateResponse(request, "profile/index.html", {
         "profile_user": db_user,
         "mfa_personal": not (request.state.is_device or user.is_device
                              or request.state.qr_incident_id is not None or request.state.qr_lage_id is not None
                              or user.username.startswith("alarmlink-gast@org")),
         "mfa_factor": db.get(AdminTotp, user.id),
+        "mfa_sms": sms_factor,
+        "mfa_sms_allowed": mfa_sms_service.sms_allowed(db, db_user) if db_user else False,
+        "mfa_sms_phone": telefon_maske(decrypt_secret(sms_factor.phone_enc)) if sms_factor else "",
+        "mfa_status": mfa_service.status(db, db_user) if db_user else {},
         "mfa_required": mfa_service.required_for(db, db_user) if db_user else False,
         "mfa_now": utcnow(),
         "avatar_url": _avatar_url(db_user),  # type: ignore[arg-type]

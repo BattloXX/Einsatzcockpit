@@ -112,7 +112,7 @@
       <td data-label="2FA">
         {% if mfa.gesperrt_bis %}<span class="badge-pill badge-pill--red">Gesperrt bis {{ mfa.gesperrt_bis|local_datetime }}</span>
         {% elif mfa.reset_offen %}<span class="badge-pill badge-pill--gray">Neueinrichtung offen</span>
-        {% elif mfa.aktiv %}<span class="badge-pill badge-pill--green">TOTP</span>
+        {% elif mfa.aktiv %}<span class="badge-pill badge-pill--green">{{ "TOTP + SMS" if mfa.methode == "totp+sms" else "SMS" if mfa.methode == "sms" else "TOTP" }}</span>
         {% else %}<span class="badge-pill badge-pill--gray">Aus</span>{% endif %}
       </td>
       <td data-label="Aktionen">

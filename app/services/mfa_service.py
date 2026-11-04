@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import write_audit
 from app.core.crypto import decrypt_secret, encrypt_secret
 from app.core.permissions import ORG_ADMIN_ROLES, authorize_user_mutation
-from app.models.admin_security import AdminRecoveryCode, AdminTotp, utcnow
+from app.models.admin_security import AdminRecoveryCode, AdminTotp, UserMfaSms, utcnow
 from app.models.master import OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
 
@@ -156,6 +156,9 @@ def create_recovery_codes(db: Session, user_id: int) -> list[str]:
 def verify(db: Session, user_id: int, code: str, *, confirming: bool = False) -> bool:
     row = db.query(AdminTotp).filter(AdminTotp.user_id == user_id).with_for_update().populate_existing().first()
     now = utcnow()
+    if (not confirming and (row is None or row.confirmed_at is None)
+            and (sms := db.get(UserMfaSms, user_id)) and sms.verified_at):
+        return verify_recovery(db, user_id, code)
     if row is None or (not confirming and row.confirmed_at is None) or (confirming and row.confirmed_at is not None):
         audit(db, "failed", user_id)
         return False
@@ -202,6 +205,45 @@ def verify(db: Session, user_id: int, code: str, *, confirming: bool = False) ->
     db.flush()
     return success
 
+
+
+def verify_recovery(db: Session, user_id: int, code: str) -> bool:
+    """Recovery fuer SMS-Konten ohne bestaetigten TOTP-Faktor, mit gleicher Sperre."""
+    from app.services.mfa_sms_service import _serialized_factor
+
+    factor = _serialized_factor(db, user_id)
+    now = utcnow()
+    if factor is None or factor.verified_at is None or (factor.locked_until and factor.locked_until > now):
+        audit(db, "failed", user_id)
+        return False
+    candidate = db.query(AdminRecoveryCode).filter(
+        AdminRecoveryCode.user_id == user_id, AdminRecoveryCode.code_hash == recovery_hash(code),
+        AdminRecoveryCode.used_at.is_(None),
+    ).first()
+    success = False
+    if candidate:
+        result = db.execute(update(AdminRecoveryCode).where(
+            AdminRecoveryCode.id == candidate.id, AdminRecoveryCode.used_at.is_(None),
+        ).values(used_at=now), execution_options={"synchronize_session": False})
+        success = result.rowcount == 1  # type: ignore[attr-defined]
+    if success:
+        factor.failed_count = 0
+        factor.locked_until = None
+    else:
+        if factor.locked_until:
+            factor.failed_count = 0
+            factor.locked_until = None
+        db.flush()
+        db.execute(update(UserMfaSms).where(UserMfaSms.user_id == user_id).values(
+            failed_count=UserMfaSms.failed_count + 1), execution_options={"synchronize_session": False})
+        db.execute(update(UserMfaSms).where(
+            UserMfaSms.user_id == user_id, UserMfaSms.failed_count >= MAX_FAILED,
+        ).values(locked_until=now + timedelta(seconds=LOCK_SECONDS)),
+            execution_options={"synchronize_session": False})
+        db.refresh(factor)
+    audit(db, "recovery_used" if success else "failed", user_id)
+    db.flush()
+    return success
 
 def diagnose_failure(db: Session, user_id: int, code: str) -> tuple[str, int | None]:
     """Nach verify()-Fehlschlag nur lesen; keine Zaehler, Faktoren oder Audits aendern."""
@@ -253,27 +295,39 @@ def reset(db: Session, user: User, actor_id: int | None, *, local: bool = False)
     row = db.get(AdminTotp, user.id)
     if row:
         db.delete(row)
+    sms = db.get(UserMfaSms, user.id)
+    if sms:
+        db.delete(sms)
+    from app.models.login_pin import LoginPin
+
+    for pin in db.query(LoginPin).filter(
+        LoginPin.user_id == user.id, LoginPin.purpose.in_(("mfa", "mfa_setup")), LoginPin.used_at.is_(None),
+    ).all():
+        db.delete(pin)
     for recovery in db.query(AdminRecoveryCode).filter(AdminRecoveryCode.user_id == user.id).all():
         db.delete(recovery)
     user.session_epoch += 1
     audit(db, "reset", actor_id, entity_type="user", entity_id=user.id, payload={"local": local})
 
 
-def status_from_totp(user: User, factor: AdminTotp | None) -> dict:
-    """Status aus vorgeladenem Faktor; weitere Methoden koennen hier ergaenzt werden."""
-    active = factor is not None and factor.confirmed_at is not None
+def status_from_totp(user: User, factor: AdminTotp | None, sms: UserMfaSms | None = None) -> dict:
+    """Status aus gebuendelt vorgeladenen Faktoren."""
+    has_totp = factor is not None and factor.confirmed_at is not None
+    has_sms = sms is not None and sms.verified_at is not None
+    dates = [d for d in (factor.confirmed_at if has_totp and factor else None,
+                         sms.verified_at if has_sms and sms else None) if d]
+    locks = [f.locked_until for f in (factor, sms) if f and f.locked_until and f.locked_until > utcnow()]
     return {
-        "aktiv": active,
-        "methode": "totp" if active else None,
-        "eingerichtet_at": factor.confirmed_at if active and factor else None,
-        "gesperrt_bis": (factor.locked_until
-                         if factor and factor.locked_until and factor.locked_until > utcnow() else None),
-        "reset_offen": user.mfa_reset_at is not None and not active,
+        "aktiv": has_totp or has_sms,
+        "methode": "totp+sms" if has_totp and has_sms else "totp" if has_totp else "sms" if has_sms else None,
+        "eingerichtet_at": min(dates) if dates else None,
+        "gesperrt_bis": max(locks) if locks else None,
+        "reset_offen": user.mfa_reset_at is not None and not (has_totp or has_sms),
     }
 
 
 def status(db: Session, user: User) -> dict:
-    return status_from_totp(user, db.get(AdminTotp, user.id))
+    return status_from_totp(user, db.get(AdminTotp, user.id), db.get(UserMfaSms, user.id))
 
 
 def setup_expired(db: Session, user: User) -> bool:
@@ -287,31 +341,37 @@ def _authorize_admin_action(db: Session, actor: User, target: User, actor_mfa_at
         raise HTTPException(404, "Benutzer nicht gefunden")
     if actor.id == target.id:
         raise HTTPException(403, "Eigene 2FA nur im Profil zuruecksetzen")
-    factor = db.get(AdminTotp, actor.id)
-    needs_step_up = (factor is not None and factor.confirmed_at is not None) or required_for(db, actor)
+    needs_step_up = status(db, actor)["aktiv"] or required_for(db, actor)
     if needs_step_up and not fresh(actor_mfa_at):
         raise HTTPException(403, "Zuerst 2FA erneut bestaetigen")
 
 
-def admin_reset(db: Session, actor: User, target: User, grund: str, actor_mfa_at: int | None) -> None:
+def admin_reset(db: Session, actor: User, target: User, grund: str, actor_mfa_at: int | None) -> str | None:
     """Reset vorbereiten; Aufrufer committet und benachrichtigt danach das Ziel."""
     _authorize_admin_action(db, actor, target, actor_mfa_at)
     grund = grund.strip()
     if not 3 <= len(grund) <= 500:
         raise HTTPException(400, "Grund muss 3 bis 500 Zeichen enthalten")
+    sms = db.get(UserMfaSms, target.id)
+    phone = decrypt_secret(sms.phone_enc) if sms and sms.verified_at else None
     reset(db, target, actor.id)
     target.mfa_reset_at = utcnow()
     audit(db, "reset", actor.id, org_id=target.org_id, entity_type="user", entity_id=target.id,
           payload={"grund": grund, "akteur_rolle": "system_admin" if actor.is_system_admin else "org_admin"})
 
+    return phone
+
 
 def admin_unlock(db: Session, actor: User, target: User, actor_mfa_at: int | None) -> None:
     _authorize_admin_action(db, actor, target, actor_mfa_at)
     factor = db.get(AdminTotp, target.id)
-    if factor is None:
+    sms = db.get(UserMfaSms, target.id)
+    if factor is None and sms is None:
         raise HTTPException(400, "Keine 2FA eingerichtet")
-    factor.failed_count = 0
-    factor.locked_until = None
+    for row in (factor, sms):
+        if row is not None:
+            row.failed_count = 0
+            row.locked_until = None
     audit(db, "unlock", actor.id, org_id=target.org_id, entity_type="user", entity_id=target.id,
           payload={"akteur_rolle": "system_admin" if actor.is_system_admin else "org_admin"})
 

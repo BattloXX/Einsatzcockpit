@@ -18,6 +18,7 @@ Sicherheit:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
@@ -124,13 +125,15 @@ async def pin_login_submit(
         return redirect
 
     # Alte offene PINs dieses Users entwerten (nur die zuletzt erzeugte gilt).
-    db.query(LoginPin).filter(
-        LoginPin.user_id == match.id, LoginPin.used_at.is_(None),
-    ).update({"used_at": datetime.now(UTC)})
+    for old_pin in db.query(LoginPin).filter(
+        LoginPin.user_id == match.id, LoginPin.purpose == "login", LoginPin.used_at.is_(None),
+    ).all():
+        old_pin.used_at = datetime.now(UTC)
 
     pin = generate_numeric_pin()
     db.add(LoginPin(
         user_id=match.id,
+        purpose="login",
         pin_hash=_hash_pin(pin),
         expires_at=datetime.now(UTC) + timedelta(minutes=LOGIN_PIN_TTL_MINUTES),
         requesting_ip=request.client.host if request.client else None,
@@ -192,14 +195,14 @@ def pin_login_code_submit(
 
     login_pin = (
         db.query(LoginPin)
-        .filter(LoginPin.user_id == match.id, LoginPin.used_at.is_(None))
+        .filter(LoginPin.user_id == match.id, LoginPin.purpose == "login", LoginPin.used_at.is_(None))
         .order_by(LoginPin.created_at.desc())
         .first()
     )
     if not login_pin or not login_pin.is_valid:
         return _err()
 
-    if login_pin.pin_hash != _hash_pin(pin_clean):
+    if not hmac.compare_digest(login_pin.pin_hash, _hash_pin(pin_clean)):
         login_pin.attempt_count += 1
         write_audit(db, "auth.pin_login.failed", user_id=match.id,
                     ip=request.client.host if request.client else None)

@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- SMS als zweiter Faktor (P4), Migration 0345.
+
 - 2FA-Reset durch Org- und Systemadmins (P3): Reset mit Grund und Step-up, Entsperren, Status in der Benutzerverwaltung und 24-Stunden-Frist zur Neueinrichtung.
 
 - **2FA fuer Org-Benutzer (P2):** TOTP-Einrichtung, Verifikation und Sicherheitsbereich im Profil fuer persoenliche Konten; Org-Richtlinie im Verwaltungstab "Benutzer & Rechte / Anmeldung & 2FA", inkl. SSO-Ausnahme und Vorbereitung der SMS-Freigabe. MFA-Gate fuer Web, WebSocket und Org-MCP. Baut auf Migration 0344 auf; keine weitere Migration.

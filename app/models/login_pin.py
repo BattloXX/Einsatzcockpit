@@ -31,6 +31,7 @@ class LoginPin(Base):
     # sha256-Hex des PIN (kein Klartext-PIN in der DB) — Schutz gegen Bruteforce
     # laeuft ueber Rate-Limit + attempt_count + kurze Gueltigkeit, nicht ueber
     # die Hash-Kosten (ein 6-stelliger PIN hat ohnehin nur 10^6 Kombinationen).
+    purpose: Mapped[str] = mapped_column(String(12), default="login", server_default="login", nullable=False)
     pin_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
