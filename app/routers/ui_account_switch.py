@@ -46,7 +46,7 @@ def _wechsel_response(
     response = RedirectResponse("/", status_code=status_code)
     _set_session_cookie(
         response,
-        sign_session(user.id, remember=remember, session_epoch=user.session_epoch),
+        sign_session(user.id, remember=remember, session_epoch=user.session_epoch, login_method="switch"),
         max_age=settings.SESSION_REMEMBER_MAX_AGE_SECONDS if remember else None,
     )
     set_accounts_cookie(response, updated)

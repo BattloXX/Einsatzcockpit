@@ -358,7 +358,7 @@ async def sso_callback(
         slug, config.tenant_id, user.id, jit_provisioned,
     )
 
-    session_token = sign_session(user.id, session_epoch=user.session_epoch)
+    session_token = sign_session(user.id, session_epoch=user.session_epoch, login_method="sso")
     redirect = RedirectResponse(_safe_next(flow.get("next")), status_code=302)
     _set_session_cookie(redirect, session_token)
     set_accounts_cookie(

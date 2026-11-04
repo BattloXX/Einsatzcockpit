@@ -44,4 +44,4 @@ app/services/resource_service.py | 4 | Einheiten-Mutex: tests/mariadb/test_high_
 app/services/ressource_pflege_service.py | 9 | Sperrt _umbuchen, _ausstattung_umbuchen, verband_bilden, verband_aufloesen, einheit_aufteilen; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
 app/services/sms_dispatch_service.py | 1 | Sperrt dispatch_einsatzinfo; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
 app/services/sms_outbox.py | 11 | SMS-Claim/Versand-Fencing: tests/mariadb/test_high_risk_snapshot_claims.py; kein Retry nach Versandwirkung.
-app/services/totp_service.py | 1 | Sperrt verify; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.
+app/services/mfa_service.py | 1 | Sperrt verify; Session-Schutz durch tests/mariadb/test_db_snapshot_isolation.py; kein neuer automatischer Retry ohne Pruefung der Aussenwirkung.

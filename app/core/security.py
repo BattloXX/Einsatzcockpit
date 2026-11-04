@@ -235,6 +235,7 @@ def sign_session(
     mfa_at: int | None = None,
     session_epoch: int = 0,
     session_started_at: int | None = None,
+    login_method: str | None = None,
 ) -> str:
     if qr:
         payload: dict | int = {"u": user_id, "qr": 1}
@@ -259,9 +260,20 @@ def sign_session(
                    "a": int(time.time()) if session_started_at is None else session_started_at}
         if remember:
             payload["r"] = 1
+        if login_method is not None:
+            payload["lm"] = login_method
         if mfa_at is not None:
             payload["m"] = mfa_at
     return _signer.dumps(payload)
+
+
+def session_login_method(token: str) -> str:
+    """Login-Methode der Session; alte Cookies gelten als Passwort-Anmeldung."""
+    if unsign_session(token) is None:
+        return "pw"
+    data = _signer.loads(token)
+    method = data.get("lm") if isinstance(data, dict) else None
+    return method if isinstance(method, str) else "pw"
 
 
 def session_security(token: str) -> tuple[int, int | None, int] | None:

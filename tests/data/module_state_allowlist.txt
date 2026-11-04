@@ -1,5 +1,6 @@
 
 # Caches (neu berechenbar bzw. erneut ladbar, pro Worker zulässig)
+app.services.mfa_service:_policy_cache
 app.routers.ui_infoscreen_alarm:_wetter_cache
 app.routers.ui_map_tiles:_tile_cache
 app.routers.ui_weather:_panel_summaries

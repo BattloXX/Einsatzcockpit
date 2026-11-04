@@ -35,6 +35,7 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     session_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    mfa_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     admin_mcp_access: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     is_device: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # org_id: which organisation this user belongs to (NULL = system_admin without org)
