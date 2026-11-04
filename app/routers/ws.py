@@ -125,11 +125,11 @@ def _resolve_user(websocket: WebSocket) -> User | None:
         ):
             return None
         if user is not None and not is_device and not _is_qr:
-            from app.services.totp_service import enabled as mfa_enabled
+            from app.services.mfa_service import required_for
 
             epoch, mfa_at, started_at = session_security(token) or (0, None, 0)
             if user.session_epoch != epoch or (
-                user.is_system_admin and mfa_enabled(db) and not valid_mfa(mfa_at, started_at)
+                required_for(db, user) and not valid_mfa(mfa_at, started_at)
             ):
                 return None
         if user is not None:

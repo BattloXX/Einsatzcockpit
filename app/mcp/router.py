@@ -51,6 +51,7 @@ def anmelden_submit(
     vorgang: str = Form(...),
     username: str = Form(...),
     password: str = Form(...),
+    code: str = Form(""),
     db: Session = Depends(get_db),
 ):
     row = db.query(MCPOAuthCode).filter(MCPOAuthCode.code_hash == hash_api_key(vorgang)).first()
@@ -64,6 +65,19 @@ def anmelden_submit(
     if user.is_system_admin and mfa_enabled(db):
         return _anmeldeseite(request, row, vorgang,
                             "Systemadministratoren mit aktiver 2FA koennen MCP noch nicht verwenden.", 403)
+    from app.models.admin_security import AdminTotp
+    from app.services import mfa_service
+
+    if not user.is_system_admin and mfa_service.required_for(db, user):
+        factor = db.get(AdminTotp, user.id)
+        if factor is None or factor.confirmed_at is None:
+            return _anmeldeseite(request, row, vorgang,
+                                "Bitte zuerst im Einsatzcockpit die Zwei-Faktor-Authentifizierung einrichten.", 403)
+        success = mfa_service.verify(db, user.id, code)
+        db.commit()
+        if not success:
+            return _anmeldeseite(request, row, vorgang,
+                                "Anmeldung nicht moeglich. Bitte Zugangsdaten und Code pruefen.", 401)
     from app.mcp.context import mcp_effective_enabled
 
     if not mcp_effective_enabled(user.org_id, db):

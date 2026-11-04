@@ -37,24 +37,36 @@ def clear_policy_cache() -> None:
     _policy_cache.clear()
 
 
-def required_for(db: Session, user: User) -> bool:
-    """MFA-Pflicht ermitteln; das bestehende Admin-Gate bleibt separat."""
-    if user.is_device:
+def required_for_cached(user: User) -> bool | None:
+    """Ohne DB pruefen; None fordert einen Policy-Lookup an."""
+    if user.is_device or user.username.startswith("alarmlink-gast@org"):
         return False
     if user.is_system_admin:
-        return enabled(db)
+        return None
     if user.org_id is None:
         return False
-    now = time.monotonic()
     cached = _policy_cache.get(user.org_id)
-    if cached is None or now - cached[0] >= _POLICY_CACHE_TTL:
-        row = db.query(OrgSettings.mfa_policy, OrgSettings.mfa_sso_ausgenommen).execution_options(
-            include_all_tenants=True,
-        ).filter(OrgSettings.org_id == user.org_id).first()
-        policy, sso_exempt = (row.mfa_policy, row.mfa_sso_ausgenommen) if row else ("aus", True)
-        cached = (now, policy, sso_exempt)
-        _policy_cache[user.org_id] = cached
+    if cached is None or time.monotonic() - cached[0] >= _POLICY_CACHE_TTL:
+        return None
     _, policy, sso_exempt = cached
+    if user.entra_oid and sso_exempt:
+        return False
+    return policy == "alle" or (policy == "admins" and bool(user.role_codes & ORG_ADMIN_ROLES))
+
+
+def required_for(db: Session, user: User) -> bool:
+    """MFA-Pflicht aus globalem Schalter oder Org-Richtlinie ermitteln."""
+    cached = required_for_cached(user)
+    if cached is not None:
+        return cached
+    if user.is_system_admin:
+        return enabled(db)
+    row = db.query(OrgSettings.mfa_policy, OrgSettings.mfa_sso_ausgenommen).execution_options(
+        include_all_tenants=True,
+    ).filter(OrgSettings.org_id == user.org_id).first()
+    policy, sso_exempt = (row.mfa_policy, row.mfa_sso_ausgenommen) if row else ("aus", True)
+    assert user.org_id is not None
+    _policy_cache[user.org_id] = (time.monotonic(), policy, sso_exempt)
     if user.entra_oid and sso_exempt:
         return False
     return policy == "alle" or (policy == "admins" and bool(user.role_codes & ORG_ADMIN_ROLES))

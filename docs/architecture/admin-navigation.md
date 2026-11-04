@@ -50,7 +50,7 @@ sichtbarkeit, modulflag, tabs, ...)` -> `AdminTab(id, label, href, aktiv_praefix
 **Stammdaten:** Personal (Mitglieder, Qualifikationen, Gruppen) · Ressourcen · Alarmstichwoerter (Alarmtypen,
 Ausrueckordnung, Auftragsvorlagen, Meldungsvorlagen, Lage-Hinweise, Default-Meldungen)
 
-**Verwaltung:** Benutzer & Rechte (Benutzer, Audit-Log) · Probenplanung (Probearten, Checklisten-Vorlagen,
+**Verwaltung:** Benutzer & Rechte (Benutzer, Audit-Log, Anmeldung & 2FA) · Probenplanung (Probearten, Checklisten-Vorlagen,
 Oeffentlicher Plan) · Infoscreens (Alarm, Wetter, Statistik, Strassensperren) · Alarmierung (SMS senden,
 Versandweg, Empfang, SMS-Einsatzinfo, Einsatzinfo-Mail, Teams, Push) · Gateway / Druck · Einsatzdaten ·
 Loeschwasserversorgung · Foerderstrecke (Pumpen, Schlaeuche, Kalibrierung) · Geraeteverleih (Artikel,
@@ -112,3 +112,9 @@ bleibt ueber Tab-Links erhalten.
 Die Systemdiagnose enthaelt den lesenden Bereich **App-Geraete** mit HTMX-Detailansicht
 `/admin/systemdiagnose/geraet/{geraet_id}` (nur persoenliche Systemadmin-Konten).
 Er gehoert zum vorhandenen Hauptpunkt Systemstatus, Tab Systemdiagnose.
+
+Unter **Benutzer & Rechte** fuehrt der Tab **Anmeldung & 2FA** (`/admin/sicherheit`,
+`admin`/`org_admin`/`system_admin`) zur Org-Richtlinie (aus, optional, Admin-Rollen, alle),
+SMS-Freigabe und SSO-Ausnahme. Systemadmins waehlen die Organisation; Org-Admins
+aendern nur ihre eigene. Die Vorschau zaehlt aktive persoenliche Benutzer ohne
+bestaetigten Faktor nach der gewaehlten Richtlinie.
