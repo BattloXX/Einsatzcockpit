@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- 2FA-Reset durch Org- und Systemadmins (P3): Reset mit Grund und Step-up, Entsperren, Status in der Benutzerverwaltung und 24-Stunden-Frist zur Neueinrichtung.
+
 - **2FA fuer Org-Benutzer (P2):** TOTP-Einrichtung, Verifikation und Sicherheitsbereich im Profil fuer persoenliche Konten; Org-Richtlinie im Verwaltungstab "Benutzer & Rechte / Anmeldung & 2FA", inkl. SSO-Ausnahme und Vorbereitung der SMS-Freigabe. MFA-Gate fuer Web, WebSocket und Org-MCP. Baut auf Migration 0344 auf; keine weitere Migration.
 
 - **Objektdokumente einzeichnen:** Dokumentseiten in der Objektverwaltung mit dem bekannten Bild-Editor bearbeiten (zeichnen, Text, Flächen, Symbole). Nicht-destruktiv: Original bleibt, Umschalter „Original anzeigen“, „Einzeichnung entfernen“. Viewer, Sammel-PDF, Einsatzdruck, Einheitenansicht, Übernahme in den Einsatz und MCP zeigen die Einzeichnung; OCR/KI/Georef bleiben beim Original. Symbol-Panel im Editor jetzt mit Reitern „Taktische Zeichen (Lageführung)“ und „Objekt-Symbole“ (überall). Keine Migration.

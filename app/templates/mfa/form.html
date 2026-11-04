@@ -4,7 +4,9 @@
 <div class="card" style="max-width:480px;margin:2rem auto;width:100%"><div class="card-body">
   <h1>Zwei-Faktor-Authentifizierung</h1>
   {% if error %}<div class="alert alert--error" role="alert">{{ error }}</div>{% endif %}
-  {% if mode == 'unconfigured' %}
+  {% if mode == 'expired' %}
+  <p>Die Frist zur Neueinrichtung ist abgelaufen. Bitte wenden Sie sich an Ihre Administration.</p>
+  {% elif mode == 'unconfigured' %}
   <p>Bitte zuerst die Zwei-Faktor-Authentifizierung einrichten.</p>
   <p><a href="/mfa/einrichten{% if next %}?next={{ next|urlencode }}{% endif %}">Zur Einrichtung</a></p>
   {% elif mode == 'verify' %}

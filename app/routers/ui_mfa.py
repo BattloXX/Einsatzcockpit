@@ -41,11 +41,11 @@ def _destination(user: User, next_url: str) -> str:
     return _safe_next(next_url) if next_url else ("/admin/system-einstellungen" if user.is_system_admin else "/")
 
 
-def _page(request: Request, mode: str, **context):
+def _page(request: Request, mode: str, *, status_code: int = 200, **context):
     response = templates.TemplateResponse(request, "mfa/form.html", {
         "user": request.state.user, "mode": mode, "next": _safe_next(request.query_params.get("next"))
         if request.query_params.get("next") else "", **context,
-    })
+    }, status_code=status_code)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -89,6 +89,8 @@ def verify_submit(request: Request, code: str = Form(...), next: str = Form(""),
 @router.get("/einrichten")
 def setup_page(request: Request, db: Session = Depends(get_db)):
     user = _user(request, db)
+    if totp.setup_expired(db, user):
+        return _page(request, "expired", status_code=403)
     row = totp.start_setup(db, user)
     if row.confirmed_at:
         db.commit()
@@ -104,6 +106,8 @@ def setup_page(request: Request, db: Session = Depends(get_db)):
 @router.post("/bestaetigen")
 def confirm_submit(request: Request, code: str = Form(...), next: str = Form(""), db: Session = Depends(get_db)):
     user = _user(request, db)
+    if totp.setup_expired(db, user):
+        return _page(request, "expired", status_code=403)
     row = db.get(AdminTotp, user.id)
     if row is None or row.confirmed_at:
         raise HTTPException(400, "Keine offene Einrichtung")
@@ -119,7 +123,8 @@ def confirm_submit(request: Request, code: str = Form(...), next: str = Form("")
 
 @router.post("/zuruecksetzen")
 def reset_submit(
-    request: Request, code: str = Form(""), user_id: int | None = Form(None), db: Session = Depends(get_db),
+    request: Request, code: str = Form(""), user_id: int | None = Form(None),
+    grund: str = Form("Systemadministration"), db: Session = Depends(get_db),
 ):
     actor = _user(request, db)
     if not actor.is_system_admin:
@@ -127,16 +132,16 @@ def reset_submit(
     target = db.query(User).execution_options(include_all_tenants=True).filter(
         User.id == (user_id or actor.id),
     ).first()
-    if not target or not target.is_system_admin or target.is_device:
+    if not target or target.is_device:
         raise HTTPException(404)
     if target.id == actor.id:
         success = totp.verify(db, actor.id, code)
         db.commit()
         if not success:
             raise HTTPException(403, "Gueltiger TOTP- oder Recovery-Code erforderlich")
-    elif totp.enabled(db) and not totp.fresh(request.state.mfa_at):
-        raise HTTPException(403, "Zuerst 2FA erneut bestaetigen (maximal 5 Minuten)")
-    totp.reset(db, target, actor.id)
+        totp.reset(db, target, actor.id)
+    else:
+        totp.admin_reset(db, actor, target, grund, request.state.mfa_at)
     db.commit()
     totp.notify_reset(db, target)
     response = RedirectResponse("/login" if target.id == actor.id else "/admin/system-einstellungen", status_code=303)

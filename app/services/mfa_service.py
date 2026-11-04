@@ -15,18 +15,20 @@ import time
 from datetime import timedelta
 from urllib.parse import quote, urlencode
 
+from fastapi import HTTPException
 from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.crypto import decrypt_secret, encrypt_secret
-from app.core.permissions import ORG_ADMIN_ROLES
+from app.core.permissions import ORG_ADMIN_ROLES, authorize_user_mutation
 from app.models.admin_security import AdminRecoveryCode, AdminTotp, utcnow
 from app.models.master import OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
 
 MAX_FAILED = 5
 LOCK_SECONDS = 300
+RESET_SETUP_HOURS = 24
 MFA_POLICIES = ("aus", "optional", "admins", "alle")
 _POLICY_CACHE_TTL = 30
 _policy_cache: dict[int, tuple[float, str, bool]] = {}
@@ -185,6 +187,9 @@ def verify(db: Session, user_id: int, code: str, *, confirming: bool = False) ->
         row.locked_until = None
         if confirming:
             row.confirmed_at = now
+            user = db.get(User, user_id)
+            if user is not None:
+                user.mfa_reset_at = None
         audit(db, "confirmed" if confirming else "recovery_used" if recovery else "verified", user_id)
     else:
         if row.locked_until:
@@ -254,6 +259,63 @@ def reset(db: Session, user: User, actor_id: int | None, *, local: bool = False)
     audit(db, "reset", actor_id, entity_type="user", entity_id=user.id, payload={"local": local})
 
 
+def status_from_totp(user: User, factor: AdminTotp | None) -> dict:
+    """Status aus vorgeladenem Faktor; weitere Methoden koennen hier ergaenzt werden."""
+    active = factor is not None and factor.confirmed_at is not None
+    return {
+        "aktiv": active,
+        "methode": "totp" if active else None,
+        "eingerichtet_at": factor.confirmed_at if active and factor else None,
+        "gesperrt_bis": (factor.locked_until
+                         if factor and factor.locked_until and factor.locked_until > utcnow() else None),
+        "reset_offen": user.mfa_reset_at is not None and not active,
+    }
+
+
+def status(db: Session, user: User) -> dict:
+    return status_from_totp(user, db.get(AdminTotp, user.id))
+
+
+def setup_expired(db: Session, user: User) -> bool:
+    return bool(user.mfa_reset_at and user.mfa_reset_at < utcnow() - timedelta(hours=RESET_SETUP_HOURS)
+                and not status(db, user)["aktiv"] and required_for(db, user))
+
+
+def _authorize_admin_action(db: Session, actor: User, target: User, actor_mfa_at: int | None) -> None:
+    authorize_user_mutation(db, actor, target, "mfa_reset")
+    if target.is_device:
+        raise HTTPException(404, "Benutzer nicht gefunden")
+    if actor.id == target.id:
+        raise HTTPException(403, "Eigene 2FA nur im Profil zuruecksetzen")
+    factor = db.get(AdminTotp, actor.id)
+    needs_step_up = (factor is not None and factor.confirmed_at is not None) or required_for(db, actor)
+    if needs_step_up and not fresh(actor_mfa_at):
+        raise HTTPException(403, "Zuerst 2FA erneut bestaetigen")
+
+
+def admin_reset(db: Session, actor: User, target: User, grund: str, actor_mfa_at: int | None) -> None:
+    """Reset vorbereiten; Aufrufer committet und benachrichtigt danach das Ziel."""
+    _authorize_admin_action(db, actor, target, actor_mfa_at)
+    grund = grund.strip()
+    if not 3 <= len(grund) <= 500:
+        raise HTTPException(400, "Grund muss 3 bis 500 Zeichen enthalten")
+    reset(db, target, actor.id)
+    target.mfa_reset_at = utcnow()
+    audit(db, "reset", actor.id, org_id=target.org_id, entity_type="user", entity_id=target.id,
+          payload={"grund": grund, "akteur_rolle": "system_admin" if actor.is_system_admin else "org_admin"})
+
+
+def admin_unlock(db: Session, actor: User, target: User, actor_mfa_at: int | None) -> None:
+    _authorize_admin_action(db, actor, target, actor_mfa_at)
+    factor = db.get(AdminTotp, target.id)
+    if factor is None:
+        raise HTTPException(400, "Keine 2FA eingerichtet")
+    factor.failed_count = 0
+    factor.locked_until = None
+    audit(db, "unlock", actor.id, org_id=target.org_id, entity_type="user", entity_id=target.id,
+          payload={"akteur_rolle": "system_admin" if actor.is_system_admin else "org_admin"})
+
+
 def notify_reset(db: Session, user: User) -> None:
     """Hinweis nach erfolgreichem Commit; keine Faktoren im Mailinhalt oder Log."""
     from app.core.async_bridge import run_async
@@ -264,6 +326,7 @@ def notify_reset(db: Session, user: User) -> None:
             message = _build_message(
                 to=user.email, subject="Einsatzcockpit: 2FA zurueckgesetzt",
                 body_txt=("Ihre Zwei-Faktor-Authentifizierung wurde zurueckgesetzt. "
+                          "Bitte richten Sie die Zwei-Faktor-Authentifizierung innerhalb von 24 Stunden neu ein. "
                           "Bei unbekannter Aktion kontaktieren Sie die Administration."),
                 smtp_cfg=_org_smtp_cfg(db, user.org_id) or get_smtp_cfg(db),
             )
