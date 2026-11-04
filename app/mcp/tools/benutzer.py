@@ -52,6 +52,28 @@ def _listen_payload(context: MCPContext, user: User) -> dict[str, object]:
     }
 
 
+def _zwei_faktor(context: MCPContext, users: list[User]) -> dict[int, dict[str, object]]:
+    """Nur Status, nie Geheimnisse oder Nummern; Reset bleibt bewusst ausserhalb von MCP."""
+    from app.models.admin_security import AdminTotp, UserMfaSms
+    from app.services import mfa_service
+
+    ids = [u.id for u in users]
+    if not ids:
+        return {}
+    totp = {row.user_id: row for row in context.db.query(AdminTotp).filter(AdminTotp.user_id.in_(ids)).all()}
+    sms = {row.user_id: row for row in context.db.query(UserMfaSms).filter(UserMfaSms.user_id.in_(ids)).all()}
+    result: dict[int, dict[str, object]] = {}
+    for user in users:
+        status = mfa_service.status_from_totp(user, totp.get(user.id), sms.get(user.id))
+        result[user.id] = {
+            "aktiv": status["aktiv"], "methode": status["methode"],
+            "gesperrt_bis": (format_local_iso(status["gesperrt_bis"], context.user.org)
+                             if status["gesperrt_bis"] else None),
+            "neueinrichtung_offen": status["reset_offen"],
+        }
+    return result
+
+
 def _audit(context: MCPContext, aktion: str, user: User, payload: dict[str, object] | None = None) -> None:
     write_audit(
         context.db, f"mcp.user.{aktion}", org_id=context.org_id, user_id=context.user.id,
@@ -113,7 +135,9 @@ async def benutzer_suchen(context: MCPContext, q: str = "", aktiv: bool | None =
         query = query.filter(User.member_id.is_not(None) if mit_mitglied else User.member_id.is_(None))
     gesamt = query.count()
     users = query.order_by(User.username, User.id).offset((seite - 1) * limit).limit(limit).all()
-    return {"benutzer": [_listen_payload(context, user) for user in users], "gesamt": gesamt,
+    zwei_faktor = _zwei_faktor(context, users)
+    return {"benutzer": [_listen_payload(context, user) | {"zwei_faktor": zwei_faktor[user.id]} for user in users],
+            "gesamt": gesamt,
             "seite": seite, "truncated": seite * limit < gesamt}
 
 
@@ -141,7 +165,8 @@ async def benutzer_mitglied_abgleichen(context: MCPContext) -> dict[str, object]
 @register_tool(
     name="benutzer_lesen",
     description=(
-        "Liest einen nicht technischen Benutzer der eigenen Organisation mit Kontaktdaten und verknuepftem Mitglied. "
+        "Liest einen nicht technischen Benutzer der eigenen Organisation mit Kontaktdaten, verknuepftem Mitglied "
+        "und 2FA-Status (aktiv, Methode, Sperre; Zuruecksetzen nur im Cockpit). "
         "Erfordert admin; nur lesend, keine Seiteneffekte."
     ),
     required_roles=BENUTZER_ROLLEN,
@@ -161,6 +186,7 @@ async def benutzer_lesen(context: MCPContext, benutzer_id: int) -> dict[str, obj
         "system_admin": user.is_system_admin,
         "mitglied": mitglied | {"gruppenkommandant_funktionen": funktionen} if mitglied else None,
         "gruppenkommandant_funktionen": funktionen,
+        "zwei_faktor": _zwei_faktor(context, [user])[user.id],
     }
 
 

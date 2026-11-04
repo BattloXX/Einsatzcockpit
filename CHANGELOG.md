@@ -4,11 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
-- SMS als zweiter Faktor (P4), Migration 0345.
-
-- 2FA-Reset durch Org- und Systemadmins (P3): Reset mit Grund und Step-up, Entsperren, Status in der Benutzerverwaltung und 24-Stunden-Frist zur Neueinrichtung.
-
-- **2FA fuer Org-Benutzer (P2):** TOTP-Einrichtung, Verifikation und Sicherheitsbereich im Profil fuer persoenliche Konten; Org-Richtlinie im Verwaltungstab "Benutzer & Rechte / Anmeldung & 2FA", inkl. SSO-Ausnahme und Vorbereitung der SMS-Freigabe. MFA-Gate fuer Web, WebSocket und Org-MCP. Baut auf Migration 0344 auf; keine weitere Migration.
+- **Zwei-Faktor-Authentifizierung fuer alle Benutzer:** Org-Richtlinie unter "Benutzer & Rechte / Anmeldung & 2FA" (aus, optional, Pflicht fuer Admin-Rollen, Pflicht fuer alle; Standard aus), SSO-Benutzer optional ausgenommen. Faktoren: Authenticator-App (TOTP) oder SMS-Code an eine eigene, bestaetigte 2FA-Nummer, dazu Recovery-Codes. SMS zaehlt nur nach Passwort- oder SSO-Anmeldung, nicht nach SMS-PIN-Login oder Kontowechsel, und ist fuer Systemadministratoren nicht verfuegbar. Abfrage nur bei der Anmeldung, auch fuer WebSocket und Org-MCP-Login. Profil mit Bereich "Sicherheit".
+- **2FA-Reset durch Admins:** Org-Admins setzen 2FA fuer Benutzer und Org-Admins der eigenen Organisation zurueck, Systemadmins fuer alle. Pflicht-Grund, frische eigene 2FA-Bestaetigung, Audit, Abmeldung des Benutzers, Mail (und Hinweis-SMS), 24-Stunden-Frist zur Neueinrichtung; "Sperre aufheben" ohne Faktorverlust. MCP zeigt den 2FA-Status (`benutzer_lesen`, `benutzer_suchen`), setzt aber nichts zurueck. Migrationen 0344-0345.
 
 - **Objektdokumente einzeichnen:** Dokumentseiten in der Objektverwaltung mit dem bekannten Bild-Editor bearbeiten (zeichnen, Text, Flächen, Symbole). Nicht-destruktiv: Original bleibt, Umschalter „Original anzeigen“, „Einzeichnung entfernen“. Viewer, Sammel-PDF, Einsatzdruck, Einheitenansicht, Übernahme in den Einsatz und MCP zeigen die Einzeichnung; OCR/KI/Georef bleiben beim Original. Symbol-Panel im Editor jetzt mit Reitern „Taktische Zeichen (Lageführung)“ und „Objekt-Symbole“ (überall). Keine Migration.
 

@@ -320,3 +320,29 @@ def test_meine_einheiten_leer_ohne_verknuepfung_und_ohne_fremde_org(client):
     _gk_lage(seed["org_id"], member_id, fremd_org_id=fremd["org_id"])
     assert _rufe(client, token, "meine_einheiten")["einheiten"] == []
     assert _rufe(client, token, "mcp_whoami")["fuehrt_einheiten"] == []
+
+
+def test_zwei_faktor_status_ohne_geheimnisse(client):
+    from app.core.crypto import encrypt_secret
+    from app.models.admin_security import AdminRecoveryCode, AdminTotp, UserMfaSms, utcnow
+
+    seed = _seed("ben-2fa", {"admin": "admin"})
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    db.add(AdminTotp(user_id=seed["visible"], secret_enc=encrypt_secret("GEHEIMTOTPSECRET"), confirmed_at=utcnow()))
+    db.add(UserMfaSms(user_id=seed["visible"], phone_enc=encrypt_secret("+436649998877"), verified_at=utcnow()))
+    db.add(AdminRecoveryCode(user_id=seed["visible"], code_hash="f" * 64))
+    db.commit()
+    db.close()
+    token = _token(client, seed["usernames"]["admin"])
+    detail = _rufe(client, token, "benutzer_lesen", benutzer_id=seed["visible"])
+    assert detail["zwei_faktor"] == {"aktiv": True, "methode": "totp+sms", "gesperrt_bis": None,
+                                     "neueinrichtung_offen": False}
+    listed = {u["id"]: u for u in _rufe(client, token, "benutzer_suchen", limit=200)["benutzer"]}
+    assert listed[seed["visible"]]["zwei_faktor"]["methode"] == "totp+sms"
+    assert listed[seed["inactive"]]["zwei_faktor"] == {"aktiv": False, "methode": None, "gesperrt_bis": None,
+                                                       "neueinrichtung_offen": False}
+    raw = json.dumps([detail, listed])
+    assert "GEHEIMTOTPSECRET" not in raw and "9998877" not in raw and "f" * 64 not in raw
+    # 2FA-Reset bleibt bewusst ausserhalb von MCP.
+    assert not any("mfa" in name or "zwei_faktor" in name or "2fa" in name for name in TOOLS)

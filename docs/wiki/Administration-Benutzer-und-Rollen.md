@@ -30,6 +30,14 @@ Oder per CLI (für Admin-Passwort ohne Login):
 python -m app.cli reset-password --username admin --password neues-passwort
 ```
 
+### Zwei-Faktor-Authentifizierung zurücksetzen
+
+Die Spalte **2FA** zeigt den Status je Benutzer. **2FA zurücksetzen** (mit Grund) löscht
+alle Faktoren, meldet den Benutzer ab und gibt ihm 24 Stunden zur Neueinrichtung;
+**Sperre aufheben** hebt nur die Fehlversuchssperre auf. Org-Admins dürfen das für
+Benutzer und Org-Admins der eigenen Organisation, Systemadmins für alle.
+Richtlinie und Details: [Zwei-Faktor-Authentifizierung](Administration-Zwei-Faktor-Authentifizierung).
+
 ### Benutzer-Mails
 
 Neue lokale Konten erhalten eine **Einladung** zum Festlegen ihres Passworts. Der Link
