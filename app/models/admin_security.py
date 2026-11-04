@@ -31,3 +31,7 @@ class AdminRecoveryCode(Base):
     code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+UserTotp = AdminTotp
+UserRecoveryCode = AdminRecoveryCode

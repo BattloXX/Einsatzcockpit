@@ -33,6 +33,7 @@ from app.core.fehlerlog import korrelation_setzen, korrelations_id
 from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.security import (
     pruefe_geraete_session,
+    session_login_method,
     session_security,
     unsign_native_link_token,
     unsign_session,
@@ -929,7 +930,8 @@ async def _session_mit_kontext(request: Request, call_next):
         response.set_cookie(
             "session",
             _sign(_refresh_user_id, remember=_refresh_remember, session_epoch=_session_epoch,
-                  mfa_at=_mfa_at, session_started_at=_started_at),
+                  mfa_at=_mfa_at, session_started_at=_started_at,
+                  login_method=session_login_method(token) if token else "pw"),
             httponly=True,
             secure=settings.COOKIE_SECURE,
             samesite="lax",

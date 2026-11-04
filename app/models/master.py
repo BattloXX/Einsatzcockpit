@@ -384,6 +384,10 @@ class OrgSettings(Base):
 
     __tablename__ = "org_settings"
 
+    mfa_policy: Mapped[str] = mapped_column(String(20), nullable=False, default="aus", server_default="aus")
+    mfa_sms_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    mfa_sso_ausgenommen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+
     alarm_parser_mcp_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

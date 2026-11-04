@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.crypto import decrypt_secret
 from app.core.permissions import require_role
-from app.core.security import sign_session, unsign_session
+from app.core.security import session_login_method, sign_session, unsign_session
 from app.core.templating import templates
 from app.db import get_db
 from app.models.admin_security import AdminTotp
@@ -43,6 +43,7 @@ def _verified_cookie(request: Request, user: User, response) -> None:
     now = int(time.time())
     _set_session_cookie(response, sign_session(
         user.id, session_epoch=user.session_epoch, mfa_at=now, session_started_at=now, remember=remember,
+        login_method=session_login_method(request.cookies.get("session", "")),
     ), max_age=settings.SESSION_REMEMBER_MAX_AGE_SECONDS if remember else None)
 
 
