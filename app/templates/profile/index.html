@@ -32,8 +32,23 @@
   <section class="card">
     <div class="card-header"><h2>Sicherheit</h2></div>
     <div class="card-body">
+      {% if mfa_sms_allowed and not (mfa_sms and mfa_sms.verified_at) %}
+      <p><a class="btn btn--secondary" href="{{ "/mfa/verify?next=/mfa/sms/einrichten" if mfa_status.aktiv else "/mfa/sms/einrichten?next=/profil" }}">SMS als zweiten Faktor einrichten</a></p>
+      {% endif %}
+      {% if mfa_sms and mfa_sms.verified_at %}
+      <p>SMS: {{ mfa_sms_phone }}, eingerichtet seit {{ mfa_sms.verified_at|local_datetime }}.</p>
+      {% if mfa_sms.locked_until and mfa_sms.locked_until > mfa_now %}<p>Gesperrt bis {{ mfa_sms.locked_until|local_datetime }}.</p>{% endif %}
+      <p><a class="btn btn--secondary" href="/mfa/verify?next=/mfa/sms/einrichten">SMS-Nummer aendern</a></p>
+      {% if not mfa_required or (mfa_factor and mfa_factor.confirmed_at) %}
+      <form method="post" action="/mfa/sms/entfernen">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <p>Vor dem Entfernen <a href="/mfa/verify?next=/profil">2FA erneut bestaetigen</a>.</p>
+        <button type="submit" class="btn btn--secondary">SMS entfernen</button>
+      </form>
+      {% endif %}
+      {% endif %}
       {% if mfa_factor and mfa_factor.confirmed_at %}
-      <p>2FA eingerichtet seit {{ mfa_factor.confirmed_at|local_datetime }}.</p>
+      <p>Authenticator-App (TOTP) eingerichtet seit {{ mfa_factor.confirmed_at|local_datetime }}.</p>
       {% if mfa_factor.locked_until and mfa_factor.locked_until > mfa_now %}
       <p role="status">Gesperrt bis {{ mfa_factor.locked_until|local_datetime }}.</p>
       {% endif %}
@@ -52,8 +67,8 @@
       </form>
       {% else %}<p>2FA ist vorgeschrieben und kann nicht entfernt werden.</p>{% endif %}
       {% else %}
-      <p>2FA nicht eingerichtet.</p>
-      <a class="btn btn--primary" href="/mfa/einrichten?next=/profil">Einrichten</a>
+      <p>{{ "Authenticator-App noch nicht eingerichtet." if mfa_status.aktiv else "2FA nicht eingerichtet." }}</p>
+      <a class="btn btn--primary" href="{{ "/mfa/verify?next=/mfa/einrichten" if mfa_status.aktiv else "/mfa/einrichten?next=/profil" }}">Einrichten</a>
       {% endif %}
     </div>
   </section>

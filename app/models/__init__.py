@@ -1,6 +1,6 @@
 from app.models.admin_mcp import AdminMCPOAuthClient, AdminMCPOAuthCode, AdminMCPOAuthToken
 from app.models.admin_repair import AdminApproval, AdminRepairRun
-from app.models.admin_security import AdminRecoveryCode, AdminTotp
+from app.models.admin_security import AdminRecoveryCode, AdminTotp, UserMfaSms
 from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.app_geraet import AppGeraet, AppGeraetFehler
 from app.models.atemschutz_pruefung import (
@@ -309,7 +309,7 @@ __all__ = [
     "AppGeraetFehler",
     "AdminRepairRun",
     "AdminApproval",
-    "AdminRecoveryCode", "AdminTotp",
+    "AdminRecoveryCode", "AdminTotp", "UserMfaSms",
     "CitizenReportVerification",
     "SearchChunk",
     "SearchDocument",

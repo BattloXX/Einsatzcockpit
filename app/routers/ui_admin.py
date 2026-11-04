@@ -23,7 +23,7 @@ from app.core.permissions import (
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.templating import templates
 from app.db import get_db
-from app.models.admin_security import AdminTotp
+from app.models.admin_security import AdminTotp, UserMfaSms
 from app.models.master import (
     BOS_VALUES,
     AlarmDispatchVehicle,
@@ -138,7 +138,9 @@ def _users_mfa_status(db: Session, users: list[User]) -> dict[int, dict]:
     factors = {row.user_id: row for row in db.query(AdminTotp).filter(
         AdminTotp.user_id.in_([u.id for u in users]),
     ).all()} if users else {}
-    return {u.id: {**mfa_service.status_from_totp(u, factors.get(u.id)), "faktor_vorhanden": u.id in factors}
+    sms = {f.user_id: f for f in db.query(UserMfaSms).filter(UserMfaSms.user_id.in_([u.id for u in users])).all()}
+    return {u.id: {**mfa_service.status_from_totp(u, factors.get(u.id), sms.get(u.id)),
+                   "faktor_vorhanden": u.id in factors or u.id in sms}
             for u in users}
 
 
@@ -1128,7 +1130,7 @@ def _user_mfa_action(user_id: int, request: Request, db: Session, *, grund: str 
         raise HTTPException(404, "Benutzer nicht gefunden")
     try:
         if grund is not None:
-            mfa_service.admin_reset(db, actor, target, grund, request.state.mfa_at)
+            phone = mfa_service.admin_reset(db, actor, target, grund, request.state.mfa_at)
         else:
             mfa_service.admin_unlock(db, actor, target, request.state.mfa_at)
     except (HTTPException, ValueError) as exc:
@@ -1141,6 +1143,9 @@ def _user_mfa_action(user_id: int, request: Request, db: Session, *, grund: str 
     db.commit()
     if grund is not None:
         mfa_service.notify_reset(db, target)
+        from app.services.mfa_sms_service import notify_reset_sms
+
+        notify_reset_sms(target, phone)
     return RedirectResponse("/admin/benutzer?saved=" + ("mfa_reset" if grund is not None else "mfa_unlock"),
                             status_code=303)
 

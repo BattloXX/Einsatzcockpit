@@ -35,3 +35,14 @@ class AdminRecoveryCode(Base):
 
 UserTotp = AdminTotp
 UserRecoveryCode = AdminRecoveryCode
+
+
+class UserMfaSms(Base):
+    __tablename__ = "user_mfa_sms"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
+    phone_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

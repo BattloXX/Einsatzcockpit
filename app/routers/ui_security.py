@@ -7,7 +7,7 @@ from app.core.org_auswahl import erste_org_weiterleitung
 from app.core.permissions import ORG_ADMIN_ROLES, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.admin_security import AdminTotp
+from app.models.admin_security import AdminTotp, UserMfaSms
 from app.models.master import FireDept, OrgSettings
 from app.models.user import User
 from app.services import mfa_service
@@ -33,6 +33,9 @@ def _page(request: Request, db: Session, user: User, org_id: int, *, saved: bool
     confirmed = {row[0] for row in db.query(AdminTotp.user_id).join(User, User.id == AdminTotp.user_id).filter(
         User.org_id == org_id, AdminTotp.confirmed_at.is_not(None),
     ).all()}
+    confirmed.update(row[0] for row in db.query(UserMfaSms.user_id).join(User, User.id == UserMfaSms.user_id).filter(
+        User.org_id == org_id, UserMfaSms.verified_at.is_not(None),
+    ).all())
     users = db.query(User).filter(User.org_id == org_id, User.active.is_(True), User.is_device.is_(False)).all()
     missing = [u for u in users if not u.is_system_admin and u.id not in confirmed
                and not u.username.startswith("alarmlink-gast@org")]
@@ -43,9 +46,8 @@ def _page(request: Request, db: Session, user: User, org_id: int, *, saved: bool
         )
         for policy in mfa_service.MFA_POLICIES for exempt in (False, True)
     }
-    own_factor = db.get(AdminTotp, user.id)
     warning = saved and not user.is_system_admin and mfa_service.required_for(db, user) and (
-        own_factor is None or own_factor.confirmed_at is None
+        not mfa_service.status(db, user)["aktiv"]
     )
     return templates.TemplateResponse(request, "admin/security.html", {
         "user": user, "org": org, "config": config, "counts": counts, "saved": saved, "warning": warning,
