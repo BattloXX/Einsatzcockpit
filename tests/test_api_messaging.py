@@ -136,6 +136,10 @@ def test_empfaenger_und_tageslimit(client, messaging_key, monkeypatch):
     )
     monkeypatch.setattr(settings, "API_MESSAGE_MAX_RECIPIENTS", 200)
     monkeypatch.setattr(settings, "API_SMS_DAILY_LIMIT", 1)
+    # Reihenfolgeunabhaengig: die erste SMS des Tages darf durchgehen (oder ist durch
+    # einen vorherigen Test schon verbraucht), die naechste muss am Limit scheitern.
+    first = client.post("/api/v1/sms", json=_sms_payload(), headers={"X-API-Key": raw}).status_code
+    assert first in (202, 429)
     assert client.post("/api/v1/sms", json=_sms_payload(), headers={"X-API-Key": raw}).status_code == 429
 
 
