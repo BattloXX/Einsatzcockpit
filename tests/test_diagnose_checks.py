@@ -150,6 +150,54 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
     assert "PRIVATE-NAME" not in content and "private@example.org" not in content
 
 
+@pytest.mark.parametrize("ersteller", ["eigene_org", "andere_org", "ohne_org", "fehlend", "geloescht"])
+def test_site_ersteller_nur_existenz(diag_engine, factory, ersteller):
+    with factory() as db:
+        org = insert(db, "fire_dept", name="Org", slug="org")
+        andere_org = insert(db, "fire_dept", name="Andere Org", slug="andere-org")
+        lage = insert(db, "major_incident", org_id=org)
+        user_id = 99999
+        if ersteller != "fehlend":
+            user_org = {"eigene_org": org, "andere_org": andere_org}.get(ersteller)
+            user_id = insert(db, "user", username="ersteller", org_id=user_org)
+        site = insert(db, "incident_site", org_id=org, major_incident_id=lage, created_by=user_id)
+        if ersteller == "geloescht":
+            # Simuliert einen Altbestand mit haengender Referenz ohne FK-Schutz.
+            db.execute(table("user").delete().where(table("user").c.id == user_id))
+            db.commit()
+
+    vorher = snapshot(diag_engine)
+    result = registry.execute_check(diag_engine, registry.CHECKS["einsatz.integritaet"])
+    assert result.vollstaendig
+    assert snapshot(diag_engine) == vorher
+    if ersteller in {"fehlend", "geloescht"}:
+        assert len(result.findings) == 1
+        finding = result.findings[0]
+        assert finding.kern == ["incident_site", "created_by"]
+        assert finding.schweregrad == "fail"
+        assert finding.betroffene_ids == {"incident_site": [site]}
+    else:
+        assert result.findings == []
+
+
+def test_site_lage_bleibt_org_streng(diag_engine, factory):
+    with factory() as db:
+        org = insert(db, "fire_dept", name="Org", slug="org")
+        andere_org = insert(db, "fire_dept", name="Andere Org", slug="andere-org")
+        lage = insert(db, "major_incident", org_id=org)
+        fremde_lage = insert(db, "major_incident", org_id=andere_org)
+        insert(db, "incident_site", org_id=org, major_incident_id=lage)
+        site = insert(db, "incident_site", org_id=org, major_incident_id=fremde_lage)
+
+    result = registry.execute_check(diag_engine, registry.CHECKS["einsatz.integritaet"])
+    assert result.vollstaendig
+    assert len(result.findings) == 1
+    finding = result.findings[0]
+    assert finding.kern == ["incident_site", "major_incident_id"]
+    assert finding.schweregrad == "fail"
+    assert finding.betroffene_ids == {"incident_site": [site]}
+
+
 @pytest.mark.parametrize("statement", ["UPDATE fire_dept SET name='changed'", "DELETE FROM fire_dept",
     "INSERT INTO fire_dept (slug,name) VALUES ('bad','bad')", "CREATE TABLE bad (id INT)",
     "PRAGMA user_version=2", "WITH x AS (SELECT 1) DELETE FROM fire_dept"])
