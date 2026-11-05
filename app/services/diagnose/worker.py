@@ -7,18 +7,20 @@ from sqlalchemy import select
 from app.models.admin_security import utcnow
 from app.models.worker_runtime import WorkerRuntime
 from app.services.diagnose.registry import CheckResult, Finding, register_check
+from app.services.worker_gesundheit import worker_ausfaelle
 
 
 @register_check("worker.zustand", "worker", "Heartbeats, Leader je Host und Loop-Fristen")
 def check(db, budget):
     t = WorkerRuntime.__table__
-    rows = budget.rows(db, select(t.c.hostname, t.c.expires_at, t.c.heartbeat_at, t.c.is_leader,
+    rows = budget.rows(db, select(t.c.hostname, t.c.started_at, t.c.expires_at, t.c.heartbeat_at, t.c.is_leader,
                                   t.c.leader_error, t.c.loops).order_by(t.c.worker_id))
     now = utcnow()
     active = [r for r in rows if r.expires_at > now]
     leaders = Counter(r.hostname for r in active if r.is_leader)
     result = CheckResult()
     metrics = {"abgelaufen": sum(r.expires_at <= now for r in rows),
+               "ausfall": len(worker_ausfaelle(rows, now)),
                "heartbeat_alt": sum(r.heartbeat_at < now - timedelta(seconds=20) for r in active),
                "mehrere_leader_pro_host": sum(n > 1 for n in leaders.values()),
                "leader_fehlt": int(not leaders), "loop_fehler": 0}
@@ -32,6 +34,7 @@ def check(db, budget):
             metrics["loop_fehler"] += int(bool(row.leader_error) or values.get("state") == "failed" or overdue)
     for key, count in metrics.items():
         if count:
-            result.findings.append(Finding(key, "Worker: " + key,
-                "fail" if key in ("mehrere_leader_pro_host", "leader_fehlt") else "warn", {"anzahl": count}))
+            schweregrad = ("fail" if key in ("mehrere_leader_pro_host", "leader_fehlt")
+                           else "info" if key == "abgelaufen" else "warn")
+            result.findings.append(Finding(key, "Worker: " + key, schweregrad, {"anzahl": count}))
     return result

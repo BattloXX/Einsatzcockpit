@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from alembic.script import ScriptDirectory
 from sqlalchemy import Boolean, Date, DateTime, Integer, LargeBinary, Numeric, create_engine, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
@@ -94,7 +94,7 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
         monkeypatch.setattr(GitHubReadonly, "compare", lambda self, sha: {
             "status": "ok", "daten": {"commits_hinter_main": 0}})
     if check_id == "app.geraete":
-        monkeypatch.setattr("app.services.diagnose.app_geraete.soll_version", lambda: None)
+        monkeypatch.setattr("app.services.diagnose.app_geraete.android_release_version_cached", lambda: None)
     check = registry.CHECKS[check_id]
     before = snapshot(diag_engine)
     result = registry.execute_check(diag_engine, check)
@@ -392,3 +392,82 @@ def test_no_finding_uses_generic_defaults():
             "Teilkomponente", "Datenbestand oder", "IDs manuell pruefen"))
         assert 0 < len(finding.ursache_hypothese) <= 500
         assert 0 < len(finding.empfehlung) <= 500
+
+
+@pytest.mark.parametrize("tabelle", ["processlist", "innodb_trx"])
+@pytest.mark.parametrize("fehlerklasse,code", [
+    (OperationalError, 1227), (OperationalError, 1142),
+    (ProgrammingError, 1227), (ProgrammingError, 1142),
+    (OperationalError, 2013), (OperationalError, 1205), (ProgrammingError, 1064),
+])
+def test_db_systemtabellen_rechte_fehler(tabelle, fehlerklasse, code):
+    class Datenbank:
+        def __init__(self):
+            self.abfragen = []
+
+        def get_bind(self):
+            return SimpleNamespace(dialect=SimpleNamespace(name="mariadb"),
+                                   engine=SimpleNamespace(pool=SimpleNamespace()))
+
+        def execute(self, statement):
+            sql = str(statement)
+            self.abfragen.append(sql)
+            if "information_schema." + tabelle in sql:
+                raise fehlerklasse(sql, {}, Exception(code, "Zugriff verweigert"))
+            return SimpleNamespace(all=lambda: [], scalars=lambda: ScriptDirectory("alembic").get_heads())
+
+    db = Datenbank()
+    if code not in (1227, 1142):
+        with pytest.raises(fehlerklasse):
+            registry.CHECKS["db.zustand"].fn(db, registry.Budget())
+        return
+    ergebnis = registry.CHECKS["db.zustand"].fn(db, registry.Budget())
+    assert ergebnis.vollstaendig
+    assert [f.schweregrad for f in ergebnis.findings] == ["info"]
+    assert "GRANT PROCESS" in ergebnis.findings[0].empfehlung
+    # Auch nach dem Prozesslistenfehler wird die Lock-Abfrage noch ausgefuehrt.
+    assert any("innodb_trx" in sql for sql in db.abfragen)
+
+
+@pytest.mark.parametrize("alter_minuten,ersatz,anderer_host,warn", [
+    (1, False, False, True), (1, True, False, False),
+    (1, True, True, True), (11, False, False, False),
+])
+def test_worker_ablauf_und_neustart(diag_engine, factory, monkeypatch,
+                                   alter_minuten, ersatz, anderer_host, warn):
+    from app.services import system_diagnose
+
+    jetzt = utcnow()
+    monkeypatch.setattr("app.services.diagnose.worker.utcnow", lambda: jetzt)
+    with factory() as db:
+        insert(db, "worker_runtime", worker_id="alt", hostname="host", pid=1,
+               started_at=jetzt - timedelta(hours=1), heartbeat_at=jetzt - timedelta(minutes=alter_minuten),
+               expires_at=jetzt - timedelta(minutes=alter_minuten), is_leader=False, redis={}, loops={})
+        insert(db, "worker_runtime", worker_id="aktiv", hostname="anders" if anderer_host else "host", pid=2,
+               started_at=jetzt - timedelta(minutes=30 if ersatz else 90), heartbeat_at=jetzt,
+               expires_at=jetzt + timedelta(seconds=20), is_leader=True, redis={}, loops={})
+        mcp = system_diagnose.worker_status(db, jetzt)
+    ergebnis = registry.execute_check(diag_engine, registry.CHECKS["worker.zustand"])
+    assert next(f for f in ergebnis.findings if f.kern == "abgelaufen").schweregrad == "info"
+    assert any(f.kern == "ausfall" and f.schweregrad == "warn" for f in ergebnis.findings) is warn
+    assert mcp["status"] == ("warn" if warn else "ok")
+    assert mcp["evidence"]["expired_workers"] == ["alt"]
+
+
+@pytest.mark.parametrize("alter_stunden,verbunden,schweregrad", [
+    (None, True, "info"), (25, True, "info"), (1, True, "warn"), (25, False, "warn"),
+])
+def test_redis_zaehler_seit_prozessstart(diag_engine, monkeypatch, alter_stunden, verbunden, schweregrad):
+    from app.services import ws_bus
+
+    status = {"configured": True, "connected": verbunden, "publisher_ok": verbunden,
+              "subscriber_connected": verbunden, "reconnects": 3, "publish_failures": 2,
+              "subscriber_failures": 1, "last_error_at": (
+                  (utcnow() - timedelta(hours=alter_stunden)).isoformat() if alter_stunden is not None else None)}
+    monkeypatch.setattr(ws_bus, "status", lambda: status)
+    ergebnis = registry.execute_check(diag_engine, registry.CHECKS["redis.zustand"])
+    for befund in ergebnis.findings:
+        assert befund.schweregrad == schweregrad
+        if befund.kern in ("reconnects", "publish_failures", "subscriber_failures"):
+            assert "seit Prozessstart" in befund.titel
+            assert befund.evidenz["anzahl"] == status[befund.kern]

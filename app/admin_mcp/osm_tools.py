@@ -110,19 +110,23 @@ def collect_osm(*, live: bool = True) -> dict:
     evidenz = asyncio.run(sammeln())
     evidenz["lokaler_bestand"] = bestand
     fehlt = any(not next((z["aktiv"] for z in rohdaten if z["quelle"] == name), None) for name, _ in quellen)
+    konfiguriert = [z for z in rohdaten if z["quelle"] in quellurls]
     veraltet = any(z["aktiv"] and (z["aktiv"]["alter_tage"] is None
-                   or z["aktiv"]["alter_tage"] > settings.OSM_GEBAEUDE_MAX_ALTER_TAGE) for z in bestand)
-    pruefung = any(z["pruefung"] for z in bestand)
-    importfehler = any(z["letzter_fehler"] for z in bestand)
+                   or z["aktiv"]["alter_tage"] > settings.OSM_GEBAEUDE_MAX_ALTER_TAGE) for z in konfiguriert)
+    pruefung = any(z["pruefung"] for z in konfiguriert)
+    importfehler = any(z["letzter_fehler"] for z in konfiguriert)
     letzte = evidenz["statistik"]["overpass"]
     grenze = iso_utc(datetime.now(UTC) - timedelta(hours=24))
     fehler_24h = bool(letzte["last_failure"] and letzte["last_failure"] >= grenze)
     erreichbar = any(p["status"] == "ok" for p in evidenz.get("endpoints", [])) if live else (
         bool(letzte["last_success"] and (not letzte["last_failure"] or letzte["last_success"] > letzte["last_failure"]))
         if letzte["last_success"] or letzte["last_failure"] else None)
-    alle_offen = all(z["status"] == "offen" for z in evidenz["circuit_breaker_status"]["endpunkte"])
+    endpunkte = evidenz["circuit_breaker_status"]["endpunkte"]
+    alle_offen = bool(endpunkte) and all(z["status"] == "offen" for z in endpunkte)
+    bestand_ok = bool(quellen) and not fehlt and not veraltet and settings.OSM_GEBAEUDE_IMPORT_ENABLED
+    overpass_gestoert = fehler_24h or erreichbar is False or alle_offen
     status = "fail" if fehlt and erreichbar is False else (
-        "warn" if fehlt or veraltet or pruefung or importfehler or fehler_24h or erreichbar is False or alle_offen
+        "warn" if fehlt or veraltet or pruefung or importfehler or (overpass_gestoert and not bestand_ok)
         else "ok")
     empfehlungen = []
     if fehlt:
@@ -133,10 +137,12 @@ def collect_osm(*, live: bool = True) -> dict:
         empfehlungen.append("Bestand veraltet: Import pruefen")
     if importfehler:
         empfehlungen.append("Letzten Importfehler pruefen: python -m app.cli osm-gebaeude-status")
-    if alle_offen and quellen and not fehlt and not veraltet and settings.OSM_GEBAEUDE_IMPORT_ENABLED:
-        evidenz["ursache_hypothese"] = "Oeffentliche Overpass-Endpunkte nach wiederholten Fehlern gesperrt."
+    if overpass_gestoert and bestand_ok:
+        evidenz["ursache_hypothese"] = "Overpass eingeschraenkt; der lokale Bestand ist aktuell."
         empfehlungen.append("lokaler Bestand aktuell, Overpass nur Fallback; Endpunkte nach der Pause erneut pruefen")
-    elif erreichbar is False or fehler_24h:
-        empfehlungen.append("Overpass oeffentlich nicht nutzbar - nur Rueckfall; lokale Quelle fuer Region ergaenzen")
+    elif overpass_gestoert:
+        empfehlungen.append(
+            "Overpass oeffentlich nicht nutzbar - nur Rueckfall; lokale Quelle fuer Region ergaenzen"
+            if not quellen or fehlt else "Overpass nur Rueckfall; lokalen Import und Datenstand pruefen")
     evidenz.update(overall_status=status, recommendations=empfehlungen)
     return {"status": status, "evidence": evidenz}

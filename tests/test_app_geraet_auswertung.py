@@ -154,7 +154,7 @@ def test_filter_verteilung_paginierung(factory, monkeypatch):  # noqa: F811
 
 
 def test_check_aggregation_readonly_budget(factory, diag_engine, monkeypatch):  # noqa: F811
-    monkeypatch.setattr(app_geraete, "soll_version", lambda: "v2026.11.01")
+    monkeypatch.setattr(app_geraete, "android_release_version_cached", lambda: "v2026.11.01")
     with factory() as db:
         ids = [
             insert(
@@ -226,3 +226,34 @@ def test_release_tag_aus_gemeinsamem_cache(monkeypatch, assets):
     assert auswertung.soll_version() == "v2026.11.01.2"
     download.android_apk_url()
     assert len(calls) == 1
+
+
+def test_check_ohne_netz_mit_alten_fehlern(factory, diag_engine, monkeypatch):  # noqa: F811
+    import httpx
+    from sqlalchemy import event
+
+    def netz_verboten(*args, **kwargs):
+        pytest.fail("Leichter Diagnosecheck darf GitHub nicht aufrufen")
+
+    monkeypatch.setattr(httpx, "get", netz_verboten)
+    monkeypatch.setattr(download, "_cache_bis", 0)
+    with factory() as db:
+        for i in range(11):
+            ident = insert(db, "app_geraet", user_id=i + 1, install_id=str(i), sdk_int=30,
+                           webview_version="130")
+            insert(db, "app_geraet_fehler", geraet_id=ident, komponente="fcm", code="alt", anzahl=50,
+                   last_at=utcnow() - timedelta(days=8))
+    abfragen = []
+
+    def merken(conn, cursor, statement, parameters, context, executemany):
+        abfragen.append(statement)
+
+    event.listen(diag_engine, "before_cursor_execute", merken)
+    try:
+        ergebnis = execute_check(diag_engine, CHECKS["app.geraete"])
+    finally:
+        event.remove(diag_engine, "before_cursor_execute", merken)
+    assert ergebnis.vollstaendig and not ergebnis.findings
+    assert "Soll-Version unbekannt" in ergebnis.hinweis
+    assert len(abfragen) == 2
+    assert all("report_zeiten" not in sql and "einstellungen" not in sql for sql in abfragen)
