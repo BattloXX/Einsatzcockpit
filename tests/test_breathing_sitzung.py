@@ -268,12 +268,14 @@ def test_state_requires_correct_session_and_serializes(ctx):
     troop = payload["troops"][0]
     assert set(troop) == {"id", "name", "status", "is_sicherheitstrupp", "entry_at", "planned_duration_min",
                           "one_third_seconds", "two_third_seconds", "max_seconds", "withdraw_press_calc",
-                          "notfall_at", "funk_verloren_at", "last_meldung_at", "warnings", "kontrollen", "members"}
+                          "notfall_at", "funk_verloren_at", "last_meldung_at", "warnings", "kontrollen", "members",
+                          "last_pressure_at", "max_time_acked"}
     assert troop["id"] == c.troop.id and troop["entry_at"].endswith("Z")
     assert troop["funk_verloren_at"] is None and "notfall" in troop["warnings"]
     assert troop["one_third_seconds"] == 600 and troop["two_third_seconds"] == 1200
     assert troop["kontrollen"] == [{"stufe": "one_third", "art": "funk",
                                      "erledigt_at": c.now.isoformat() + "Z", "niedrigster_druck": 230.0}]
+    assert troop["last_pressure_at"] is None and troop["max_time_acked"] is False
     assert len(troop["members"]) == 2
     assert set(troop["members"][0]) == {"id", "name", "role", "start_press", "current_press", "withdraw_press"}
 
