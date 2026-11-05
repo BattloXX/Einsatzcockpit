@@ -229,11 +229,16 @@ def gateway_summary(db: Session) -> dict:
             .execution_options(include_all_tenants=True).scalar() or 0
 
     evidence: dict = {}
+    warn = False
     for kind in ("linux", "windows_agent"):
         valid = (Gateway.kind == kind, Gateway.device_token_hash.isnot(None))
+        online = (Gateway.agent_connection_id.isnot(None), Gateway.agent_presence_expires_at > now,
+                  Gateway.agent_connection_token_hash == Gateway.device_token_hash)
         evidence[kind] = {"eingerichtet": count(Gateway, *valid), "online": count(Gateway, *valid,
-            Gateway.agent_connection_id.isnot(None), Gateway.agent_presence_expires_at > now,
-            Gateway.agent_connection_token_hash == Gateway.device_token_hash)}
+            *online), "nicht_ueberwacht": count(Gateway, *valid, Gateway.offline_alert_enabled.is_(False))}
+        monitored = (*valid, Gateway.offline_alert_enabled.is_(True))
+        # Online-Zaehler bleiben vollstaendig; nur ueberwachte Ausfaelle warnen.
+        warn |= count(Gateway, *monitored) > count(Gateway, *monitored, *online)
     evidence["sms"] = {"eingerichtet": count(SmsGatewayToken, SmsGatewayToken.revoked_at.is_(None)),
         "online": count(SmsGatewayToken, SmsGatewayToken.revoked_at.is_(None),
             SmsGatewayToken.connection_id.isnot(None), SmsGatewayToken.presence_expires_at > now,
@@ -256,7 +261,7 @@ def gateway_summary(db: Session) -> dict:
     ):
         pending = model.status.in_(active)
         evidence[label] = {"offen": count(model, pending), "ueberfaellig": count(model, pending, overdue)}
-    warn = any(evidence[k]["eingerichtet"] > evidence[k]["online"] for k in ("linux", "windows_agent", "sms"))
+    warn = warn or evidence["sms"]["eingerichtet"] > evidence["sms"]["online"]
     warn = warn or bool(serial["down"] or serial["teilweise"])
     warn = warn or any(evidence[k]["ueberfaellig"] for k in ("druck_jobs", "sms_jobs"))
     return {"status": "warn" if warn else "ok", "checked_at": now, "evidence": evidence}

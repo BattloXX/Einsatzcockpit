@@ -296,3 +296,38 @@ def test_build_falls_back_to_process_start(monkeypatch):
     assert evidence["build_time_quelle"] == "Prozessstart (kein Buildnachweis)"
     stamp = datetime.fromisoformat(evidence["BUILD_TIME"])
     assert stamp.tzinfo is not None and stamp <= datetime.now(UTC)
+
+
+@pytest.mark.parametrize("kind", ["linux", "windows_agent"])
+def test_gateway_summary_ueberwacht_nur_aktivierte_gateways(tmp_path, kind):
+    from app.db import Base
+    from app.services.diagnose.helpers import table
+    from tests.test_diagnose_checks import insert
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'gateways.db'}")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            db.info["current_org_id"] = None
+            optional = insert(db, "gateway", kind=kind, device_token_hash="optional", offline_alert_enabled=False)
+            result = diagnose.gateway_summary(db)
+            assert result["status"] == "ok"
+            assert result["evidence"][kind] == {"eingerichtet": 1, "online": 0, "nicht_ueberwacht": 1}
+            # Ein optionales Online-Gateway darf einen ueberwachten Ausfall nicht verdecken.
+            source = table("gateway")
+            db.execute(source.update().where(source.c.id == optional).values(
+                agent_connection_id="c", agent_connection_token_hash="optional",
+                agent_presence_expires_at=diagnose.presence.utc() + timedelta(minutes=5)))
+            db.commit()
+            monitored = insert(db, "gateway", kind=kind, device_token_hash="monitored", offline_alert_enabled=True)
+            result = diagnose.gateway_summary(db)
+            assert result["status"] == "warn"
+            assert result["evidence"][kind] == {"eingerichtet": 2, "online": 1, "nicht_ueberwacht": 1}
+            db.execute(source.update().where(source.c.id == monitored).values(offline_alert_enabled=False))
+            db.commit()
+            assert diagnose.gateway_summary(db)["status"] == "ok"
+            insert(db, "print_job", gateway_id=optional, status="queued",
+                   erstellt_am=diagnose.presence.utc() - timedelta(minutes=10), lease_expires_at=None)
+            assert diagnose.gateway_summary(db)["status"] == "warn"
+    finally:
+        engine.dispose()

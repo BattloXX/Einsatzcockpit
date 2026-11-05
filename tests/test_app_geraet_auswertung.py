@@ -318,3 +318,44 @@ def test_check_ohne_netz_mit_alten_fehlern(factory, diag_engine, monkeypatch):  
     assert "Soll-Version unbekannt" in ergebnis.hinweis
     assert len(abfragen) == 2
     assert all("report_zeiten" not in sql and "einstellungen" not in sql for sql in abfragen)
+
+
+def _app_check_ohne_http(db, budget):
+    # Im Kindprozess jeden versehentlichen HTTP-Aufruf sichtbar scheitern lassen.
+    def verboten(*args, **kwargs):
+        raise AssertionError("Der isolierte Check darf kein HTTP verwenden")
+
+    download.httpx.get = verboten
+    return app_geraete.check(db, budget)
+
+
+@pytest.mark.parametrize("erfolg", [True, False])
+def test_isolierter_check_waermt_release_cache_vorher(factory, diag_engine, monkeypatch, erfolg):  # noqa: F811
+    from app.services.diagnose.registry import Check, execute_isolated
+
+    monkeypatch.setattr(download, "_cache_url", None)
+    monkeypatch.setattr(download, "_cache_bis", 0)
+    monkeypatch.setattr(download, "_cache_version", None)
+    calls = []
+
+    def release(url, **kwargs):
+        calls.append(kwargs["timeout"])
+        if not erfolg:
+            raise httpx.ConnectError("offline")
+        return httpx.Response(200, request=httpx.Request("GET", url), json={"tag_name": "2026.11.01"})
+
+    monkeypatch.setattr(download.httpx, "get", release)
+    with factory() as db:
+        insert(db, "app_geraet", user_id=1, install_id="isolated", app_version="2026.01.01",
+               sdk_int=34, webview_version="130")
+    check = Check("app.geraete", "app", "", "leicht", _app_check_ohne_http)
+    for _ in range(2):
+        result = execute_isolated(diag_engine, check)
+        assert result.vollstaendig
+        assert any(f.kern == "version" for f in result.findings) == erfolg
+        assert (result.hinweis is None) == erfolg
+    assert calls == [5.0]
+    # Andere Checks loesen auch bei leerem Cache keinen Abruf aus.
+    monkeypatch.setattr(download, "_cache_bis", 0)
+    execute_isolated(diag_engine, CHECKS["einsatz.integritaet"])
+    assert calls == [5.0]

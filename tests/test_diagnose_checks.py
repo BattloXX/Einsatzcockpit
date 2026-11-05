@@ -471,3 +471,33 @@ def test_redis_zaehler_seit_prozessstart(diag_engine, monkeypatch, alter_stunden
         if befund.kern in ("reconnects", "publish_failures", "subscriber_failures"):
             assert "seit Prozessstart" in befund.titel
             assert befund.evidenz["anzahl"] == status[befund.kern]
+
+
+@pytest.mark.parametrize("kind", ["linux", "windows_agent"])
+def test_gateway_praesenz_respektiert_offline_alarme(diag_engine, factory, kind):
+    with factory() as db:
+        optional = insert(db, "gateway", kind=kind, device_token_hash="optional", offline_alert_enabled=False)
+    result = registry.execute_check(diag_engine, registry.CHECKS["gateway.jobs"])
+    info, = result.findings
+    assert info.schweregrad == "info"
+    assert info.betroffene_ids == {"gateway": [optional]}
+    with factory() as db:
+        monitored = insert(db, "gateway", kind=kind, device_token_hash="monitored", offline_alert_enabled=True)
+        sms = insert(db, "sms_gateway_token", token_hash="sms", revoked_at=None)
+    result = registry.execute_check(diag_engine, registry.CHECKS["gateway.jobs"])
+    findings = {tuple(f.kern): f for f in result.findings}
+    info = findings[("gateway", "presence_nicht_ueberwacht")]
+    assert info.schweregrad == "info"
+    assert info.betroffene_ids == {"gateway": [optional]}
+    assert "Ueberwachung aus" in info.titel
+    assert findings[("gateway", "presence")].schweregrad == "warn"
+    assert findings[("gateway", "presence")].betroffene_ids == {"gateway": [monitored]}
+    assert findings[("sms_gateway_token", "presence")].betroffene_ids == {"sms_gateway_token": [sms]}
+    assert len(findings) == 3
+    with factory() as db:
+        job = insert(db, "print_job", gateway_id=optional, status="queued",
+                     erstellt_am=utcnow() - timedelta(minutes=10), lease_expires_at=None)
+    result = registry.execute_check(diag_engine, registry.CHECKS["gateway.jobs"])
+    overdue = next(f for f in result.findings if f.kern == ["print_job", "ueberfaellig"])
+    assert overdue.schweregrad == "warn"
+    assert overdue.betroffene_ids == {"print_job": [job]}
