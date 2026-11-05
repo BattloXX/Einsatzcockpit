@@ -3,13 +3,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
 if TYPE_CHECKING:
     from app.models.master import Member
+
+WARNUNG_KINDS = [
+    "withdraw", "max_exceeded", "one_third_due", "two_third_due",
+    "funk_verloren", "notfall", "kein_sicherheitstrupp", "assp",
+]
 
 TROOP_STATUSES = ["bereit", "im_einsatz", "rueckzug", "zurueck", "erholt"]
 TROOP_STATUS_LABELS = {
@@ -330,3 +335,50 @@ class PressureLog(Base):
 
 # Forward reference resolution
 from app.models.incident import Incident  # noqa: E402, F401
+
+
+class BreathingWarnung(Base):
+    __tablename__ = "breathing_warnung"
+    __table_args__ = (Index("ix_breathing_warnung_troop_kind_erledigt", "troop_id", "kind", "erledigt_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
+    troop_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("breathing_troop.id", ondelete="CASCADE"), nullable=False
+    )
+    zyklus_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    ausgeloest_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    erledigt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    eskalation_stufe: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    eskaliert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    zustellungen: Mapped[list[BreathingZustellung]] = relationship(
+        back_populates="warnung", cascade="all, delete-orphan",
+    )
+
+
+class BreathingZustellung(Base):
+    __tablename__ = "breathing_zustellung"
+    __table_args__ = (
+        UniqueConstraint("warnung_id", "stufe", "kanal", "user_id", name="uq_breathing_zustellung_empfaenger"),
+        Index("ix_breathing_zustellung_status_versuch", "status", "naechster_versuch_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    warnung_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("breathing_warnung.id", ondelete="CASCADE"), nullable=False
+    )
+    stufe: Mapped[int] = mapped_column(Integer, nullable=False)
+    kanal: Mapped[str] = mapped_column(String(8), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    empfaenger_label: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending", server_default="pending")
+    versuche: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    naechster_versuch_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    lease_bis: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fehler: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    gesendet_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    warnung: Mapped[BreathingWarnung] = relationship(back_populates="zustellungen")

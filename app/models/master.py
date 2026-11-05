@@ -477,6 +477,8 @@ class OrgSettings(Base):
     )
     asuew_gelb_prozent: Mapped[int] = mapped_column(Integer, nullable=False, default=75, server_default="75")
     asuew_erholzeit_min: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
+    asuew_eskalation_user_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    asuew_eskalation_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
 
     # Objektverwaltung: je Org aktivierbar, effektiv = SystemSettings-Key
     # "objekt_module_enabled" == "true" AND dieser Wert (Muster UAS).

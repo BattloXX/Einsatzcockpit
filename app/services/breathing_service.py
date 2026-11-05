@@ -1,6 +1,7 @@
 """Atemschutzüberwachung – Rückzugsdruck-Berechnung und Status-Maschine."""
 import logging
 import math
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from time import monotonic
@@ -93,6 +94,39 @@ def get_asuew_settings(db: Session, org_id: int) -> AsuewSettings:
         bounded("asuew_gelb_prozent", 75, 50, 95),
         bounded("asuew_erholzeit_min", 30, 0, 120),
     )
+
+
+def parse_user_id_csv(raw: str | None) -> list[int]:
+    """Liest ganze User-IDs und entfernt Duplikate unter Beibehaltung der Reihenfolge."""
+    ids: list[int] = []
+    for part in (raw or "").split(","):
+        value = part.strip()
+        if re.fullmatch(r"[+-]?[0-9]+", value) is None:
+            continue
+        try:
+            user_id = int(value)
+        except ValueError:
+            continue
+        if user_id not in ids:
+            ids.append(user_id)
+    return ids
+
+
+def get_eskalation_empfaenger_ids(db: Session, org_id: int) -> tuple[list[int], bool]:
+    """Liefert konfigurierte aktive Empfänger der eigenen Org und das SMS-Flag."""
+    from app.models.master import OrgSettings
+    from app.models.user import User
+
+    row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if row is None:
+        return [], True
+    ids = parse_user_id_csv(row.asuew_eskalation_user_ids)
+    # Nur darstellbare BigInteger-Werte an die Datenbank weiterreichen.
+    valid_ids = {user.id for user in db.query(User).filter(
+        User.org_id == org_id, User.active.is_(True),
+        User.id.in_([value for value in ids if -(2**63) <= value < 2**63]),
+    ).all()} if ids else set()
+    return [value for value in ids if value in valid_ids], row.asuew_eskalation_sms is not False
 
 
 def calc_withdraw_pressure(start_press: float, factor: float = 0.5, reserve: int = 10) -> float:

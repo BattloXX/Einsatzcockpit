@@ -556,6 +556,29 @@
         <small class="form-hint">Mindestpause vor einem erneuten Einsatz. Vorgabe: 30 Minuten.</small>
       </div>
 
+      <h4>Eskalation</h4>
+      <input type="hidden" name="asuew_eskalation_form" value="1" {% if not breathing_sys_enabled %}disabled{% endif %}>
+      <div class="form-group">
+        {% for empfaenger in asuew_users %}
+        <label class="sys-check{% if not breathing_sys_enabled %} sys-disabled{% endif %}">
+          <input type="checkbox" name="asuew_eskalation_user_ids" value="{{ empfaenger.id }}"
+                 {% if empfaenger.id in asuew_selected_user_ids %}checked{% endif %}
+                 {% if not breathing_sys_enabled %}disabled{% endif %}>
+          {{ empfaenger.full_name or empfaenger.display_name }}
+          <small>({{ empfaenger.roles | map(attribute='label') | join(', ') or 'Keine Rolle' }})</small>
+        </label>
+        {% endfor %}
+        <small class="form-hint">Ohne Auswahl werden Einsatzleiter und Atemschutz-Überwacher der Organisation benachrichtigt</small>
+      </div>
+      <div class="form-group">
+        <label class="sys-check{% if not breathing_sys_enabled %} sys-disabled{% endif %}">
+          <input type="checkbox" name="asuew_eskalation_sms_raw" value="1"
+                 {% if not org_settings or org_settings.asuew_eskalation_sms is not sameas false %}checked{% endif %}
+                 {% if not breathing_sys_enabled %}disabled{% endif %}>
+          Bei Eskalation zusätzlich per SMS benachrichtigen
+        </label>
+      </div>
+
       <h3 class="sys-section-title">{{ modul_icon("probenplan", size="md") }} Probenplanung</h3>
       {% set _probenplanung_org_on = (org_settings.probenplanung_modul_aktiv) if org_settings else false %}
       <div class="form-group">
