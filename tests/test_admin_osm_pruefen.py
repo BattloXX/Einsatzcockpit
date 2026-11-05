@@ -20,6 +20,7 @@ admin_env = oauth.admin_env
 
 @pytest.fixture
 def umgebung(monkeypatch):
+    monkeypatch.setattr(settings, "OSM_GEBAEUDE_IMPORT_ENABLED", True)
     monkeypatch.setattr(settings, "HYDRANT_OVERPASS_URL", "https://osm.test/api/interpreter?lat=47.12345")
     monkeypatch.setattr(settings, "OVERPASS_FALLBACK_URLS", "https://fallback.test/api/interpreter")
     monkeypatch.setattr(settings, "OSM_GEBAEUDE_QUELLEN", "region=https://pbf.test/GEHEIM.pbf?lat=47.12345")
@@ -108,7 +109,7 @@ def test_warnungen_und_empfehlungen(umgebung, fall):
     else:
         bestand[0]["aktiv"] = None
     ergebnis = registry.collect(None, "admin_osm_pruefen", live=False)
-    assert ergebnis["status"] == "warn"
+    assert ergebnis["status"] == ("ok" if fall == "overpassfehler" else "warn")
     assert ergebnis["evidence"]["recommendations"]
     assert "GEHEIM" not in json.dumps(ergebnis)
 
@@ -188,10 +189,33 @@ def test_offene_endpunkte_mit_aktuellem_bestand(umgebung, monkeypatch):
         "offen_bis": datetime.now(UTC).timestamp() + 60, "code": "OVERPASS_TIMEOUT",
     }))
     ergebnis = registry.collect(None, "admin_osm_pruefen", live=False)
-    assert ergebnis["status"] == "warn"
+    assert ergebnis["status"] == "ok"
     evidenz = ergebnis["evidence"]
     for z in evidenz["circuit_breaker_status"]["endpunkte"]:
         assert z["status"] == "offen" and z["offen_bis"] and z["code"] == "OVERPASS_TIMEOUT"
     assert "lokaler Bestand aktuell, Overpass nur Fallback" in " ".join(evidenz["recommendations"])
     assert evidenz["ursache_hypothese"]
     assert umgebung[2] == []
+
+
+@pytest.mark.parametrize("live", [False, True])
+@pytest.mark.parametrize("fall,erwartet", [
+    ("aktuell", "ok"), ("zweite_fehlt", "fail"), ("deaktiviert", "warn"), ("alt", "warn"),
+])
+def test_overpass_nur_rueckfall_bei_vollstaendigem_bestand(umgebung, monkeypatch, live, fall, erwartet):
+    bestand, daten, _, zustand = umgebung
+    daten["last_failure"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    zustand["status"] = 502
+    if fall == "zweite_fehlt":
+        monkeypatch.setattr(settings, "OSM_GEBAEUDE_QUELLEN",
+                            "region=https://pbf.test/a.pbf,andere=https://pbf.test/b.pbf")
+    elif fall == "deaktiviert":
+        monkeypatch.setattr(settings, "OSM_GEBAEUDE_IMPORT_ENABLED", False)
+    elif fall == "alt":
+        bestand[0]["aktiv"]["alter_tage"] = 99
+    ergebnis = registry.collect(None, "admin_osm_pruefen", live=live)
+    assert ergebnis["status"] == erwartet
+    empfehlungen = " ".join(ergebnis["evidence"]["recommendations"])
+    assert ("lokale Quelle fuer Region ergaenzen" in empfehlungen) is (fall == "zweite_fehlt")
+    if fall == "aktuell":
+        assert "Overpass nur Fallback" in empfehlungen

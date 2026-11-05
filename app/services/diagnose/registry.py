@@ -219,9 +219,11 @@ def execute_isolated(bind, check: Check, seconds: float = CHECK_TIMEOUT) -> Chec
     receiver, sender = context.Pipe(duplex=False)
     engine = bind.engine
     from app.services import ws_bus
+    from app.services.app_download_service import android_release_version_cached
     from app.services.db_transactions import retry_statistik
 
-    runtime = {"redis": ws_bus.status(), "pool": pool_metrics(engine.pool),
+    runtime = {"android_version": android_release_version_cached(), "redis": ws_bus.status(),
+               "pool": pool_metrics(engine.pool),
                "db_retries": retry_statistik(), "worker_pid": os.getpid()}
     process = context.Process(target=_process_check,
         args=(sender, engine.url.render_as_string(hide_password=False), check, seconds, runtime), daemon=True)

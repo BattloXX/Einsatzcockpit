@@ -1,6 +1,7 @@
 """App-Befunde aggregieren; ausschliesslich budgetierte SELECTs."""
 
 from collections import defaultdict
+from datetime import timedelta
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -8,8 +9,8 @@ from sqlalchemy import select
 from app.models.admin_security import utcnow
 from app.models.app_geraet import AppGeraet, AppGeraetFehler
 from app.models.user import DeviceToken
-from app.services.app_geraet_auswertung import REGELN, befunde, soll_version
-from app.services.diagnose.helpers import table
+from app.services.app_download_service import android_release_version_cached
+from app.services.app_geraet_auswertung import REGELN, befunde, calver
 from app.services.diagnose.registry import MAX_IDS, CheckResult, Finding, register_check
 
 
@@ -18,30 +19,37 @@ def check(db, budget):
     now = utcnow()
     rows = budget.rows(
         db,
-        select(AppGeraet, DeviceToken.duty_active, DeviceToken.revoked_at)
+        select(*(getattr(AppGeraet, name) for name in (
+            "id", "device_token_id", "sdk_int", "sicherheitspatch", "webview_version",
+            "geraet_details", "app_version", "berechtigungen", "dienste", "last_report_at",
+        )), DeviceToken.duty_active, DeviceToken.revoked_at)
         .outerjoin(DeviceToken, DeviceToken.id == AppGeraet.device_token_id)
         .order_by(AppGeraet.id),
     )
     if not rows:
         return CheckResult(vollstaendig=budget.complete)
     budget.tick()
-    soll = soll_version()
+    version = budget.runtime.get("android_version", android_release_version_cached())
+    soll = version if calver(version) else None
     budget.tick()
-    ids = [r[0].id for r in rows]
-    f = table("app_geraet_fehler")
+    ids = [r.id for r in rows]
+    f = AppGeraetFehler.__table__
     errors = budget.rows(
         db,
-        select(AppGeraetFehler).where(f.c.geraet_id.in_(ids)).order_by(f.c.geraet_id, f.c.id),
+        select(f.c.geraet_id, f.c.komponente, f.c.code, f.c.anzahl, f.c.last_at)
+        .where(f.c.geraet_id.in_(ids), f.c.last_at >= now - timedelta(days=7))
+        .order_by(f.c.geraet_id, f.c.id),
     )
     by_device: dict[int, list] = defaultdict(list)
     clusters: dict[tuple[str, str], set[int]] = defaultdict(set)
-    for (error,) in errors:
+    for error in errors:
         by_device[error.geraet_id].append(error)
         clusters[error.komponente, error.code].add(error.geraet_id)
     groups: dict[str, list[int]] = defaultdict(list)
-    for geraet, duty, revoked in rows:
+    for geraet in rows:
         budget.tick()
-        token = SimpleNamespace(duty_active=duty, revoked_at=revoked) if geraet.device_token_id else None
+        token = (SimpleNamespace(duty_active=geraet.duty_active, revoked_at=geraet.revoked_at)
+                 if geraet.device_token_id else None)
         for code in befunde(geraet, soll, token=token, fehler=by_device[geraet.id], jetzt=now):
             groups[code].append(geraet.id)
     result = CheckResult(vollstaendig=budget.complete)

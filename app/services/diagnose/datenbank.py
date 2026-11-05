@@ -4,6 +4,7 @@ from pathlib import Path
 
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.services.diagnose.registry import CheckResult, Finding, pool_metrics, register_check
 
@@ -27,16 +28,33 @@ def check(db, budget):
         result.hinweis = "MariaDB-Prozess-/Transaktionspruefung: nicht verfuegbar"
         return result
     # Keine Benutzer, Hosts, DB-Namen oder Query-Texte lesen.
-    rows = db.execute(text("SELECT ID, TIME FROM information_schema.processlist "
-        "WHERE COMMAND <> 'Sleep' AND TIME > 30 ORDER BY TIME DESC LIMIT 50")).all()
-    if rows:
-        result.findings.append(Finding("langlaeufer", "Lange laufende DB-Abfragen", evidenz={"anzahl": len(rows)},
-                                       betroffene_ids={"db_prozess": [int(r[0]) for r in rows]}))
-    rows = db.execute(text("SELECT trx_mysql_thread_id FROM information_schema.innodb_trx "
-                           "WHERE trx_state = 'LOCK WAIT' LIMIT 50")).all()
-    if rows:
-        result.findings.append(Finding("locks", "Wartende DB-Transaktionen", evidenz={"anzahl": len(rows)},
-                                       betroffene_ids={"db_prozess": [int(r[0]) for r in rows]}))
+    for kern, titel, sql in (
+        ("langlaeufer", "Lange laufende DB-Abfragen",
+         "SELECT ID, TIME FROM information_schema.processlist "
+         "WHERE COMMAND <> 'Sleep' AND TIME > 30 ORDER BY TIME DESC LIMIT 50"),
+        ("locks", "Wartende DB-Transaktionen",
+         "SELECT trx_mysql_thread_id FROM information_schema.innodb_trx "
+         "WHERE trx_state = 'LOCK WAIT' LIMIT 50"),
+    ):
+        try:
+            rows = db.execute(text(sql)).all()
+        except (OperationalError, ProgrammingError) as exc:
+            if not exc.orig.args or exc.orig.args[0] not in (1227, 1142):
+                raise
+            # MariaDB verwirft bei diesen Rechtefehlern nur das Statement.
+            # Kein SAVEPOINT (SELECT-Sperre) oder Rollback der lesenden Session.
+            result.findings.append(Finding(
+                [kern, "recht_fehlt"],
+                "Lock-Pruefung nicht verfuegbar (PROCESS-Recht fehlt)" if kern == "locks"
+                else "Prozess-Pruefung nicht verfuegbar (Recht fehlt)",
+                "info", {"fehlercode": exc.orig.args[0]},
+                ursache_hypothese="Der DB-Benutzer darf diese Systemtabelle nicht lesen.",
+                empfehlung="GRANT PROCESS ON *.* TO '<app-user>'@'<host>' optional",
+            ))
+            continue
+        if rows:
+            result.findings.append(Finding(kern, titel, evidenz={"anzahl": len(rows)},
+                betroffene_ids={"db_prozess": [int(r[0]) for r in rows]}))
     return result
 
 

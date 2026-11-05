@@ -24,6 +24,7 @@ from app.models.worker_runtime import WorkerRuntime
 from app.services import gateway_presence as presence
 from app.services import ws_bus
 from app.services.background_runtime import EXPIRED_WORKER_RETENTION
+from app.services.worker_gesundheit import worker_ausfaelle
 
 _PROCESS_STARTED_AT = datetime.now(UTC)
 logger = logging.getLogger(__name__)
@@ -84,14 +85,15 @@ def worker_status(db: Session, now: datetime | None = None) -> dict:
     faulty = any(w["leader_error"] or any(loop["overdue"] or loop["state"] == "failed"
                  for loop in w["loops"]) for w in worker_rows)
     state = "fail" if not leaders or any(len(ids) > 1 for ids in leaders_by_host.values()) else (
-        "warn" if expired or faulty else "ok")
+        "warn" if worker_ausfaelle(registered, now) or faulty else "ok")
     last_success = max((values.get("last_success_at") for w in registered
                         if w.heartbeat_at > now - timedelta(days=1) for values in w.loops.values()
                         if values.get("last_success_at")), default=None)
     return {"status": state, "checked_at": now, "evidence": {
         "worker_count": len(workers), "workers": worker_rows,
         "heartbeat_age_s": {w.worker_id: max(0, (now - w.heartbeat_at).total_seconds()) for w in registered},
-        "expired_workers": [w.worker_id for w in expired], "leaders_by_host": leaders_by_host,
+        "expired_workers": [w.worker_id for w in expired],
+        "failed_workers": [w.worker_id for w in worker_ausfaelle(registered, now)], "leaders_by_host": leaders_by_host,
         "leader_workers": [w.worker_id for w in leaders], "last_success_at": _datetime(last_success),
         "redis": {"state": redis_state, "configured": configured,
                   "connected_workers": redis_up, "configured_workers": len(redis_workers)},
