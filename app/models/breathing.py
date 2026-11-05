@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -48,6 +48,13 @@ class BreathingTroop(Base):
     bottle_preset: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Location / Standort
     location_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    ueberwacher_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    angriffsweg: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    funkkanal: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    funk_verloren_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notfall_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ueberwacher_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    notfall_von_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     # Last situation report
     last_meldung_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_meldung_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -83,6 +90,16 @@ class BreathingTroop(Base):
         back_populates="troop", order_by="BreathingDeployment.lfd_nr",
         cascade="all, delete-orphan", lazy="selectin",
     )
+
+    kontrollen: Mapped[list[BreathingKontrolle]] = relationship(
+        back_populates="troop", order_by="BreathingKontrolle.erledigt_at",
+        cascade="all, delete-orphan", lazy="selectin",
+    )
+
+    @property
+    def active_kontrollen(self) -> list[BreathingKontrolle]:
+        """Kontrollen des aktuellen, noch nicht archivierten Einsatzzyklus."""
+        return [kontrolle for kontrolle in self.kontrollen if kontrolle.deployment_id is None]
 
     @property
     def active_members(self) -> list[TroopMember]:
@@ -158,6 +175,11 @@ class BreathingDeployment(Base):
     bottle_preset: Mapped[str | None] = mapped_column(String(20), nullable=True)
     task_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
     location_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    ueberwacher_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    angriffsweg: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    funkkanal: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    funk_verloren_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notfall_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     start_press_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     withdraw_press_calc: Mapped[float | None] = mapped_column(Float, nullable=True)
     warn_one_third_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -227,6 +249,32 @@ class BreathingDeployment(Base):
     def active_pressure_logs(self) -> list[PressureLog]:
         """Kompatibilitätsalias: ein Deployment enthält ausschließlich seinen Zyklus."""
         return self.pressure_logs
+
+
+class BreathingKontrolle(Base):
+    __tablename__ = "breathing_kontrolle"
+    __table_args__ = (Index("ix_breathing_kontrolle_troop_deployment", "troop_id", "deployment_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    troop_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("breathing_troop.id", ondelete="CASCADE"), nullable=False
+    )
+    deployment_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("breathing_deployment.id", ondelete="CASCADE"), nullable=True
+    )
+    stufe: Mapped[str] = mapped_column(String(12), nullable=False)
+    faellig_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    erledigt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    niedrigster_druck: Mapped[float | None] = mapped_column(Float, nullable=True)
+    troop_member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("troop_member.id", ondelete="SET NULL"), nullable=True
+    )
+    art: Mapped[str] = mapped_column(String(20), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    troop: Mapped[BreathingTroop] = relationship(back_populates="kontrollen")
 
 
 class TroopMember(Base):

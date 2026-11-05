@@ -469,6 +469,14 @@ class OrgSettings(Base):
     # Atemschutzueberwachung: bestehendes Modul bleibt bei Einfuehrung des
     # Org-Toggles standardmaessig aktiv; effektiv zusaetzlich systemweit gated.
     atemschutz_ueberwachung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    asuew_erwartete_einsatzzeit_min: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=30, server_default="30"
+    )
+    asuew_rueckzug_untergrenze_bar: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=60, server_default="60"
+    )
+    asuew_gelb_prozent: Mapped[int] = mapped_column(Integer, nullable=False, default=75, server_default="75")
+    asuew_erholzeit_min: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
 
     # Objektverwaltung: je Org aktivierbar, effektiv = SystemSettings-Key
     # "objekt_module_enabled" == "true" AND dieser Wert (Muster UAS).

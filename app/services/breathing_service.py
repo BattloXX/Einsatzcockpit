@@ -69,6 +69,31 @@ def breathing_effective_enabled(org_id: int | None, db: Session) -> bool:
     return org_s is None or org_s.atemschutz_ueberwachung_modul_aktiv
 
 
+class AsuewSettings(NamedTuple):
+    erwartete_einsatzzeit_min: int
+    rueckzug_untergrenze_bar: int
+    gelb_prozent: int
+    erholzeit_min: int
+
+
+def get_asuew_settings(db: Session, org_id: int) -> AsuewSettings:
+    """Liest die ASUEW-Org-Werte mit Defaults und begrenzten Wertebereichen."""
+    from app.models.master import OrgSettings
+
+    row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+
+    def bounded(name: str, default: int, minimum: int, maximum: int) -> int:
+        value = getattr(row, name, None)
+        return default if value is None else max(minimum, min(maximum, value))
+
+    return AsuewSettings(
+        bounded("asuew_erwartete_einsatzzeit_min", 30, 5, 120),
+        bounded("asuew_rueckzug_untergrenze_bar", 60, 30, 100),
+        bounded("asuew_gelb_prozent", 75, 50, 95),
+        bounded("asuew_erholzeit_min", 30, 0, 120),
+    )
+
+
 def calc_withdraw_pressure(start_press: float, factor: float = 0.5, reserve: int = 10) -> float:
     return round(start_press * factor + reserve, 1)
 
@@ -225,6 +250,7 @@ def redeploy_troop(
         raise ValueError("Nur ein erholter Atemschutztrupp kann erneut eingesetzt werden.")
     filled_members = _validated_members_data(members_data)
     old_members = list(troop.active_members)
+    old_kontrollen = list(troop.active_kontrollen)
     deployment = BreathingDeployment(
         troop=troop,
         lfd_nr=len(troop.deployments) + 1,
@@ -236,6 +262,11 @@ def redeploy_troop(
         bottle_preset=troop.bottle_preset,
         task_text=troop.task_text,
         location_text=troop.location_text,
+        ueberwacher_name=troop.ueberwacher_name,
+        angriffsweg=troop.angriffsweg,
+        funkkanal=troop.funkkanal,
+        funk_verloren_at=troop.funk_verloren_at,
+        notfall_at=troop.notfall_at,
         start_press_avg=troop.start_press_avg,
         withdraw_press_calc=troop.withdraw_press_calc,
         warn_one_third_acked_at=troop.warn_one_third_acked_at,
@@ -255,8 +286,14 @@ def redeploy_troop(
         member.deployment = deployment
         member.deployment_id = deployment.id
 
+    for kontrolle in old_kontrollen:
+        kontrolle.deployment_id = deployment.id
+
     _add_live_members(db, troop, filled_members)
 
+    troop.funk_verloren_at = None
+    troop.notfall_at = None
+    troop.notfall_von_user_id = None
     troop.status = "bereit"
     troop.entry_at = None
     troop.withdraw_at = None
