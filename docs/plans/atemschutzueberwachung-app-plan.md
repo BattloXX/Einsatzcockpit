@@ -1,6 +1,6 @@
 # Atemschutzüberwachung (ASÜW): Analyse und Verbesserungsplan mit App-Stabilisierung
 
-Stand: 2026-11-05 · Status: **Plan, noch nicht umgesetzt**
+Stand: 2026-11-05 · Status: **Plan, Entscheidungen getroffen (Abschnitt 8), noch nicht umgesetzt**
 
 ## 1. Ziel
 
@@ -495,22 +495,35 @@ Gerätetest-Checkliste (Übungseinsatz, mindestens 2 Geräte):
 | 4 | Phase 5 | Offline-Robustheit |
 | 5 | Phase 6 + 7 | Bedienkomfort, ASSP, Protokoll |
 | 6 | Phase 8 | Abnahme vor Freigabe im Echteinsatz |
+| 7 | Phase 9 | iOS-Vorbereitung, nach Android-Abnahme und Apple-Account |
 
 Bis Phase 4 abgenommen ist, sollte das Wiki deutlich festhalten: **Die digitale ASÜW ergänzt
 die Überwachungstafel bzw. das Formular und ersetzt sie nicht.**
 
-## 8. Offene Entscheidungen
+## 8. Entscheidungen (2026-11-05)
 
-1. **Browser:** Komplett sperren oder eine Nur-Lese-Ansicht für EL und Stab (ohne Eingaben
-   und Quittierungen) erlauben? Empfehlung: Nur-Lese erlauben, Überwachung nur in der App.
-2. **Kontrollzeiten:** Fix 10/20 min wie im Formular oder relativ zur einstellbaren zu
-   erwartenden Einsatzzeit (Vorgabe 30 min → 10/20 min)? Empfehlung: relativ, mit
-   Vorgabe 30 min.
-3. **Vorläufige Rückzugsgrenze vor dem Einsatzziel:** Warneinrichtung (60 bar) oder wie bisher
-   ½ + Reserve? Empfehlung: org-einstellbar, Vorgabe 60 bar.
-4. **Eskalationsempfänger:** EL, GRKDT der Einheit, Atemschutzbeauftragter der Org? SMS ab
-   welcher Stufe?
-5. **iOS:** Der Überwachungsmodus bleibt vorerst Android-only. Die iOS-App ist noch in
-   Vorbereitung, kritische Wecker auf iOS bräuchten die Critical-Alerts-Berechtigung.
-6. **Wer darf überwachen:** Bisher `breathing_supervisor`, `incident_leader`, `admin` und
-   `recorder`. Soll `recorder` weiter Trupps starten dürfen, oder nur noch erfassen?
+| # | Frage | Entscheidung | Auswirkung auf den Plan |
+|---|---|---|---|
+| 1 | Browser | **Nur-Lese-Ansicht** mit deutlichem Hinweis „Atemschutzüberwachung nur in der Einsatzcockpit-App" | Browser zeigt Trupps, Drücke, Fristen und Timeline ohne Eingabe, Quittierung und Alarmton. Alle Schreibrouten verlangen die App-Sitzung (4.2). Der Hinweis ist ein fester Kopfbanner mit Deep-Link/QR zur App. |
+| 2 | Kontrollzeiten | **Relativ** zur zu erwartenden Einsatzzeit | Org-Einstellung (Vorgabe 30 min) → Kontrollen bei 1/3 und 2/3 (10/20 min). Flasche liefert nur Luftvorrat/Plausibilität (F1). |
+| 3 | Vorläufige Rückzugsgrenze | **Warneinrichtung bei 60 bar** | Vorgabe 60 bar (org-einstellbar, 50–60 bar laut Lehrbehelf). Nach „Einsatzziel erreicht" gilt `max(60, 2 × Anmarschverbrauch)` (F2/K2). |
+| 4 | Eskalation | **Kritischer Hinweis auf dem Board** (nicht wegklickbar, bis erledigt) **plus SMS** | SMS-Eskalation für Rückzugsdruck ohne Bestätigung, Max-Zeit, Funkverlust, Notfall und Heartbeat-Ausfall. Empfänger gemäß Matrix (EL, GRKDT der Einheit, Führer Sicherheitstrupp), Fallback auf Rollen/Org-Einstellung. Konkrete Empfängerliste je Org ist in Phase 1 konfigurierbar. |
+| 5 | iOS | **Beides vorbereiten** | Fachlogik, Sitzungs-/Heartbeat-API und Fristenberechnung bleiben plattformneutral (siehe Phase 9). Android wird zuerst abgenommen. |
+| 6 | Rolle `recorder` | **Darf weiter Trupps einsetzen** | Rollen bleiben `breathing_supervisor`, `incident_leader`, `admin`, `recorder`. Der Readiness-Override (Begründung) bleibt auf die ersten drei beschränkt. |
+
+### Phase 9: iOS-Vorbereitung (B + iOS-Repo)
+
+Die iOS-App ist noch in Vorbereitung (Mac-Test und Apple-Account offen). Für ASÜW ohne Umbau
+nachrüstbar machen:
+
+- Server-API (`/api/asuew/*`), Capability `asuew` und Mindestversion bleiben
+  plattformneutral (`X-ECP-Platform` unterscheidet).
+- Fristenlogik als reine, getestete Funktionen ohne Android-Bezug (Kotlin-Logik und
+  JS-Spiegel mit identischen Testfällen).
+- iOS-Ersatz für den nativen Wächter: lokale Benachrichtigungen mit
+  `UNNotificationInterruptionLevel.timeSensitive`, für Rückzug/Notfall
+  **Critical Alerts** (Apple-Berechtigung muss beantragt werden), Background-Modes und
+  Live Activity für die Trupp-Uhren. Ein iOS-Gerät kann Fristen weniger zuverlässig im
+  Hintergrund halten als Android; bis zur Abnahme ist die Überwachung auf iOS nur freigegeben,
+  wenn die Selbsttest-Ampel grün ist und zusätzlich ein Android-Gerät mitüberwacht.
+- Bis dahin zeigt iOS die Nur-Lese-Ansicht mit App-Hinweis.
