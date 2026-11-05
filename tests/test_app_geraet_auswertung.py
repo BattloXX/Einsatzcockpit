@@ -225,7 +225,7 @@ def test_check_aggregation_readonly_budget(factory, diag_engine, monkeypatch):  
 def test_maskierter_altbericht_in_diagnose_und_mcp(factory, monkeypatch):  # noqa: F811
     from app.admin_mcp.geraete_tools import collect_geraete
 
-    monkeypatch.setattr(app_geraete, "soll_version", lambda: "2026.11.01")
+    monkeypatch.setattr(app_geraete, "android_release_version_cached", lambda: "2026.11.01")
     monkeypatch.setattr(auswertung, "soll_version", lambda: "2026.11.01")
     with factory() as db:
         db.info["current_org_id"] = None
