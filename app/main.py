@@ -58,6 +58,7 @@ from app.routers import (
     api_v1,
     api_weather,
     apple_app_site,
+    asuew_api,
     auth,
     csp_report,
     device_api,
@@ -1069,6 +1070,7 @@ app.include_router(api_kontakt_sync.router)
 app.include_router(api_messaging.router)
 app.include_router(api_weather.router)
 app.include_router(device_api.router)
+app.include_router(asuew_api.router)
 app.include_router(api_feed.router)
 app.include_router(api_live.router)
 app.include_router(gateway_api.router)

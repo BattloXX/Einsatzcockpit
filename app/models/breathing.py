@@ -382,3 +382,28 @@ class BreathingZustellung(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     warnung: Mapped[BreathingWarnung] = relationship(back_populates="zustellungen")
+
+
+class BreathingGeraetSitzung(Base):
+    __tablename__ = "breathing_geraet_sitzung"
+    __table_args__ = (
+        Index("ix_breathing_sitzung_incident_ende_heartbeat", "incident_id", "beendet_at", "letzter_heartbeat_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    fcm_token_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("fcm_token.id", ondelete="SET NULL"), nullable=True
+    )
+    session_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    app_version: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    platform: Mapped[str] = mapped_column(String(10), nullable=False)
+    geraet_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    selbsttest: Mapped[str | None] = mapped_column(Text, nullable=True)
+    akku_prozent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    laedt: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    gestartet_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    letzter_heartbeat_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    beendet_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ende_grund: Mapped[str | None] = mapped_column(String(20), nullable=True)
