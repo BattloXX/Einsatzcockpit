@@ -7,7 +7,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import time
 import uuid
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
@@ -239,11 +238,10 @@ def start_job(
                 },
             )
             _save(status)
-            python = us.APP_ROOT / ".venv" / "bin" / "python"
             fd = os.open(root / f"{job_id}.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "wb") as log, open(os.devnull, "rb") as stdin:
                 process = subprocess.Popen(
-                    [str(python) if python.exists() else sys.executable, "-m", "app.cli", "update-run", job_id],
+                    [us.python_executable(), "-m", "app.cli", "update-run", job_id],
                     cwd=str(us.APP_ROOT),
                     start_new_session=True,
                     stdin=stdin,
