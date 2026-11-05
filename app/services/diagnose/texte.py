@@ -181,6 +181,14 @@ TEXTE = {
 }
 
 WORKER = {
+    "ausfall": (
+        "Ein Worker ist kuerzlich ohne aktiven Ersatz auf demselben Host abgelaufen.",
+        "Worker-Dienst, Heartbeats und Neustart auf diesem Host pruefen.",
+    ),
+    "recht_fehlt": (
+        "Der DB-Benutzer darf diese Systemtabelle nicht lesen.",
+        "GRANT PROCESS ON *.* TO '<app-user>'@'<host>' optional",
+    ),
     "abgelaufen": (
         "Worker-Heartbeats sind abgelaufen.",
         (

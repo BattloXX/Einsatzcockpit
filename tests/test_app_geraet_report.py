@@ -59,6 +59,35 @@ def test_sitzung_ohne_token_upsert(client, konto, bericht):
         assert row.geraet_details["geraet"]["akku_prozent"] == 80
 
 
+def test_neuer_bericht_ersetzt_maskierte_altwerte_auch_bei_gleicher_app_version(client, konto, bericht):
+    from app.services.app_geraet_auswertung import befunde
+
+    bericht["app"]["version_name"] = "2026.11.01.2"
+    bericht["webview"] = {"version": "156.0.0.0"}
+    bericht["android"]["build_id"] = "BP4A.123456789"
+    response = client.post(URL, json=bericht)
+    assert response.status_code == 200
+    ident = response.json()["geraet_id"]
+    with SessionLocal() as db:
+        row = db.get(AppGeraet, ident)
+        row.app_version = row.webview_version = "[Telefon]"
+        row.geraet_details = {"app": {"version_name": "[Telefon]"},
+                             "webview": {"version": "[Telefon]"}, "android": {"build_id": "BP4A.[Telefon]"}}
+        db.commit()
+    # Die App meldet weiterhin dieselben Versionen; der Altbestand muss trotzdem ersetzt werden.
+    for _ in range(2):
+        response = client.post(URL, json=bericht)
+        assert response.status_code == 200
+        assert response.json()["geraet_id"] == ident
+        with SessionLocal() as db:
+            row = db.get(AppGeraet, ident)
+            assert row.app_version == bericht["app"]["version_name"]
+            assert row.webview_version == bericht["webview"]["version"]
+            assert row.geraet_details["android"]["build_id"] == bericht["android"]["build_id"]
+            assert "technik_maskiert" not in befunde(row, "2026.11.01.2")
+            assert "webview" not in befunde(row, "2026.11.01.2")
+
+
 @pytest.mark.parametrize("bearer", [True, False])
 def test_tatsaechliches_token(client, konto, bericht, bearer):
     with SessionLocal() as db:

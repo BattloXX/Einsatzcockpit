@@ -57,7 +57,7 @@ def test_alle_regeln_und_grenzen():
     errors = [SimpleNamespace(anzahl=5, last_at=now - timedelta(days=7))]
     token = SimpleNamespace(duty_active=True, revoked_at=None)
     codes = auswertung.befunde(g, "v2026.11.01", token=token, fehler=errors, jetzt=now)
-    assert set(codes) == set(auswertung.REGELN)
+    assert set(codes) == set(auswertung.REGELN) - {"technik_maskiert"}
     assert auswertung.gesundheit(codes) == "fail"
     g.sdk_int, g.sicherheitspatch, g.webview_version = 24, "2025-11-01", "100.0"
     g.geraet_details = {"locale": {"uhr_abweichung_s": 120}, "geraet": {"speicher_mb_free": 200}}
@@ -65,6 +65,41 @@ def test_alle_regeln_und_grenzen():
     g.last_report_at = now - timedelta(hours=48)
     assert auswertung.befunde(g, None, token=token, jetzt=now) == []
     assert auswertung.gesundheit([]) == "ok"
+
+
+@pytest.mark.parametrize(
+    "wert,erwartet",
+    [("[Telefon]", ["technik_maskiert"]), ("[Token]", ["technik_maskiert"]),
+     ("[E-Mail]", ["technik_maskiert"]), ("[ID]", ["technik_maskiert"]),
+     ("[URL]", ["technik_maskiert"]), ("[Sonstiges]", ["technik_maskiert"]),
+     ("90.[Telefon]", ["technik_maskiert"]), ("90.0", ["webview"]),
+     (None, ["webview"]), ("", ["webview"]), ("  ", ["webview"]),
+     ("156.0.0.0", []), ("kaputt", [])],
+)
+def test_webview_altwerte_und_echte_versionen(wert, erwartet):
+    g = geraet()
+    g.webview_version = wert
+    assert auswertung.befunde(g, None) == erwartet
+    assert auswertung.gesundheit(erwartet) == (
+        "warn" if "technik_maskiert" in erwartet else "fail" if erwartet else "ok"
+    )
+
+
+def test_maskierte_app_version_bleibt_unbekannt_und_warnt_nur_einmal():
+    g = geraet()
+    g.app_version = "[Telefon]"
+    assert auswertung.ampel(g.app_version, "2026.11.01") == "unbekannt"
+    assert auswertung.befunde(g, "2026.11.01") == ["technik_maskiert"]
+    g.webview_version = "[Telefon]"
+    g.geraet_details = {"app": {"version_name": "[Telefon]"},
+                       "webview": {"version": "[Telefon]"}, "android": {"build_id": "BP4A.[Telefon]"}}
+    assert auswertung.befunde(g, "2026.11.01") == ["technik_maskiert"]
+
+
+@pytest.mark.parametrize("gruppe,feld", [("app", "version_name"), ("webview", "version"), ("android", "build_id")])
+def test_maskierte_technikdetails_warnen(gruppe, feld):
+    g = geraet(geraet_details={gruppe: {feld: "BP4A.[Telefon]"}})
+    assert auswertung.befunde(g, None) == ["technik_maskiert"]
 
 
 def test_token_und_fehlerschwellen():
@@ -154,7 +189,7 @@ def test_filter_verteilung_paginierung(factory, monkeypatch):  # noqa: F811
 
 
 def test_check_aggregation_readonly_budget(factory, diag_engine, monkeypatch):  # noqa: F811
-    monkeypatch.setattr(app_geraete, "soll_version", lambda: "v2026.11.01")
+    monkeypatch.setattr(app_geraete, "android_release_version_cached", lambda: "v2026.11.01")
     with factory() as db:
         ids = [
             insert(
@@ -185,6 +220,32 @@ def test_check_aggregation_readonly_budget(factory, diag_engine, monkeypatch):  
         assert all(len(f.betroffene_ids["app_geraet"]) <= 1 for f in limited.findings)
         with pytest.raises(TimeoutError):
             app_geraete.check(db, Budget(seconds=-1))
+
+
+def test_maskierter_altbericht_in_diagnose_und_mcp(factory, monkeypatch):  # noqa: F811
+    from app.admin_mcp.geraete_tools import collect_geraete
+
+    monkeypatch.setattr(app_geraete, "android_release_version_cached", lambda: "2026.11.01")
+    monkeypatch.setattr(auswertung, "soll_version", lambda: "2026.11.01")
+    with factory() as db:
+        db.info["current_org_id"] = None
+        benutzer = insert(db, "user", username="altbericht")
+        ident = insert(db, "app_geraet", user_id=benutzer, install_id="altbericht",
+                       app_version="[Telefon]", webview_version="[Telefon]")
+        ergebnis = app_geraete.check(db, Budget())
+        assert len(ergebnis.findings) == 1
+        befund = ergebnis.findings[0]
+        titel, schweregrad, _, empfehlung = auswertung.REGELN["technik_maskiert"]
+        assert befund.kern == "technik_maskiert"
+        assert befund.titel == f"1 Geraete: {titel}"
+        assert befund.schweregrad == schweregrad == "warn"
+        assert befund.empfehlung == empfehlung
+        details = collect_geraete(db, "admin_geraet_details", geraet_id=ident)
+        assert details["status"] == "warn"
+        assert details["evidence"]["version"]["ampel"] == "unbekannt"
+        assert details["evidence"]["befunde"] == [
+            {"code": "technik_maskiert", "titel": titel, "schweregrad": schweregrad}
+        ]
 
 
 def test_verteilung_und_liste_behalten_tenant(factory, monkeypatch):  # noqa: F811
@@ -226,3 +287,34 @@ def test_release_tag_aus_gemeinsamem_cache(monkeypatch, assets):
     assert auswertung.soll_version() == "v2026.11.01.2"
     download.android_apk_url()
     assert len(calls) == 1
+
+
+def test_check_ohne_netz_mit_alten_fehlern(factory, diag_engine, monkeypatch):  # noqa: F811
+    import httpx
+    from sqlalchemy import event
+
+    def netz_verboten(*args, **kwargs):
+        pytest.fail("Leichter Diagnosecheck darf GitHub nicht aufrufen")
+
+    monkeypatch.setattr(httpx, "get", netz_verboten)
+    monkeypatch.setattr(download, "_cache_bis", 0)
+    with factory() as db:
+        for i in range(11):
+            ident = insert(db, "app_geraet", user_id=i + 1, install_id=str(i), sdk_int=30,
+                           webview_version="130")
+            insert(db, "app_geraet_fehler", geraet_id=ident, komponente="fcm", code="alt", anzahl=50,
+                   last_at=utcnow() - timedelta(days=8))
+    abfragen = []
+
+    def merken(conn, cursor, statement, parameters, context, executemany):
+        abfragen.append(statement)
+
+    event.listen(diag_engine, "before_cursor_execute", merken)
+    try:
+        ergebnis = execute_check(diag_engine, CHECKS["app.geraete"])
+    finally:
+        event.remove(diag_engine, "before_cursor_execute", merken)
+    assert ergebnis.vollstaendig and not ergebnis.findings
+    assert "Soll-Version unbekannt" in ergebnis.hinweis
+    assert len(abfragen) == 2
+    assert all("report_zeiten" not in sql and "einstellungen" not in sql for sql in abfragen)

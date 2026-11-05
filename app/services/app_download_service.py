@@ -71,3 +71,8 @@ def android_release_version() -> str | None:
     """Release-Tag aus demselben Abruf und Cache wie der APK-Download."""
     android_apk_url()
     return _cache_version
+
+
+def android_release_version_cached() -> str | None:
+    """Vorhandenen Release-Tag ohne Netz lesen; abgelaufener Cache ist unbekannt."""
+    return _cache_version if time.monotonic() < _cache_bis else None

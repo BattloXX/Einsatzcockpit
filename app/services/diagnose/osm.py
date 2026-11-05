@@ -51,10 +51,11 @@ def check(db, budget):
     if offene:
         ergebnis.findings.append(Finding(
             ["overpass", "endpunkte_offen"], "Overpass-Endpunkte durch Fehlerschutz gesperrt",
+            schweregrad="info" if bestand_ok else "warn",
             evidenz={"endpunkte": endpunkte},
             ursache_hypothese="Wiederholte externe Fehler haben den Endpunkt-Fehlerschutz geoeffnet.",
             empfehlung=("lokaler Bestand aktuell, Overpass nur Fallback; Endpunkte nach der Pause erneut pruefen"
-                        if bestand_ok and len(offene) == len(endpunkte)
+                        if bestand_ok
                         else "Overpass-Endpunkte nach der Pause erneut pruefen; lokalen Importstatus pruefen"),
         ))
     return ergebnis

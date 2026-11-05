@@ -67,6 +67,7 @@ def test_offene_endpunkte_bei_aktuellem_bestand(diag_engine, factory, monkeypatc
     assert snapshot(diag_engine) == vorher
     assert ergebnis.vollstaendig and len(ergebnis.findings) == 1
     befund = ergebnis.findings[0]
+    assert befund.schweregrad == "info"
     assert befund.evidenz["endpunkte"] == endpunkte
     assert "lokaler Bestand aktuell, Overpass nur Fallback" in befund.empfehlung
     assert "externe Fehler" in befund.ursache_hypothese
