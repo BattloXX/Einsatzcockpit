@@ -20,13 +20,14 @@
           <input type="text" name="location_text" class="form-input" value="{{ troop.location_text or '' }}">
         </div>
         <div class="form-group">
-          <label>Flasche / Einsatzzeit</label>
+          <label>Flasche (Anzeige)</label>
           <select name="bottle_preset" class="form-select" x-model="bottlePreset">
             <option value="">– bitte wählen –</option>
             {% for slug, label, duration in bottle_presets %}
-            <option value="{{ slug }}">{{ label }}{% if duration %} → {{ duration }} min{% endif %}</option>
+            <option value="{{ slug }}">{{ label }}</option>
             {% endfor %}
           </select>
+          <p class="form-hint">Einsatzzeit {{ asuew_settings.erwartete_einsatzzeit_min }} Min. (Einstellung der Organisation), Kontrollen nach {{ (asuew_settings.erwartete_einsatzzeit_min / 3) | round | int }} und {{ (asuew_settings.erwartete_einsatzzeit_min * 2 / 3) | round | int }} Min.</p>
         </div>
         <div class="form-group" x-show="bottlePreset === 'manuell'">
           <label>Einsatzzeit (Minuten, manuell)</label>

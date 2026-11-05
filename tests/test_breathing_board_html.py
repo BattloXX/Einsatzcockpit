@@ -93,3 +93,140 @@ def test_board_loads_network_helpers_and_connection_banner(client, breathing_rou
     assert "breathing-conn" in response.text
     assert "ECPBreathingNet.send(" in response.text
     assert "requestSubmit(); open = false" not in response.text
+
+
+@pytest.mark.parametrize(("minutes", "stufe", "label"), [
+    (15, "one_third", "1/3"), (25, "two_third", "2/3"),
+])
+def test_due_control_requires_pressure_or_no_contact(client, breathing_routes, minutes, stufe, label):
+    from datetime import UTC, datetime, timedelta
+
+    ctx = breathing_routes
+    ctx.troop.status = "im_einsatz"
+    ctx.troop.entry_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=minutes)
+    ctx.troop.planned_duration_min = 30
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert f"Kontrolle fällig ({label}): niedrigsten Druck des Trupps abfragen" in response.text
+    forms = re.findall(r'<form\b[^>]*hx-post="' + re.escape(ctx.url) + r'/kontrolle".*?</form>', response.text, re.S)
+    due_forms = [form for form in forms if f'name="stufe" value="{stufe}"' in form]
+    assert len(due_forms) == 2
+    assert 'name="art" value="funk"' in due_forms[0]
+    assert 'name="art" value="kein_kontakt"' in due_forms[1]
+    for form in due_forms:
+        assert 'name="_csrf"' in form
+        assert 'hx-swap="none"' in form
+        assert "ECPBreathingNet.describeFailure" in form
+    assert re.findall(r'name="pressure_bar" value="(\d+)"', due_forms[0]) == [str(v) for v in range(300, 0, -10)]
+    assert not re.search(r"ackWarning\([^\n]*'(one_third|two_third)'", response.text)
+    assert 'name="stufe" value="frei"' in response.text
+    assert "Kontrolle (frei)" in response.text
+
+
+@pytest.mark.parametrize(("field", "banner", "route"), [
+    ("notfall_at", "ATEMSCHUTZNOTFALL seit", "notfall/aufheben"),
+    ("funk_verloren_at", "Kein Funkkontakt seit", "funkverlust"),
+])
+def test_persistent_safety_banner(client, breathing_routes, field, banner, route):
+    from datetime import UTC, datetime
+
+    ctx = breathing_routes
+    ctx.troop.status = "im_einsatz"
+    setattr(ctx.troop, field, datetime.now(UTC).replace(tzinfo=None))
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert response.text.count(banner) == 1
+    assert f'hx-post="{ctx.url}/{route}"' in response.text
+    if field == "notfall_at":
+        assert re.search(r'class="troop-card [^"]*troop-card--notfall"', response.text)
+        assert "Atemschutznotfall wirklich melden?" in response.text
+        assert 'name="bestaetigt" value="1"' in response.text
+    else:
+        assert "Funkkontakt wieder da" in response.text
+        assert 'name="aktiv" value="0"' in response.text
+        assert 'name="aktiv" value="1"' in response.text
+
+
+def test_new_troop_dialog_uses_org_duration_and_supervision_fields(client, breathing_routes):
+    ctx = breathing_routes
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    dialog = response.text.split('id="newTroopModal"', 1)[1].split('</dialog>', 1)[0]
+    for field in ("ueberwacher_name", "angriffsweg", "funkkanal"):
+        assert f'name="{field}"' in dialog
+    from html import escape
+
+    from tests.test_breathing_routes_phase1 import _user
+
+    user = _user(ctx)
+    assert f'value="{escape(user.full_name or user.username, quote=True)}"' in dialog
+    assert "Flasche (Anzeige)" in dialog
+    assert "Einsatzzeit 30 Min. (Einstellung der Organisation), Kontrollen nach 10 und 20 Min." in dialog
+    options = dialog.split('name="bottle_preset"', 1)[1].split('</select>', 1)[0]
+    assert not re.search(r'\d+ min', options)
+
+
+def test_member_pressure_uses_configured_yellow_threshold(client, breathing_routes):
+    from tests.test_breathing_routes_phase1 import _settings
+
+    ctx = breathing_routes
+    _settings(ctx, asuew_gelb_prozent=80)
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert re.search(r'memberPressRow\(\d+, 300.0, [\d.]+, 300.0, 80\)', response.text)
+    assert "this.startPressAvg * this.gelbProzent / 100" in response.text
+
+
+@pytest.mark.parametrize("status", ["erholt", "zurueck"])
+@pytest.mark.parametrize("recovery_min", [0, 30])
+def test_recovery_countdown_for_returned_troop(client, breathing_routes, status, recovery_min):
+    from datetime import UTC, datetime
+
+    from tests.test_breathing_routes_phase1 import _settings
+
+    ctx = breathing_routes
+    ctx.troop.status = status
+    ctx.troop.back_at = datetime.now(UTC).replace(tzinfo=None)
+    ctx.db.commit()
+    _settings(ctx, asuew_erholzeit_min=recovery_min)
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert ('x-text="recoveryDisplay">Erholzeit</div>' in response.text) is (recovery_min > 0)
+
+
+def test_control_summary_shows_three_latest_active_controls(client, breathing_routes):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.breathing import BreathingKontrolle
+
+    ctx = breathing_routes
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for index, (stufe, art, pressure) in enumerate([
+        ("frei", "funk", 290), ("one_third", "funk", 190),
+        ("two_third", "kein_kontakt", None), ("frei", "funk", 150),
+    ]):
+        ctx.db.add(BreathingKontrolle(
+            troop_id=ctx.troop.id, stufe=stufe, art=art, niedrigster_druck=pressure,
+            erledigt_at=now + timedelta(seconds=index),
+        ))
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert "Kontrolle 1/3 (Funk): 190 bar," in response.text
+    assert "Kontrolle 2/3: kein Funkkontakt," in response.text
+    assert "Kontrolle (Funk): 150 bar," in response.text
+    assert "Kontrolle (Funk): 290 bar," not in response.text
