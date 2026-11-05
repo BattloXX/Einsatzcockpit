@@ -13,6 +13,7 @@ from app.models.breathing import (
     BOTTLE_PRESET_NOMINAL_BAR,
     TROOP_STATUSES,
     BreathingDeployment,
+    BreathingKontrolle,
     BreathingTroop,
     PressureLog,
     TroopMember,
@@ -113,17 +114,14 @@ class ReadinessWarning(Exception):
         super().__init__("; ".join(issues))
 
 
-def _withdraw_settings(db: Session, troop: BreathingTroop) -> tuple[float, int]:
-    """Lädt die vorläufige Rückzugsdruck-Konfiguration der primären Organisation."""
+def _asuew_settings_for_troop(db: Session, troop: BreathingTroop) -> AsuewSettings:
+    """Lädt Org-Einstellungen des Einsatzes oder die ASÜW-Defaults."""
     from app.models.incident import Incident
-    from app.models.master import FireDept
 
     incident = db.get(Incident, troop.incident_id)
-    dept = db.get(FireDept, incident.primary_org_id) if (incident and incident.primary_org_id) else None
-    return (
-        dept.withdraw_press_factor if dept else 0.5,
-        dept.withdraw_press_reserve if dept else 10,
-    )
+    if incident is not None and incident.primary_org_id is not None:
+        return get_asuew_settings(db, incident.primary_org_id)
+    return AsuewSettings(30, int(WARNEINRICHTUNG_BAR), 75, 30)
 
 
 def check_start_readiness(db: Session, troop: BreathingTroop) -> list[str]:
@@ -152,6 +150,33 @@ def check_start_readiness(db: Session, troop: BreathingTroop) -> list[str]:
                     f"{member.display_name}: Anfangsdruck {member.start_press:g} bar liegt unter "
                     f"90 % des Nominalfülldrucks ({minimum:g} bar)."
                 )
+    if troop.deployments and troop.deployments[-1].back_at is not None:
+        erholzeit_min = _asuew_settings_for_troop(db, troop).erholzeit_min
+        back_at = troop.deployments[-1].back_at
+        back_at = back_at if back_at.tzinfo else back_at.replace(tzinfo=UTC)
+        remaining = (back_at + timedelta(minutes=erholzeit_min) - _now()).total_seconds()
+        if erholzeit_min and remaining > 0:
+            issues.append(
+                f"Erholzeit nicht eingehalten: noch {math.ceil(remaining / 60)} Min. "
+                f"(empfohlen {erholzeit_min} Min. Pause)"
+            )
+
+    member_ids = {member.member_id for member in troop.active_members if member.member_id is not None}
+    if member_ids:
+        other_troops = (
+            db.query(BreathingTroop)
+            .filter(
+                BreathingTroop.incident_id == troop.incident_id,
+                BreathingTroop.id != troop.id,
+                BreathingTroop.status.in_(("im_einsatz", "rueckzug")),
+            )
+            .all()
+        )
+        for other in other_troops:
+            other_ids = {member.member_id for member in other.active_members}
+            for member in troop.active_members:
+                if member.member_id is not None and member.member_id in other_ids:
+                    issues.append(f"{member.display_name} ist bereits in Trupp {other.name} im Einsatz.")
     return issues
 
 
@@ -362,18 +387,17 @@ def start_troop(
         )
 
     # Calculate average start pressure from members
-    pressures = [m.start_press for m in troop.active_members if m.start_press]
+    pressures = [m.start_press for m in troop.active_members if m.start_press is not None]
+    settings = _asuew_settings_for_troop(db, troop)
+    troop.withdraw_press_calc = float(settings.rueckzug_untergrenze_bar)
     if pressures:
         avg = sum(pressures) / len(pressures)
         troop.start_press_avg = avg
 
-        factor, reserve = _withdraw_settings(db, troop)
-        troop.withdraw_press_calc = calc_withdraw_pressure(avg, factor, reserve)
-
         # Set individual withdraw pressures
         for m in troop.active_members:
-            if m.start_press:
-                m.withdraw_press = calc_withdraw_pressure(m.start_press, factor, reserve)
+            if m.start_press is not None:
+                m.withdraw_press = float(settings.rueckzug_untergrenze_bar)
                 m.current_press = m.start_press
 
     troop.status = "im_einsatz"
@@ -435,12 +459,15 @@ def log_pressure(
         raise ValueError("Das Truppmitglied gehört nicht zu diesem Atemschutztrupp.")
     now = _now()
     log = PressureLog(
+        troop=troop,
         troop_id=troop.id,
+        troop_member=member,
         troop_member_id=member.id,
         member_id=member.member_id,
         pressure_bar=pressure_bar,
         note=note or None,
         recorded_by_user_id=recorded_by_user_id,
+        ts=now,
     )
     db.add(log)
     member.current_press = pressure_bar
@@ -450,6 +477,113 @@ def log_pressure(
         troop.last_meldung_text = note
     db.flush()
     return log
+
+
+def record_kontrolle(
+    db: Session,
+    troop: BreathingTroop,
+    stufe: str,
+    art: str,
+    pressure_bar: float | None = None,
+    troop_member_id: int | None = None,
+    note: str | None = None,
+    user_id: int | None = None,
+) -> BreathingKontrolle:
+    """Protokolliert eine Druckabfrage oder einen erfolglosen Funkkontakt."""
+    if stufe not in ("one_third", "two_third", "frei"):
+        raise ValueError("Unbekannte Kontrollstufe.")
+    if art not in ("funk", "kein_kontakt"):
+        raise ValueError("Unbekannte Kontrollart.")
+    if troop.status not in ("im_einsatz", "rueckzug"):
+        raise ValueError("Kontrollen sind nur im Einsatz oder Rückzug erlaubt.")
+    if art == "funk":
+        if pressure_bar is None:
+            raise ValueError("Eine Funkkontrolle benötigt den niedrigsten Flaschendruck.")
+        pressure_bar = validate_pressure(pressure_bar)
+        if troop_member_id is None:
+            members = troop.active_members
+            if not members:
+                raise ValueError("Das Truppmitglied fehlt.")
+            with_pressure = [member for member in members if member.current_press is not None]
+            member = min(with_pressure, key=lambda member: member.current_press or 0) if with_pressure else members[0]
+            troop_member_id = member.id
+        label = {"one_third": "1/3", "two_third": "2/3", "frei": "frei"}[stufe]
+        log_pressure(
+            db, troop, troop_member_id, pressure_bar,
+            note=note or f"Kontrolle {label}: niedrigster Druck",
+            recorded_by_user_id=user_id,
+        )
+    now = _now()
+    due_seconds = {"one_third": troop.one_third_seconds, "two_third": troop.two_third_seconds}.get(stufe)
+    faellig_at = (
+        troop.entry_at + timedelta(seconds=due_seconds)
+        if troop.entry_at is not None and due_seconds is not None else None
+    )
+    if art == "kein_kontakt":
+        troop.funk_verloren_at = now
+    kontrolle = BreathingKontrolle(
+        troop=troop, troop_id=troop.id, deployment_id=None,
+        stufe=stufe, art=art, faellig_at=faellig_at, erledigt_at=now,
+        niedrigster_druck=pressure_bar if art == "funk" else None,
+        troop_member_id=troop_member_id, note=note, user_id=user_id,
+    )
+    db.add(kontrolle)
+    db.flush()
+    write_incident_change(
+        db, troop.incident_id, "troop.kontrolle", "breathing_troop", troop.id,
+        before=None, after={"stufe": stufe, "art": art, "pressure_bar": kontrolle.niedrigster_druck},
+        user_id=user_id,
+    )
+    return kontrolle
+
+
+def set_funk_verloren(
+    db: Session, troop: BreathingTroop, active: bool, user_id: int | None = None,
+) -> BreathingTroop:
+    """Markiert Funkverlust oder hebt ihn auch nach der Rückkehr auf."""
+    if active and troop.status not in ("im_einsatz", "rueckzug"):
+        raise ValueError("Funkverlust kann nur im Einsatz oder Rückzug gemeldet werden.")
+    before = {"active": troop.funk_verloren_at is not None}
+    troop.funk_verloren_at = (troop.funk_verloren_at or _now()) if active else None
+    db.flush()
+    write_incident_change(
+        db, troop.incident_id, "troop.funk_verloren", "breathing_troop", troop.id,
+        before=before, after={"active": active}, user_id=user_id,
+    )
+    return troop
+
+
+def declare_notfall(
+    db: Session, troop: BreathingTroop, user_id: int | None = None,
+) -> BreathingTroop:
+    """Meldet einen Atemschutznotfall ohne Änderung des Einsatzstatus."""
+    if troop.status not in ("im_einsatz", "rueckzug"):
+        raise ValueError("Ein Notfall kann nur im Einsatz oder Rückzug gemeldet werden.")
+    if troop.notfall_at is not None:
+        return troop
+    troop.notfall_at = _now()
+    troop.notfall_von_user_id = user_id
+    db.flush()
+    write_incident_change(
+        db, troop.incident_id, "troop.notfall", "breathing_troop", troop.id,
+        before=None, after={"active": True}, user_id=user_id,
+    )
+    return troop
+
+
+def clear_notfall(
+    db: Session, troop: BreathingTroop, user_id: int | None = None,
+) -> BreathingTroop:
+    """Hebt einen Notfall auch nach Abschluss des Einsatzes auf."""
+    before = {"active": troop.notfall_at is not None}
+    troop.notfall_at = None
+    troop.notfall_von_user_id = None
+    db.flush()
+    write_incident_change(
+        db, troop.incident_id, "troop.notfall_cleared", "breathing_troop", troop.id,
+        before=before, after={"active": False}, user_id=user_id,
+    )
+    return troop
 
 
 def report_objective_reached(
@@ -474,9 +608,12 @@ def report_objective_reached(
     member.objective_press = pressure_bar
     member.objective_press_at = now
     member.current_press = pressure_bar
-    member.withdraw_press = round(max(WARNEINRICHTUNG_BAR, 2 * (member.start_press - pressure_bar)), 1)
+    floor = _asuew_settings_for_troop(db, troop).rueckzug_untergrenze_bar
+    member.withdraw_press = round(max(floor, 2 * (member.start_press - pressure_bar)), 1)
     db.add(PressureLog(
+        troop=troop,
         troop_id=troop.id,
+        troop_member=member,
         troop_member_id=member.id,
         member_id=member.member_id,
         pressure_bar=pressure_bar,
@@ -545,11 +682,9 @@ def ack_warning(
 ) -> None:
     """Quittiert den aktuellen Warnzustand nach ASÜW-Leitfaden/FwDV 7."""
     now = _now()
-    if kind == "one_third":
-        troop.warn_one_third_acked_at = now
-    elif kind == "two_third":
-        troop.warn_two_third_acked_at = now
-    elif kind == "max_time":
+    if kind in ("one_third", "two_third"):
+        raise ValueError("Die Kontrolle erfolgt über Druckabfrage, nicht über Quittieren.")
+    if kind == "max_time":
         troop.warn_max_time_acked_at = now
         troop.escalated_at = None
     elif kind == "withdraw":
@@ -566,7 +701,7 @@ def ack_warning(
     )
 
 
-def get_warning_level(troop: BreathingTroop) -> PressureWarning:
+def get_warning_level(troop: BreathingTroop, gelb_prozent: int = 75) -> PressureWarning:
     """Prüft jedes Mitglied einzeln; der ungünstigste Status bestimmt den Trupp."""
     worst = PressureWarning("ok", None)
     rank = {"ok": 0, "yellow": 1, "red": 2}
@@ -576,7 +711,7 @@ def get_warning_level(troop: BreathingTroop) -> PressureWarning:
             continue
         if member.withdraw_press is not None and current <= member.withdraw_press:
             candidate = "red"
-        elif current <= member.start_press * 0.75:
+        elif current <= member.start_press * gelb_prozent / 100:
             candidate = "yellow"
         else:
             candidate = "ok"
@@ -590,7 +725,7 @@ def get_time_warnings(troop: BreathingTroop) -> list[str]:
 
     Trigger-Regeln (Leitfaden ASÜW / FwDV 7):
       one_third_due / two_third_due: jeweilige Schwelle verstrichen UND keine
-                     Meldung nach genau dieser Schwelle eingegangen.
+                     Funkkontrolle oder Druckmeldung nach dieser Schwelle eingegangen.
       max_exceeded:  Maximale Einsatzzeit überschritten UND nicht quittiert.
     """
     if troop.entry_at is None or troop.status not in ("im_einsatz", "rueckzug"):
@@ -605,16 +740,22 @@ def get_time_warnings(troop: BreathingTroop) -> list[str]:
         if troop.warn_max_time_acked_at is None:
             warnings.append("max_exceeded")
 
-    last = troop.last_meldung_at
-    last_utc = (last if last.tzinfo else last.replace(tzinfo=UTC)) if last else None
     stages = (
-        (troop.two_third_seconds, "two_third_due", troop.warn_two_third_acked_at),
-        (troop.one_third_seconds, "one_third_due", troop.warn_one_third_acked_at),
+        (troop.two_third_seconds, "two_third_due", "two_third"),
+        (troop.one_third_seconds, "one_third_due", "one_third"),
     )
-    for due_seconds, warning, acked_at in stages:
+    for due_seconds, warning, stufe in stages:
         if due_seconds and elapsed >= due_seconds:
             due_at = entry + timedelta(seconds=due_seconds)
-            if (last_utc is None or last_utc < due_at) and acked_at is None:
+            controlled = any(
+                kontrolle.art == "funk" and kontrolle.stufe == stufe
+                for kontrolle in troop.active_kontrollen
+            )
+            reported = any(
+                (log.ts if log.ts.tzinfo else log.ts.replace(tzinfo=UTC)) >= due_at
+                for log in troop.active_pressure_logs
+            )
+            if not controlled and not reported:
                 warnings.append(warning)
 
     return warnings
@@ -632,6 +773,10 @@ def get_time_warning(troop: BreathingTroop) -> str:
 def check_troop_warnings(troop: BreathingTroop) -> list[str]:
     """Gibt alle aktuell aktiven Warnstufen zurück (für Watchdog-Task)."""
     warnings = []
+    if troop.notfall_at is not None:
+        warnings.append("notfall")
+    elif troop.funk_verloren_at is not None:
+        warnings.append("funk_verloren")
     pressure_warn = get_warning_level(troop)
     ack_press = troop.warn_withdraw_acked_press
     trigger_press = pressure_warn.member.current_press if pressure_warn.member else None
