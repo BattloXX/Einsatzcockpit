@@ -23,8 +23,10 @@ def orphans(db, budget, result, names):
         for fk in sorted(source.foreign_keys, key=lambda f: f.parent.name):
             target = fk.column.table.alias()
             match = target.c[fk.column.name] == fk.parent
-            # Bei expliziten Org-Tabellen sind auch org-fremde Ziele ungueltig.
-            if "org_id" in source.c and "org_id" in target.c:
+            # Benutzerreferenzen halten den tatsaechlichen Akteur fest, auch bei
+            # org-uebergreifenden Systemadmins oder spaeterem Org-/Rollenwechsel.
+            # Hier zaehlt nur die Existenz; andere Org-Ziele bleiben org-streng.
+            if fk.column.table.name != "user" and "org_id" in source.c and "org_id" in target.c:
                 match = and_(match, target.c.org_id == source.c.org_id)
             missing = ~select(target.c[fk.column.name]).where(match).exists()
             collect_ids(db, budget, result, name, and_(fk.parent.isnot(None), missing),
