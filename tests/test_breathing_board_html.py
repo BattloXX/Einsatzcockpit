@@ -411,3 +411,64 @@ def test_warning_event_reloads_board_for_all_kinds(client, breathing_routes):
     assert "_playWarning(kind, troopId);" in handler
     assert "if (document.getElementById('troopsGrid')) doBreathingReload();" in handler
     assert "if (!src) return;" in response.text
+
+
+@pytest.mark.parametrize("status", ["bereit", "im_einsatz", "rueckzug", "zurueck", "erholt"])
+@pytest.mark.parametrize("mode", ["off", "missing", "valid"])
+def test_app_readonly_board(client, breathing_routes, status, mode):
+    from datetime import UTC, datetime, timedelta
+
+    from tests.test_breathing_routes_phase1 import _settings
+    from tests.test_breathing_routes_phase3 import _session
+
+    ctx = breathing_routes
+    _settings(ctx, asuew_app_pflicht=mode != "off")
+    ctx.troop.status = status
+    ctx.troop.entry_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+    ctx.db.commit()
+    if mode == "valid":
+        _session(ctx, client)
+    page = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+    assert page.status_code == 200
+    readonly = mode == "missing"
+    assert page.context["asuew_readonly"] is readonly
+    assert ("Nur-Lese-Ansicht:" in page.text) is readonly
+    assert f"const ASUEW_READONLY = {'true' if readonly else 'false'};" in page.text
+    if readonly:
+        assert 'href="/app"' in page.text
+        posts = re.findall(r'hx-post="([^"]+)"', page.text)
+        assert all(url.endswith(("/notfall", "/funkverlust")) for url in posts)
+        assert len(posts) == (2 if status in ("im_einsatz", "rueckzug") else 0)
+        for text in ["ackWarning(", "Trupp anlegen", 'id="newTroopModal"',
+                     "requestSubmit", 'id="redeployTroopModal-']:
+            assert text not in page.text
+        assert "if (ASUEW_READONLY) return;" in page.text
+    else:
+        assert "Trupp anlegen" in page.text
+        assert 'id="newTroopModal"' in page.text
+        assert 'hx-post=' in page.text
+
+
+@pytest.mark.parametrize("pflicht,age,status,expected", [
+    (True, None, "im_einsatz", True), (True, 61, "rueckzug", True),
+    (True, 0, "im_einsatz", False), (False, None, "im_einsatz", False),
+    (True, None, "bereit", False),
+])
+def test_board_heartbeat_hint(client, breathing_routes, pflicht, age, status, expected):
+    from datetime import UTC, datetime, timedelta
+
+    from tests.test_breathing_routes_phase1 import _settings
+    from tests.test_breathing_routes_phase3 import _session
+
+    ctx = breathing_routes
+    _settings(ctx, asuew_app_pflicht=pflicht)
+    ctx.troop.status = status
+    ctx.db.commit()
+    if age is not None:
+        _session(ctx, client, letzter_heartbeat_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=age))
+    page = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+    assert page.status_code == 200
+    assert page.context["kein_heartbeat"] is expected
+    assert ("Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden)." in page.text) is expected
+    if expected:
+        assert "Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen." in page.text

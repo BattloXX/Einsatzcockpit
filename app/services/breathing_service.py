@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import NamedTuple
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_incident_change
@@ -14,12 +15,14 @@ from app.models.breathing import (
     BOTTLE_PRESET_NOMINAL_BAR,
     TROOP_STATUSES,
     BreathingDeployment,
+    BreathingGeraetSitzung,
     BreathingKontrolle,
     BreathingTroop,
     BreathingWarnung,
     PressureLog,
     TroopMember,
 )
+from app.models.incident import Incident
 
 WARNEINRICHTUNG_BAR = 60.0
 MAX_PRESSURE_BAR = 330
@@ -30,6 +33,7 @@ ALLOWED_TROOP_TRANSITIONS = {
 }
 logger = logging.getLogger("einsatzleiter.breathing")
 _watchdog_last_ok: datetime | None = None
+_watchdog_last_sitzung_cleanup: datetime | None = None
 
 
 class InvalidTroopTransition(ValueError):
@@ -853,16 +857,55 @@ def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTr
     return hinweise
 
 
+def asuew_heartbeat_fehlt(db: Session, incident: Incident, now: datetime) -> bool:
+    """App-Pflicht mit eingesetztem Trupp, aber ohne frischen Geraete-Heartbeat."""
+    from app.models.master import OrgSettings
+    from app.services.breathing_sitzung import hat_frischen_heartbeat
+
+    if not any(t.status in ("im_einsatz", "rueckzug") for t in incident.breathing_troops):
+        return False
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == incident.primary_org_id).first()
+    return bool(org_settings and org_settings.asuew_app_pflicht
+                and not hat_frischen_heartbeat(db, incident.id, now))
+
+
+def _cleanup_breathing_sitzungen(db: Session, now: datetime) -> bool:
+    """Abgelaufene und alte beendete Sitzungen in begrenzten Chargen aufraeumen."""
+    from app.services.breathing_sitzung import SITZUNG_MAX_STUNDEN
+
+    changed = False
+    for sitzung in db.query(BreathingGeraetSitzung).join(
+        Incident, Incident.id == BreathingGeraetSitzung.incident_id,
+    ).filter(
+        BreathingGeraetSitzung.beendet_at.is_(None),
+        or_(BreathingGeraetSitzung.gestartet_at < now - timedelta(hours=SITZUNG_MAX_STUNDEN),
+            Incident.status != "active"),
+    ).order_by(BreathingGeraetSitzung.id).limit(200).all():
+        sitzung.beendet_at, sitzung.ende_grund = now, "abgelaufen"
+        changed = True
+    for sitzung in db.query(BreathingGeraetSitzung).filter(
+        BreathingGeraetSitzung.beendet_at < now - timedelta(days=30),
+    ).order_by(BreathingGeraetSitzung.id).limit(200).all():
+        db.delete(sitzung)
+        changed = True
+    return changed
+
+
 def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
     """Aktive Warnungen persistieren und Events nur fuer neue Warnungen liefern."""
-    from app.models.incident import Incident
+    global _watchdog_last_sitzung_cleanup
+
     from app.services.breathing_notify import schliesse_warnungen_fuer_trupp, sync_warnungen
 
     events: list[tuple[int, int, str]] = []
     changed = False
     enabled_by_org: dict[int | None, bool] = {}
     now = _now().replace(tzinfo=None)
+    cleanup_due = (_watchdog_last_sitzung_cleanup is None
+                   or now - _watchdog_last_sitzung_cleanup >= timedelta(minutes=10))
     try:
+        if cleanup_due:
+            changed = _cleanup_breathing_sitzungen(db, now)
         active_incidents = db.query(Incident).filter(Incident.status == "active").all()
         for incident in active_incidents:
             org_id = incident.primary_org_id
@@ -872,6 +915,11 @@ def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
                 continue
             db.refresh(incident, ["breathing_troops"])
             hinweise = incident_hinweise(incident.breathing_troops)
+            if asuew_heartbeat_fehlt(db, incident, now):
+                hinweise["kein_heartbeat"] = min(
+                    (t for t in incident.breathing_troops if t.status in ("im_einsatz", "rueckzug")),
+                    key=lambda t: t.id,
+                )
             for troop in incident.breathing_troops:
                 offene = db.query(BreathingWarnung).filter(
                     BreathingWarnung.troop_id == troop.id, BreathingWarnung.erledigt_at.is_(None),
@@ -891,6 +939,8 @@ def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
                 events.extend((incident.id, troop.id, w.kind) for w in neue)
         if changed:
             db.commit()
+        if cleanup_due:
+            _watchdog_last_sitzung_cleanup = now
     except Exception:
         db.rollback()
         raise

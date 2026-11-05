@@ -1,5 +1,7 @@
 """Atemschutzüberwachung UI."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, selectinload
@@ -12,12 +14,13 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingTroop, BreathingWarnung
 from app.models.incident import Incident
-from app.models.master import Member
+from app.models.master import Member, OrgSettings
 from app.services.breathing_service import (
     AsuewSettings,
     InvalidTroopTransition,
     ReadinessWarning,
     ack_warning,
+    asuew_heartbeat_fehlt,
     check_troop_warnings,
     clear_notfall,
     create_troop,
@@ -36,6 +39,7 @@ from app.services.breathing_service import (
     update_meldung,
     update_troop_status,
 )
+from app.services.breathing_sitzung import validiere_sitzung
 from app.services.broadcast import manager
 
 router = APIRouter()
@@ -83,6 +87,32 @@ def require_breathing_enabled(request: Request) -> None:
         raise HTTPException(status_code=404, detail="Nicht gefunden")
 
 
+def _asuew_app_pflicht(db: Session, incident_id: int) -> bool:
+    incident = db.get(Incident, incident_id)
+    org = db.query(OrgSettings).filter(
+        OrgSettings.org_id == incident.primary_org_id,
+    ).first() if incident else None
+    return bool(org and org.asuew_app_pflicht)
+
+
+def _asuew_session_ok(request: Request, db: Session, incident_id: int) -> bool:
+    user = getattr(request.state, "user", None)
+    key = request.headers.get("X-ECP-ASUEW") or request.cookies.get("ec_asuew", "")
+    return bool(user and validiere_sitzung(db, key, incident_id, user.id))
+
+
+def require_asuew_session(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+) -> None:
+    """App-Sitzung fuer Eingaben; Notfall und Funkverlust-Melden bleiben frei.
+
+    Ein Notruf darf fuer berechtigte Rollen nie an einer fehlenden Sitzung
+    scheitern. Funkkontakt-Wiederherstellung und Notfall-Aufheben sind Eingaben.
+    """
+    if _asuew_app_pflicht(db, incident_id) and not _asuew_session_ok(request, db, incident_id):
+        raise HTTPException(403, "Atemschutzüberwachung nur in der Einsatzcockpit-App.")
+
+
 @router.get("/einsatz/{incident_id}/atemschutz", response_class=HTMLResponse)
 def breathing_board(
     incident_id: int,
@@ -101,6 +131,10 @@ def breathing_board(
     members = [m for m in all_members if m.is_agt]
     vehicles = [v for v in incident.vehicles if not v.removed_at]
 
+    app_pflicht = _asuew_app_pflicht(db, incident_id)
+    session_ok = _asuew_session_ok(request, db, incident_id)
+    readonly = app_pflicht and not session_ok
+    can_alarm = has_role(user, "breathing_supervisor", "incident_leader", "admin", "recorder")
     asuew_settings = _incident_asuew_settings(db, incident_id)
     troops_with_warnings = [
         (t, *get_warning_level(t, asuew_settings.gelb_prozent), get_time_warning(t), check_troop_warnings(t))
@@ -123,12 +157,16 @@ def breathing_board(
         ).order_by(BreathingWarnung.ausgeloest_at, BreathingWarnung.id).all():
             warnungen_by_troop.setdefault(warnung.troop_id, []).append(warnung)
     return templates.TemplateResponse(request, "breathing/board.html", {
+        "asuew_app_pflicht": app_pflicht, "asuew_session_ok": session_ok,
+        "asuew_readonly": readonly, "can_alarm": can_alarm,
+        "can_edit": can_alarm and not readonly,
         "user": user, "incident": incident,
         "troops_with_warnings": troops_with_warnings, "members": members,
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
         "troop_status_labels": TROOP_STATUS_LABELS,
         "asuew_settings": asuew_settings, "current_user_label": _current_user_label(request),
         "hinweise": incident_hinweise(incident.breathing_troops),
+        "kein_heartbeat": asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None)),
         "trupp_uebersicht": trupp_uebersicht, "warnungen_by_troop": warnungen_by_troop,
     })
 
@@ -150,6 +188,7 @@ def create_breathing_troop(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     duration = _incident_asuew_settings(db, incident_id).erwartete_einsatzzeit_min
     if bottle_preset == "manuell" and planned_duration_min is not None:
@@ -214,6 +253,7 @@ def redeploy_troop_view(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     """Archiviert den letzten Zyklus und legt eine neue Truppbesetzung an."""
     troop = db.get(BreathingTroop, troop_id)
@@ -256,6 +296,7 @@ def start_troop_view(
     db: Session = Depends(get_db),
     user=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -294,6 +335,7 @@ def back_pressure_view(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     """Erfasst den Enddruck eines Mitglieds nach Rückkehr des Trupps."""
     troop = db.get(BreathingTroop, troop_id)
@@ -321,6 +363,7 @@ def update_status(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -350,6 +393,7 @@ def log_pressure_view(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -387,6 +431,7 @@ def objective_reached_view(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     """Erfasst den Druck am Einsatzziel und finalisiert den Rückzugsdruck."""
     troop = db.get(BreathingTroop, troop_id)
@@ -439,6 +484,7 @@ def troop_meldung(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -461,6 +507,7 @@ def troop_ack(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     if kind not in ("one_third", "two_third", "max_time", "withdraw"):
         return Response(status_code=400)
@@ -489,6 +536,7 @@ def troop_kontrolle_view(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -516,6 +564,9 @@ def troop_funk_view(
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
 ):
+    # Nur das Melden ist aus Sicherheitsgruenden ohne App-Sitzung erlaubt.
+    if aktiv != "1":
+        require_asuew_session(incident_id, request, db)
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
@@ -569,6 +620,7 @@ def troop_notfall_cleared_view(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -594,6 +646,7 @@ def troop_details_view(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -638,6 +691,7 @@ def troop_standort(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -658,6 +712,7 @@ def troop_auftrag(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
+    _session: None = Depends(require_asuew_session),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:

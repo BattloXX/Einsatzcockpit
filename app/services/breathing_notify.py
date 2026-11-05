@@ -51,6 +51,8 @@ ESKALATIONSPLAN: dict[str, list[Stufe]] = {
                 (0, 0, "leitung", ("push", "sms"), True)],
     "kein_sicherheitstrupp": [(0, 0, "leitung", ("push",), False)],
     "assp": [(0, 0, "leitung", ("push",), False)],
+    "kein_heartbeat": [(0, 0, "leitung", ("push",), True),
+                       (1, 180, "leitung", ("sms",), False)],
 }
 TEXTE = {
     "one_third_due": ("Atemschutz: Kontrolle fällig (1/3)", "Kontrolle fällig (1/3)"),
@@ -61,6 +63,8 @@ TEXTE = {
     "notfall": ("ATEMSCHUTZNOTFALL", "Atemschutznotfall"),
     "kein_sicherheitstrupp": ("Atemschutz: Kein Sicherheitstrupp bereit", "Kein Sicherheitstrupp bereit"),
     "assp": ("Atemschutz: ASSP alarmieren", "ASSP alarmieren"),
+    "kein_heartbeat": ("Atemschutz: Kein Überwachungsgerät in der App aktiv",
+                       "Kein Überwachungsgerät aktiv (Heartbeat fehlt)"),
 }
 PushSender = Callable[[Session, int, str, str, str, bool, dict[str, str]], bool]
 SmsSender = Callable[[int, str, str, str], Awaitable[bool]]

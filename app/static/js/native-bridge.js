@@ -169,6 +169,7 @@
   // beim ersten Versuch noch nicht erteilt war (z.B. verweigert, dann nachtraeglich
   // in den Android-Einstellungen erlaubt), gab es bisher KEINEN Retry und das Geraet
   // blieb dauerhaft "Inaktiv", bis die App komplett neu gestartet wurde.
+  let _fcmToken = null;
   let _fcmRegistered = false;
   let _fcmRegisterPromise = null;
 
@@ -206,6 +207,7 @@
                 return;
               }
               if (res.ok) {
+                _fcmToken = reg.value;
                 _fcmRegistered = true;
                 resolve({ ok: true });
               } else {
@@ -765,6 +767,17 @@
     downloadFile,
     openFile,
     registerPush,
+    async getAppVersion() {
+      try {
+        const info = await window.Capacitor.Plugins.App.getInfo();
+        return info.version || null;
+      } catch (_) { return null; }
+    },
+    async getFcmToken() {
+      const result = await _registerFcmToken();
+      if (!result.ok) throw new Error(result.error);
+      return _fcmToken;
+    },
     setBatterySaver(on) { _setBatterySaver(on); },
     get batterySaverActive() { return _batterySaver; },
     get isTracking() { return _isTracking; },

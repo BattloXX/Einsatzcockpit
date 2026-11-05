@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     ALARM_MAP_TTL_DAYS: int = 365
     # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
     ALARM_LINK_TTL_DAYS: int = 30
+    ASUEW_MIN_APP_VERSION: str = ""
     APP_VERSION: str = "2026.11.02"
     GIT_SHA: str = ""
     BUILD_TIME: str = ""

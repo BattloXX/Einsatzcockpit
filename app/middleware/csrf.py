@@ -20,6 +20,7 @@ die native App aber nicht ohne App-seitige Änderung nachrüstbar (separates Rep
 daher hier ein leichtgewichtiger Origin-Check statt Token-Pflicht: Browser senden
 bei Cross-Origin-Requests einen Origin-Header, der bei Fremd-Origin abgelehnt wird;
 native HTTP-Clients senden i. d. R. keinen Origin-Header und bleiben unberührt.
+Die App-Sitzungs-API /api/asuew/* verwendet denselben Origin-Check.
 """
 import hmac
 import logging
@@ -40,7 +41,7 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 # automatisiert ohne Browser-Kontext und damit ohne CSRF-Cookie/-Token. Der
 # signierte Token im Pfad selbst authentifiziert die Aktion.
 EXEMPT_PREFIXES = (
-    "/ws/", "/api/v1/", "/api/lagekarte/", "/api/mcp/uploads/", "/static/", "/push/",
+    "/ws/", "/api/v1/", "/api/asuew/", "/api/lagekarte/", "/api/mcp/uploads/", "/static/", "/push/",
     "/mailing/webhook/resend/", "/mail/webhook/resend-inbound/", "/mailing/u/",
 )
 # MCP-OAuth-Endpunkte (Bearer/PKCE, kein Browser-Cookie): nur exakte Pfade, kein Praefix.
@@ -48,9 +49,9 @@ EXEMPT_PREFIXES = (
 _EXEMPT_EXACT = frozenset({
     "/csp-report", "/mcp", "/mcp/admin", "/mcp/admin/token", "/mcp/admin/register", "/mcp/admin/revoke",
     "/token", "/register", "/revoke", "/mail/webhook/resend-inbound"})
-# Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
+# Cookie-authentifizierte Geräte- und ASUEW-API-Endpunkte (SEC-8) — kein
 # Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
-_ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)
+_ORIGIN_CHECK_PREFIXES = ("/api/v1/device/", "/api/asuew/",)
 
 
 def _allowed_origin_host() -> str | None:

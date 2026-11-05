@@ -1,3 +1,4 @@
+{% if can_edit is not defined or can_edit %}
 <dialog class="modal modal--wide" id="redeployTroopModal-{{ troop.id }}">
   <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/erneut-einsetzen"
         hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML"
@@ -79,3 +80,4 @@
     </div>
   </form>
 </dialog>
+{% endif %}
