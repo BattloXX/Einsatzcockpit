@@ -2,6 +2,7 @@
 import logging
 import math
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import NamedTuple
@@ -831,6 +832,27 @@ def check_troop_warnings(troop: BreathingTroop) -> list[str]:
     return warnings
 
 
+def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTroop]:
+    """Einsatzbezogene Hinweise am eingesetzten Trupp mit der niedrigsten ID verankern.
+
+    Erwartet die Trupps eines Einsatzes. Bei einem Ankerwechsel wird die alte
+    Warnung geschlossen und am neuen Anker eine neue Warnung angelegt.
+    """
+    troops = list(troops)
+    eingesetzt = [troop for troop in troops if troop.status in ("im_einsatz", "rueckzug")]
+    if not eingesetzt:
+        return {}
+    anker = min(eingesetzt, key=lambda troop: troop.id)
+    hinweise = {}
+    if len(eingesetzt) >= 3:
+        hinweise["assp"] = anker
+    if any(not troop.is_sicherheitstrupp for troop in eingesetzt) and not any(
+        troop.is_sicherheitstrupp and troop.status == "bereit" for troop in troops
+    ):
+        hinweise["kein_sicherheitstrupp"] = anker
+    return hinweise
+
+
 def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
     """Aktive Warnungen persistieren und Events nur fuer neue Warnungen liefern."""
     from app.models.incident import Incident
@@ -849,6 +871,7 @@ def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
             if not enabled_by_org[org_id]:
                 continue
             db.refresh(incident, ["breathing_troops"])
+            hinweise = incident_hinweise(incident.breathing_troops)
             for troop in incident.breathing_troops:
                 offene = db.query(BreathingWarnung).filter(
                     BreathingWarnung.troop_id == troop.id, BreathingWarnung.erledigt_at.is_(None),
@@ -860,6 +883,7 @@ def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
                         changed = True
                     continue
                 aktive = set(check_troop_warnings(troop))
+                aktive |= {kind for kind, anker in hinweise.items() if anker.id == troop.id}
                 bisher_offen = offene.all()
                 neue = sync_warnungen(db, incident, troop, aktive, now)
                 if neue or any(w.erledigt_at is not None for w in bisher_offen):

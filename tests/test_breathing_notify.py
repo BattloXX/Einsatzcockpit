@@ -418,6 +418,10 @@ def watchdog(ctx, monkeypatch):
     monkeypatch.setattr(svc, "breathing_effective_enabled",
                         lambda org_id, db: org_id == ctx.org.id and enabled(org_id, db))
     monkeypatch.setattr(svc, "_now", lambda: ctx.now.replace(tzinfo=UTC))
+    # Bereiter Sicherheitstrupp: sonst entsteht zusaetzlich der Einsatzhinweis kein_sicherheitstrupp.
+    ctx.db.add(BreathingTroop(incident_id=ctx.incident.id, name="Sicherheitstrupp", status="bereit",
+                              is_sicherheitstrupp=True))
+    ctx.db.commit()
     return svc
 
 
