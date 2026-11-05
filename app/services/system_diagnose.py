@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 from alembic.migration import MigrationContext
@@ -22,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.worker_runtime import WorkerRuntime
 from app.services import gateway_presence as presence
-from app.services import ws_bus
+from app.services import update_service, ws_bus
 from app.services.background_runtime import EXPIRED_WORKER_RETENTION
 
 _PROCESS_STARTED_AT = datetime.now(UTC)
@@ -135,16 +136,32 @@ def db_status(db: Session) -> dict:
     return {"status": state, "evidence": evidence, "checked_at": now}
 
 
+@lru_cache(maxsize=1)
+def _git_commit_time() -> str | None:
+    """Commit-Zeit pro Prozess einmal lesen, auch bei gepackten Git-Objekten."""
+    from app.admin_mcp.zeit import iso_utc
+
+    # HEAD/Refs allein enthalten keine Zeit; Git liest auch Packfiles und Worktrees.
+    code, output, _ = update_service._run_git(["log", "-1", "--format=%cI", "HEAD"], timeout=2)
+    return iso_utc(output) if code == 0 else None
+
+
 def version_info() -> dict:
     """Build-Metadaten aus den Laufzeiteinstellungen."""
     from app.admin_mcp.zeit import iso_utc
 
     build = iso_utc(settings.BUILD_TIME) if settings.BUILD_TIME.strip().lower() not in ("", "unknown") else None
     source = "BUILD_TIME"
+    docker = update_service.is_docker()
+    if build is None and not docker and update_service.is_git_checkout():
+        build = _git_commit_time()
+        if build is not None:
+            source = "Git-Commit-Zeit (HEAD)"
+    missing = build is None
     if build is None:
         try:
             fallback = datetime.fromtimestamp(Path(__file__).stat().st_mtime, UTC)
-            source = "Image-Datei-mtime (kein Buildnachweis)"
+            source = "Image-Datei-mtime (kein Buildnachweis)" if docker else "Datei-mtime (kein Buildnachweis)"
         except OSError:
             # Linux-Prozessstart, kein frei erfundener Buildzeitpunkt.
             try:
@@ -157,14 +174,19 @@ def version_info() -> dict:
                 fallback = _PROCESS_STARTED_AT
                 source = "Modulinitialisierung (kein Buildnachweis)"
         build = iso_utc(fallback)
-    missing = source != "BUILD_TIME"
+    recommendation = "Keine Aktion erforderlich."
+    if missing:
+        recommendation = (
+            "BUILD_TIME fehlt: CI-Image aus docker-build.yml mit compose pull beziehen "
+            "oder beim lokalen Build --build-arg BUILD_TIME=<UTC-ISO-Zeitpunkt> setzen."
+            if docker else
+            "BUILD_TIME als UTC-ISO-Zeitpunkt setzen oder einen Git-Checkout mit lesbarer HEAD-Commit-Zeit verwenden."
+        )
     return {"status": "warn" if missing or not settings.GIT_SHA or settings.GIT_SHA == "unknown" else "ok",
             "checked_at": presence.utc(), "evidence": {
                 "APP_VERSION": settings.APP_VERSION, "GIT_SHA": settings.GIT_SHA, "BUILD_TIME": build,
                 "build_time_quelle": source,
-                "empfehlung": ("BUILD_TIME fehlt: CI-Image aus docker-build.yml mit compose pull beziehen "
-                               "oder beim lokalen Build --build-arg BUILD_TIME=<UTC-ISO-Zeitpunkt> setzen.")
-                if missing else "Keine Aktion erforderlich.",
+                "empfehlung": recommendation,
             }}
 
 
