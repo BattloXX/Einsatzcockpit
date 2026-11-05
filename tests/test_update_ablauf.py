@@ -439,3 +439,37 @@ def test_migration_timeout_zeigt_stderr_ende(monkeypatch):
     assert not ok
     assert "Zeitlimit" in message and message.endswith("ENDE")
     assert "Anfang" not in message
+
+
+def test_python_executable_faellt_auf_laufenden_interpreter_zurueck(tmp_path, monkeypatch):
+    """Ohne APP_ROOT/.venv kein nacktes 'python' (fehlt auf Prod, Vorfall 2026-11-05)."""
+    import sys
+
+    from app.services import update_service as us
+
+    monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+    assert us.python_executable() == sys.executable
+
+    venv_python = tmp_path / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("")
+    assert us.python_executable() == str(venv_python)
+
+
+def test_pip_install_nutzt_python_executable(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    from app.services import update_service as us
+
+    monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+    aufrufe = []
+
+    def fake_run(cmd, **kwargs):
+        aufrufe.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(us.subprocess, "run", fake_run)
+    assert us._run_pip_install() == (True, "OK")
+    assert us._run_migrations() == (True, "OK")
+    assert all(cmd[0] == sys.executable for cmd in aufrufe)

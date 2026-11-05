@@ -10,6 +10,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import zipfile
 from collections.abc import Callable
@@ -59,6 +60,22 @@ def _backup_gate(backup: dict) -> dict | None:
     return None
 
 
+def python_executable() -> str:
+    """Interpreter für pip/alembic/Update-Job.
+
+    Bevorzugt ``APP_ROOT/.venv/bin/python``; sonst den laufenden Interpreter
+    (``sys.executable`` - im Betrieb das App-venv). Ein nacktes ``python``
+    existiert auf Debian/Ubuntu-Servern nicht (Update-Vorfall 2026-11-05:
+    "[Errno 2] No such file or directory: 'python'").
+    """
+    venv_python = APP_ROOT / ".venv" / "bin" / "python"
+    if venv_python.exists():
+        return str(venv_python)
+    if sys.executable:
+        return sys.executable
+    return shutil.which("python3") or shutil.which("python") or "python3"
+
+
 def _dump_hint(backup: dict) -> str:
     return "DB-Restore aus dem Pre-Update-Dump: " + (
         ", ".join(backup.get("files", [])) or "kein Dump verfügbar (Backup-Konfiguration prüfen)"
@@ -66,10 +83,9 @@ def _dump_hint(backup: dict) -> str:
 
 
 def _alembic_state(command: str) -> str | None:
-    python = APP_ROOT / ".venv" / "bin" / "python"
     try:
         result = subprocess.run(
-            [str(python) if python.exists() else "python", "-m", "alembic", command],
+            [python_executable(), "-m", "alembic", command],
             cwd=str(APP_ROOT), capture_output=True, text=True, timeout=60,
         )
         if result.returncode == 0:
@@ -329,13 +345,11 @@ def _run_pip_install() -> tuple[bool, str]:
     Ausweich-Installation trotz des Flags durchrutscht.
     Gibt "OK" oder eine gekürzte Fehlermeldung zurück.
     """
-    python = APP_ROOT / ".venv" / "bin" / "python"
-    if not python.exists():
-        python = Path("python")  # Fallback: System-Python (Dev)
+    python = python_executable()
     try:
         env = {**os.environ, "PYTHONNOUSERSITE": "1"}
         result = subprocess.run(
-            [str(python), "-m", "pip", "install", "-e", ".", "--no-input", "--quiet"],
+            [python, "-m", "pip", "install", "-e", ".", "--no-input", "--quiet"],
             cwd=str(APP_ROOT),
             capture_output=True,
             text=True,
@@ -360,12 +374,10 @@ def _run_migrations() -> tuple[bool, str]:
     """Führt alembic upgrade head aus. Gibt Ausgabe oder Fehlermeldung zurück."""
     from app.config import settings
 
-    python = APP_ROOT / ".venv" / "bin" / "python"
-    if not python.exists():
-        python = Path("python")  # Fallback: System-Python
+    python = python_executable()
     try:
         result = subprocess.run(
-            [str(python), "-m", "alembic", "upgrade", "head"],
+            [python, "-m", "alembic", "upgrade", "head"],
             cwd=str(APP_ROOT),
             capture_output=True,
             text=True,
