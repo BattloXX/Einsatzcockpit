@@ -211,14 +211,75 @@ def test_service_summary_separates_unconfigured(diagnose_db, state, expected):
 
 @pytest.mark.parametrize("build", ["", "unknown", "invalid"])
 def test_missing_build_time_warns_with_labelled_fallback(monkeypatch, build):
+    monkeypatch.setattr(diagnose.update_service, "is_docker", lambda: True)
+    def unexpected_git_read():
+        pytest.fail("Docker darf keine Git-Commit-Zeit verwenden")
+    monkeypatch.setattr(diagnose, "_git_commit_time", unexpected_git_read)
     monkeypatch.setattr(settings, "BUILD_TIME", build)
     monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
     result = diagnose.version_info()
     assert result["status"] == "warn"
     evidence = result["evidence"]
-    assert "mtime" in evidence["build_time_quelle"]
+    assert evidence["build_time_quelle"] == "Image-Datei-mtime (kein Buildnachweis)"
     assert datetime.fromisoformat(evidence["BUILD_TIME"]).tzinfo is not None
     assert "compose pull" in evidence["empfehlung"] and "--build-arg BUILD_TIME" in evidence["empfehlung"]
+
+
+@pytest.fixture
+def git_time_cache():
+    diagnose._git_commit_time.cache_clear()
+    yield
+    diagnose._git_commit_time.cache_clear()
+
+
+@pytest.mark.parametrize("build", ["", "unknown"])
+def test_git_commit_time_is_build_evidence_and_cached(monkeypatch, git_time_cache, build):
+    calls = []
+    def git_log(args, timeout):
+        calls.append((args, timeout))
+        return 0, "2026-10-27T13:30:00+01:00", ""
+    monkeypatch.setattr(diagnose.update_service, "is_docker", lambda: False)
+    monkeypatch.setattr(diagnose.update_service, "is_git_checkout", lambda: True)
+    monkeypatch.setattr(diagnose.update_service, "_run_git", git_log)
+    monkeypatch.setattr(settings, "BUILD_TIME", build)
+    monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
+    for _ in range(2):
+        result = diagnose.version_info()
+        assert result["status"] == "ok"
+        assert result["evidence"]["BUILD_TIME"] == "2026-10-27T12:30:00Z"
+        assert result["evidence"]["build_time_quelle"] == "Git-Commit-Zeit (HEAD)"
+        assert result["evidence"]["empfehlung"] == "Keine Aktion erforderlich."
+    assert calls == [(["log", "-1", "--format=%cI", "HEAD"], 2)]
+    monkeypatch.setattr(settings, "GIT_SHA", "unknown")
+    assert diagnose.version_info()["status"] == "warn"
+
+
+@pytest.mark.parametrize("git_result", [(1, "", "git fehlt"), (0, "ungueltig", "")])
+def test_git_read_failure_uses_file_fallback(monkeypatch, git_time_cache, git_result):
+    monkeypatch.setattr(diagnose.update_service, "is_docker", lambda: False)
+    monkeypatch.setattr(diagnose.update_service, "is_git_checkout", lambda: True)
+    monkeypatch.setattr(diagnose.update_service, "_run_git", lambda *args, **kwargs: git_result)
+    monkeypatch.setattr(settings, "BUILD_TIME", "unknown")
+    monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
+    result = diagnose.version_info()
+    assert result["status"] == "warn"
+    evidence = result["evidence"]
+    assert evidence["build_time_quelle"] == "Datei-mtime (kein Buildnachweis)"
+    assert datetime.fromisoformat(evidence["BUILD_TIME"]).tzinfo is not None
+    assert "BUILD_TIME" in evidence["empfehlung"]
+    assert "compose" not in evidence["empfehlung"]
+
+
+def test_non_git_installation_uses_file_fallback(monkeypatch):
+    monkeypatch.setattr(diagnose.update_service, "is_docker", lambda: False)
+    monkeypatch.setattr(diagnose.update_service, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(settings, "BUILD_TIME", "")
+    monkeypatch.setattr(settings, "GIT_SHA", "abcdef12")
+    result = diagnose.version_info()
+    assert result["status"] == "warn"
+    assert result["evidence"]["build_time_quelle"] == "Datei-mtime (kein Buildnachweis)"
+    assert "UTC-ISO-Zeitpunkt" in result["evidence"]["empfehlung"]
+    assert "compose" not in result["evidence"]["empfehlung"]
 
 
 def test_build_falls_back_to_process_start(monkeypatch):
@@ -229,6 +290,7 @@ def test_build_falls_back_to_process_start(monkeypatch):
             raise OSError("image file metadata unavailable")
         return real_stat(path, *args, **kwargs)
     monkeypatch.setattr(settings, "BUILD_TIME", "unknown")
+    monkeypatch.setattr(diagnose.update_service, "is_docker", lambda: True)
     monkeypatch.setattr(Path, "stat", missing_image_file)
     evidence = diagnose.version_info()["evidence"]
     assert evidence["build_time_quelle"] == "Prozessstart (kein Buildnachweis)"
