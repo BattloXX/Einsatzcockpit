@@ -319,6 +319,10 @@ def save_org_settings(
     uas_module_enabled_raw: str = Form(""),
     mcp_modul_aktiv_raw: str = Form(""),
     atemschutz_ueberwachung_modul_aktiv_raw: str = Form(""),
+    asuew_erwartete_einsatzzeit_min: int | None = Form(None),
+    asuew_rueckzug_untergrenze_bar: int | None = Form(None),
+    asuew_gelb_prozent: int | None = Form(None),
+    asuew_erholzeit_min: int | None = Form(None),
     objekt_module_enabled_raw: str = Form(""),
     kontakte_module_enabled_raw: str = Form(""),
     nachschlagewerke_module_enabled_raw: str = Form(""),
@@ -532,6 +536,30 @@ def save_org_settings(
                 org_id=effective_org_id,
                 user_id=user.id,
                 payload={"alt": old_breathing, "neu": new_breathing},
+                ip=request.client.host if request.client else None,
+            )
+
+        settings_before = {}
+        settings_after = {}
+        for field, value, lower, upper in (
+            ("asuew_erwartete_einsatzzeit_min", asuew_erwartete_einsatzzeit_min, 5, 120),
+            ("asuew_rueckzug_untergrenze_bar", asuew_rueckzug_untergrenze_bar, 30, 100),
+            ("asuew_gelb_prozent", asuew_gelb_prozent, 50, 95),
+            ("asuew_erholzeit_min", asuew_erholzeit_min, 0, 120),
+        ):
+            if value is not None:
+                old_value = getattr(org_s, field)
+                new_value = max(lower, min(upper, value))
+                if old_value != new_value:
+                    settings_before[field] = old_value
+                    settings_after[field] = new_value
+                    setattr(org_s, field, new_value)
+        if settings_after:
+            from app.core.audit import write_audit
+
+            write_audit(
+                db, "breathing.asuew_settings", org_id=effective_org_id,
+                user_id=user.id, payload={"alt": settings_before, "neu": settings_after},
                 ip=request.client.host if request.client else None,
             )
 

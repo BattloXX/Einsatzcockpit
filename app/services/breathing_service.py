@@ -227,6 +227,10 @@ def create_troop(
     bottle_preset: str | None = None,
     is_sicherheitstrupp: bool = False,
     user_id: int | None = None,
+    ueberwacher_user_id: int | None = None,
+    ueberwacher_name: str | None = None,
+    angriffsweg: str | None = None,
+    funkkanal: str | None = None,
 ) -> BreathingTroop:
     """
     members_data: [{"member_id": int|None, "free_text_name": str|None,
@@ -239,6 +243,10 @@ def create_troop(
         name=name,
         unit_name=unit_name,
         status="bereit",
+        ueberwacher_user_id=ueberwacher_user_id,
+        ueberwacher_name=ueberwacher_name.strip()[:150] if ueberwacher_name else None,
+        angriffsweg=angriffsweg.strip()[:300] if angriffsweg else None,
+        funkkanal=funkkanal.strip()[:50] if funkkanal else None,
         task_text=task_text,
         vehicle_id=vehicle_id,
         location_text=location_text,

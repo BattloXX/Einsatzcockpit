@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 
 from app.core.async_bridge import run_async
+from app.core.audit import write_incident_change
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
@@ -13,17 +14,23 @@ from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingT
 from app.models.incident import Incident
 from app.models.master import Member
 from app.services.breathing_service import (
+    AsuewSettings,
     InvalidTroopTransition,
     ReadinessWarning,
     ack_warning,
     check_troop_warnings,
+    clear_notfall,
     create_troop,
+    declare_notfall,
+    get_asuew_settings,
     get_time_warning,
     get_warning_level,
     log_pressure,
+    record_kontrolle,
     redeploy_troop,
     report_back_pressure,
     report_objective_reached,
+    set_funk_verloren,
     start_troop,
     update_meldung,
     update_troop_status,
@@ -31,6 +38,20 @@ from app.services.breathing_service import (
 from app.services.broadcast import manager
 
 router = APIRouter()
+
+
+def _incident_asuew_settings(db: Session, incident_id: int) -> AsuewSettings:
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(404)
+    if incident.primary_org_id is None:
+        return AsuewSettings(30, 60, 75, 30)
+    return get_asuew_settings(db, incident.primary_org_id)
+
+
+def _current_user_label(request: Request) -> str:
+    user = request.state.user
+    return user.full_name or user.username
 
 
 def _parse_members_form(form_data: FormData) -> list[dict]:
@@ -79,8 +100,9 @@ def breathing_board(
     members = [m for m in all_members if m.is_agt]
     vehicles = [v for v in incident.vehicles if not v.removed_at]
 
+    asuew_settings = _incident_asuew_settings(db, incident_id)
     troops_with_warnings = [
-        (t, *get_warning_level(t), get_time_warning(t), check_troop_warnings(t))
+        (t, *get_warning_level(t, asuew_settings.gelb_prozent), get_time_warning(t), check_troop_warnings(t))
         for t in incident.breathing_troops
     ]
     return templates.TemplateResponse(request, "breathing/board.html", {
@@ -88,6 +110,7 @@ def breathing_board(
         "troops_with_warnings": troops_with_warnings, "members": members,
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
         "troop_status_labels": TROOP_STATUS_LABELS,
+        "asuew_settings": asuew_settings, "current_user_label": _current_user_label(request),
     })
 
 
@@ -102,17 +125,20 @@ def create_breathing_troop(
     bottle_preset: str = Form(""),
     planned_duration_min: int | None = Form(None),
     is_sicherheitstrupp: bool = Form(False),
+    ueberwacher_name: str | None = Form(None),
+    angriffsweg: str = Form(""),
+    funkkanal: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
 ):
-    # Geplante Einsatzzeit aus Preset ableiten (außer bei "manuell" oder leerem Preset)
-    duration = planned_duration_min
-    if bottle_preset and bottle_preset != "manuell":
-        from app.models.breathing import BOTTLE_PRESET_DURATIONS
-        preset_dur = BOTTLE_PRESET_DURATIONS.get(bottle_preset)
-        if preset_dur is not None:
-            duration = preset_dur
+    duration = _incident_asuew_settings(db, incident_id).erwartete_einsatzzeit_min
+    if bottle_preset == "manuell" and planned_duration_min is not None:
+        if not 1 <= planned_duration_min <= 120:
+            return RedirectResponse(
+                f"/einsatz/{incident_id}/atemschutz?error=invalid_input", status_code=303,
+            )
+        duration = planned_duration_min
 
     # Parse member data from form (member_0_id, member_0_role, member_0_press, etc.)
     form_data = run_async(request.form)
@@ -144,6 +170,9 @@ def create_breathing_troop(
             planned_duration_min=duration,
             bottle_preset=bottle_preset.strip() or None,
             is_sicherheitstrupp=is_sicherheitstrupp,
+            ueberwacher_user_id=request.state.user.id,
+            ueberwacher_name=ueberwacher_name if ueberwacher_name is not None else _current_user_label(request),
+            angriffsweg=angriffsweg, funkkanal=funkkanal,
             user_id=request.state.user.id,
         )
     except ValueError:
@@ -173,12 +202,13 @@ def redeploy_troop_view(
         return Response(status_code=404)
 
     form_data = run_async(request.form)
-    duration = planned_duration_min
-    if bottle_preset and bottle_preset != "manuell":
-        from app.models.breathing import BOTTLE_PRESET_DURATIONS
-        preset_duration = BOTTLE_PRESET_DURATIONS.get(bottle_preset)
-        if preset_duration is not None:
-            duration = preset_duration
+    duration = _incident_asuew_settings(db, incident_id).erwartete_einsatzzeit_min
+    if bottle_preset == "manuell" and planned_duration_min is not None:
+        if not 1 <= planned_duration_min <= 120:
+            return Response(
+                "Die Einsatzzeit muss zwischen 1 und 120 Minuten liegen.", status_code=400, media_type="text/plain",
+            )
+        duration = planned_duration_min
 
     try:
         members_data = _parse_members_form(form_data)
@@ -283,7 +313,7 @@ def update_status(
     except ValueError as exc:
         return Response(str(exc), status_code=400)
     db.commit()
-    warning = get_warning_level(troop)
+    warning = get_warning_level(troop, _incident_asuew_settings(db, incident_id).gelb_prozent)
     time_warn = get_time_warning(troop)
     run_async(manager.broadcast, incident_id, {
         "type": "troop_status_changed", "troop_id": troop_id,
@@ -314,7 +344,7 @@ def log_pressure_view(
     db.commit()
     updated_troop = db.get(BreathingTroop, troop_id)
     assert updated_troop is not None
-    warning = get_warning_level(updated_troop)
+    warning = get_warning_level(updated_troop, _incident_asuew_settings(db, incident_id).gelb_prozent)
     time_warn = get_time_warning(updated_troop)
     lowest = updated_troop.lowest_current_pressure or pressure_bar
     run_async(manager.broadcast, incident_id, {
@@ -351,7 +381,7 @@ def objective_reached_view(
     except ValueError as exc:
         return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
-    warning = get_warning_level(troop)
+    warning = get_warning_level(troop, _incident_asuew_settings(db, incident_id).gelb_prozent)
     run_async(manager.broadcast, incident_id, {
         "type": "troop_objective_reached", "troop_id": troop_id,
         "troop_member_id": member.id, "pressure": pressure_bar,
@@ -418,10 +448,166 @@ def troop_ack(
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
-    ack_warning(db, troop, kind, user_id=request.state.user.id)
+    try:
+        ack_warning(db, troop, kind, user_id=request.state.user.id)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     run_async(manager.broadcast, incident_id, {
         "type": "troop_warning_acked", "troop_id": troop_id, "kind": kind,
+    })
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/kontrolle")
+def troop_kontrolle_view(
+    incident_id: int, troop_id: int, request: Request,
+    stufe: str = Form(...),
+    art: str = Form("funk"),
+    pressure_bar: float | None = Form(None),
+    troop_member_id: int | None = Form(None),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+    try:
+        record_kontrolle(
+            db, troop, stufe, art, pressure_bar=pressure_bar,
+            troop_member_id=troop_member_id, note=note.strip() or None,
+            user_id=request.state.user.id,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "troop_kontrolle", "troop_id": troop_id, "stufe": stufe, "art": art,
+    })
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/funkverlust")
+def troop_funk_view(
+    incident_id: int, troop_id: int, request: Request,
+    aktiv: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+    try:
+        if aktiv not in ("1", "0"):
+            raise ValueError("Aktiv muss 1 oder 0 sein.")
+        set_funk_verloren(db, troop, aktiv == "1", user_id=request.state.user.id)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "troop_funk", "troop_id": troop_id,
+    })
+    if aktiv == "1":
+        run_async(manager.broadcast, incident_id, {
+            "type": "troop_warning", "troop_id": troop_id, "kind": "funk_verloren",
+        })
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/notfall")
+def troop_notfall_view(
+    incident_id: int, troop_id: int, request: Request,
+    bestaetigt: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+    try:
+        if bestaetigt != "1":
+            raise ValueError("Notfall muss ausdrücklich bestätigt werden.")
+        declare_notfall(db, troop, user_id=request.state.user.id)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "troop_notfall", "troop_id": troop_id,
+    })
+    run_async(manager.broadcast, incident_id, {
+        "type": "troop_warning", "troop_id": troop_id, "kind": "notfall",
+    })
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/notfall/aufheben")
+def troop_notfall_cleared_view(
+    incident_id: int, troop_id: int, request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin")),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+    try:
+        clear_notfall(db, troop, user_id=request.state.user.id)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "troop_notfall_cleared", "troop_id": troop_id,
+    })
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/details")
+def troop_details_view(
+    incident_id: int, troop_id: int, request: Request,
+    angriffsweg: str | None = Form(None),
+    funkkanal: str | None = Form(None),
+    ueberwacher_name: str | None = Form(None),
+    uebernehmen: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+    form_data = run_async(request.form)
+    # Leere, ausdrücklich gesendete Felder dürfen bestehende Angaben löschen.
+    if angriffsweg is None and "angriffsweg" in form_data:
+        angriffsweg = ""
+    if funkkanal is None and "funkkanal" in form_data:
+        funkkanal = ""
+    if ueberwacher_name is None and "ueberwacher_name" in form_data:
+        ueberwacher_name = ""
+    fields = ("angriffsweg", "funkkanal", "ueberwacher_name", "ueberwacher_user_id")
+    before = {field: getattr(troop, field) for field in fields}
+    if uebernehmen == "1":
+        troop.ueberwacher_user_id = request.state.user.id
+        if ueberwacher_name is None:
+            ueberwacher_name = _current_user_label(request)
+    for field, value, length in (
+        ("angriffsweg", angriffsweg, 300),
+        ("funkkanal", funkkanal, 50),
+        ("ueberwacher_name", ueberwacher_name, 150),
+    ):
+        if value is not None:
+            setattr(troop, field, value.strip()[:length] or None)
+    write_incident_change(
+        db, incident_id, "troop.details", "breathing_troop", troop_id,
+        before=before, after={field: getattr(troop, field) for field in fields},
+        user_id=request.state.user.id,
+    )
+    db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "troop_details", "troop_id": troop_id,
     })
     return Response(status_code=204)
 

@@ -527,6 +527,35 @@
         </small>
       </div>
 
+      <div class="form-group">
+        <label for="asuew_erwartete_einsatzzeit_min">Erwartete Einsatzzeit (Minuten)</label>
+        <input type="number" id="asuew_erwartete_einsatzzeit_min" name="asuew_erwartete_einsatzzeit_min" min="5" max="120"
+               value="{{ org_settings.asuew_erwartete_einsatzzeit_min if org_settings and org_settings.asuew_erwartete_einsatzzeit_min is not none else 30 }}"
+               {% if not breathing_sys_enabled %}disabled{% endif %}>
+        <small class="form-hint">Kontrollen bei 1/3 und 2/3 der Einsatzzeit. Vorgabe: 30 Minuten.</small>
+      </div>
+      <div class="form-group">
+        <label for="asuew_rueckzug_untergrenze_bar">Rückzugsuntergrenze (bar)</label>
+        <input type="number" id="asuew_rueckzug_untergrenze_bar" name="asuew_rueckzug_untergrenze_bar" min="30" max="100"
+               value="{{ org_settings.asuew_rueckzug_untergrenze_bar if org_settings and org_settings.asuew_rueckzug_untergrenze_bar is not none else 60 }}"
+               {% if not breathing_sys_enabled %}disabled{% endif %}>
+        <small class="form-hint">Untergrenze an der Warneinrichtung. Vorgabe: 60 bar.</small>
+      </div>
+      <div class="form-group">
+        <label for="asuew_gelb_prozent">Gelbschwelle (%)</label>
+        <input type="number" id="asuew_gelb_prozent" name="asuew_gelb_prozent" min="50" max="95"
+               value="{{ org_settings.asuew_gelb_prozent if org_settings and org_settings.asuew_gelb_prozent is not none else 75 }}"
+               {% if not breathing_sys_enabled %}disabled{% endif %}>
+        <small class="form-hint">Gelbe Warnung ab diesem Anteil des Anfangsdrucks. Vorgabe: 75 %.</small>
+      </div>
+      <div class="form-group">
+        <label for="asuew_erholzeit_min">Erholzeit (Minuten)</label>
+        <input type="number" id="asuew_erholzeit_min" name="asuew_erholzeit_min" min="0" max="120"
+               value="{{ org_settings.asuew_erholzeit_min if org_settings and org_settings.asuew_erholzeit_min is not none else 30 }}"
+               {% if not breathing_sys_enabled %}disabled{% endif %}>
+        <small class="form-hint">Mindestpause vor einem erneuten Einsatz. Vorgabe: 30 Minuten.</small>
+      </div>
+
       <h3 class="sys-section-title">{{ modul_icon("probenplan", size="md") }} Probenplanung</h3>
       {% set _probenplanung_org_on = (org_settings.probenplanung_modul_aktiv) if org_settings else false %}
       <div class="form-group">
