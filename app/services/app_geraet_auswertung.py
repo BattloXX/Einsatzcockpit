@@ -18,6 +18,7 @@ from app.models.app_geraet import AppGeraet, AppGeraetFehler
 from app.models.master import FireDept, VehicleMaster
 from app.models.user import DeviceToken, User
 from app.services import app_download_service
+from app.services.app_geraet_service import TECHNIK_FELDER
 
 # Code, Titel, Schweregrad, Hypothese, Empfehlung; gemeinsame Regeln fuer UI und Check.
 REGELN = {
@@ -38,6 +39,12 @@ REGELN = {
         "fail",
         "WebView ist unvollstaendig oder veraltet.",
         "Android System WebView aktualisieren.",
+    ),
+    "technik_maskiert": (
+        "Technikangaben aus Altbericht maskiert - neuer Geraetebericht noetig",
+        "warn",
+        "Maskierte Technikangaben aus einem Altbericht sind nicht auswertbar.",
+        "Einen neuen Geraetebericht mit der aktuellen App senden.",
     ),
     "uhr": (
         "Uhrabweichung > 120 Sekunden",
@@ -122,6 +129,11 @@ def ampel(version: str | None, soll: str | None) -> str:
     return "veraltet" if ist < ziel else "aktuell"
 
 
+def _technik_maskiert(wert: str | None) -> bool:
+    """Auch teilweise maskierte Altwerte wie BP4A.[Telefon] sind nicht belegt."""
+    return bool(re.search(r"\[[^\[\]]+\]", wert or ""))
+
+
 def befunde(geraet, soll: str | None, *, token=None, fehler=(), jetzt: datetime | None = None) -> list[str]:
     now = jetzt or utcnow()
     details = geraet.geraet_details or {}
@@ -136,9 +148,17 @@ def befunde(geraet, soll: str | None, *, token=None, fehler=(), jetzt: datetime 
             codes.append("patch")
     except ValueError:
         pass  # Ein fehlendes Patch-Datum belegt kein Alter.
-    webview = re.match(r"^(\d+)", geraet.webview_version or "")
-    if webview is None or int(webview[1]) < 100:
+    webview_wert = (geraet.webview_version or "").strip()
+    webview = re.match(r"^(\d+)", webview_wert)
+    if not webview_wert or (
+        not _technik_maskiert(webview_wert) and webview is not None and int(webview[1]) < 100
+    ):
         codes.append("webview")
+    if any(_technik_maskiert(wert) for wert in (
+        geraet.app_version, geraet.webview_version,
+        *(details.get(gruppe, {}).get(feld) for gruppe, feld in TECHNIK_FELDER),
+    )):
+        codes.append("technik_maskiert")
     abweichung = details.get("locale", {}).get("uhr_abweichung_s")
     if isinstance(abweichung, (int, float)) and abs(abweichung) > 120:
         codes.append("uhr")
