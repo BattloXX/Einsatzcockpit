@@ -40,6 +40,7 @@ def snapshot(db, org_id: int, now: datetime | None = None) -> dict:
             sms = kind == "sms"
             gateways.append({"kind": "sms" if sms else row.kind, "id": row.id,
                              "name": row.label if sms else row.name, "online": presence.online(row, now),
+                             "offline_alert_enabled": True if sms else row.offline_alert_enabled,
                              "heartbeat_at": row.last_heartbeat_at if sms else row.agent_heartbeat_at,
                              "expires_at": row.presence_expires_at if sms else row.agent_presence_expires_at,
                              "worker_id": row.worker_id if sms else row.agent_worker_id})

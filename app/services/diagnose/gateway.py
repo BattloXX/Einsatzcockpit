@@ -44,8 +44,13 @@ def check(db, budget):
         (SmsGatewayToken, SmsGatewayToken.presence_expires_at, SmsGatewayToken.connection_id,
          SmsGatewayToken.connection_token_hash, SmsGatewayToken.token_hash, SmsGatewayToken.revoked_at.is_(None)),
     ):
-        collect_ids(db, budget, result, model.__tablename__, and_(configured, or_(expiry.is_(None),
-            expiry <= now, connection.is_(None), token.is_(None), token != expected)),
+        offline = and_(configured, or_(expiry.is_(None), expiry <= now,
+            connection.is_(None), token.is_(None), token != expected))
+        if model is Gateway:
+            collect_ids(db, budget, result, "gateway", and_(offline, Gateway.offline_alert_enabled.is_(False)),
+                ["gateway", "presence_nicht_ueberwacht"], "Gateway offline, Ueberwachung aus", "info")
+            offline = and_(offline, Gateway.offline_alert_enabled.is_(True))
+        collect_ids(db, budget, result, model.__tablename__, offline,
             [model.__tablename__, "presence"], "Gateway ohne gueltige Praesenz")
     collect_ids(db, budget, result, "gateway_message", and_(GatewayMessage.state == "queued",
         GatewayMessage.expires_at <= now), "transport_abgelaufen", "Gateway-Transportzustellung abgelaufen")

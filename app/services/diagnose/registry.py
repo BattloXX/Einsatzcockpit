@@ -219,10 +219,15 @@ def execute_isolated(bind, check: Check, seconds: float = CHECK_TIMEOUT) -> Chec
     receiver, sender = context.Pipe(duplex=False)
     engine = bind.engine
     from app.services import ws_bus
-    from app.services.app_download_service import android_release_version_cached
+    from app.services.app_download_service import android_release_version, android_release_version_cached
     from app.services.db_transactions import retry_statistik
 
-    runtime = {"android_version": android_release_version_cached(), "redis": ws_bus.status(),
+    version = android_release_version_cached()
+    if check.id == "app.geraete" and version is None:
+        # Der Runner ruft uns im Thread auf: Netzabruf vor Prozessstart/Budget,
+        # mit vorhandenem Timeout und Fehler-Cache; der Check bleibt netzfrei.
+        version = android_release_version()
+    runtime = {"android_version": version, "redis": ws_bus.status(),
                "pool": pool_metrics(engine.pool),
                "db_retries": retry_statistik(), "worker_pid": os.getpid()}
     process = context.Process(target=_process_check,

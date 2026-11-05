@@ -1,6 +1,10 @@
 """Konkrete Ursachen und naechste Schritte je technischem Befundkern."""
 
 TEXTE = {
+    "presence_nicht_ueberwacht": (
+        "Fuer diese Gateways sind Offline-Alarme ausgeschaltet; Offline-Zeiten sind eingeplant.",
+        "Keine Massnahme erforderlich; bei gewuenschter Dauerueberwachung Offline-Alarme aktivieren.",
+    ),
     "migration": (
         "DB-Schema und ausgelieferter Code haben unterschiedliche Alembic-Staende.",
         ("Vor dem Neustart alembic upgrade head mit dem ausgelieferten Image ausfuehren; Migrationslog pruefen."),

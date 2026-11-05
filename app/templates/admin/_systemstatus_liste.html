@@ -57,8 +57,10 @@
     <thead><tr><th>Gateway</th><th>Typ</th><th>Verbindung</th><th>Letzter Heartbeat</th><th>Presence gültig bis</th></tr></thead>
     <tbody>
       {% for gateway in runtime.gateways %}
+      {% set nicht_ueberwacht = not gateway.online and gateway.offline_alert_enabled is sameas false %}
+      {% set verbindung = 'Online' if gateway.online else ('Offline, Überwachung aus' if nicht_ueberwacht else 'Offline') %}
       <tr><td>{{ gateway.name }}</td><td>{{ {'sms': 'SMS', 'linux': 'Linux', 'windows_agent': 'Windows'}.get(gateway.kind, gateway.kind) }}</td>
-        <td><span class="sys-pill {{ 'sys-status--ok' if gateway.online else 'sys-status--fail' }}">{{ status_dot('gruen' if gateway.online else 'rot', 'Online' if gateway.online else 'Offline') }} {{ 'Online' if gateway.online else 'Offline' }}</span></td>
+        <td><span class="sys-pill {{ 'sys-status--ok' if gateway.online else ('sys-status--neutral' if nicht_ueberwacht else 'sys-status--fail') }}">{{ status_dot('gruen' if gateway.online else ('grau' if nicht_ueberwacht else 'rot'), verbindung) }} {{ verbindung }}</span></td>
         <td>{{ gateway.heartbeat_at|local_datetime if gateway.heartbeat_at else 'noch keiner' }}</td>
         <td>{{ gateway.expires_at|local_datetime if gateway.expires_at else '–' }}</td></tr>
       {% else %}<tr><td colspan="5">Keine Gateways eingerichtet.</td></tr>{% endfor %}

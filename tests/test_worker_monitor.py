@@ -164,3 +164,44 @@ def test_runtime_template_renders_dates_and_worker_details(runtime_orgs):
             '<!doctype html><html lang="de"><meta charset="utf-8">'
             f'<link rel="stylesheet" href="{css}"><title>Systemstatus Vorschau</title>'
             f'<body><main class="page-content"><h1>Systemstatus</h1>{html}</main></body></html>')
+
+
+@pytest.mark.parametrize("kind,enabled,klasse,text", [
+    ("linux", False, "neutral", "Offline, Überwachung aus"),
+    ("windows_agent", False, "neutral", "Offline, Überwachung aus"),
+    ("linux", True, "fail", "Offline"),
+    ("sms", True, "fail", "Offline"),
+])
+def test_offline_gateway_im_systemstatus(runtime_orgs, kind, enabled, klasse, text):
+    from html import escape
+
+    from starlette.requests import Request
+
+    from app.core.templating import templates
+    from app.models.user import SmsGatewayToken
+
+    org, _ = runtime_orgs
+    connection, _ = bind(kind, org)
+    try:
+        with database() as db:
+            model = SmsGatewayToken if kind == "sms" else Gateway
+            row = db.get(model, connection.gateway_id)
+            if kind == "sms":
+                row.presence_expires_at = presence.utc() - timedelta(minutes=1)
+            else:
+                row.agent_presence_expires_at = presence.utc() - timedelta(minutes=1)
+                row.offline_alert_enabled = enabled
+            db.commit()
+            data = snapshot(db, org)
+        gateway, = data["gateways"]
+        assert not gateway["online"]
+        assert gateway["offline_alert_enabled"] == enabled
+        request = Request({"type": "http", "headers": []})
+        html = templates.env.get_template("admin/_systemstatus_liste.html").render(
+            request=request, org=None, runtime=data, checks=[], status_rows={}, dienst_zustaende={}, labels={})
+        # Verbindung gezielt in der Gateway-Zeile lesen.
+        zeile = html.split(f"<td>{escape(gateway['name'])}</td>", 1)[1].split("</tr>", 1)[0]
+        assert f"sys-status--{klasse}" in zeile
+        assert f" {text}</span>" in zeile
+    finally:
+        cleanup(connection)
