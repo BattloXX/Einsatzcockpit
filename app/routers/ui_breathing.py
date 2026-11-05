@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from starlette.datastructures import FormData
 
 from app.core.async_bridge import run_async
@@ -10,7 +10,7 @@ from app.core.audit import write_incident_change
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingTroop
+from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingTroop, BreathingWarnung
 from app.models.incident import Incident
 from app.models.master import Member
 from app.services.breathing_service import (
@@ -25,6 +25,7 @@ from app.services.breathing_service import (
     get_asuew_settings,
     get_time_warning,
     get_warning_level,
+    incident_hinweise,
     log_pressure,
     record_kontrolle,
     redeploy_troop,
@@ -105,12 +106,30 @@ def breathing_board(
         (t, *get_warning_level(t, asuew_settings.gelb_prozent), get_time_warning(t), check_troop_warnings(t))
         for t in incident.breathing_troops
     ]
+    trupp_uebersicht = dict.fromkeys(TROOP_STATUS_LABELS, 0)
+    trupp_uebersicht["sicherheitstrupp_bereit"] = 0
+    troop_ids = [t.id for t in incident.breathing_troops]
+    warnungen_by_troop: dict[int, list[BreathingWarnung]] = {}
+    for troop in incident.breathing_troops:
+        trupp_uebersicht[troop.status] += 1
+        if troop.status == "bereit" and troop.is_sicherheitstrupp:
+            trupp_uebersicht["sicherheitstrupp_bereit"] += 1
+    if troop_ids:
+        for warnung in db.query(BreathingWarnung).options(
+            selectinload(BreathingWarnung.zustellungen),
+        ).filter(
+            BreathingWarnung.troop_id.in_(troop_ids),
+            BreathingWarnung.erledigt_at.is_(None),
+        ).order_by(BreathingWarnung.ausgeloest_at, BreathingWarnung.id).all():
+            warnungen_by_troop.setdefault(warnung.troop_id, []).append(warnung)
     return templates.TemplateResponse(request, "breathing/board.html", {
         "user": user, "incident": incident,
         "troops_with_warnings": troops_with_warnings, "members": members,
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
         "troop_status_labels": TROOP_STATUS_LABELS,
         "asuew_settings": asuew_settings, "current_user_label": _current_user_label(request),
+        "hinweise": incident_hinweise(incident.breathing_troops),
+        "trupp_uebersicht": trupp_uebersicht, "warnungen_by_troop": warnungen_by_troop,
     })
 
 

@@ -137,6 +137,16 @@
 .troop-safety-banner--funk { background:#f6e05e; color:#1a202c; }
 .troop-safety-banner--notfall { background:#7c1d1d; color:#fff; animation:pulse-warn 1s infinite; }
 .troop-control-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.breathing-critical { margin-bottom:12px; padding:12px; border:1px solid #e53e3e; border-radius:6px; background:rgba(229,62,62,.2); }
+.breathing-critical a { color:inherit; text-decoration:underline; }
+.breathing-critical__notfall { animation:pulse-warn 1s infinite; font-weight:700; }
+.breathing-overview { margin:8px 0 12px; }
+.troop-funk-help { width:100%; }
+.troop-funk-help label { display:block; margin:6px 0; }
+.troop-notifications { margin-top:8px; min-width:0; }
+.troop-notifications__table { overflow-x:auto; }
+.troop-notifications table { width:100%; font-size:.75rem; border-collapse:collapse; }
+.troop-notifications th, .troop-notifications td { padding:6px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
 @media (max-width:760px) {
   .troop-card__actions, .troop-card__header { flex-wrap:wrap; }
   .troop-control-actions .press-picker-popup, .troop-card__header .press-picker-popup { left:0; right:auto; }
@@ -157,6 +167,26 @@
     <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newTroopModal">+ Trupp anlegen</button>
     {% endif %}
   </div>
+</div>
+
+{% set safety = namespace(troop=None) %}
+{% for troop in incident.breathing_troops %}
+  {% if safety.troop is none and troop.status == 'bereit' and troop.is_sicherheitstrupp %}{% set safety.troop = troop %}{% endif %}
+{% endfor %}
+{# Auch bei einem partiellen Grid-Reload Hinweise und Zaehler aktualisieren. #}
+<div id="breathingSummary" hx-swap-oob="outerHTML">
+  {% if hinweise or incident.breathing_troops | selectattr('notfall_at') | list or incident.breathing_troops | selectattr('funk_verloren_at') | list %}
+  <section class="breathing-critical" aria-labelledby="breathingCriticalTitle">
+    <h3 id="breathingCriticalTitle">{{ icon("alert-triangle") }} Kritische Hinweise</h3>
+    {% if hinweise.assp %}<p>3 oder mehr Trupps gleichzeitig im Einsatz: Atemschutzsammelplatz (ASSP) über die Einsatzleitung alarmieren. Der ASSP übernimmt nur Logistik, die Überwachung bleibt beim Gruppenkommandanten.</p>{% endif %}
+    {% if hinweise.kein_sicherheitstrupp %}<p>Kein bereiter Sicherheitstrupp: Rettungstrupp ab Einsatzbeginn bereitstellen.</p>{% endif %}
+    {% for troop in incident.breathing_troops %}
+    {% if troop.notfall_at %}<p class="breathing-critical__notfall"><a href="#troop-{{ troop.id }}">ATEMSCHUTZNOTFALL: {{ troop.name }}</a></p>{% endif %}
+    {% if troop.funk_verloren_at %}<p><a href="#troop-{{ troop.id }}">Kein Funkkontakt: {{ troop.name }}</a></p>{% endif %}
+    {% endfor %}
+  </section>
+  {% endif %}
+  <p class="breathing-overview">Trupps: {{ trupp_uebersicht.im_einsatz + trupp_uebersicht.rueckzug }} im Einsatz, {{ trupp_uebersicht.bereit }} bereit (davon {{ trupp_uebersicht.sicherheitstrupp_bereit }} Sicherheitstrupp), {{ trupp_uebersicht.zurueck }} in Erholung</p>
 </div>
 
 <div class="troops-grid" id="troopsGrid" @click.once="unlockAudio()">
@@ -199,6 +229,13 @@
       <div class="troop-safety-banner troop-safety-banner--funk">
         Kein Funkkontakt seit {{ troop.funk_verloren_at | local_time }} (Trupp zum Rückzug auffordern, GRKDT verständigen, Rettungstrupp prüfen)
         {% if can_edit is not defined or can_edit %}{{ safety_form(troop, 'funkverlust', 'Funkkontakt wieder da', 'aktiv', '0') }}{% endif %}
+        <details class="troop-funk-help" x-data="{checked: []}">
+          <summary>Vorgehen bei fehlendem Funkkontakt</summary>
+          {% for item in ['Gruppenkommandant des Trupps verständigt', 'Trupp im Innenangriff muss den Rückzug antreten', 'Rettungstrupp bzw. Sicherheitstrupp einsetzen (Entscheidung GRKDT)', 'Überwacher und Einsatzleitung informiert'] %}
+          <label><input type="checkbox" x-model="checked" value="{{ loop.index }}"> {{ item }}</label>
+          {% endfor %}
+          {% if safety.troop %}<a class="btn btn--ghost btn--sm" href="#troop-{{ safety.troop.id }}">Zum Sicherheitstrupp</a>{% endif %}
+        </details>
       </div>
       {% endif %}
 
@@ -273,8 +310,30 @@
     {% if troop.last_meldung_text %}
     <div class="troop-card__meta">
       <strong>Letzte Meldung:</strong> {{ troop.last_meldung_text }}
-      {% if troop.last_meldung_at %}<span style="font-size:.68rem;color:var(--text-muted)"> – {{ (troop.last_meldung_at | local).strftime('%H:%M') }}</span>{% endif %}
+      {% if troop.last_meldung_at %}<span style="font-size:.68rem;color:var(--text-muted)"> – {{ troop.last_meldung_at | local_time }}</span>{% endif %}
     </div>
+    {% endif %}
+
+    {% if warnungen_by_troop.get(troop.id) %}
+    <details class="troop-notifications">
+      <summary>Benachrichtigungen</summary>
+      {% set art_labels = {'withdraw': 'Rückzugsdruck', 'max_exceeded': 'Max-Zeit', 'one_third_due': 'Kontrolle 1/3', 'two_third_due': 'Kontrolle 2/3', 'funk_verloren': 'Kein Funkkontakt', 'notfall': 'Notfall', 'kein_sicherheitstrupp': 'Kein bereiter Sicherheitstrupp', 'assp': 'Atemschutzsammelplatz (ASSP)'} %}
+      {% set status_labels = {'pending': 'wartend', 'claimed': 'in Bearbeitung', 'sent': 'gesendet', 'failed': 'fehlgeschlagen', 'suppressed': 'unterdrückt'} %}
+      <div class="troop-notifications__table" role="region" aria-label="Zustellungsprotokoll" tabindex="0">
+        <table>
+          <thead><tr><th>Art</th><th>Ausgelöst um</th><th>Stufe</th><th>Kanal</th><th>Empfänger</th><th>Status</th><th>Sendezeit</th></tr></thead>
+          <tbody>
+          {% for warnung in warnungen_by_troop[troop.id] %}
+            {% for zustellung in warnung.zustellungen | sort(attribute='id') %}
+            <tr><td>{{ art_labels.get(warnung.kind, warnung.kind) }}</td><td>{{ warnung.ausgeloest_at | local_time }}</td><td>{{ zustellung.stufe }}</td><td>{{ 'SMS' if zustellung.kanal == 'sms' else 'Push' }}</td><td>{{ zustellung.empfaenger_label or '-' }}</td><td>{{ status_labels.get(zustellung.status, zustellung.status) }}{% if zustellung.fehler %}: {{ zustellung.fehler }}{% endif %}</td><td>{{ zustellung.gesendet_at | local_time if zustellung.gesendet_at else '-' }}</td></tr>
+            {% else %}
+            <tr><td>{{ art_labels.get(warnung.kind, warnung.kind) }}</td><td>{{ warnung.ausgeloest_at | local_time }}</td><td colspan="5">Keine Zustellungen</td></tr>
+            {% endfor %}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
     {% endif %}
 
     <!-- ── Gauge (SVG) ── -->
@@ -537,7 +596,7 @@
             <span class="troop-meldung-press">{{ log.pressure_bar | int }} bar</span>
             {% if log.note %}<span style="font-size:.7rem;color:var(--text-muted)"> – {{ log.note }}</span>{% endif %}
             <span style="color:var(--text-muted);font-size:.68rem">
-              — {{ (log.ts | local).strftime('%H:%M:%S') }}
+              — {{ log.ts | local_time }}
             </span>
           </div>
           {% set shown.count = shown.count + 1 %}

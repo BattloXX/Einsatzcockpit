@@ -230,3 +230,184 @@ def test_control_summary_shows_three_latest_active_controls(client, breathing_ro
     assert "Kontrolle 2/3: kein Funkkontakt," in response.text
     assert "Kontrolle (Funk): 150 bar," in response.text
     assert "Kontrolle (Funk): 290 bar," not in response.text
+
+
+def _board_summary(html):
+    return html.split('<div id="breathingSummary"', 1)[1].split('<div class="troops-grid"', 1)[0]
+
+
+def _add_board_troop(ctx, name, status="bereit", safety=False):
+    from app.models.breathing import BreathingTroop
+
+    troop = BreathingTroop(
+        incident_id=ctx.incident_id, name=name, status=status, is_sicherheitstrupp=safety,
+    )
+    ctx.db.add(troop)
+    ctx.db.flush()
+    return troop
+
+
+def test_three_deployed_troops_show_assp_hint(client, breathing_routes):
+    ctx = breathing_routes
+    ctx.troop.status = "im_einsatz"
+    _add_board_troop(ctx, "Trupp B", "im_einsatz")
+    third = _add_board_troop(ctx, "Trupp C", "rueckzug")
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    summary = _board_summary(response.text)
+    assert "Kritische Hinweise" in summary
+    assert "Atemschutzsammelplatz (ASSP)" in summary
+    assert "die Überwachung bleibt beim Gruppenkommandanten" in summary
+    assert 'hx-swap-oob="outerHTML"' in summary
+    assert response.text.index('id="breathingSummary"') < response.text.index('id="troopsGrid"')
+
+    third.status = "zurueck"
+    ctx.db.commit()
+    assert "Atemschutzsammelplatz (ASSP) über die Einsatzleitung" not in _board_summary(
+        client.get(f"/einsatz/{ctx.incident_id}/atemschutz").text,
+    )
+
+
+@pytest.mark.parametrize("safety_status", [None, "bereit", "im_einsatz", "erholt"])
+def test_missing_ready_safety_troop_hint(client, breathing_routes, safety_status):
+    ctx = breathing_routes
+    ctx.troop.status = "im_einsatz"
+    if safety_status:
+        _add_board_troop(ctx, "Rettungstrupp", safety_status, safety=True)
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    summary = _board_summary(response.text)
+    assert ("Kein bereiter Sicherheitstrupp" in summary) is (safety_status != "bereit")
+    assert ("Kritische Hinweise" in summary) is (safety_status != "bereit")
+
+
+def test_summary_links_to_emergency_and_radio_loss(client, breathing_routes):
+    from datetime import UTC, datetime
+
+    ctx = breathing_routes
+    ctx.troop.notfall_at = datetime.now(UTC).replace(tzinfo=None)
+    radio = _add_board_troop(ctx, "Funktrupp")
+    radio.funk_verloren_at = ctx.troop.notfall_at
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    summary = _board_summary(response.text)
+    assert f'href="#troop-{ctx.troop.id}">ATEMSCHUTZNOTFALL: Trupp A</a>' in summary
+    assert f'href="#troop-{radio.id}">Kein Funkkontakt: Funktrupp</a>' in summary
+    assert 'class="breathing-critical__notfall"' in summary
+
+
+@pytest.mark.parametrize("closed", [False, True])
+def test_notification_table_only_for_open_warnings(client, breathing_routes, closed):
+    from datetime import UTC, datetime
+
+    from app.models.breathing import BreathingWarnung, BreathingZustellung
+
+    ctx = breathing_routes
+    now = datetime.now(UTC).replace(tzinfo=None)
+    warning = BreathingWarnung(
+        incident_id=ctx.incident_id, troop_id=ctx.troop.id, kind="withdraw",
+        ausgeloest_at=now, erledigt_at=now if closed else None,
+    )
+    ctx.db.add(warning)
+    ctx.db.flush()
+    for index, (channel, status, error) in enumerate([
+        ("push", "sent", None), ("sms", "pending", None),
+        ("sms", "failed", "Versand fehlgeschlagen"), ("sms", "suppressed", "Übung"),
+    ]):
+        ctx.db.add(BreathingZustellung(
+            warnung_id=warning.id, stufe=index, kanal=channel,
+            empfaenger_label=f"Empfänger {index}", status=status, fehler=error,
+            gesendet_at=now if status == "sent" else None,
+        ))
+    foreign = _add_board_troop(ctx, "Anderer Einsatz")
+    foreign.incident_id = ctx.other_incident_id
+    ctx.db.add(BreathingWarnung(
+        incident_id=ctx.other_incident_id, troop_id=foreign.id,
+        kind="notfall", ausgeloest_at=now,
+    ))
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert ('<summary>Benachrichtigungen</summary>' in response.text) is not closed
+    if not closed:
+        table = response.text.split('aria-label="Zustellungsprotokoll"', 1)[1].split('</table>', 1)[0]
+        for value in ["Rückzugsdruck", "Ausgelöst um", "Stufe", "Kanal", "Sendezeit",
+                      "Push", "SMS", "gesendet", "wartend", "fehlgeschlagen", "unterdrückt: Übung"]:
+            assert value in table
+        for index in range(4):
+            assert f"Empfänger {index}" in table
+        assert ">Notfall<" not in table
+
+
+def test_without_warnings_has_no_notifications(client, breathing_routes):
+    response = client.get(f"/einsatz/{breathing_routes.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert '<summary>Benachrichtigungen</summary>' not in response.text
+
+
+@pytest.mark.parametrize("with_safety", [False, True])
+def test_radio_loss_help_checklist_and_safety_link(client, breathing_routes, with_safety):
+    from datetime import UTC, datetime
+
+    ctx = breathing_routes
+    ctx.troop.funk_verloren_at = datetime.now(UTC).replace(tzinfo=None)
+    if with_safety:
+        first = _add_board_troop(ctx, "Sicherheit 1", safety=True)
+        second = _add_board_troop(ctx, "Sicherheit 2", safety=True)
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    banner = response.text.split('class="troop-safety-banner troop-safety-banner--funk"', 1)[1].split('</details>', 1)[0]
+    assert "Vorgehen bei fehlendem Funkkontakt" in banner
+    for item in ["Gruppenkommandant des Trupps verständigt", "Trupp im Innenangriff muss den Rückzug antreten",
+                 "Rettungstrupp bzw. Sicherheitstrupp einsetzen (Entscheidung GRKDT)",
+                 "Überwacher und Einsatzleitung informiert"]:
+        assert item in banner
+    assert banner.count('type="checkbox" x-model="checked"') == 4
+    assert 'x-data="{checked: []}"' in banner
+    assert ("Zum Sicherheitstrupp" in banner) is with_safety
+    if with_safety:
+        assert f'href="#troop-{first.id}"' in banner
+        assert f'href="#troop-{second.id}"' not in banner
+
+
+def test_overview_counts_all_statuses(client, breathing_routes):
+    ctx = breathing_routes
+    ctx.troop.status = "im_einsatz"
+    for name, status, safety in [
+        ("Rückzug", "rueckzug", False), ("Bereit", "bereit", False),
+        ("Sicherheit", "bereit", True), ("Erholung 1", "zurueck", False),
+        ("Erholung 2", "zurueck", False), ("Erholung 3", "zurueck", False),
+        ("Erholt", "erholt", False),
+    ]:
+        _add_board_troop(ctx, name, status, safety)
+    ctx.db.commit()
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert "Trupps: 2 im Einsatz, 2 bereit (davon 1 Sicherheitstrupp), 3 in Erholung" in _board_summary(response.text)
+
+
+def test_warning_event_reloads_board_for_all_kinds(client, breathing_routes):
+    response = client.get(f"/einsatz/{breathing_routes.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    handler = response.text.split("window.addEventListener('breathing-warning',", 1)[1].split('});', 1)[0]
+    assert "_playWarning(kind, troopId);" in handler
+    assert "if (document.getElementById('troopsGrid')) doBreathingReload();" in handler
+    assert "if (!src) return;" in response.text

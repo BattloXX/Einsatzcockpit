@@ -2,152 +2,178 @@
 
 ← [Zurück zur Startseite](Home)
 
-Diese Phase-1-Überarbeitung stützt sich auf **FwDV 7** und **ÖBFV M302**. Der
-intern referenzierte Vorarlberger „Falter A6, V0" war online nicht verfügbar.
-Sobald das Original vorliegt, ist ein Abgleich durch den Projektinhaber erforderlich.
+Die Abläufe orientieren sich am FAZ-Falter und am Atemschutz-Lehrbehelf des
+LFV Vorarlberg: Kontrollen nach einem und zwei Dritteln der erwarteten Einsatzzeit,
+Rückzug nach dem doppelten Anmarschverbrauch und Überwachung des gesamten Trupps.
+
+> Die digitale Überwachung ergänzt Tafel und Formular, sie ersetzt sie nicht.
 
 ---
 
 ## Ansicht öffnen
 
-Im Einsatz-Board: Button **AS-Überwachung** in der Kopfleiste, oder direkt `/einsatz/{id}/atemschutz`.
-
-Die Atemschutz-Ansicht ist für alle Rollen lesbar. Änderungen dürfen:
-- Admin, Einsatzleiter, AS-Überwacher, Bearbeiter
+Im Einsatz-Board: **AS-Überwachung** in der Kopfleiste, oder direkt `/einsatz/{id}/atemschutz`.
+Das Modul muss systemweit und für die Organisation aktiviert sein.
+Die Ansicht ist für alle Rollen lesbar. Admin, Einsatzleiter, AS-Überwacher und
+Bearbeiter dürfen Änderungen durchführen.
 
 ---
 
 ## Trupp anlegen
 
-1. **+ Trupp anlegen** klicken.
-2. **Trupp-Bezeichnung** eingeben (z.B. „Trupp 1 – RLF").
-3. **Auftrag** beschreiben (z.B. „Innenangriff 2. OG").
-4. **Standort / Einsatzabschnitt** eingeben (z.B. „Treppenhaus Süd").
-5. **Einheit (Funkrufname)** eintragen (z.B. „1. Gruppe").
-6. **Flasche / Einsatzzeit** wählen:
-   - `1 × 6 L (300 bar)` → **33 min** Grundeinsatzzeit
-   - `1 × 6,8 L (300 bar)` → **37 min**
-   - `1 × 9 L (300 bar)` → **50 min**
-   - `manuell` → eigene Minutenzahl eingeben
-7. Optional **Fahrzeug** zuweisen.
-8. Mindestens **2 Truppmitglieder** ausfüllen (Truppführer TF + Truppmann TM).
-9. Für jedes Mitglied den **Anfangsdruck** im Picker wählen (max. 300 bar).
+1. **+ Trupp anlegen** klicken und Trupp-Bezeichnung, Auftrag und Standort eintragen.
+2. Einheit (Funkrufname) und optional Fahrzeug zuweisen.
+3. **Überwacher**, **Funkkanal** und **Angriffsweg** festhalten. Mit
+   **Überwachung/Details** lassen sich diese Angaben später ändern; **Überwachung
+   übernehmen** ordnet den angemeldeten Benutzer als Überwacher zu.
+4. **Flasche (Anzeige)** wählen. Die Flaschengröße bestimmt die Einsatzzeit nicht.
+   Es gilt die erwartete Einsatzzeit der Organisation (Vorgabe 30 Minuten).
+   Bei **manuell** kann die erwartete Einsatzzeit des Trupps angepasst werden.
+5. Mindestens zwei Truppmitglieder (Truppführer und Truppmann) mit Anfangsdruck erfassen.
+6. Einen vorgesehenen Sicherheitstrupp entsprechend kennzeichnen.
 
-> **Hinweis:** 200-bar-Flaschen und 2×6,8 L-Geräte werden nicht mehr unterstützt.
+Die früher genannten 33/37/50 Minuten aus der Flaschengröße gelten nicht mehr.
+Der Picker bietet 10 bis 300 bar in 10er-Schritten, einschließlich 200 bar.
+Die Serverprüfung erlaubt Druckwerte von 0 bis 330 bar. Ein pauschaler Ausschluss
+von 200-bar-Flaschen ist daher falsch; die Flaschen-Auswahl dient der Anzeige.
+
+Eine Doppelbelegung derselben Person in einem anderen eingesetzten oder
+im Rückzug befindlichen Trupp desselben Einsatzes wird beim Einsetzen gemeldet. Vor dem Fortfahren muss die Belegung
+geklärt werden; eine bewusste Übersteuerung verlangt eine Begründung.
 
 ---
 
-## Anfangsdrücke
+## Einsatz starten und Druck überwachen
 
-Der Druck-Picker geht von 10 bis 300 bar in 10er-Schritten.  
-Bis zum Erreichen des Einsatzziels wird ein **vorläufiger Rückzugsdruck** geschätzt:
+Mit **Einsetzen** beginnen Stoppuhr und Überwachung. Bei Druckabfragen zählt der
+**niedrigste Druck des Trupps**. Individuelle Druckwerte können über **Druck**
+eingetragen werden und erscheinen mit Zeit und Mitglied in der Chronik.
+
+Bis **Einsatzziel erreicht** gilt die konfigurierte Rückzug-Untergrenze
+(Vorgabe: Warneinrichtung bei 60 bar). Am Einsatzziel den Druck jedes Mitglieds
+melden. Anschließend berechnet sich dessen Rückzugsdruck so:
 
 ```
-Rückzugsdruck = Anfangsdruck × 0,5 + 10 bar (Sicherheitsreserve)
-Beispiel: 300 bar × 0,5 + 10 = 160 bar
+Anmarschverbrauch = Anfangsdruck − Druck am Einsatzziel
+Rückzugsdruck = max(konfigurierte Untergrenze, 2 × Anmarschverbrauch)
+Beispiel: 300 bar am Start, 270 bar am Ziel → Rückzug bei 60 bar
+Beispiel: 270 bar am Start, 180 bar am Ziel → Rückzug bei 180 bar
 ```
 
-Am Einsatzziel wird der Druck jedes Mitglieds mit **Einsatzziel erreicht** gemeldet.
-Danach gilt der tatsächliche Verbrauch des Vormarschs:
-
-```
-Finaler Rückzugsdruck = 2 × Zieldruck − Anfangsdruck
-```
-
-Die konfigurierte Mindestreserve bildet dabei die Untergrenze. Jedes Mitglied
-wird einzeln gegen seinen eigenen Rückzugsdruck geprüft; der ungünstigste
-Einzelstatus bestimmt den Truppstatus und zeigt die betroffene Person an.
+Die Warneinrichtung (Vorgabe 60 bar) bildet die Mindestgrenze; ihr erstes Signal
+bedeutet Rückzug des gesamten Trupps. Der ungünstigste Einzelstatus bestimmt die
+Truppwarnung und zeigt die betroffene Person an.
 
 ---
 
-## Einsatz starten
+## Kontrolle statt Quittieren
 
-**▶ Einsetzen** klicken → `entry_at` wird gesetzt → Stoppuhr und Warnungen laufen.
+Bei **1/3 und 2/3 der erwarteten Einsatzzeit** wird eine Kontrolle fällig,
+bei 30 Minuten also nach 10 und 20 Minuten. Über Funk den niedrigsten Druck des
+Trupps abfragen und mit **Druck abgefragt** dokumentieren. Eine Kontrolle vor der
+jeweiligen Fälligkeit erledigt die spätere Kontrolle nicht.
 
----
+Besteht kein Funkkontakt, **Kein Funkkontakt** wählen. Einfaches Quittieren,
+ein individueller Druckeintrag oder eine Freitext-Lagemeldung ersetzt die fällige
+Kontrolle nicht. **Kontrolle (frei)** dokumentiert zusätzliche Abfragen.
 
-## Timer und Warnungen
-
-| Ereignis | Anzeige | Akustik |
-|---|---|---|
-| 1/3 der Einsatzzeit verstrichen, keine Lagemeldung | Gelbes Badge „⚠ Lagemeldung fällig (1/3)" | Ton ~10 s (muss mind. 10 s laut hörbar sein, Leitfaden) |
-| 2/3 der Einsatzzeit verstrichen, keine Meldung nach dieser Schwelle | Gelbes Badge „⚠ Lagemeldung fällig (2/3)" | Ton ~10 s |
-| Rückzugsdruck unterschritten | Rotes Badge „⚠ RÜCKZUGSDRUCK" | Alarm-Ton ~5 s |
-| Max-Einsatzzeit überschritten | Rotes Badge „⚠ MAX-EINSATZZEIT" | **Dauerton** bis manuelle Quittierung |
-
-Jedes Badge hat einen **„✓ Quit."-Button** zum Bestätigen.
-
-> Eine 1/3- bzw. 2/3-Warnstufe gilt erst durch eine Meldung nach dem jeweiligen
-> Fälligkeitszeitpunkt als erfüllt. Eine frühere Meldung unterdrückt die spätere Warnung nicht.
+Rückzugsdruck und überschrittene Max-Einsatzzeit erscheinen rot. Das Quittieren
+einer solchen Warnanzeige dokumentiert eine Bestätigung und ersetzt keine
+Rückzugsmaßnahme. Standort, Auftrag und Freitext-Lagemeldung lassen sich separat
+aktualisieren; die letzte Meldung erscheint mit Uhrzeit auf der Karte.
 
 ---
 
-## Lagemeldung absetzen
+## Funkverlust und Notfall
 
-Button **📢 Lagemeldung** in der Truppliste → Freitext eingeben → „Meldung absetzen".
+**Kein Funkkontakt** bleibt als gelbes Banner sichtbar, bis **Funkkontakt wieder da**
+gemeldet wird. Die aufklappbare Hilfe enthält die Schritte nach FAZ-Falter:
 
-Die letzte Meldung mit Zeitstempel erscheint in der Truppliste und im Protokoll-PDF.
+- Gruppenkommandant des Trupps verständigen.
+- Der Trupp im Innenangriff muss den Rückzug antreten.
+- Rettungstrupp bzw. Sicherheitstrupp einsetzen (Entscheidung GRKDT).
+- Überwacher und Einsatzleitung informieren.
 
-Auch das Eintragen eines neuen Drucks gilt automatisch als Lagemeldung (zählt für die 1/3-Frist).
+Die Checkboxen sind eine lokale Merkhilfe und werden nicht gespeichert.
+**Zum Sicherheitstrupp** springt zum ersten bereiten Sicherheitstrupp, sofern vorhanden.
+
+**Atemschutznotfall** muss bestätigt werden. Die Karte und der kritische Hinweis
+werden rot hervorgehoben. Notfall und Funkverlust lösen sofort Benachrichtigungen
+aus. Das Aufheben eines Notfalls ist Einsatzleiter, AS-Überwacher und Admin vorbehalten.
 
 ---
 
-## Druckupdates
+## Einsatzhinweise und Übersicht
 
-Während des Einsatzes: Pro Mitglied auf **„Druck"** klicken → Wert aus dem Picker wählen.
+Über den Karten stehen **Kritische Hinweise**, solange ihre Bedingung zutrifft.
+Sie sind nicht schließbar und verschwinden nach Behebung automatisch:
 
-Druckwerte werden in der Meldungs-Chronik aufgezeichnet (Zeit, Mitglied, bar, optionale Notiz).
+- Ab drei gleichzeitig eingesetzten Trupps (einschließlich Rückzug):
+  **Atemschutzsammelplatz (ASSP)** über die Einsatzleitung alarmieren.
+  Der ASSP übernimmt nur Logistik; die Überwachung bleibt beim Gruppenkommandanten.
+- Ohne bereiten Sicherheitstrupp bei eingesetztem Angriffstrupp:
+  **Rettungstrupp ab Einsatzbeginn bereitstellen**. Nur der Status **bereit** zählt.
+- Notfall und Funkverlust je Trupp, mit Sprunglink zur betroffenen Karte.
+
+Die Übersichtszeile zählt eingesetzte Trupps einschließlich Rückzug, bereite
+Trupps samt Sicherheitstrupps sowie zurückgekehrte Trupps in Erholung.
 
 ---
 
-## Status-Wechsel
+## Benachrichtigungen und Eskalationsstufen
+
+Warnungen und Zustellungen werden serverseitig gespeichert. Der Versand läuft
+auch ohne geöffnetes Board weiter und setzt nach einem Watchdog-/Worker-Neustart
+auf dem gespeicherten Stand auf. Fristen zählen ab Auslösung der Warnung.
+
+**Überwacher** ist der dem Trupp zugeordnete Benutzer, ersatzweise der Einsatzleiter.
+**Leitung** umfasst die konfigurierten aktiven Eskalationsempfänger der primären
+Einsatzorganisation und den Einsatzleiter. Ist niemand zugeordnet, werden aktive
+AS-Überwacher dieser Organisation verwendet.
+
+| Ereignis | Stufe 0 | Stufe 1 | Stufe 2 |
+|---|---|---|---|
+| Kontrolle 1/3 oder 2/3 offen | Nach 60 s Push an Überwacher | Nach 180 s Push an Leitung | Nach 300 s SMS an Leitung |
+| Rückzugsdruck erreicht | Sofort Push an Überwacher | Nach 60 s Push und SMS an Leitung | – |
+| Max-Einsatzzeit überschritten | Sofort Push an Überwacher | Nach konfigurierter Eskalationsfrist (Vorgabe 3 min) Push und SMS an Leitung | – |
+| Kein Funkkontakt | Sofort Push an Überwacher sowie Push und SMS an Leitung | – | – |
+| Atemschutznotfall | Sofort Push und SMS an Überwacher und Leitung | – | – |
+| Kein bereiter Sicherheitstrupp / ASSP | Sofort Push an Leitung | – | – |
+
+SMS setzt den SMS-Schalter, einen eingerichteten Versand und eine Telefonnummer
+voraus. Bei Übungen werden SMS unterdrückt. Erledigte Warnungen stoppen noch
+wartende Zustellungen. Unter **Benachrichtigungen** auf der Truppkarte stehen für
+offene Warnungen Art, Auslösezeit, Stufe, Kanal, Empfänger, Zustellstatus und Sendezeit.
+Unterdrückte Zustellungen zeigen den Grund, fehlgeschlagene den Versandfehler.
+
+Push-Alarm und SMS-Eskalation sind Phase 2. Die **Android-App-Pflicht** mit
+Überwachungssitzung folgt in Phase 3; der native, abgesicherte **Alarmton** mit
+lokaler Überwachung folgt in Phase 4. Die vorhandene Browser-Akustik hängt von
+Autoplay-Freigabe und offenem Board ab.
+
+---
+
+## Rückkehr und Erholung
 
 | Von | Nach | Bedeutung |
-|-----|------|-----------|
+|---|---|---|
 | Bereit | Im Einsatz | Trupp betritt den Gefahrenbereich |
 | Im Einsatz | Rückzug | Rückzugsdruck erreicht oder Rückruf |
 | Rückzug | Zurück | Trupp hat Gefahrenbereich verlassen |
-| Zurück | Erholt | Trupp ist wieder einsatzbereit |
+| Zurück | Erholt | Erholung abgeschlossen |
 
----
-
-## Abschlussdruck eintragen
-
-Nach dem Einsatz: Restdrücke über den Druck-Picker je Mitglied eintragen.
+Nach der Rückkehr **Enddruck** je Mitglied eintragen. Ab der Rückkehr läuft die
+Erholzeit (Vorgabe 30 Minuten); die Karte zeigt die verbleibende Zeit.
+Beim erneuten Einsatz vor Ablauf erscheint eine Warnung; eine Übersteuerung
+verlangt eine Begründung. **Erneut einsetzen** archiviert den bisherigen Zyklus
+und übernimmt die neue Besetzung für den nächsten Einsatz.
 
 ---
 
 ## PDF-Export
 
-### Einzelprotokoll (Trupp)
-
-In der Truppliste: **📄 PDF**-Button → vollständiges A4-Protokoll mit:
-- Stammdaten (Name, Funkrufname, Auftrag, Standort, Gerätetype, Einsatzdauer)
-- Mitgliedertabelle (Anfangsdruck, Soll-Rückzugsdruck, Enddruck, AGT-Qualifikation)
-- Zeitachse (1/3-Zeitpunkt soll/ist, Rückzug, Zurück)
-- vollständige Meldungs-Chronik (Druck, Notiz, Uhrzeit)
-- Quittierungsnachweis
-
-Auch im **Archiv** (Detail-Ansicht) ist ein PDF-Link je Trupp verfügbar.
-
-### Gesamtbericht
-
-Im Abschlussbericht des Einsatzes ist eine eigene Seite **„Atemschutz-Protokoll"** enthalten – mit identischem vollständigen Inhalt für alle Trupps.
-
----
-
-## Technische Anforderungen (Leitfaden)
-
-| Anforderung | Umsetzung |
-|---|---|
-| Digitaluhr mit laufender Zeit | ✓ Stoppuhr pro Trupp ab Einsatzbeginn |
-| Kurzzeituhr mit geplanter Einsatzzeit | ✓ Timer „mm:ss / Plan-min" mit Fortschrittsbalken |
-| Warnsignal nach 1/3 der Einsatzzeit, laut ≥ 10 s | ✓ Ton + Badge |
-| Warnsignal nach 2/3 der Einsatzzeit | ✓ Ton + Badge |
-| Warnsignal bei Rückzugsdruck | ✓ |
-| Warnsignal Dauerton bei Max-Zeit bis Quittierung | ✓ |
-| Felder: Name, Funkrufname, Gerätetype | ✓ (name, unit_name, bottle_preset) |
-| Felder: Auftrag, Standort | ✓ |
-| Druck bei Einsatzbeginn / Einsatzziel / Einsatzende | ✓ (start_press / pressure_logs / back_press) |
-| Letzte Meldung (Zeitpunkt + Text) | ✓ |
-| PDF-Export mit aller Dokumentation | ✓ |
+**PDF** auf der Truppkarte öffnet das Einzelprotokoll mit Stammdaten, Mitgliedern,
+Druckwerten, Zeitachse und Meldungs-Chronik. Auch im Archiv ist ein PDF-Link je
+Trupp verfügbar. Der Abschlussbericht enthält die Atemschutz-Protokolle aller
+Trupps. Einstellungen zu Fristen und Empfängern:
+[Organisations-Einstellungen](Administration-Einstellungen#atemschutzüberwachung).
