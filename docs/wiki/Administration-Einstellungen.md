@@ -66,6 +66,54 @@ Details zur Lagekarte.info-Integration: [Lagekarte.info](Anwender-Lagekarte)
 
 Unter **Keine Alarmierung bei Begriffen** können pro Zeile Begriffe hinterlegt werden. Kommt einer davon in Stichwort, Meldung oder Grund eines neuen Einsatzes vor, wird der Einsatz weiterhin angelegt und angezeigt, aber SMS, Teams, Mail und Push werden nicht versendet. Groß- und Kleinschreibung werden dabei ignoriert. Einsätze mit dem Stichwort F30 werden immer unterdrückt.
 
+## Atemschutzüberwachung
+
+Unter **Einstellungen → Allgemein → Atemschutzüberwachung** werden die Werte der
+Organisation gepflegt. Das Modul muss zusätzlich systemweit und für die
+Organisation freigeschaltet sein. Für den Trupp gelten die Werte der primären
+Einsatzorganisation.
+
+| Einstellung | Wirkung / Vorgabe |
+|---|---|
+| Erwartete Einsatzzeit | 30 Minuten (5–120); Kontrollen bei 1/3 und 2/3, also standardmäßig nach 10 und 20 Minuten. Die Flaschengröße bestimmt die Zeit nicht mehr. |
+| Rückzug-Untergrenze | 60 bar (30–100 einstellbar); Vorgabe entspricht der Warneinrichtung. Nach Erreichen des Einsatzziels gilt der größere Wert aus Untergrenze und doppeltem Anmarschverbrauch. |
+| Gelbschwelle | 75 % des Anfangsdrucks (50–95); gelbe Druckwarnung. |
+| Erholzeit | 30 Minuten (0–120); vorzeitig erneutes Einsetzen verlangt eine begründete Übersteuerung. |
+| Eskalationsempfänger | Aktive Benutzer der eigenen Organisation; zusätzlich erhält der Einsatzleiter die Eskalation. Ohne Zuordnung fallen die Empfänger auf aktive AS-Überwacher der Organisation zurück. |
+| SMS-Eskalation | Standardmäßig aktiv; zusätzlich SMS-Versand und Telefonnummern einrichten. In Übungen werden SMS unterdrückt. |
+| Eskalationsfrist | Organisationswert `escalation_grace_min`, Vorgabe 3 Minuten; Wartezeit für die Max-Zeit-Eskalation. Andere Ereignisse haben feste Stufen. |
+
+Die Abläufe folgen FAZ/LFV Vorarlberg: niedrigsten Druck des Trupps abfragen,
+fällige Kontrollen dokumentieren statt nur quittieren, Rückzug beim doppelten
+Anmarschverbrauch mit Warneinrichtung als Untergrenze. Überwacher, Funkkanal und
+Angriffsweg werden je Trupp erfasst. Doppelbelegung und zu kurze Erholung werden
+beim Einsetzen geprüft.
+
+| Ereignis | Push / SMS und Zeitpunkt ab Auslösung |
+|---|---|
+| Kontrolle 1/3 oder 2/3 offen | Stufe 0 nach 60 s Push an Überwacher; Stufe 1 nach 180 s Push an Leitung; Stufe 2 nach 300 s SMS an Leitung. |
+| Rückzugsdruck | Stufe 0 sofort Push an Überwacher; Stufe 1 nach 60 s Push und SMS an Leitung. |
+| Max-Einsatzzeit | Stufe 0 sofort Push an Überwacher; Stufe 1 nach Eskalationsfrist Push und SMS an Leitung. |
+| Funkverlust | Stufe 0 sofort Push an Überwacher, Push und SMS an Leitung. |
+| Notfall | Stufe 0 sofort Push und SMS an Überwacher und Leitung. |
+| ASSP / kein bereiter Sicherheitstrupp | Stufe 0 sofort Push an Leitung. |
+
+Überwacher ist der zugeordnete Benutzer, ersatzweise der Einsatzleiter. Leitung
+bezeichnet die oben beschriebene Empfängergruppe. Warnungen und Zustellungen sind
+persistent; wartende Zustellungen werden bei Erledigung unterdrückt. Das Board
+zeigt offene Warnungen samt Zustellungsprotokoll und Gründen für Unterdrückungen.
+
+Ab drei eingesetzten Trupps fordert der Einsatzhinweis den **ASSP** über die
+Einsatzleitung an (nur Logistik, Überwachung bleibt beim Gruppenkommandanten).
+Ein Sicherheitstrupp zählt nur im Status **bereit**. Funkverlust und Notfall
+bleiben im Board sichtbar, bis sie aufgehoben werden.
+
+> Die digitale Überwachung ergänzt Tafel und Formular, sie ersetzt sie nicht.
+
+Die Android-App-Pflicht folgt in Phase 3, der native abgesicherte Alarmton in
+Phase 4. Ablauf und Funkverlust-Checkliste:
+[Atemschutzüberwachung](Anwender-Atemschutzueberwachung).
+
 ## Auto-Schließen (Einsatz automatisch beenden)
 
 Einsätze können automatisch geschlossen werden, wenn sie für eine konfigurierbare Zeit inaktiv waren.

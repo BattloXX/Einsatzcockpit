@@ -219,7 +219,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         )
     }
     from app.models.weather import WeatherStation
-    from app.services.breathing_service import breathing_system_enabled
+    from app.services.breathing_service import breathing_system_enabled, parse_user_id_csv
     from app.services.foerderstrecke_service import foerderstrecke_system_enabled
     from app.services.gateway_service import gateway_system_enabled as _gateway_system_enabled
     from app.services.katplan_flags import katplan_system_enabled
@@ -243,6 +243,12 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
             (tab for tab, path in SETTINGS_TAB_PATHS.items() if path == request.url.path), "stammdaten"
         ),
         "org": org,
+        "asuew_users": db.query(User).filter(
+            User.org_id == effective_org_id, User.active.is_(True),
+        ).order_by(User.display_name, User.id).all() if effective_org_id else [],
+        "asuew_selected_user_ids": parse_user_id_csv(
+            org_settings.asuew_eskalation_user_ids if org_settings else None
+        ),
         "org_settings": org_settings,
         "version": get_current_version(),
         "is_sysadmin": is_sysadmin,
@@ -323,6 +329,9 @@ def save_org_settings(
     asuew_rueckzug_untergrenze_bar: int | None = Form(None),
     asuew_gelb_prozent: int | None = Form(None),
     asuew_erholzeit_min: int | None = Form(None),
+    asuew_eskalation_user_ids: list[int] = Form([]),
+    asuew_eskalation_form: str = Form(""),
+    asuew_eskalation_sms_raw: str = Form(""),
     objekt_module_enabled_raw: str = Form(""),
     kontakte_module_enabled_raw: str = Form(""),
     nachschlagewerke_module_enabled_raw: str = Form(""),
@@ -562,6 +571,33 @@ def save_org_settings(
                 user_id=user.id, payload={"alt": settings_before, "neu": settings_after},
                 ip=request.client.host if request.client else None,
             )
+
+        if asuew_eskalation_form == "1":
+            selected_ids = sorted(set(asuew_eskalation_user_ids))
+            valid_users = db.query(User).filter(
+                User.org_id == effective_org_id, User.active.is_(True),
+                User.id.in_([value for value in selected_ids if -(2**63) <= value < 2**63]),
+            ).all() if selected_ids else []
+            new_ids = ",".join(str(value) for value in sorted(u.id for u in valid_users)) or None
+            new_sms = asuew_eskalation_sms_raw in ("1", "true", "on")
+            escalation_before = {
+                "asuew_eskalation_user_ids": org_s.asuew_eskalation_user_ids,
+                "asuew_eskalation_sms": org_s.asuew_eskalation_sms is not False,
+            }
+            escalation_after = {
+                "asuew_eskalation_user_ids": new_ids,
+                "asuew_eskalation_sms": new_sms,
+            }
+            org_s.asuew_eskalation_user_ids = new_ids
+            org_s.asuew_eskalation_sms = new_sms
+            if escalation_before != escalation_after:
+                from app.core.audit import write_audit
+
+                write_audit(
+                    db, "breathing.asuew_eskalation", org_id=effective_org_id,
+                    user_id=user.id, payload={"alt": escalation_before, "neu": escalation_after},
+                    ip=request.client.host if request.client else None,
+                )
 
     # Lageführung: Org-Toggle — nur änderbar wenn System-Flag aktiv
     # (gleiches Muster wie UAS: disabled-Checkbox darf den Wert nicht kippen).
