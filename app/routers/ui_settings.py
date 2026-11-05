@@ -331,6 +331,8 @@ def save_org_settings(
     asuew_erholzeit_min: int | None = Form(None),
     asuew_eskalation_user_ids: list[int] = Form([]),
     asuew_eskalation_form: str = Form(""),
+    asuew_app_form: str = Form(""),
+    asuew_app_pflicht_raw: str = Form(""),
     asuew_eskalation_sms_raw: str = Form(""),
     objekt_module_enabled_raw: str = Form(""),
     kontakte_module_enabled_raw: str = Form(""),
@@ -571,6 +573,19 @@ def save_org_settings(
                 user_id=user.id, payload={"alt": settings_before, "neu": settings_after},
                 ip=request.client.host if request.client else None,
             )
+
+        if asuew_app_form == "1":
+            old_app_pflicht = bool(org_s.asuew_app_pflicht)
+            new_app_pflicht = asuew_app_pflicht_raw in ("1", "true", "on")
+            org_s.asuew_app_pflicht = new_app_pflicht
+            if old_app_pflicht != new_app_pflicht:
+                from app.core.audit import write_audit
+
+                write_audit(
+                    db, "breathing.asuew_app_pflicht", org_id=effective_org_id,
+                    user_id=user.id, payload={"alt": old_app_pflicht, "neu": new_app_pflicht},
+                    ip=request.client.host if request.client else None,
+                )
 
         if asuew_eskalation_form == "1":
             selected_ids = sorted(set(asuew_eskalation_user_ids))

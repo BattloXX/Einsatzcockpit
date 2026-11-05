@@ -411,3 +411,39 @@ def test_warning_event_reloads_board_for_all_kinds(client, breathing_routes):
     assert "_playWarning(kind, troopId);" in handler
     assert "if (document.getElementById('troopsGrid')) doBreathingReload();" in handler
     assert "if (!src) return;" in response.text
+
+
+@pytest.mark.parametrize("status", ["bereit", "im_einsatz", "rueckzug", "zurueck", "erholt"])
+@pytest.mark.parametrize("mode", ["off", "missing", "valid"])
+def test_app_readonly_board(client, breathing_routes, status, mode):
+    from datetime import UTC, datetime, timedelta
+
+    from tests.test_breathing_routes_phase1 import _settings
+    from tests.test_breathing_routes_phase3 import _session
+
+    ctx = breathing_routes
+    _settings(ctx, asuew_app_pflicht=mode != "off")
+    ctx.troop.status = status
+    ctx.troop.entry_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+    ctx.db.commit()
+    if mode == "valid":
+        _session(ctx, client)
+    page = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+    assert page.status_code == 200
+    readonly = mode == "missing"
+    assert page.context["asuew_readonly"] is readonly
+    assert ("Nur-Lese-Ansicht:" in page.text) is readonly
+    assert f"const ASUEW_READONLY = {'true' if readonly else 'false'};" in page.text
+    if readonly:
+        assert 'href="/app"' in page.text
+        posts = re.findall(r'hx-post="([^"]+)"', page.text)
+        assert all(url.endswith(("/notfall", "/funkverlust")) for url in posts)
+        assert len(posts) == (2 if status in ("im_einsatz", "rueckzug") else 0)
+        for text in ["ackWarning(", "Trupp anlegen", 'id="newTroopModal"',
+                     "requestSubmit", 'id="redeployTroopModal-']:
+            assert text not in page.text
+        assert "if (ASUEW_READONLY) return;" in page.text
+    else:
+        assert "Trupp anlegen" in page.text
+        assert 'id="newTroopModal"' in page.text
+        assert 'hx-post=' in page.text

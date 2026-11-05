@@ -157,10 +157,17 @@
 {% endblock %}
 
 {% block content %}
+{% if asuew_readonly %}
+<div role="alert" style="padding:16px;background:#7c1d1d;color:#fff;">
+  Nur-Lese-Ansicht: Eingaben, Quittierungen und der Alarmton der Atemschutzüberwachung sind nur in der Einsatzcockpit-App möglich.
+  <a href="/app" style="color:inherit;text-decoration:underline;">App herunterladen</a>
+</div>
+{% endif %}
 {% if incident.is_exercise %}<div class="exercise-topbar">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>{% endif %}
 <div class="breathing-board">
 <div class="page-header">
   {% with active="atemschutz" %}{% include "incident/_subnav.html" %}{% endwith %}
+  <span id="asuewSessionStatus" role="status"></span>
   <h2>Atemschutzüberwachung – {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     {% if can_edit is not defined or can_edit %}
@@ -243,15 +250,19 @@
       {% if 'max_exceeded' in active_warnings %}
         <span class="warn-badge warn-badge--max-time" id="warn-max-{{ troop.id }}">
           {{ icon("alert-triangle", size="sm") }} MAX-EINSATZZEIT
+          {% if can_edit is not defined or can_edit %}
           <button type="button" class="btn btn--ghost btn--sm btn--ack"
                   onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','max_time','warn-max-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
+          {% endif %}
         </span>
       {% endif %}
       {% if 'withdraw' in active_warnings %}
         <span class="warn-badge warn-badge--red" id="warn-withdraw-{{ troop.id }}">
           {{ icon("alert-triangle", size="sm") }} RÜCKZUGSDRUCK{% if warning_member %}: {{ warning_member.display_name }}{% endif %}
+          {% if can_edit is not defined or can_edit %}
           <button type="button" class="btn btn--ghost btn--sm btn--ack"
                   onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','withdraw','warn-withdraw-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
+          {% endif %}
         </span>
       {% endif %}
       {% for kind, stufe, label in [('two_third_due', 'two_third', '2/3'), ('one_third_due', 'one_third', '1/3')] %}
@@ -518,6 +529,7 @@
 
     <!-- ── Status actions ── -->
     <div class="troop-card__actions">
+      {% if can_edit is not defined or can_edit %}
       {% if troop.status == 'bereit' %}
       <div id="readiness-start-{{ troop.id }}">
         <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/starten"
@@ -554,13 +566,14 @@
               data-ec-action="open-dialog" data-ec-dialog="redeployTroopModal-{{ troop.id }}">{{ icon("refresh", size="xs") }} Erneut einsetzen</button>
       {% endif %}
 
+      {% endif %}
       <button type="button" class="btn btn--ghost btn--sm" title="Trupp-Protokoll als PDF"
          onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ troop.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf'})">{{ icon("file-text", size="xs") }} PDF</button>
     </div>
 
-    {% if (can_edit is not defined or can_edit) and troop.status in ['im_einsatz', 'rueckzug'] %}
+    {% if can_alarm and troop.status in ['im_einsatz', 'rueckzug'] %}
     <div class="troop-control-actions">
-      {{ kontrolle_picker(troop, 'frei', 'Kontrolle (frei)') }}
+      {% if can_edit is not defined or can_edit %}{{ kontrolle_picker(troop, 'frei', 'Kontrolle (frei)') }}{% endif %}
       {{ safety_form(troop, 'funkverlust', 'Funkkontakt verloren', 'aktiv', '1') }}
       <div class="mini-popup-wrap" x-data="{open:false}" @click.outside="open = false">
         <button type="button" class="btn btn--danger btn--sm" @click="open = !open">Atemschutznotfall</button>
@@ -629,7 +642,7 @@
     {% endif %}
 
   </div>
-  {% if troop.status == 'erholt' %}{% include "breathing/_redeploy_dialog.html" %}{% endif %}
+  {% if (can_edit is not defined or can_edit) and troop.status == 'erholt' %}{% include "breathing/_redeploy_dialog.html" %}{% endif %}
   {% else %}
   <p class="text-muted">Noch keine Trupps angelegt.</p>
   {% endfor %}
@@ -637,6 +650,7 @@
 </div>
 
 <!-- ── Neuer Trupp Modal ── -->
+{% if can_edit is not defined or can_edit %}
 <dialog class="modal modal--wide" id="newTroopModal">
   <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/trupp"
         hx-post="/einsatz/{{ incident.id }}/atemschutz/trupp"
@@ -806,13 +820,43 @@
     </div>
   </form>
 </dialog>
+{% endif %}
 {% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/breathing_net.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/asuew_sitzung.js?v={{ ASSET_VERSION }}"></script>
 <script>
-{% if request.query_params.get('error') in ['min_two_members', 'invalid_input'] %}
+const ASUEW_READONLY = {{ asuew_readonly | default(false) | tojson }};
+if (window.ELNative && ELNative.isNative) {
+  let firstSessionStarted = false;
+  ECPAsuewSitzung.start({
+    incidentId: {{ incident.id }},
+    onState: function (state) {
+      const el = document.getElementById('asuewSessionStatus');
+      const labels = { verbindet: 'Überwachung verbindet', aktiv: 'Überwachung aktiv', gestoert: 'Verbindung gestört' };
+      el.textContent = state.zustand === 'fehler' ? state.message : labels[state.zustand];
+      el.style.color = state.zustand === 'fehler' || state.ampel === 'rot' ? '#e53e3e' :
+        (state.zustand === 'gestoert' || state.ampel === 'gelb' ? '#ed8936' : '#48bb78');
+      el.title = (state.probleme || []).join(' ');
+      if (state.ampel === 'rot' || state.ampel === 'gelb') el.textContent += ' - Selbsttest: ' + state.ampel;
+    },
+    onStarted: function () {
+      if (firstSessionStarted) return;
+      firstSessionStarted = true;
+      if (!ASUEW_READONLY) return;
+      try {
+        const key = 'asuew-reload-{{ incident.id }}';
+        const last = Number(sessionStorage.getItem(key));
+        if (last && Date.now() - last < 120000) return;
+        sessionStorage.setItem(key, String(Date.now()));
+        location.reload();
+      } catch (_) { /* Ohne Reload-Schutz kein automatischer Reload. */ }
+    }
+  });
+}
+{% if (can_edit is not defined or can_edit) and request.query_params.get('error') in ['min_two_members', 'invalid_input'] %}
 document.getElementById('newTroopModal').showModal();
 {% endif %}
 /* ── Programm-Reload: unterdrückt beforeunload-Dialog ─────────────── */
@@ -835,6 +879,7 @@ function doBreathingReload() {
 });
 
 /* ── Warn-Quittierung: erst nach bestaetigtem POST Ton stoppen ── */
+{% if can_edit is not defined or can_edit %}
 async function ackWarning(btn, url, kind, badgeId) {
   btn.disabled = true;
   const badge = document.getElementById(badgeId);
@@ -863,10 +908,12 @@ async function ackWarning(btn, url, kind, badgeId) {
   doBreathingReload();
 }
 
+{% endif %}
 /* ── Audio unlock (Browser-Autoplay-Policy) ── */
 let _audioUnlocked = false;
 const _pendingWarnings = new Map();
 function unlockAudio() {
+  if (ASUEW_READONLY) return;
   if (_audioUnlocked) return;
   _audioUnlocked = true;
   // Web Audio API Context entsperren
@@ -895,6 +942,7 @@ function unlockAudio() {
 const _loopingAudio = new Map();
 
 function _playWarning(kind, troopId) {
+  if (ASUEW_READONLY) return;
   const files = {
     'one_third': '/static/audio/troop-warning-third.mp3',
     'two_third': '/static/audio/troop-warning-third.mp3',

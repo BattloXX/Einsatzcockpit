@@ -556,6 +556,14 @@
         <small class="form-hint">Mindestpause vor einem erneuten Einsatz. Vorgabe: 30 Minuten.</small>
       </div>
 
+      <input type="hidden" name="asuew_app_form" value="1" {% if not breathing_sys_enabled %}disabled{% endif %}>
+      <label class="{% if not breathing_sys_enabled %}sys-disabled{% endif %} sys-check">
+        <input type="checkbox" name="asuew_app_pflicht_raw" value="1"
+               {% if org_settings and org_settings.asuew_app_pflicht %}checked{% endif %}
+               {% if not breathing_sys_enabled %}disabled{% endif %}>
+        Überwachung nur in der App erlauben (im Browser nur Lesen)
+      </label>
+      <p class="form-hint">Erst aktivieren, wenn alle Überwachungsgeräte die aktuelle Einsatzcockpit-App mit Atemschutzüberwachung installiert haben.</p>
       <h4>Eskalation</h4>
       <input type="hidden" name="asuew_eskalation_form" value="1" {% if not breathing_sys_enabled %}disabled{% endif %}>
       <div class="form-group">
