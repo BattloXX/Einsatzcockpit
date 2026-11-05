@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
+from starlette.datastructures import FormData
 
 from app.core.async_bridge import run_async
 from app.core.permissions import has_role, require_role
@@ -12,6 +13,7 @@ from app.models.breathing import BOTTLE_PRESETS, BreathingTroop
 from app.models.incident import Incident
 from app.models.master import Member
 from app.services.breathing_service import (
+    InvalidTroopTransition,
     ReadinessWarning,
     ack_warning,
     check_troop_warnings,
@@ -29,6 +31,28 @@ from app.services.breathing_service import (
 from app.services.broadcast import manager
 
 router = APIRouter()
+
+
+def _parse_members_form(form_data: FormData) -> list[dict]:
+    members_data = []
+    i = 0
+    while True:
+        key_id = f"member_{i}_id"
+        key_name = f"member_{i}_name"
+        key_role = f"member_{i}_role"
+        key_press = f"member_{i}_press"
+        if key_id not in form_data and key_name not in form_data:
+            break
+        mid = form_data.get(key_id)
+        members_data.append({
+            "member_id": int(mid) if mid and str(mid).isdigit() else None,  # type: ignore[arg-type]
+            "free_text_name": form_data.get(key_name) or None,
+            "role": form_data.get(key_role, "truppmann"),
+            "start_press": float(form_data[key_press]) if form_data.get(key_press) else None,  # type: ignore[arg-type]
+        })
+        i += 1
+
+    return members_data
 
 
 def require_breathing_enabled(request: Request) -> None:
@@ -91,23 +115,13 @@ def create_breathing_troop(
 
     # Parse member data from form (member_0_id, member_0_role, member_0_press, etc.)
     form_data = run_async(request.form)
-    members_data = []
-    i = 0
-    while True:
-        key_id = f"member_{i}_id"
-        key_name = f"member_{i}_name"
-        key_role = f"member_{i}_role"
-        key_press = f"member_{i}_press"
-        if key_id not in form_data and key_name not in form_data:
-            break
-        mid = form_data.get(key_id)
-        members_data.append({
-            "member_id": int(mid) if mid and str(mid).isdigit() else None,  # type: ignore[arg-type]
-            "free_text_name": form_data.get(key_name) or None,
-            "role": form_data.get(key_role, "truppmann"),
-            "start_press": float(form_data[key_press]) if form_data.get(key_press) else None,  # type: ignore[arg-type]
-        })
-        i += 1
+    try:
+        members_data = _parse_members_form(form_data)
+    except ValueError:
+        return RedirectResponse(
+            f"/einsatz/{incident_id}/atemschutz?error=invalid_input",
+            status_code=303,
+        )
 
     # Validierung: mindestens 2 Mitglieder ausgefüllt (Member-ID ODER Freitext-Name)
     filled = [
@@ -120,16 +134,22 @@ def create_breathing_troop(
             status_code=303,
         )
 
-    create_troop(
-        db, incident_id=incident_id, name=name,
-        members_data=members_data, task_text=task_text or None,
-        vehicle_id=vehicle_id, unit_name=unit_name.strip() or None,
-        location_text=location_text.strip() or None,
-        planned_duration_min=duration,
-        bottle_preset=bottle_preset.strip() or None,
-        is_sicherheitstrupp=is_sicherheitstrupp,
-        user_id=request.state.user.id,
-    )
+    try:
+        create_troop(
+            db, incident_id=incident_id, name=name,
+            members_data=members_data, task_text=task_text or None,
+            vehicle_id=vehicle_id, unit_name=unit_name.strip() or None,
+            location_text=location_text.strip() or None,
+            planned_duration_min=duration,
+            bottle_preset=bottle_preset.strip() or None,
+            is_sicherheitstrupp=is_sicherheitstrupp,
+            user_id=request.state.user.id,
+        )
+    except ValueError:
+        return RedirectResponse(
+            f"/einsatz/{incident_id}/atemschutz?error=invalid_input",
+            status_code=303,
+        )
     db.commit()
     run_async(manager.broadcast, incident_id, {"type": "troop_created", "reload_breathing": True})
     return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
@@ -152,24 +172,6 @@ def redeploy_troop_view(
         return Response(status_code=404)
 
     form_data = run_async(request.form)
-    members_data = []
-    index = 0
-    while True:
-        key_id = f"member_{index}_id"
-        key_name = f"member_{index}_name"
-        key_role = f"member_{index}_role"
-        key_press = f"member_{index}_press"
-        if key_id not in form_data and key_name not in form_data:
-            break
-        member_id = form_data.get(key_id)
-        members_data.append({
-            "member_id": int(member_id) if member_id and str(member_id).isdigit() else None,  # type: ignore[arg-type]
-            "free_text_name": form_data.get(key_name) or None,
-            "role": form_data.get(key_role, "truppmann"),
-            "start_press": float(form_data[key_press]) if form_data.get(key_press) else None,  # type: ignore[arg-type]
-        })
-        index += 1
-
     duration = planned_duration_min
     if bottle_preset and bottle_preset != "manuell":
         from app.models.breathing import BOTTLE_PRESET_DURATIONS
@@ -178,6 +180,7 @@ def redeploy_troop_view(
             duration = preset_duration
 
     try:
+        members_data = _parse_members_form(form_data)
         redeploy_troop(
             db, troop, members_data,
             task_text=task_text,
@@ -251,8 +254,8 @@ def back_pressure_view(
             db, troop, troop_member_id, pressure_bar,
             recorded_by_user_id=request.state.user.id,
         )
-    except ValueError:
-        return Response(status_code=400)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     run_async(manager.broadcast, incident_id, {
         "type": "troop_back_pressure_reported", "troop_id": troop_id,
@@ -272,7 +275,12 @@ def update_status(
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
-    update_troop_status(db, troop, status, user_id=request.state.user.id)
+    try:
+        update_troop_status(db, troop, status, user_id=request.state.user.id)
+    except InvalidTroopTransition as exc:
+        return Response(str(exc), status_code=409)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400)
     db.commit()
     warning = get_warning_level(troop)
     time_warn = get_time_warning(troop)
@@ -300,8 +308,8 @@ def log_pressure_view(
         log_pressure(db, troop, troop_member_id, pressure_bar,
                  note=note.strip() or None,
                  recorded_by_user_id=request.state.user.id)
-    except ValueError:
-        return Response(status_code=400)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     updated_troop = db.get(BreathingTroop, troop_id)
     assert updated_troop is not None
@@ -339,8 +347,8 @@ def objective_reached_view(
             db, troop, troop_member_id, pressure_bar,
             recorded_by_user_id=request.state.user.id,
         )
-    except ValueError:
-        return Response(status_code=400)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     warning = get_warning_level(troop)
     run_async(manager.broadcast, incident_id, {
@@ -383,7 +391,7 @@ def troop_meldung(
     _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
-    if not troop:
+    if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     update_meldung(db, troop, text.strip() or None, user_id=request.state.user.id)
     db.commit()
@@ -407,7 +415,7 @@ def troop_ack(
     if kind not in ("one_third", "two_third", "max_time", "withdraw"):
         return Response(status_code=400)
     troop = db.get(BreathingTroop, troop_id)
-    if not troop:
+    if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     ack_warning(db, troop, kind, user_id=request.state.user.id)
     db.commit()
@@ -426,7 +434,7 @@ def troop_standort(
     _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
-    if not troop:
+    if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     troop.location_text = location_text.strip() or None
     db.commit()
@@ -446,10 +454,13 @@ def troop_auftrag(
     _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
-    if not troop:
+    if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     troop.task_text = task_text.strip() or None
     db.commit()
+    run_async(manager.broadcast, incident_id, {
+        "type": "troop_auftrag", "troop_id": troop_id, "task_text": troop.task_text,
+    })
     return Response(status_code=204)
 
 
