@@ -145,7 +145,7 @@
     <div class="troop-card__header">
       <span class="troop-card__name">{{ troop.name }}</span>
       <span class="troop-card__status-pill status-pill--{{ troop.status }}">
-        {{ {'bereit':'Bereit','im_einsatz':'Im Einsatz','rueckzug':'Rückzug!','zurueck':'Zurück','erholt':'Erholt'}[troop.status] }}
+        {{ troop_status_labels[troop.status] }}
       </span>
       {% if troop.is_sicherheitstrupp %}
       <span class="badge badge--unit">{{ icon("lifebuoy", size="sm") }} Sicherheitstrupp</span>
@@ -289,7 +289,7 @@
               x-show="currentPress !== null"
               x-text="currentPress !== null ? Math.floor(currentPress) + ' bar' : ''"></span>
 
-        {% if (can_edit is not defined or can_edit) and troop.status in ['bereit','im_einsatz','rueckzug'] %}
+        {% if (can_edit is not defined or can_edit) and troop.status in ['im_einsatz','rueckzug'] %}
         <div class="press-picker-wrap" @click.outside="open = false">
           <button type="button" class="btn btn--ghost btn--sm press-trigger" @click="open = !open">Druck</button>
           <div x-show="open" class="press-picker-popup">
@@ -485,6 +485,11 @@
         Es müssen mindestens 2 Truppmitglieder ausgefüllt sein.
       </div>
       {% endif %}
+      {% if request.query_params.get('error') == 'invalid_input' %}
+      <div class="alert alert--error" style="margin-bottom:10px;">
+        Ungültige Eingabe: Bitte Druckwerte (0 bis 330 bar) und Namen prüfen.
+      </div>
+      {% endif %}
 
       <div class="new-troop-fields">
         <div class="form-group">
@@ -624,6 +629,9 @@
 
 {% block scripts %}
 <script>
+{% if request.query_params.get('error') in ['min_two_members', 'invalid_input'] %}
+document.getElementById('newTroopModal').showModal();
+{% endif %}
 /* ── Programm-Reload: unterdrückt beforeunload-Dialog ─────────────── */
 var _breathingReload = false;
 function doBreathingReload() {
@@ -882,9 +890,10 @@ function newTroopForm(initialMembers, initialBottlePreset) {
 
 /* ── Atemschutz-Board: WebSocket + Sicherheitswarnungen ─────────────────── */
 (function () {
-  {% set ns_act = namespace(cnt=0) %}
+  {% set ns_act = namespace(cnt=0, live_troops=false) %}
   {% for troop, _w, _wm, _tw, _aws in troops_with_warnings %}
     {% if troop.status in ['im_einsatz', 'rueckzug'] %}{% set ns_act.cnt = ns_act.cnt + 1 %}{% endif %}
+    {% if troop.status in ['bereit', 'im_einsatz', 'rueckzug'] %}{% set ns_act.live_troops = true %}{% endif %}
   {% endfor %}
   var HAS_ACTIVE = {{ 'true' if ns_act.cnt > 0 else 'false' }};
 
@@ -1029,6 +1038,7 @@ function newTroopForm(initialMembers, initialBottlePreset) {
   if (window.ELNative && window.ELNative.keepAwake) window.ELNative.keepAwake(true);
 })();
 
+{% if not ns_act.live_troops %}
 /* ── Auto-Screensaver nach 3 Minuten Inaktivität ─────────────────────── */
 (function () {
   var TIMEOUT_MS = 3 * 60 * 1000;
@@ -1050,5 +1060,6 @@ function newTroopForm(initialMembers, initialBottlePreset) {
 
   resetTimer();
 })();
+{% endif %}
 </script>
 {% endblock %}

@@ -9,7 +9,7 @@ from app.core.async_bridge import run_async
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.breathing import BOTTLE_PRESETS, BreathingTroop
+from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingTroop
 from app.models.incident import Incident
 from app.models.master import Member
 from app.services.breathing_service import (
@@ -87,6 +87,7 @@ def breathing_board(
         "user": user, "incident": incident,
         "troops_with_warnings": troops_with_warnings, "members": members,
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
+        "troop_status_labels": TROOP_STATUS_LABELS,
     })
 
 
