@@ -81,3 +81,15 @@ def test_pressure_picker_only_for_deployed_troop(client, breathing_routes, statu
     assert response.status_code == 200
     assert (f'<form hx-post="{ctx.url}/druck"' in response.text) is has_pressure_form
     assert "document.getElementById('newTroopModal').showModal();" not in response.text
+
+
+def test_board_loads_network_helpers_and_connection_banner(client, breathing_routes):
+    ctx = breathing_routes
+
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert '<script src="/static/js/breathing_net.js?v=' in response.text
+    assert "breathing-conn" in response.text
+    assert "ECPBreathingNet.send(" in response.text
+    assert "requestSubmit(); open = false" not in response.text

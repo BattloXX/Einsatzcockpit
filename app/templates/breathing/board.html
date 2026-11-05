@@ -295,7 +295,8 @@
           <div x-show="open" class="press-picker-popup">
             <div class="press-picker-header">{{ m.display_name }}</div>
             <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/druck" hx-swap="none"
-                  x-ref="druckForm">
+                  x-ref="druckForm"
+                  @htmx:after-request="if ($event.detail.successful) { currentPress = Number($refs.pressVal.value); window.dispatchEvent(new CustomEvent('breathing-pressure', {detail:{troopId:{{ troop.id }}, lowestPressure:currentPress, memberId:memberId, pressure:currentPress, local:true}})); open = false; } else { ECPBreathingNet.showError(ECPBreathingNet.describeFailure($event.detail.xhr.status, $event.detail.xhr.responseText)); }">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="troop_member_id" value="{{ m.id }}">
               <input type="hidden" name="pressure_bar" x-ref="pressVal">
@@ -304,7 +305,7 @@
                 <button type="button"
                         class="press-btn {% if m.withdraw_press and val <= m.withdraw_press %}press-btn--danger{% elif m.start_press and val <= m.start_press * 0.75 %}press-btn--warn{% else %}press-btn--high{% endif %}"
                         :class="currentPress !== null && Math.floor(currentPress) == {{ val }} ? 'press-btn--selected' : ''"
-                        @click="currentPress = {{ val }}; $refs.pressVal.value = '{{ val }}'; $refs.druckForm.requestSubmit(); open = false; window.dispatchEvent(new CustomEvent('breathing-pressure', {detail:{troopId:{{ troop.id }}, lowestPressure:{{ val }}, memberId:memberId, pressure:{{ val }}, local:true}}))">
+                        @click="$refs.pressVal.value = '{{ val }}'; $refs.druckForm.requestSubmit()">
                   {{ val }}
                 </button>
                 {% endfor %}
@@ -319,7 +320,7 @@
           <div x-show="objectiveOpen" class="press-picker-popup">
             <div class="press-picker-header">Einsatzziel: {{ m.display_name }}</div>
             <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/einsatzziel" hx-swap="none"
-                  @htmx:after-request="objectiveOpen = false">
+                  @htmx:after-request="if ($event.detail.successful) { objectiveOpen = false; } else { ECPBreathingNet.showError(ECPBreathingNet.describeFailure($event.detail.xhr.status, $event.detail.xhr.responseText)); }">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="troop_member_id" value="{{ m.id }}">
               <div class="press-grid">
@@ -339,7 +340,7 @@
           <div x-show="backOpen" class="press-picker-popup">
             <div class="press-picker-header">Enddruck: {{ m.display_name }}</div>
             <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/enddruck" hx-swap="none"
-                  @htmx:after-request="backOpen = false">
+                  @htmx:after-request="if ($event.detail.successful) { backOpen = false; } else { ECPBreathingNet.showError(ECPBreathingNet.describeFailure($event.detail.xhr.status, $event.detail.xhr.responseText)); }">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="troop_member_id" value="{{ m.id }}">
               <div class="press-grid">
@@ -361,7 +362,7 @@
       <button type="button" class="btn btn--ghost btn--sm" @click="meldungOpen = !meldungOpen">{{ icon("speakerphone", size="xs") }} Lagemeldung</button>
       <div x-show="meldungOpen" class="mini-popup">
         <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/meldung" hx-swap="none"
-              @htmx:after-request="meldungOpen = false">
+              @htmx:after-request="if ($event.detail.successful) { meldungOpen = false; } else { ECPBreathingNet.showError(ECPBreathingNet.describeFailure($event.detail.xhr.status, $event.detail.xhr.responseText)); }">
           <input type="text" name="text" class="form-input" placeholder="Lagetext (optional)" style="margin-bottom:6px">
           <button type="submit" class="btn btn--primary btn--sm" style="width:100%">Meldung absetzen</button>
         </form>
@@ -628,6 +629,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/breathing_net.js?v={{ ASSET_VERSION }}"></script>
 <script>
 {% if request.query_params.get('error') in ['min_two_members', 'invalid_input'] %}
 document.getElementById('newTroopModal').showModal();
@@ -642,23 +644,41 @@ function doBreathingReload() {
   window.setTimeout(function () { _breathingReload = false; }, 500);
 }
 
-/* ── Warn-Quittierung: stoppt Animation sofort, sendet POST, lädt Seite ── */
+['htmx:responseError', 'htmx:sendError'].forEach(function (name) {
+  document.body.addEventListener(name, function (event) {
+    const detail = event.detail;
+    const path = detail.requestConfig && detail.requestConfig.path;
+    if (!path || !path.includes('/atemschutz/')) return;
+    ECPBreathingNet.showError(ECPBreathingNet.describeFailure(detail.xhr.status, detail.xhr.responseText));
+  });
+});
+
+/* ── Warn-Quittierung: erst nach bestaetigtem POST Ton stoppen ── */
 async function ackWarning(btn, url, kind, badgeId) {
   btn.disabled = true;
   const badge = document.getElementById(badgeId);
+  const animation = badge ? badge.style.animation : '';
+  const opacity = badge ? badge.style.opacity : '';
   if (badge) {
     badge.style.animation = 'none';
     badge.style.opacity = '0.45';
   }
   const troopEl = btn.closest('[id^="troop-"]');
   const troopId = troopEl ? parseInt(troopEl.id.replace('troop-', ''), 10) : null;
+  const fd = new FormData();
+  fd.append('kind', kind);
+  fd.append('_csrf', {{ request.state.csrf_token | tojson }});
+  const result = await ECPBreathingNet.send(url, fd);
+  if (!result.ok) {
+    btn.disabled = false;
+    if (badge) {
+      badge.style.animation = animation;
+      badge.style.opacity = opacity;
+    }
+    ECPBreathingNet.showError('Quittierung nicht gespeichert. ' + ECPBreathingNet.describeFailure(result.status, result.message));
+    return;
+  }
   if (troopId !== null) _stopLoopingWarning(kind, troopId);
-  try {
-    const fd = new FormData();
-    fd.append('kind', kind);
-    fd.append('_csrf', {{ request.state.csrf_token | tojson }});
-    await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
-  } catch (_) {}
   doBreathingReload();
 }
 
@@ -748,6 +768,7 @@ function memberPressRow(memberId, initialPress, withdrawPress, startPressAvg) {
     withdrawPress: withdrawPress,
     startPressAvg: startPressAvg,
     open: false,
+    pressureListener: null,
 
     get pressClass() {
       if (this.currentPress === null) return '';
@@ -757,12 +778,17 @@ function memberPressRow(memberId, initialPress, withdrawPress, startPressAvg) {
     },
 
     init() {
-      if (this.memberId === null) return;
-      window.addEventListener('breathing-pressure', (e) => {
+      if (this.memberId === null || this.pressureListener) return;
+      this.pressureListener = (e) => {
         if (e.detail.memberId === this.memberId) {
           this.currentPress = e.detail.pressure;
         }
-      });
+      };
+      window.addEventListener('breathing-pressure', this.pressureListener);
+    },
+    destroy() {
+      window.removeEventListener('breathing-pressure', this.pressureListener);
+      this.pressureListener = null;
     },
   };
 }
@@ -780,6 +806,8 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
     timeAgo: '',
     timerDisplay: '00:00',
     timerPct: 0,
+    timerInterval: null,
+    pressureListener: null,
 
     get needleAngle() {
       const pct = this.maxPress > 0
@@ -795,6 +823,7 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
     },
 
     init() {
+      if (this.pressureListener) return;
       const troopId = parseInt(this.$el.id.replace('troop-', ''));
 
       // time-ago updater
@@ -824,14 +853,14 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
 
       updateAgo();
       updateTimer();
-      if (this.lastLog || this.entryAt) {
-        setInterval(() => { updateAgo(); updateTimer(); }, 1000);
+      if ((this.lastLog || this.entryAt) && this.timerInterval === null) {
+        this.timerInterval = setInterval(() => { updateAgo(); updateTimer(); }, 1000);
       }
 
-      window.addEventListener('breathing-pressure', (e) => {
+      this.pressureListener = (e) => {
         if (e.detail.troopId === troopId) {
           if (e.detail.local) {
-            // Optimistisches Update: Druck kann nur sinken – nimm den niedrigsten Wert
+            // Bestaetigte Eingabe: niedrigsten Druck fuer die Truppanzeige nehmen
             this.currentPress = Math.min(this.currentPress, e.detail.pressure);
           } else {
             // WS-Event: Server liefert autoritativen Minimalwert
@@ -840,7 +869,14 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
           this.lastLog = new Date();
           updateAgo();
         }
-      });
+      };
+      window.addEventListener('breathing-pressure', this.pressureListener);
+    },
+    destroy() {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+      window.removeEventListener('breathing-pressure', this.pressureListener);
+      this.pressureListener = null;
     }
   };
 }
@@ -940,13 +976,52 @@ function newTroopForm(initialMembers, initialBottlePreset) {
   /* ── WebSocket für Echtzeit-Updates ── */
   var proto = location.protocol === 'https:' ? 'wss' : 'ws';
   var wsUrl = proto + '://' + location.host + '/ws/incident/{{ incident.id }}';
-  var lastAct = Date.now();
-  var firstConn = true;
+  var connTracker = ECPBreathingNet.createConnTracker();
+  var reconnectAttempt = 0;
+  var lossVibrated = false;
+  var connBanner = document.createElement('div');
+  connBanner.id = 'breathing-conn';
+  connBanner.setAttribute('role', 'status');
+  connBanner.style.cssText = 'display:none;position:fixed;top:0;left:0;right:0;z-index:10000;padding:12px 16px;font-weight:600;';
+  document.body.prepend(connBanner);
+
+  function updateConnectionBanner() {
+    var seconds = connTracker.lostSeconds();
+    connBanner.style.display = seconds === null ? 'none' : 'block';
+    if (seconds === null) return;
+    connBanner.style.background = seconds > 20 ? '#7c1d1d' : '#f6e05e';
+    connBanner.style.color = seconds > 20 ? '#fff' : '#1a202c';
+    var elapsed = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+    connBanner.textContent = 'Verbindung zum Server unterbrochen seit ' + elapsed
+      + ' - Warnungen können fehlen. Die Fristen laufen weiter, bitte Trupps per Funk kontrollieren.';
+    if (seconds > 20 && !lossVibrated) {
+      lossVibrated = true;
+      if (typeof navigator.vibrate === 'function') navigator.vibrate(200);
+    }
+  }
+  setInterval(updateConnectionBanner, 1000);
 
   function connectWS() {
     var ws = new WebSocket(wsUrl);
+    var lastAct = Date.now();
+    var pingInterval = null;
+    var watchdogInterval = null;
     ws.onopen = function () {
-      firstConn = false;
+      var hadLoss = connTracker.lostSeconds() !== null;
+      connTracker.onOpen();
+      reconnectAttempt = 0;
+      lossVibrated = false;
+      lastAct = Date.now();
+      updateConnectionBanner();
+      if (hadLoss) doBreathingReload();
+      if (pingInterval === null) {
+        pingInterval = setInterval(function () { if (ws.readyState === 1) ws.send('ping'); }, 30000);
+      }
+      if (watchdogInterval === null) {
+        watchdogInterval = setInterval(function () {
+          if (Date.now() - lastAct > 70000) ws.close();
+        }, 15000);
+      }
       fetch('/einsatz/{{ incident.id }}/atemschutz/aktive-warnungen', {credentials:'same-origin'})
         .then(function (response) { return response.ok ? response.json() : {warnings:[]}; })
         .then(function (data) {
@@ -992,11 +1067,15 @@ function newTroopForm(initialMembers, initialBottlePreset) {
       }
     };
     ws.onclose = function () {
-      setTimeout(function () {
-        connectWS();
-      }, 3000);
+      clearInterval(pingInterval);
+      clearInterval(watchdogInterval);
+      pingInterval = null;
+      watchdogInterval = null;
+      connTracker.onClose();
+      updateConnectionBanner();
+      setTimeout(connectWS, ECPBreathingNet.backoffMs(reconnectAttempt++));
     };
-    setInterval(function () { if (ws.readyState === 1) ws.send('ping'); }, 30000);
+    ws.onerror = function () { ws.close(); };
   }
 
   connectWS();
