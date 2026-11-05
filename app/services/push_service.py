@@ -706,7 +706,9 @@ def notify_org_web(db: Session, org_id: int, title: str, body: str,
 
 
 def notify_user(db: Session, user_id: int, title: str, body: str,
-                url: str | None = None, source: str = "system") -> int:
+                url: str | None = None, source: str = "system",
+                channel_id: str | None = None,
+                extra_data: dict[str, str] | None = None) -> int:
     from app.models.user import User as _User
 
     cfg = _push_cfg(db)
@@ -719,7 +721,9 @@ def notify_user(db: Session, user_id: int, title: str, body: str,
     else:
         wp_count = 0
     # FCM
-    fcm_extra = _notify_fcm_logged(db, {user_id}, title, body, url, cfg, None, push_log.id)
+    fcm_extra = _notify_fcm_logged(
+        db, {user_id}, title, body, url, cfg, channel_id, push_log.id, extra_data=extra_data,
+    )
     return wp_count + fcm_extra
 
 
