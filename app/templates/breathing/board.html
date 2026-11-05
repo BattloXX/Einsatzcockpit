@@ -182,9 +182,10 @@
 {% endfor %}
 {# Auch bei einem partiellen Grid-Reload Hinweise und Zaehler aktualisieren. #}
 <div id="breathingSummary" hx-swap-oob="outerHTML">
-  {% if hinweise or incident.breathing_troops | selectattr('notfall_at') | list or incident.breathing_troops | selectattr('funk_verloren_at') | list %}
+  {% if kein_heartbeat or hinweise or incident.breathing_troops | selectattr('notfall_at') | list or incident.breathing_troops | selectattr('funk_verloren_at') | list %}
   <section class="breathing-critical" aria-labelledby="breathingCriticalTitle">
     <h3 id="breathingCriticalTitle">{{ icon("alert-triangle") }} Kritische Hinweise</h3>
+    {% if kein_heartbeat %}<p>Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden). Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen.</p>{% endif %}
     {% if hinweise.assp %}<p>3 oder mehr Trupps gleichzeitig im Einsatz: Atemschutzsammelplatz (ASSP) über die Einsatzleitung alarmieren. Der ASSP übernimmt nur Logistik, die Überwachung bleibt beim Gruppenkommandanten.</p>{% endif %}
     {% if hinweise.kein_sicherheitstrupp %}<p>Kein bereiter Sicherheitstrupp: Rettungstrupp ab Einsatzbeginn bereitstellen.</p>{% endif %}
     {% for troop in incident.breathing_troops %}
@@ -328,7 +329,7 @@
     {% if warnungen_by_troop.get(troop.id) %}
     <details class="troop-notifications">
       <summary>Benachrichtigungen</summary>
-      {% set art_labels = {'withdraw': 'Rückzugsdruck', 'max_exceeded': 'Max-Zeit', 'one_third_due': 'Kontrolle 1/3', 'two_third_due': 'Kontrolle 2/3', 'funk_verloren': 'Kein Funkkontakt', 'notfall': 'Notfall', 'kein_sicherheitstrupp': 'Kein bereiter Sicherheitstrupp', 'assp': 'Atemschutzsammelplatz (ASSP)'} %}
+      {% set art_labels = {'withdraw': 'Rückzugsdruck', 'max_exceeded': 'Max-Zeit', 'one_third_due': 'Kontrolle 1/3', 'two_third_due': 'Kontrolle 2/3', 'funk_verloren': 'Kein Funkkontakt', 'notfall': 'Notfall', 'kein_sicherheitstrupp': 'Kein bereiter Sicherheitstrupp', 'assp': 'Atemschutzsammelplatz (ASSP)', 'kein_heartbeat': 'Überwachungsgerät ohne Heartbeat'} %}
       {% set status_labels = {'pending': 'wartend', 'claimed': 'in Bearbeitung', 'sent': 'gesendet', 'failed': 'fehlgeschlagen', 'suppressed': 'unterdrückt'} %}
       <div class="troop-notifications__table" role="region" aria-label="Zustellungsprotokoll" tabindex="0">
         <table>

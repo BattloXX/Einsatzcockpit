@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 WARNUNG_KINDS = [
     "withdraw", "max_exceeded", "one_third_due", "two_third_due",
-    "funk_verloren", "notfall", "kein_sicherheitstrupp", "assp",
+    "funk_verloren", "notfall", "kein_sicherheitstrupp", "assp", "kein_heartbeat",
 ]
 
 TROOP_STATUSES = ["bereit", "im_einsatz", "rueckzug", "zurueck", "erholt"]

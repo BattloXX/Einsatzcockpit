@@ -115,3 +115,13 @@ for (const [status, error] of [[403, 'app_erforderlich'], [426, 'app_veraltet']]
     assert.equal(e.timers.length, 0);
   });
 }
+
+for (const getAppVersion of [async () => null, async () => { throw new Error('Plugin fehlt'); }]) {
+  test('app version failure is omitted and start still succeeds', async () => {
+    const e = env([started()], { native: { getFcmToken: async () => 't', getAppVersion } });
+    await e.controller.ready;
+    assert.equal(e.calls.length, 1);
+    assert.equal(Object.hasOwn(e.calls[0].data, 'app_version'), false);
+    assert.equal(e.api.getState().zustand, 'aktiv');
+  });
+}

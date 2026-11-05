@@ -50,8 +50,10 @@
           data.incident_id = opts.incidentId;
           data.fcm_token = await native.getFcmToken();
           if (!data.fcm_token) throw new Error('FCM-Token fehlt');
-          // Diese Bridge stellt derzeit keinen App-Versionsweg bereit.
-          if (native.getAppVersion) data.app_version = await native.getAppVersion();
+          try {
+            const version = native.getAppVersion ? await native.getAppVersion() : null;
+            if (version) data.app_version = version;
+          } catch (_) { /* Die App-Version ist optional. */ }
         }
         const response = await fetchImpl(key ? '/api/asuew/heartbeat' : '/api/asuew/sitzung', {
           method: 'POST', credentials: 'same-origin',

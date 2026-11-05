@@ -179,3 +179,62 @@ def test_scan_anchor_change_closes_old_warning_and_creates_new_one(ctx):
     assert all(row.status == "suppressed" for row in old.zustellungen)
     assert new.troop_id == successor.id and new.erledigt_at is None
     assert_pending_leadership_push(c, new)
+
+
+def test_scan_heartbeat_lifecycle(ctx):
+    from datetime import timedelta
+
+    from app.models.breathing import BreathingGeraetSitzung
+
+    c = ctx
+    settings = c.db.query(OrgSettings).filter_by(org_id=c.incident.primary_org_id).one()
+    settings.asuew_app_pflicht = True
+    anchor = add_troop(c)
+    add_troop(c, "rueckzug")
+    add_troop(c, "bereit", safety=True)
+    assert svc._collect_new_breathing_warnings(c.db) == [(c.incident.id, anchor.id, "kein_heartbeat")]
+    warning, = warnings(c)
+    assert warning.troop_id == anchor.id
+    assert {(r.user_id, r.kanal, r.stufe, r.naechster_versuch_at) for r in warning.zustellungen} == {
+        (u.id, channel, stage, c.now + timedelta(seconds=delay))
+        for u in (c.leader, c.escalation)
+        for channel, stage, delay in (("push", 0, 0), ("sms", 1, 180))
+    }
+    assert svc._collect_new_breathing_warnings(c.db) == []
+    assert warnings(c)[0].erledigt_at is None
+    session = BreathingGeraetSitzung(
+        incident_id=c.incident.id, user_id=c.supervisor.id, session_key=uuid4().hex,
+        platform="android", gestartet_at=c.now, letzter_heartbeat_at=c.now,
+    )
+    c.db.add(session)
+    c.db.commit()
+    assert svc._collect_new_breathing_warnings(c.db) == []
+    warning, = warnings(c)
+    assert warning.erledigt_at == c.now
+    assert all(r.status == "suppressed" for r in warning.zustellungen)
+    session.letzter_heartbeat_at = c.now - timedelta(seconds=61)
+    c.db.commit()
+    assert svc._collect_new_breathing_warnings(c.db) == [(c.incident.id, anchor.id, "kein_heartbeat")]
+    settings.asuew_app_pflicht = False
+    c.db.commit()
+    assert svc._collect_new_breathing_warnings(c.db) == []
+    assert all(w.erledigt_at is not None for w in warnings(c))
+
+
+@pytest.mark.parametrize("pflicht,frisch,status", [(False, False, "im_einsatz"),
+                                                   (True, True, "rueckzug"),
+                                                   (True, False, "bereit")])
+def test_scan_no_heartbeat_warning_when_not_required(ctx, pflicht, frisch, status):
+    from app.models.breathing import BreathingGeraetSitzung
+
+    c = ctx
+    c.db.query(OrgSettings).filter_by(org_id=c.incident.primary_org_id).one().asuew_app_pflicht = pflicht
+    add_troop(c, status, safety=True)
+    if frisch:
+        c.db.add(BreathingGeraetSitzung(
+            incident_id=c.incident.id, user_id=c.supervisor.id, session_key=uuid4().hex,
+            platform="android", gestartet_at=c.now, letzter_heartbeat_at=c.now,
+        ))
+    c.db.commit()
+    assert svc._collect_new_breathing_warnings(c.db) == []
+    assert warnings(c) == []

@@ -101,6 +101,7 @@ async def deliver(c, now=None, **kwargs):
     ("notfall", [(0, 0, "push", "u"), (0, 0, "sms", "u"), (0, 0, "push", "l"), (0, 0, "sms", "l")]),
     ("kein_sicherheitstrupp", [(0, 0, "push", "l")]),
     ("assp", [(0, 0, "push", "l")]),
+    ("kein_heartbeat", [(0, 0, "push", "l"), (1, 180, "sms", "l")]),
 ])
 def test_plan(ctx, kind, expected):
     c = ctx
@@ -619,3 +620,18 @@ def test_breathing_loops_registered(monkeypatch):
     names = registered_background_loop_names(monkeypatch)
     assert names.count("_breathing_watchdog_loop") == 1
     assert names.count("breathing_notify_loop") == 1
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_delivery_alarm_and_sms_after_180_seconds(ctx):
+    c = ctx
+    sync(c, ["kein_heartbeat"])
+    assert await deliver(c) == 2
+    assert {call.args[1] for call in c.push.call_args_list} == {c.leader.id, c.escalation.id}
+    assert all(call.args[5] is True for call in c.push.call_args_list)
+    assert all(call.args[2] == "Atemschutz: Kein Überwachungsgerät in der App aktiv"
+               for call in c.push.call_args_list)
+    assert await deliver(c, c.now + timedelta(seconds=179)) == 0
+    assert c.sms.call_count == 0
+    assert await deliver(c, c.now + timedelta(seconds=180)) == 2
+    assert {call.args[1] for call in c.sms.call_args_list} == {c.leader.phone, c.escalation.phone}

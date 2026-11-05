@@ -767,6 +767,12 @@
     downloadFile,
     openFile,
     registerPush,
+    async getAppVersion() {
+      try {
+        const info = await window.Capacitor.Plugins.App.getInfo();
+        return info.version || null;
+      } catch (_) { return null; }
+    },
     async getFcmToken() {
       const result = await _registerFcmToken();
       if (!result.ok) throw new Error(result.error);

@@ -75,6 +75,7 @@ Einsatzorganisation.
 
 | Einstellung | Wirkung / Vorgabe |
 |---|---|
+| Überwachung nur in der App erlauben | Standard aus; Eingaben verlangen eine App-Sitzung mit frischem Heartbeat. Browser bleiben als Nur-Lese-Ansicht verfügbar; Notfall und Funkverlust können auch ohne App gemeldet werden. |
 | Erwartete Einsatzzeit | 30 Minuten (5–120); Kontrollen bei 1/3 und 2/3, also standardmäßig nach 10 und 20 Minuten. Die Flaschengröße bestimmt die Zeit nicht mehr. |
 | Rückzug-Untergrenze | 60 bar (30–100 einstellbar); Vorgabe entspricht der Warneinrichtung. Nach Erreichen des Einsatzziels gilt der größere Wert aus Untergrenze und doppeltem Anmarschverbrauch. |
 | Gelbschwelle | 75 % des Anfangsdrucks (50–95); gelbe Druckwarnung. |
@@ -97,6 +98,7 @@ beim Einsetzen geprüft.
 | Funkverlust | Stufe 0 sofort Push an Überwacher, Push und SMS an Leitung. |
 | Notfall | Stufe 0 sofort Push und SMS an Überwacher und Leitung. |
 | ASSP / kein bereiter Sicherheitstrupp | Stufe 0 sofort Push an Leitung. |
+| Kein Überwachungsgerät aktiv | Bei App-Pflicht und eingesetztem Trupp ohne frischen Heartbeat: sofort Push-Alarm an Leitung, nach 180 s SMS an Leitung; keine Zustellung an die Gruppe Überwacher. |
 
 Überwacher ist der zugeordnete Benutzer, ersatzweise der Einsatzleiter. Leitung
 bezeichnet die oben beschriebene Empfängergruppe. Warnungen und Zustellungen sind
@@ -110,8 +112,27 @@ bleiben im Board sichtbar, bis sie aufgehoben werden.
 
 > Die digitale Überwachung ergänzt Tafel und Formular, sie ersetzt sie nicht.
 
-Die Android-App-Pflicht folgt in Phase 3, der native abgesicherte Alarmton in
-Phase 4. Ablauf und Funkverlust-Checkliste:
+**Rollout Phase 3:** Den Schalter **Überwachung nur in der App erlauben** erst
+aktivieren, wenn alle Überwachungsgeräte die aktuelle App mit der Fähigkeit
+`asuew` besitzen (Android-PR BattloXX/Einsatzcockpit-Android#96). Standard ist aus.
+Die App-Sitzung ist an Benutzer, Einsatz und Gerät gebunden. Heartbeats kommen
+alle 15 Sekunden und gelten 60 Sekunden; nach spätestens 24 Stunden oder bei
+beendetem Einsatz läuft die Sitzung ab. Beendete Sitzungen werden nach 30 Tagen
+in begrenzten Chargen gelöscht.
+
+Die Selbsttest-Ampel bewertet Benachrichtigungen, Verbindung, Uhr und Akku.
+Alarmton, exakte Wecker, Vollbild und Akku-Optimierung folgen als native
+Prüfpunkte; fehlende Angaben sind keine bestätigte Prüfung. Einzelheiten zu Grün,
+Gelb und Rot sowie zur Nur-Lese-Ansicht stehen in der Anwenderseite.
+
+Systemadmins können über die Umgebungsvariable `ASUEW_MIN_APP_VERSION` eine
+Mindest-App-Version für den Sitzungsstart festlegen, zum Beispiel `2026.11.06`.
+Leer (Standard) bedeutet keine Versionsprüfung. Bei gesetztem Wert werden ältere,
+fehlende oder ungültige App-Versionen mit dem Hinweis zum Aktualisieren abgewiesen.
+Die App ermittelt ihre Version über das offizielle Capacitor-App-Plugin.
+Die kommentierte Variablenreferenz steht in `.env.example`.
+
+Der native abgesicherte Alarmton folgt in Phase 4. Ablauf und Funkverlust-Checkliste:
 [Atemschutzüberwachung](Anwender-Atemschutzueberwachung).
 
 ## Auto-Schließen (Einsatz automatisch beenden)

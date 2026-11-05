@@ -511,3 +511,12 @@ test('Viewer-defaultPrevented: Capture-Dateiaktion wird vom geladenen Viewer nic
   assert.equal(event.defaultPrevented, true);
   assert.deepEqual(u.calls, [['openFile', { url: link.href }]]);
 });
+
+test("App-Version ueber offizielles Capacitor-App-Plugin, Fehler liefern null", async () => {
+  const { window, native } = umgebung();
+  assert.equal(await native.getAppVersion(), null);
+  window.Capacitor = { Plugins: { App: { getInfo: async () => ({ version: '2026.11.06' }) } } };
+  assert.equal(await native.getAppVersion(), '2026.11.06');
+  window.Capacitor.Plugins.App.getInfo = async () => { throw new Error('nicht verfuegbar'); };
+  assert.equal(await native.getAppVersion(), null);
+});

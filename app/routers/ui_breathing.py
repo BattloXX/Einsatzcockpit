@@ -1,5 +1,7 @@
 """Atemschutzüberwachung UI."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, selectinload
@@ -18,6 +20,7 @@ from app.services.breathing_service import (
     InvalidTroopTransition,
     ReadinessWarning,
     ack_warning,
+    asuew_heartbeat_fehlt,
     check_troop_warnings,
     clear_notfall,
     create_troop,
@@ -163,6 +166,7 @@ def breathing_board(
         "troop_status_labels": TROOP_STATUS_LABELS,
         "asuew_settings": asuew_settings, "current_user_label": _current_user_label(request),
         "hinweise": incident_hinweise(incident.breathing_troops),
+        "kein_heartbeat": asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None)),
         "trupp_uebersicht": trupp_uebersicht, "warnungen_by_troop": warnungen_by_troop,
     })
 

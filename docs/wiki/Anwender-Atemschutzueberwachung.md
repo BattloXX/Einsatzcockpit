@@ -19,6 +19,47 @@ Bearbeiter dürfen Änderungen durchführen.
 
 ---
 
+## App-Sitzung und Selbsttest (Phase 3)
+
+Die Einsatzcockpit-App startet beim Öffnen der Überwachung eine an Benutzer,
+Einsatz und Gerät gebundene App-Sitzung. Alle 15 Sekunden sendet sie einen
+Heartbeat; dieser gilt 60 Sekunden. Ohne frischen Heartbeat ist eine Sitzung
+nicht mehr für Eingaben gültig. Sitzungen enden spätestens nach 24 Stunden oder
+wenn der Einsatz beendet ist.
+
+Ist **Überwachung nur in der App erlauben** für die Organisation eingeschaltet,
+zeigt der Browser eine **Nur-Lese-Ansicht** mit Hinweis zum Öffnen der App.
+Druckwerte, Kontrollen und andere Änderungen benötigen dann eine gültige
+App-Sitzung. **Notfall melden und Funkverlust melden bleiben auch ohne App
+möglich.** Zum Aufheben ist wieder eine gültige App-Sitzung erforderlich.
+Ohne diesen optionalen Schalter bleibt die Bedienung im Browser möglich.
+
+Die **Selbsttest-Ampel** zeigt Grün ohne gemeldetes Problem, Gelb bei
+Einschränkungen und Rot bei schwerwiegenden Problemen. Sie prüft die verfügbaren
+Angaben zu Benachrichtigungsberechtigung, Serververbindung, Uhrabweichung und Akku.
+Nicht erlaubte Benachrichtigungen, fehlende Verbindung, mehr als 30 Sekunden
+Uhrabweichung oder weniger als 10 % Akku ohne Ladegerät ergeben Rot; noch nicht
+erlaubte Benachrichtigungen, mehr als 5 Sekunden Uhrabweichung oder weniger als
+20 % Akku ergeben Gelb. Fehlende Geräteangaben sind keine bestätigte Prüfung.
+Alarmton-Test, exakte Wecker, Vollbildalarme und Ausnahme von der Akku-Optimierung
+werden später in der nativen App geprüft; Phase 3 bereitet diese Prüfpunkte vor.
+
+Bei App-Pflicht und mindestens einem Trupp im Einsatz oder Rückzug erscheint ohne
+frischen Heartbeat **Kein Überwachungsgerät aktiv** unter **Kritische Hinweise**.
+Die Leitung erhält sofort einen Push-Alarm und nach weiteren 3 Minuten eine SMS
+(nach den eingestellten SMS-Regeln). Es erfolgt keine Zustellung an die Gruppe
+Überwacher des ausgefallenen Geräts. Überwachung in der App öffnen oder
+Funkkontrolle der Trupps durchführen. Ein neuer Heartbeat beendet die Warnung und
+unterdrückt noch wartende Zustellungen.
+
+Der Organisationsschalter ist standardmäßig aus. Er darf erst aktiviert werden,
+wenn alle Überwachungsgeräte die aktuelle App mit der Fähigkeit `asuew` haben;
+diese kommt mit [Android-PR #96](https://github.com/BattloXX/Einsatzcockpit-Android/pull/96).
+Eine vom Betrieb gesetzte Mindestversion (`ASUEW_MIN_APP_VERSION`) kann beim
+Sitzungsstart ein App-Update verlangen.
+
+---
+
 ## Trupp anlegen
 
 1. **+ Trupp anlegen** klicken und Trupp-Bezeichnung, Auftrag und Standort eintragen.
@@ -139,6 +180,7 @@ AS-Überwacher dieser Organisation verwendet.
 | Kein Funkkontakt | Sofort Push an Überwacher sowie Push und SMS an Leitung | – | – |
 | Atemschutznotfall | Sofort Push und SMS an Überwacher und Leitung | – | – |
 | Kein bereiter Sicherheitstrupp / ASSP | Sofort Push an Leitung | – | – |
+| Kein Überwachungsgerät aktiv (bei App-Pflicht) | Sofort Push-Alarm an Leitung | Nach 180 s SMS an Leitung | – |
 
 SMS setzt den SMS-Schalter, einen eingerichteten Versand und eine Telefonnummer
 voraus. Bei Übungen werden SMS unterdrückt. Erledigte Warnungen stoppen noch
@@ -146,8 +188,8 @@ wartende Zustellungen. Unter **Benachrichtigungen** auf der Truppkarte stehen f�
 offene Warnungen Art, Auslösezeit, Stufe, Kanal, Empfänger, Zustellstatus und Sendezeit.
 Unterdrückte Zustellungen zeigen den Grund, fehlgeschlagene den Versandfehler.
 
-Push-Alarm und SMS-Eskalation sind Phase 2. Die **Android-App-Pflicht** mit
-Überwachungssitzung folgt in Phase 3; der native, abgesicherte **Alarmton** mit
+Push-Alarm und SMS-Eskalation sind Phase 2. Die optionale **Android-App-Pflicht**
+mit Überwachungssitzung und Heartbeat ist ab Phase 3 verfügbar; der native, abgesicherte **Alarmton** mit
 lokaler Überwachung folgt in Phase 4. Die vorhandene Browser-Akustik hängt von
 Autoplay-Freigabe und offenem Board ab.
 

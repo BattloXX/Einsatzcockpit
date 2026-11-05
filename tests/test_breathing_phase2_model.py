@@ -131,7 +131,7 @@ def test_warning_roundtrip_dedupe_and_cascade(escalation):
     now = datetime.now(UTC).replace(tzinfo=None)
     assert set(WARNUNG_KINDS) == {
         "withdraw", "max_exceeded", "one_third_due", "two_third_due", "funk_verloren", "notfall",
-        "kein_sicherheitstrupp", "assp",
+        "kein_sicherheitstrupp", "assp", "kein_heartbeat",
     }
     for kind in WARNUNG_KINDS:
         warning = BreathingWarnung(incident_id=ctx.incident_id, troop_id=ctx.troop.id,
