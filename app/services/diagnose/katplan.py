@@ -28,8 +28,9 @@ def check(db, budget):
     collect_ids(db, budget, result, link.name, ~link.c.ziel_typ.in_(targets), "zieltyp",
                 "Unbekannter Plan-Zieltyp", "fail")
     r = table("katplan_relation")
+    # Planuebergreifende Relationen sind innerhalb derselben Organisation erlaubt.
     collect_ids(db, budget, result, r.name, ~select(e.c.id).where(e.c.uuid == r.c.zu_element_uuid,
-        e.c.plan_id == r.c.plan_id, e.c.org_id == r.c.org_id).exists(), "relation_ziel",
+        e.c.org_id == r.c.org_id).exists(), "relation_ziel",
         "Planrelation ohne Zielelement", "fail")
     # Dieselbe begrenzte Seiten-Syntax wie bei der Planuebernahme verwenden.
     from app.services.katplan_quelle_service import parse_seiten

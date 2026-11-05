@@ -999,32 +999,8 @@ def update_task(
     return task
 
 
-def cancel_task(
-    db: Session,
-    task: Task,
-    user_id: int | None = None,
-) -> Task:
-    before = {"is_cancelled": task.is_cancelled}
-    task.is_cancelled = not task.is_cancelled
-    task.cancelled_at = _now() if task.is_cancelled else None
-    db.flush()
-    write_incident_change(
-        db, task.incident_id, "task.cancelled" if task.is_cancelled else "task.restored", "task", task.id,
-        before=before, after={"is_cancelled": task.is_cancelled},
-        user_id=user_id,
-    )
-    return task
-
-
-def set_task_status(
-    db: Session,
-    task: Task,
-    status: str,
-    user_id: int | None = None,
-) -> Task:
-    if status not in TASK_STATUS_VALUES:
-        raise ValueError(f"Ungültiger Status: {status}")
-    before = {"status": task.status, "is_done": task.is_done, "is_cancelled": task.is_cancelled}
+def _apply_task_status(task: Task, status: str) -> None:
+    """Status, Abschlussmarkierungen und Zeitpunkte gemeinsam setzen."""
     task.status = status
     if status == "done":
         task.is_done = True
@@ -1041,6 +1017,34 @@ def set_task_status(
         task.done_at = None
         task.is_cancelled = False
         task.cancelled_at = None
+
+
+def cancel_task(
+    db: Session,
+    task: Task,
+    user_id: int | None = None,
+) -> Task:
+    before = {"status": task.status, "is_done": task.is_done, "is_cancelled": task.is_cancelled}
+    _apply_task_status(task, "open" if task.is_cancelled else "cancelled")
+    db.flush()
+    write_incident_change(
+        db, task.incident_id, "task.cancelled" if task.is_cancelled else "task.restored", "task", task.id,
+        before=before, after={"status": task.status, "is_done": task.is_done, "is_cancelled": task.is_cancelled},
+        user_id=user_id,
+    )
+    return task
+
+
+def set_task_status(
+    db: Session,
+    task: Task,
+    status: str,
+    user_id: int | None = None,
+) -> Task:
+    if status not in TASK_STATUS_VALUES:
+        raise ValueError(f"Ungültiger Status: {status}")
+    before = {"status": task.status, "is_done": task.is_done, "is_cancelled": task.is_cancelled}
+    _apply_task_status(task, status)
     db.flush()
     write_incident_change(
         db, task.incident_id, "task.status_set", "task", task.id,
