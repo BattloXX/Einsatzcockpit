@@ -122,6 +122,9 @@ class FakeDB:
     def flush(self):
         pass
 
+    def get(self, model, ident):
+        return None
+
 
 class FakeQuery:
     def __init__(self, result):
@@ -232,12 +235,12 @@ def _timer_troop(offset_minutes: int, planned_minutes: int) -> BreathingTroop:
     return troop
 
 
-def test_report_only_suppresses_stage_when_after_its_due_time():
+def test_text_report_does_not_suppress_stage_even_after_its_due_time():
     troop = _timer_troop(offset_minutes=12, planned_minutes=33)
     troop.last_meldung_at = troop.entry_at + timedelta(minutes=5)
     assert get_time_warning(troop) == "one_third_due"
     troop.last_meldung_at = troop.entry_at + timedelta(minutes=11, seconds=1)
-    assert get_time_warning(troop) == "ok"
+    assert get_time_warning(troop) == "one_third_due"
 
 
 def test_acknowledgement_does_not_suppress_worsening_pressure(monkeypatch):
@@ -360,7 +363,6 @@ def test_start_troop_override_starts_and_sets_audit_fields(monkeypatch):
     )
     troop.status = "bereit"
     events = []
-    monkeypatch.setattr(svc, "_withdraw_settings", lambda db, value: (0.5, 10))
     monkeypatch.setattr(
         svc, "write_incident_change",
         lambda db, incident_id, event, *args, **kwargs: events.append((event, kwargs)),
@@ -512,7 +514,11 @@ def test_redeploy_archives_cycles_and_allows_roster_change(monkeypatch):
         assert get_troop_cycles(troop) == [first, troop]
 
         # Die bestehende Startlogik prüft und verwendet ausschließlich die neue Besetzung.
-        start_troop(db, troop)
+        with pytest.raises(ReadinessWarning) as exc_info:
+            start_troop(db, troop)
+        assert len(exc_info.value.issues) == 1
+        assert "Erholzeit nicht eingehalten" in exc_info.value.issues[0]
+        start_troop(db, troop, override_reason="Besetzung vollständig gewechselt", override_user_id=1)
         assert troop.status == "im_einsatz"
         assert {member.current_press for member in troop.active_members} == {290, 300}
 
