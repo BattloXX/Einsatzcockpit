@@ -221,6 +221,10 @@
         const msg = JSON.parse(e.data);
         if (msg.type === 'incident_closed') location.href = '/';
         else if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+        else if (msg.type === 'troop_warning' || msg.type === 'troop_started'
+                 || msg.type === 'troop_created' || msg.type === 'troop_status_changed') {
+          location.href = '/einsatz/{{ incident.id }}/atemschutz';
+        }
         // Reiner Anzeige-View (Logo/Uhr/Alarmtext) ohne Modals/Scroll-Zustand –
         // ein Full-Reload auf jede Mutation ist hier unkritisch und stellt sicher,
         // dass künftige Event-Typen (z.B. alarm_type_changed, address_updated)

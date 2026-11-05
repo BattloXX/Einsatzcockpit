@@ -1,6 +1,9 @@
 """Atemschutzüberwachung – Rückzugsdruck-Berechnung und Status-Maschine."""
+import logging
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from time import monotonic
 from typing import NamedTuple
 
 from sqlalchemy.orm import Session
@@ -14,6 +17,32 @@ from app.models.breathing import (
     PressureLog,
     TroopMember,
 )
+
+WARNEINRICHTUNG_BAR = 60.0
+MAX_PRESSURE_BAR = 330
+ALLOWED_TROOP_TRANSITIONS = {
+    "im_einsatz": {"rueckzug", "zurueck"},
+    "rueckzug": {"zurueck"},
+    "zurueck": {"erholt"},
+}
+logger = logging.getLogger("einsatzleiter.breathing")
+_watchdog_last_ok: datetime | None = None
+
+
+class InvalidTroopTransition(ValueError):
+    """Der angeforderte Statusübergang ist nicht erlaubt."""
+
+
+def validate_pressure(value: float) -> float:
+    """Prüft einen endlichen Flaschendruck im Bereich 0 bis 330 bar."""
+    if not math.isfinite(value) or not 0 <= value <= MAX_PRESSURE_BAR:
+        raise ValueError("Der Druck muss zwischen 0 und 330 bar liegen und endlich sein.")
+    return value
+
+
+def get_watchdog_heartbeat() -> datetime | None:
+    """UTC-Zeitpunkt des letzten erfolgreichen Watchdog-Durchlaufs."""
+    return _watchdog_last_ok
 
 
 def _now() -> datetime:
@@ -82,7 +111,7 @@ def check_start_readiness(db: Session, troop: BreathingTroop) -> list[str]:
                 BreathingTroop.incident_id == troop.incident_id,
                 BreathingTroop.id != troop.id,
                 BreathingTroop.is_sicherheitstrupp.is_(True),
-                BreathingTroop.status.in_(("bereit", "im_einsatz")),
+                BreathingTroop.status == "bereit",
             )
             .first()
         )
@@ -109,6 +138,9 @@ def _validated_members_data(members_data: list[dict]) -> list[dict]:
     ]
     if len(filled_members) < 2:
         raise ValueError("Ein Atemschutztrupp benötigt mindestens 2 Mitglieder.")
+    for data in filled_members:
+        if data.get("start_press") is not None:
+            validate_pressure(data["start_press"])
     return filled_members
 
 
@@ -327,7 +359,12 @@ def update_troop_status(
     new_status: str,
     user_id: int | None = None,
 ) -> BreathingTroop:
-    assert new_status in TROOP_STATUSES
+    if new_status not in TROOP_STATUSES:
+        raise ValueError(f"Unbekannter Truppstatus: {new_status}")
+    if new_status == troop.status:
+        return troop
+    if new_status not in ALLOWED_TROOP_TRANSITIONS.get(troop.status, set()):
+        raise InvalidTroopTransition(f"Statusübergang {troop.status} -> {new_status} ist nicht erlaubt.")
     before = {"status": troop.status}
     troop.status = new_status
     if new_status == "rueckzug":
@@ -353,6 +390,9 @@ def log_pressure(
     note: str | None = None,
     recorded_by_user_id: int | None = None,
 ) -> PressureLog:
+    pressure_bar = validate_pressure(pressure_bar)
+    if troop.status not in ("im_einsatz", "rueckzug"):
+        raise ValueError("Druckmeldungen sind nur im Einsatz oder Rückzug erlaubt.")
     member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None:
         raise ValueError("Das Truppmitglied gehört nicht zu diesem Atemschutztrupp.")
@@ -382,20 +422,22 @@ def report_objective_reached(
     pressure_bar: float,
     recorded_by_user_id: int | None = None,
 ) -> TroopMember:
-    """Erfasst das Einsatzziel und berechnet den Rückzugsdruck nach FwDV 7.
+    """Erfasst das Einsatzziel und berechnet den Rückzugsdruck nach FAZ-Lehrbehelf.
 
-    Für den Rückweg wird die doppelte beim Vormarsch verbrauchte Luftmenge
-    angesetzt; die konfigurierte Mindestreserve darf nicht unterschritten werden.
+    Rückzug bei doppeltem Anmarschverbrauch, nie unter der Warneinrichtung.
+    Ein Zieldruck über dem Anfangsdruck wird als Verbrauch von 0 angesetzt.
     """
+    pressure_bar = validate_pressure(pressure_bar)
+    if troop.status not in ("im_einsatz", "rueckzug"):
+        raise ValueError("Das Einsatzziel kann nur im Einsatz oder Rückzug gemeldet werden.")
     member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None or member.start_press is None:
         raise ValueError("Das Truppmitglied oder sein Anfangsdruck fehlt.")
-    _, reserve = _withdraw_settings(db, troop)
     now = _now()
     member.objective_press = pressure_bar
     member.objective_press_at = now
     member.current_press = pressure_bar
-    member.withdraw_press = round(max(float(reserve), 2 * pressure_bar - member.start_press), 1)
+    member.withdraw_press = round(max(WARNEINRICHTUNG_BAR, 2 * (member.start_press - pressure_bar)), 1)
     db.add(PressureLog(
         troop_id=troop.id,
         troop_member_id=member.id,
@@ -425,6 +467,9 @@ def report_back_pressure(
     recorded_by_user_id: int | None = None,
 ) -> TroopMember:
     """Erfasst den Enddruck eines Truppmitglieds nach der Rückkehr."""
+    pressure_bar = validate_pressure(pressure_bar)
+    if troop.status not in ("zurueck", "erholt", "rueckzug"):
+        raise ValueError("Der Enddruck kann nur im Rückzug oder nach der Rückkehr gemeldet werden.")
     member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None:
         raise ValueError("Das Truppmitglied gehört nicht zu diesem Atemschutztrupp.")
@@ -643,6 +688,8 @@ def _collect_new_breathing_warnings(
 
 async def _breathing_watchdog_loop() -> None:
     """Prüft alle 5 Sekunden alle laufenden Trupps und broadcastet Warnungen."""
+    global _watchdog_last_ok
+
     import asyncio
 
     from app.db import SessionLocal
@@ -651,6 +698,7 @@ async def _breathing_watchdog_loop() -> None:
     # Tracking bereits gesendeter Warns (troop_id → set[kind])
     # verhindert dauerhaftes Re-Senden ohne Zustandsänderung
     sent: dict[int, set[str]] = {}
+    last_error_logged: float | None = None
 
     def _collect_new_warnings() -> list[tuple[int, int, str]]:
         """DB-Scan im Threadpool (Audit B2)."""
@@ -672,7 +720,11 @@ async def _breathing_watchdog_loop() -> None:
                     "troop_id": troop_id,
                     "kind": kind,
                 })
+            _watchdog_last_ok = _now()
         except asyncio.CancelledError:
             raise
         except Exception:
-            pass  # Watchdog darf nie crashen
+            now = monotonic()
+            if last_error_logged is None or now - last_error_logged >= 60:
+                logger.exception("Atemschutz-Watchdog: Fehler im Scan")
+                last_error_logged = now
