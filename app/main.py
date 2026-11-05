@@ -272,6 +272,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.alarm_outbox import alarm_outbox_loop
     from app.services.api_message_dispatch_loop import api_message_dispatch_loop
     from app.services.autoclose import autoclose_loop
+    from app.services.breathing_notify import breathing_notify_loop
     from app.services.breathing_service import _breathing_watchdog_loop
     from app.services.diag_schedule import diag_schedule_loop
     from app.services.diagnose.runner import diag_runner_loop
@@ -310,7 +311,7 @@ def _start_background_loops() -> list[asyncio.Task]:
 
     loops = (
         diag_runner_loop, diag_schedule_loop, autoclose_loop, _breathing_watchdog_loop, task_reminder_loop,
-        print_job_watchdog_loop,
+        breathing_notify_loop, print_job_watchdog_loop,
         print_agent_sweep_loop, suche_outbox_loop,
         gsl_lagemeldung_reminder_loop, gk_versand_aufraeum_loop, verleih_erinnerung_loop, probe_erinnerung_loop,
         weather_retention_loop, ai_log_retention_loop, mcp_upload_retention_loop,

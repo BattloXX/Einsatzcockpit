@@ -2,7 +2,6 @@
 import logging
 import math
 import re
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import NamedTuple
@@ -16,6 +15,7 @@ from app.models.breathing import (
     BreathingDeployment,
     BreathingKontrolle,
     BreathingTroop,
+    BreathingWarnung,
     PressureLog,
     TroopMember,
 )
@@ -831,82 +831,45 @@ def check_troop_warnings(troop: BreathingTroop) -> list[str]:
     return warnings
 
 
-def check_and_escalate_troop(
-    db: Session,
-    incident,
-    troop: BreathingTroop,
-    grace_min: int,
-    *,
-    now: datetime | None = None,
-    notifier: Callable | None = None,
-) -> bool:
-    """Eskaliert eine unquittierte Max-Zeit-Überschreitung einmalig nach ÖBFV M302."""
-    if (
-        troop.status not in ("im_einsatz", "rueckzug")
-        or troop.entry_at is None
-        or troop.max_seconds is None
-        or troop.warn_max_time_acked_at is not None
-        or troop.escalated_at is not None
-        or incident.incident_leader_user_id is None
-    ):
-        return False
-
-    current = now or _now()
-    current = current if current.tzinfo else current.replace(tzinfo=UTC)
-    entry = troop.entry_at if troop.entry_at.tzinfo else troop.entry_at.replace(tzinfo=UTC)
-    escalation_due = entry + timedelta(seconds=troop.max_seconds, minutes=max(0, grace_min))
-    if current < escalation_due:
-        return False
-
-    if notifier is None:
-        from app.services.push_service import notify_user
-        notifier = notify_user
-    notifier(
-        db,
-        incident.incident_leader_user_id,
-        "Atemschutz: keine Rueckmeldung",
-        f"{troop.name} ueberschreitet die Einsatzzeit ohne Rueckmeldung",
-        url=f"/einsatz/{incident.id}/atemschutz",
-        source="breathing_watchdog",
-    )
-    troop.escalated_at = current
-    db.flush()
-    return True
-
-
-def _collect_new_breathing_warnings(
-    db: Session, sent: dict[int, set[str]]
-) -> list[tuple[int, int, str]]:
-    """Sammelt neue Warnungen aktiver Orgs und führt fällige Eskalationen aus."""
+def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
+    """Aktive Warnungen persistieren und Events nur fuer neue Warnungen liefern."""
     from app.models.incident import Incident
-    from app.models.master import FireDept
+    from app.services.breathing_notify import schliesse_warnungen_fuer_trupp, sync_warnungen
 
     events: list[tuple[int, int, str]] = []
-    escalation_changed = False
+    changed = False
     enabled_by_org: dict[int | None, bool] = {}
-    active_incidents = db.query(Incident).filter(Incident.status == "active").all()
-    for incident in active_incidents:
-        org_id = incident.primary_org_id
-        if org_id not in enabled_by_org:
-            enabled_by_org[org_id] = breathing_effective_enabled(org_id, db)
-        if not enabled_by_org[org_id]:
-            continue
-        db.refresh(incident, ["breathing_troops"])
-        dept = db.get(FireDept, org_id) if org_id else None
-        grace_min = dept.escalation_grace_min if dept else 3
-        for troop in incident.breathing_troops:
-            if troop.status not in ("im_einsatz", "rueckzug"):
-                sent.pop(troop.id, None)
+    now = _now().replace(tzinfo=None)
+    try:
+        active_incidents = db.query(Incident).filter(Incident.status == "active").all()
+        for incident in active_incidents:
+            org_id = incident.primary_org_id
+            if org_id not in enabled_by_org:
+                enabled_by_org[org_id] = breathing_effective_enabled(org_id, db)
+            if not enabled_by_org[org_id]:
                 continue
-            active_warnings = set(check_troop_warnings(troop))
-            prev_warnings = sent.get(troop.id, set())
-            for kind in active_warnings - prev_warnings:
-                events.append((incident.id, troop.id, kind))
-            sent[troop.id] = active_warnings
-            if check_and_escalate_troop(db, incident, troop, grace_min):
-                escalation_changed = True
-    if escalation_changed:
-        db.commit()
+            db.refresh(incident, ["breathing_troops"])
+            for troop in incident.breathing_troops:
+                offene = db.query(BreathingWarnung).filter(
+                    BreathingWarnung.troop_id == troop.id, BreathingWarnung.erledigt_at.is_(None),
+                )
+                if (troop.status not in ("im_einsatz", "rueckzug")
+                        and troop.notfall_at is None and troop.funk_verloren_at is None):
+                    if db.query(offene.exists()).scalar():
+                        schliesse_warnungen_fuer_trupp(db, troop, now)
+                        changed = True
+                    continue
+                aktive = set(check_troop_warnings(troop))
+                bisher_offen = offene.all()
+                neue = sync_warnungen(db, incident, troop, aktive, now)
+                if neue or any(w.erledigt_at is not None for w in bisher_offen):
+                    changed = True
+                events.extend((incident.id, troop.id, w.kind) for w in neue)
+        if changed:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return events
 
 
@@ -918,10 +881,8 @@ async def _breathing_watchdog_loop() -> None:
 
     from app.db import SessionLocal
     from app.services.broadcast import manager
+    from app.services.loop_utils import iteration_watch
 
-    # Tracking bereits gesendeter Warns (troop_id → set[kind])
-    # verhindert dauerhaftes Re-Senden ohne Zustandsänderung
-    sent: dict[int, set[str]] = {}
     last_error_logged: float | None = None
 
     def _collect_new_warnings() -> list[tuple[int, int, str]]:
@@ -931,20 +892,21 @@ async def _breathing_watchdog_loop() -> None:
         db = SessionLocal()
         set_tenant_context(db, None)
         try:
-            return _collect_new_breathing_warnings(db, sent)
+            return _collect_new_breathing_warnings(db)
         finally:
             db.close()
 
     while True:
         try:
             await asyncio.sleep(5)
-            for incident_id, troop_id, kind in await asyncio.to_thread(_collect_new_warnings):
-                await manager.broadcast(incident_id, {
-                    "type": "troop_warning",
-                    "troop_id": troop_id,
-                    "kind": kind,
-                })
-            _watchdog_last_ok = _now()
+            with iteration_watch(logger, "breathing_watchdog", 5):
+                for incident_id, troop_id, kind in await asyncio.to_thread(_collect_new_warnings):
+                    await manager.broadcast(incident_id, {
+                        "type": "troop_warning",
+                        "troop_id": troop_id,
+                        "kind": kind,
+                    })
+                _watchdog_last_ok = _now()
         except asyncio.CancelledError:
             raise
         except Exception:

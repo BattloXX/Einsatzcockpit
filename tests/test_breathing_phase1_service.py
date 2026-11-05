@@ -420,25 +420,3 @@ def test_pressure_and_kontrolle_visible_before_and_after_reload():
     finally:
         db.rollback()
         db.close()
-
-
-def test_watchdog_deduplicates_new_flags(monkeypatch):
-    from unittest.mock import MagicMock
-
-    troop = live_troop()
-    troop.entry_at = NOW
-    incident = SimpleNamespace(id=1, primary_org_id=42, breathing_troops=[troop], incident_leader_user_id=None)
-    db = MagicMock()
-    db.query.return_value.filter.return_value.all.return_value = [incident]
-    monkeypatch.setattr(svc, "breathing_effective_enabled", lambda org_id, session: True)
-    sent = {}
-    troop.funk_verloren_at = NOW
-    assert svc._collect_new_breathing_warnings(db, sent) == [(1, troop.id, "funk_verloren")]
-    assert svc._collect_new_breathing_warnings(db, sent) == []
-    troop.notfall_at = NOW
-    assert svc._collect_new_breathing_warnings(db, sent) == [(1, troop.id, "notfall")]
-    assert sent == {troop.id: {"notfall"}}
-    assert svc._collect_new_breathing_warnings(db, sent) == []
-    troop.status = "zurueck"
-    assert svc._collect_new_breathing_warnings(db, sent) == []
-    assert sent == {}

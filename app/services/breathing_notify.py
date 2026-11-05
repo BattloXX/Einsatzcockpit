@@ -1,14 +1,16 @@
 """Persistente ASUEW-Warnungen mit gestuftem Push- und SMS-Versand.
 
 Der Aufrufer committet sync/schliessen; der Versand besitzt eigene Transaktionen.
-Alle Fristen sind naive UTC. Die Watchdog-Anbindung folgt separat.
+Alle Fristen sind naive UTC.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from time import monotonic
 
 from sqlalchemy import and_, or_, update
 from sqlalchemy.exc import IntegrityError
@@ -25,6 +27,7 @@ from app.models.master import FireDept
 from app.models.user import Role, User, UserRole
 from app.services.breathing_service import get_eskalation_empfaenger_ids
 from app.services.db_transactions import retry_claim
+from app.services.loop_utils import iteration_watch
 from app.services.push_service import notify_user
 from app.services.sms_service import send_sms
 
@@ -111,19 +114,21 @@ def schliesse_warnungen_fuer_trupp(db: Session, troop: BreathingTroop, now: date
 def sync_warnungen(
     db: Session, incident: Incident, troop: BreathingTroop, aktive_kinds: set[str], now: datetime,
 ) -> list[BreathingWarnung]:
-    """Warnungen und alle geplanten Zustellungen in der aufrufenden Transaktion erzeugen."""
+    """Warnungen und geplante Zustellungen in der aufrufenden Transaktion erzeugen.
+
+    Der Watchdog laeuft ausschliesslich im Leader-Worker und ist der einzige
+    Erzeuger. Die Pruefung auf offene Warnungen im selben Durchlauf stellt
+    Idempotenz ohne Zeilensperren sicher.
+    """
     if troop.incident_id != incident.id:
         raise ValueError("Trupp gehoert nicht zum Einsatz")
     unbekannt = aktive_kinds - ESKALATIONSPLAN.keys()
     if unbekannt:
         raise ValueError(f"Unbekannte Warnungsarten: {sorted(unbekannt)}")
     db.flush()
-    # Das Modell hat keinen UNIQUE-Index fuer offene Warnungen. Der Trupp-Lock
-    # serialisiert konkurrierende Erzeuger auch fuer bisher leere Warnungslisten.
-    db.query(BreathingTroop.id).filter(BreathingTroop.id == troop.id).with_for_update().one()
     offene = db.query(BreathingWarnung).filter(
         BreathingWarnung.troop_id == troop.id, BreathingWarnung.erledigt_at.is_(None),
-    ).with_for_update().all()
+    ).all()
     vorhanden = set()
     for warnung in offene:
         if warnung.kind not in aktive_kinds or warnung.zyklus_start != troop.entry_at:
@@ -291,3 +296,20 @@ async def liefere_faellige(
                                level=logging.ERROR, zustellung_id=zeile.id, incident_id=incident.id)
             db.commit()
     return gesendet
+
+
+async def breathing_notify_loop() -> None:
+    """Faellige ASUEW-Zustellungen alle fuenf Sekunden ausliefern."""
+    last_error_logged: float | None = None
+    while True:
+        try:
+            with iteration_watch(logger, "breathing_notify", 5):
+                await liefere_faellige()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            now = monotonic()
+            if last_error_logged is None or now - last_error_logged >= 60:
+                logger.exception("Atemschutz-Versand: Fehler in der Zustellung")
+                last_error_logged = now
+        await asyncio.sleep(5)

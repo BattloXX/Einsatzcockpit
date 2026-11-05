@@ -18,7 +18,6 @@ from app.services.breathing_service import (
     breathing_effective_enabled,
     breathing_system_enabled,
     calc_withdraw_pressure,
-    check_and_escalate_troop,
     check_start_readiness,
     check_troop_warnings,
     create_troop,
@@ -107,7 +106,7 @@ def test_watchdog_skips_incident_when_org_module_disabled(monkeypatch):
     db.query.return_value = query
     monkeypatch.setattr(svc, "breathing_effective_enabled", lambda org_id, session: False)
 
-    assert _collect_new_breathing_warnings(db, {}) == []
+    assert _collect_new_breathing_warnings(db) == []
     db.refresh.assert_not_called()
     db.get.assert_not_called()
 
@@ -403,40 +402,6 @@ def test_report_back_pressure_sets_value_and_writes_audit(monkeypatch):
         "troop.back_pressure_reported",
         {"before": None, "after": {"pressure_bar": 80}, "user_id": 42},
     )]
-
-
-def test_escalation_fires_once_and_again_after_ack_reset(monkeypatch):
-    import app.services.breathing_service as svc
-
-    now = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
-    troop = _timer_troop(offset_minutes=14, planned_minutes=10)
-    troop.entry_at = now - timedelta(minutes=14)
-    incident = SimpleNamespace(id=7, incident_leader_user_id=99)
-    notifications = []
-
-    def notifier(*args, **kwargs):
-        notifications.append((args, kwargs))
-
-    assert check_and_escalate_troop(
-        FakeDB(), incident, troop, 3, now=now, notifier=notifier,
-    ) is True
-    assert troop.escalated_at == now
-    assert len(notifications) == 1
-
-    assert check_and_escalate_troop(
-        FakeDB(), incident, troop, 3, now=now + timedelta(minutes=1), notifier=notifier,
-    ) is False
-    assert len(notifications) == 1
-
-    monkeypatch.setattr(svc, "write_incident_change", lambda *args, **kwargs: None)
-    ack_warning(FakeDB(), troop, "max_time")
-    assert troop.escalated_at is None
-    troop.warn_max_time_acked_at = None
-
-    assert check_and_escalate_troop(
-        FakeDB(), incident, troop, 3, now=now + timedelta(minutes=2), notifier=notifier,
-    ) is True
-    assert len(notifications) == 2
 
 
 def test_redeploy_rejects_troop_that_is_not_recovered():
@@ -767,7 +732,7 @@ async def test_watchdog_logs_throttled_errors_continues_and_updates_heartbeat(mo
     scans = 0
     sleeps = 0
 
-    def collect(session, sent):
+    def collect(session):
         nonlocal scans
         scans += 1
         assert svc.get_watchdog_heartbeat() == (None if scans <= 3 else now)

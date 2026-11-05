@@ -11,7 +11,7 @@ from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 from app.core.tenant import set_tenant_context
-from app.models.breathing import BreathingTroop, BreathingWarnung, BreathingZustellung, WARNUNG_KINDS
+from app.models.breathing import BreathingTroop, BreathingWarnung, BreathingZustellung, TroopMember, WARNUNG_KINDS
 from app.models.incident import Incident, IncidentChange
 from app.models.master import FireDept, OrgSettings
 from app.models.user import Role, User, UserRole
@@ -408,3 +408,210 @@ async def test_real_sms_adapter(ctx, monkeypatch):
     monkeypatch.setattr(bn, "send_sms", send)
     assert await bn._sms(ctx.org.id, "+43664", "Text", "asuew-123")
     send.assert_awaited_once_with(ctx.org.id, "+43664", "Text", job_id="asuew-123")
+
+
+@pytest.fixture
+def watchdog(ctx, monkeypatch):
+    from app.services import breathing_service as svc
+
+    enabled = svc.breathing_effective_enabled
+    monkeypatch.setattr(svc, "breathing_effective_enabled",
+                        lambda org_id, db: org_id == ctx.org.id and enabled(org_id, db))
+    monkeypatch.setattr(svc, "_now", lambda: ctx.now.replace(tzinfo=UTC))
+    return svc
+
+
+def open_warnings(c):
+    c.db.expire_all()
+    return c.db.query(BreathingWarnung).filter(
+        BreathingWarnung.troop_id == c.troop.id, BreathingWarnung.erledigt_at.is_(None),
+    ).all()
+
+
+def test_sync_twice_in_same_transaction_has_one_open_warning_per_kind(ctx):
+    c = ctx
+    kinds = {"withdraw", "notfall"}
+    assert {w.kind for w in bn.sync_warnungen(c.db, c.incident, c.troop, kinds, c.now)} == kinds
+    assert bn.sync_warnungen(c.db, c.incident, c.troop, kinds, c.now) == []
+    c.db.flush()
+    assert sorted(w.kind for w in open_warnings(c)) == sorted(kinds)
+
+
+def test_watchdog_persists_events_across_sessions_and_closes_inactive_kind(ctx, watchdog):
+    c = ctx
+    c.troop.funk_verloren_at = c.now
+    c.db.commit()
+    assert watchdog._collect_new_breathing_warnings(c.db) == [(c.incident.id, c.troop.id, "funk_verloren")]
+    assert [w.kind for w in open_warnings(c)] == ["funk_verloren"]
+    with TestingSession() as second:
+        set_tenant_context(second, None)
+        assert watchdog._collect_new_breathing_warnings(second) == []
+    c.troop.notfall_at = c.now
+    c.db.commit()
+    assert watchdog._collect_new_breathing_warnings(c.db) == [(c.incident.id, c.troop.id, "notfall")]
+    assert [w.kind for w in open_warnings(c)] == ["notfall"]
+    assert all(r.status == "suppressed" for r in rows(c)
+               if c.db.get(BreathingWarnung, r.warnung_id).kind == "funk_verloren")
+    assert watchdog._collect_new_breathing_warnings(c.db) == []
+
+
+def prepare_max_time(c, watchdog):
+    c.troop.planned_duration_min = 1
+    c.troop.members.append(TroopMember(free_text_name="Testmitglied", start_press=300, current_press=300))
+    c.db.flush()
+    watchdog.record_kontrolle(c.db, c.troop, "one_third", "funk", 230)
+    watchdog.record_kontrolle(c.db, c.troop, "two_third", "funk", 200)
+
+
+@pytest.mark.parametrize("flag", [None, "notfall_at", "funk_verloren_at"])
+def test_watchdog_returned_troop_closes_only_cleared_flags(ctx, watchdog, flag):
+    c = ctx
+    if flag:
+        setattr(c.troop, flag, c.now)
+    else:
+        prepare_max_time(c, watchdog)
+    c.db.commit()
+    kind = {None: "max_exceeded", "notfall_at": "notfall", "funk_verloren_at": "funk_verloren"}[flag]
+    assert watchdog._collect_new_breathing_warnings(c.db) == [(c.incident.id, c.troop.id, kind)]
+    c.troop.status = "zurueck"
+    c.db.commit()
+    assert watchdog._collect_new_breathing_warnings(c.db) == []
+    assert [w.kind for w in open_warnings(c)] == ([kind] if flag else [])
+    if flag:
+        if flag == "notfall_at":
+            watchdog.clear_notfall(c.db, c.troop)
+        else:
+            watchdog.set_funk_verloren(c.db, c.troop, False)
+        c.db.commit()
+        assert watchdog._collect_new_breathing_warnings(c.db) == []
+        assert open_warnings(c) == []
+    assert all(r.status == "suppressed" for r in rows(c))
+
+
+def test_watchdog_disabled_org_creates_nothing(ctx, watchdog):
+    c = ctx
+    c.settings.atemschutz_ueberwachung_modul_aktiv = False
+    c.troop.notfall_at = c.now
+    c.db.commit()
+    assert watchdog._collect_new_breathing_warnings(c.db) == []
+    assert open_warnings(c) == []
+    assert rows(c) == []
+
+
+@pytest.mark.asyncio
+async def test_watchdog_max_time_stage_one_after_grace_and_ack_suppresses_pending(ctx, watchdog):
+    c = ctx
+    c.org.escalation_grace_min = 7
+    prepare_max_time(c, watchdog)
+    c.db.commit()
+    assert watchdog._collect_new_breathing_warnings(c.db) == [(c.incident.id, c.troop.id, "max_exceeded")]
+    assert c.troop.escalated_at is None
+    assert await deliver(c) == 1
+    assert c.push.call_count == 1 and c.sms.call_count == 0
+    assert await deliver(c, c.now + timedelta(minutes=7) - timedelta(seconds=1)) == 0
+    assert await deliver(c, c.now + timedelta(minutes=7)) == 4
+    assert c.push.call_count == 3 and c.sms.call_count == 2
+    assert all(r.status == "sent" for r in rows(c))
+    # A new cycle verifies acknowledgement before the delayed deliveries run.
+    c.troop.entry_at = c.now - timedelta(minutes=5)
+    c.db.commit()
+    assert watchdog._collect_new_breathing_warnings(c.db) == [(c.incident.id, c.troop.id, "max_exceeded")]
+    watchdog.ack_warning(c.db, c.troop, "max_time")
+    c.db.commit()
+    assert watchdog._collect_new_breathing_warnings(c.db) == []
+    assert open_warnings(c) == []
+    assert all(r.status == "suppressed" for r in rows(c)[5:])
+    assert len(rows(c)[5:]) == 5
+    assert await deliver(c, c.now + timedelta(minutes=8)) == 0
+    assert c.troop.escalated_at is None
+
+
+@pytest.mark.asyncio
+async def test_watchdog_sync_failure_rolls_back_and_loop_recovers(ctx, watchdog, monkeypatch):
+    import app.db as database
+    from app.services.broadcast import manager
+
+    c = ctx
+    c.troop.notfall_at = c.now
+    c.db.commit()
+    original_sync = bn.sync_warnungen
+    calls = 0
+    rollback = Mock(wraps=c.db.rollback)
+    monkeypatch.setattr(c.db, "rollback", rollback)
+
+    def failing_sync(*args):
+        nonlocal calls
+        calls += 1
+        # Start a write transaction before the SQLite SAVEPOINT.
+        c.troop.name = "Rollback-Test"
+        c.db.flush()
+        result = original_sync(*args)
+        if calls == 1:
+            raise RuntimeError("Nach Erzeugung fehlgeschlagen")
+        return result
+
+    monkeypatch.setattr(bn, "sync_warnungen", failing_sync)
+    monkeypatch.setattr(database, "SessionLocal", lambda: c.db)
+    close = Mock()
+    monkeypatch.setattr(c.db, "close", close)
+    from unittest.mock import AsyncMock
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast", broadcast)
+    sleeps = 0
+
+    async def sleep(delay):
+        nonlocal sleeps
+        sleeps += 1
+        assert delay == 5
+        if sleeps == 2:
+            rollback.assert_called_once()
+            assert open_warnings(c) == []
+            assert c.troop.name == "Trupp Alpha"
+            broadcast.assert_not_awaited()
+        if sleeps == 3:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await watchdog._breathing_watchdog_loop()
+    assert calls == 2 and close.call_count == 2
+    assert [w.kind for w in open_warnings(c)] == ["notfall"]
+    broadcast.assert_awaited_once_with(c.incident.id, {
+        "type": "troop_warning", "troop_id": c.troop.id, "kind": "notfall",
+    })
+    assert watchdog.get_watchdog_heartbeat() == c.now.replace(tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_notify_loop_survives_errors_and_throttles_logging(monkeypatch, caplog):
+    from unittest.mock import AsyncMock
+
+    send = AsyncMock(side_effect=[RuntimeError("one"), RuntimeError("two"), 0, RuntimeError("three"), 0])
+    monkeypatch.setattr(bn, "liefere_faellige", send)
+    ticks = iter([0.0, 59.0, 60.0])
+    monkeypatch.setattr(bn, "monotonic", lambda: next(ticks))
+    sleeps = 0
+
+    async def sleep(delay):
+        nonlocal sleeps
+        assert delay == 5
+        sleeps += 1
+        if sleeps == 5:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await bn.breathing_notify_loop()
+    assert send.await_count == 5
+    records = [r for r in caplog.records if r.name == bn.logger.name]
+    assert len(records) == 2
+    assert all(r.getMessage() == "Atemschutz-Versand: Fehler in der Zustellung" for r in records)
+    assert all(r.exc_info[0] is RuntimeError for r in records)
+
+
+def test_breathing_loops_registered(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
+
+    names = registered_background_loop_names(monkeypatch)
+    assert names.count("_breathing_watchdog_loop") == 1
+    assert names.count("breathing_notify_loop") == 1
