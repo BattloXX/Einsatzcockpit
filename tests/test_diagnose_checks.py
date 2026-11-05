@@ -66,6 +66,58 @@ def snapshot(engine):
         return {t.name: [tuple(r) for r in con.execute(select(t))] for t in Base.metadata.tables.values()}
 
 
+@pytest.mark.parametrize("status", ["open", "in_progress", "done"])
+def test_cancel_task_haelt_status_flags_und_diagnose_konsistent(diag_engine, factory, status):
+    from app.models.incident import IncidentChange, Task
+    from app.services.incident_service import cancel_task, set_task_status
+
+    with factory() as db:
+        org = insert(db, "fire_dept", slug="auftraege")
+        incident = insert(db, "incident", primary_org_id=org, status="active")
+        ident = insert(db, "task", incident_id=incident, status="open", is_done=False, is_cancelled=False)
+        task = db.get(Task, ident)
+        set_task_status(db, task, status)
+        db.commit()
+        for zielstatus, aktion in [("cancelled", "task.cancelled"), ("open", "task.restored")]:
+            vorher = {"status": task.status, "is_done": task.is_done, "is_cancelled": task.is_cancelled}
+            assert cancel_task(db, task) is task
+            db.commit()
+            db.refresh(task)
+            assert task.status == zielstatus
+            assert task.is_cancelled == (zielstatus == "cancelled")
+            assert not task.is_done and task.done_at is None
+            assert (task.cancelled_at is not None) == task.is_cancelled
+            log = db.query(IncidentChange).filter_by(incident_id=incident, action=aktion).one()
+            assert json.loads(log.before_json) == vorher
+            assert json.loads(log.after_json) == {
+                "status": zielstatus, "is_done": False, "is_cancelled": task.is_cancelled,
+            }
+            result = registry.execute_check(diag_engine, registry.CHECKS["einsatz.integritaet"])
+            assert not any(f.kern == "task_flags" for f in result.findings)
+
+
+def test_katplan_relation_ziel_darf_in_anderem_plan_aber_nicht_anderer_org_liegen(diag_engine, factory):
+    with factory() as db:
+        org = insert(db, "fire_dept", slug="relationen")
+        andere_org = insert(db, "fire_dept", slug="andere-relationen")
+        plan = insert(db, "katplan_plan", org_id=org, status="entwurf")
+        zielplan = insert(db, "katplan_plan", org_id=org, status="entwurf")
+        fremdplan = insert(db, "katplan_plan", org_id=andere_org, status="entwurf")
+        quelle = insert(db, "katplan_element", org_id=org, plan_id=plan, uuid="quelle")
+        insert(db, "katplan_element", org_id=org, plan_id=zielplan, uuid="ziel")
+        insert(db, "katplan_element", org_id=andere_org, plan_id=fremdplan, uuid="fremd")
+        gueltig = insert(db, "katplan_relation", org_id=org, plan_id=plan,
+                         von_element_id=quelle, zu_element_uuid="ziel", art="siehe_auch")
+        ungueltig = [insert(db, "katplan_relation", org_id=org, plan_id=plan,
+                            von_element_id=quelle, zu_element_uuid=uuid, art="siehe_auch")
+                     for uuid in ("fremd", "fehlt")]
+    result = registry.execute_check(diag_engine, registry.CHECKS["katplan.integritaet"])
+    finding, = [f for f in result.findings if f.kern == "relation_ziel"]
+    assert finding.schweregrad == "fail"
+    assert set(finding.betroffene_ids["katplan_relation"]) == set(ungueltig)
+    assert gueltig not in finding.betroffene_ids["katplan_relation"]
+
+
 @pytest.mark.parametrize("check_id", list(registry.CHECKS))
 def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, monkeypatch, tmp_path, check_id):
     from app.config import settings
