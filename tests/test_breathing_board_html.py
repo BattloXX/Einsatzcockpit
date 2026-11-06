@@ -110,7 +110,10 @@ def test_due_control_requires_pressure_or_no_contact(client, breathing_routes, m
     response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
 
     assert response.status_code == 200
-    assert f"Kontrolle fällig ({label}): niedrigsten Druck des Trupps abfragen" in response.text
+    assert f"Kontrolle fällig ({label})" in response.text
+    warning_row = response.text.split('class="warning-actions"', 1)[1].split('</div>\n        </div>', 1)[0]
+    assert ">Druck abgefragt</button>" in warning_row
+    assert ">Kein Funkkontakt</button>" in warning_row
     forms = re.findall(r'<form\b[^>]*hx-post="' + re.escape(ctx.url) + r'/kontrolle".*?</form>', response.text, re.S)
     due_forms = [form for form in forms if f'name="stufe" value="{stufe}"' in form]
     assert len(due_forms) == 2
@@ -400,7 +403,8 @@ def test_overview_counts_all_statuses(client, breathing_routes):
     response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
 
     assert response.status_code == 200
-    assert "Trupps: 2 im Einsatz, 2 bereit (davon 1 Sicherheitstrupp), 3 in Erholung" in _board_summary(response.text)
+    for chip in ["2 im Einsatz", "2 bereit", "1 Sicherheitstrupp bereit", "3 in Erholung"]:
+        assert f"<span>{chip}</span>" in _board_summary(response.text)
 
 
 def test_warning_event_refreshes_card_for_all_kinds(client, breathing_routes):
@@ -492,3 +496,38 @@ def test_board_offline_outbox_and_pressure_correction(client, breathing_routes):
     for form in re.findall(r'<form\b.*?</form>', response.text, re.S):
         assert "ECPBreathingNet.showError(" not in form
     assert "ECPBreathingNet.formFailed($event)" in response.text
+
+
+@pytest.mark.parametrize("status,label", [
+    ("bereit", "Einsetzen"), ("im_einsatz", "Rückzug"), ("rueckzug", "Zurück"),
+    ("zurueck", "Erholt"), ("erholt", "Erneut einsetzen"),
+])
+def test_redesigned_card_primary_and_pressure_bars(client, breathing_routes, status, label):
+    from datetime import UTC, datetime, timedelta
+
+    ctx = breathing_routes
+    ctx.troop.status = status
+    ctx.troop.entry_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=11)
+    ctx.troop.planned_duration_min = 30
+    for index, member in enumerate(ctx.troop.active_members):
+        member.current_press = 220 - index * 10
+        member.withdraw_press = 60
+    ctx.db.commit()
+    page = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+    card = client.get(f"{ctx.url}/karte")
+    assert page.status_code == card.status_code == 200
+    assert '<link rel="stylesheet" href="/static/css/breathing.css?v=' in page.text
+    for html in [page.text, card.text]:
+        primary = html.split('class="troop-card__actions troop-primary-actions"', 1)[1].split('</div>', 1)[0]
+        assert f" {label}</button>" in primary
+        assert primary.count('<button') == 1
+        assert 'gauge-svg' not in html
+        assert 'needleAngle' not in html
+        assert html.count('class="member-withdraw-marker"') == len(ctx.troop.active_members)
+        assert html.count('class="member-pressure-track"') == len(ctx.troop.active_members)
+        assert 'class="member-lowest">niedrigster</span>' in html
+        timeline = html.split('aria-label="Fristen"', 1)[1].split('</div>', 1)[0]
+        for event in ["Eintritt", "1/3", "2/3", "Max", "fällig", "offen"]:
+            assert event in timeline
+        if status == "erholt":
+            assert html.index(' Erneut einsetzen</button>') < html.index('<details class="recovered-details">')

@@ -61,6 +61,44 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def troop_timeline(troop: BreathingTroop) -> list[dict]:
+    """Fristen und dokumentierte Ereignisse des aktuellen Einsatzzyklus."""
+    if not troop.entry_at:
+        return []
+    events = []
+
+    def add(label, soll_at=None, ist_at=None, status="erledigt", detail=""):
+        events.append(dict(label=label, soll_at=soll_at, ist_at=ist_at, status=status, detail=detail))
+
+    add("Eintritt", ist_at=troop.entry_at)
+    elapsed = troop.elapsed_seconds or 0
+    for label, stufe, seconds in [
+        ("1/3", "one_third", troop.one_third_seconds),
+        ("2/3", "two_third", troop.two_third_seconds),
+        ("Max", None, troop.max_seconds),
+    ]:
+        if seconds is None:
+            continue
+        controls = [k for k in troop.active_kontrollen if k.stufe == stufe and k.art == "funk"] if stufe else []
+        control = max(controls, key=lambda k: k.erledigt_at) if controls else None
+        # A return completes the maximum-duration deadline; radio loss never completes a pressure check.
+        actual = control.erledigt_at if control else (troop.back_at if stufe is None else None)
+        status = "erledigt" if actual else ("faellig" if elapsed >= seconds else "offen")
+        detail = f"{control.niedrigster_druck:g} bar" if control and control.niedrigster_druck is not None else ""
+        add(label, troop.entry_at + timedelta(seconds=seconds), actual, status, detail)
+    for member in troop.active_members:
+        if member.objective_press_at:
+            detail = member.display_name
+            if member.objective_press is not None:
+                detail += f" ({member.objective_press:g} bar)"
+            add("Einsatzziel", ist_at=member.objective_press_at, detail=detail)
+    if troop.withdraw_at:
+        add("Rückzug", ist_at=troop.withdraw_at)
+    if troop.back_at:
+        add("Zurück", ist_at=troop.back_at)
+    return events
+
+
 def breathing_system_enabled(db: Session) -> bool:
     """Systemweiter Atemschutz-Flag; ein fehlender Eintrag bedeutet aktiv."""
     from app.models.master import SystemSettings

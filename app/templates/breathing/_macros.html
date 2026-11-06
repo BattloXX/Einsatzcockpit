@@ -28,3 +28,48 @@
 </form>
 {% endmacro %}
 
+
+{% macro primary_action(troop) %}
+    <!-- ── Status actions ── -->
+    <div class="troop-card__actions troop-primary-actions">
+      {% if can_edit is not defined or can_edit %}
+      {% if troop.status == 'bereit' %}
+      <div id="readiness-start-{{ troop.id }}">
+        <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/starten"
+              hx-target="#readiness-start-{{ troop.id }}" hx-swap="outerHTML">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--primary btn--sm">{{ icon("player-play", size="xs") }} Einsetzen</button>
+        </form>
+      </div>
+      {% elif troop.status == 'im_einsatz' %}
+      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
+            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="status" value="rueckzug">
+        <button type="submit" class="btn btn--danger btn--sm">{{ icon("arrow-left", size="xs") }} Rückzug</button>
+      </form>
+      {% elif troop.status == 'rueckzug' %}
+      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
+            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="status" value="zurueck">
+        <button type="submit" class="btn btn--warn btn--sm">{{ icon("check", size="xs") }} Zurück</button>
+      </form>
+      {% elif troop.status == 'zurueck' %}
+      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
+            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="status" value="erholt">
+        <button type="submit" class="btn btn--success btn--sm">{{ icon("check", size="xs") }} Erholt</button>
+      </form>
+      {% endif %}
+
+      {% if troop.status == 'erholt' %}
+      <button type="button" class="btn btn--primary btn--sm"
+              data-ec-action="open-dialog" data-ec-dialog="redeployTroopModal-{{ troop.id }}">{{ icon("refresh", size="xs") }} Erneut einsetzen</button>
+      {% endif %}
+
+      {% endif %}
+    </div>
+
+{% endmacro %}

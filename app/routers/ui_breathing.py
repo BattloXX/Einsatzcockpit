@@ -38,6 +38,7 @@ from app.services.breathing_service import (
     report_objective_reached,
     set_funk_verloren,
     start_troop,
+    troop_timeline,
     troop_urgency,
     update_meldung,
     update_troop_status,
@@ -183,7 +184,7 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
         "can_edit": can_alarm and not readonly,
         "request": request, "user": user, "incident": incident,
         "server_now_iso": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "troop_urgency": troop_urgency,
+        "troop_urgency": troop_urgency, "troop_timeline": troop_timeline,
         "safety": {"troop": next((t for t in incident.breathing_troops
                                  if t.status == "bereit" and t.is_sicherheitstrupp), None)},
         "troops_with_warnings": troops_with_warnings, "members": members,

@@ -156,7 +156,7 @@ test('troop timer uses the server clock and releases interval and pressure liste
     window: { addEventListener: (type, fn) => listeners.add(fn), removeEventListener: (type, fn) => listeners.delete(fn) }
   };
   vm.runInNewContext(code, context);
-  const card = context.troopCard(180, 300, 100, '2026-11-06T12:09:30Z', '2026-11-06T12:00:00Z', 30, null, 30);
+  const card = context.troopCard('2026-11-06T12:09:30Z', '2026-11-06T12:00:00Z', 30, null, 30);
   card.$el = { id: 'troop-7' };
   card.init(); card.init();
   assert.equal(card.timeAgo, 'vor 30 Sek.');
@@ -169,7 +169,7 @@ test('troop timer uses the server clock and releases interval and pressure liste
   card.destroy();
   assert.equal(intervals.size, 0);
   assert.equal(listeners.size, 0);
-  const returned = context.troopCard(100, 300, 100, null, null, 30, '2026-11-06T12:00:00Z', 30);
+  const returned = context.troopCard(null, null, 30, '2026-11-06T12:00:00Z', 30);
   returned.$el = { id: 'troop-8' }; returned.init();
   assert.equal(returned.recoverySeconds, 19 * 60);
   returned.destroy();

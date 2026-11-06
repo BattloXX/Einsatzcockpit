@@ -12,6 +12,10 @@
     {% endfor %}
   </section>
   {% endif %}
-  <p class="breathing-overview">Trupps: {{ trupp_uebersicht.im_einsatz + trupp_uebersicht.rueckzug }} im Einsatz, {{ trupp_uebersicht.bereit }} bereit (davon {{ trupp_uebersicht.sicherheitstrupp_bereit }} Sicherheitstrupp), {{ trupp_uebersicht.zurueck }} in Erholung</p>
+  <div class="breathing-overview" aria-label="Truppübersicht">
+    <span>{{ trupp_uebersicht.im_einsatz + trupp_uebersicht.rueckzug }} im Einsatz</span>
+    <span>{{ trupp_uebersicht.bereit }} bereit</span>
+    <span>{{ trupp_uebersicht.sicherheitstrupp_bereit }} Sicherheitstrupp bereit</span>
+    <span>{{ trupp_uebersicht.zurueck }} in Erholung</span>
+  </div>
 </div>
-
