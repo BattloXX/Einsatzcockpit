@@ -6,23 +6,26 @@
 <div class="person-select" data-required="{{ 'true' if person_required else 'false' }}" x-data='personSelectFlyout({
        title: {{ person_title|tojson }},
        people: {{ personen|tojson }},
-       initialName: {{ person_name|tojson }},
-       initialId: {{ person_id|tojson }}
-     })' @keydown.escape.window="close()">
+       initialName: {{ person_name_expr|default(person_name|tojson) }},
+       initialId: {{ person_id_expr|default(person_id|tojson) }}
+     })' @keydown.escape.window="if (open) { $event.preventDefault(); close(); }">
   {% if person_show_label|default(true) %}
   <label class="form-label" for="{{ person_field }}-trigger">{{ person_label }}{% if person_required %} *{% endif %}</label>
   {% endif %}
+  {% if not person_external_fields|default(false) %}
   <input type="hidden"{% if person_field_expr|default('') %} :name="{{ person_field_expr }}"{% else %} name="{{ person_field }}_member_id"{% endif %} :value="memberId">
   <input type="hidden"{% if person_field_expr|default('') %} :name="{{ person_field_expr.replace('_member_id', '_name') }}"{% else %} name="{{ person_field }}_name"{% endif %} :value="selectedName">
-  <button type="button" id="{{ person_field }}-trigger" class="person-select__trigger"
+  {% endif %}
+  <button type="button" {% if person_external_fields|default(false) %}:id="uid + '-trigger'"{% else %}id="{{ person_field }}-trigger"{% endif %} class="person-select__trigger"
           @click="{% if person_title_expr|default('') %}title = {{ person_title_expr }}; {% endif %}openFlyout()" :aria-expanded="open.toString()" aria-haspopup="dialog">
     {{ icon("user", size="sm") }}
     <strong x-text='selectedName || {{ person_placeholder|tojson }}'></strong>
+    <small class="person-flyout__badge" x-show="people.some(person => String(person.id) === String(memberId) && person.is_agt)">AGT</small>
     <span class="person-select__chevron" aria-hidden="true">{{ icon("chevron-right", size="sm") }}</span>
   </button>
   <p class="fb-name-warn" x-show="invalid" x-cloak>Bitte eine Person aus der Liste auswählen.</p>
 
-  <template x-teleport="body">
+  <template x-teleport="{{ person_teleport|default('body') }}">
     <div class="person-flyout-backdrop" x-show="open" x-transition.opacity @click.self="close()" role="presentation">
       <section class="person-flyout" role="dialog" aria-modal="true" :aria-label="title" @click.stop>
         <header class="person-flyout__header">
@@ -48,7 +51,9 @@
               <template x-for="person in filtered" :key="person.id">
                 <button type="button" class="person-flyout__person" :class="{'is-selected': String(person.id) === String(memberId)}"
                         @click="select(person)" @keydown.enter.prevent="select(person)" role="option"
-                        :aria-selected="String(person.id) === String(memberId)" x-text="person.name"></button>
+                        :aria-selected="String(person.id) === String(memberId)"><span x-text="person.name"></span>
+                  <small class="person-flyout__badge" x-show="person.is_agt">AGT</small>
+                  <small x-show="person.occupied" x-text="person.occupied ? 'bereits in Trupp ' + person.occupied : ''"></small></button>
               </template>
             </div>
           </template>
@@ -60,7 +65,9 @@
                   <template x-for="person in groups[letter]" :key="person.id">
                     <button type="button" class="person-flyout__person" :class="{'is-selected': String(person.id) === String(memberId)}"
                             @click="select(person)" @keydown.enter.prevent="select(person)" role="option"
-                            :aria-selected="String(person.id) === String(memberId)" x-text="person.name"></button>
+                            :aria-selected="String(person.id) === String(memberId)"><span x-text="person.name"></span>
+                  <small class="person-flyout__badge" x-show="person.is_agt">AGT</small>
+                  <small x-show="person.occupied" x-text="person.occupied ? 'bereits in Trupp ' + person.occupied : ''"></small></button>
                   </template>
                 </section>
               </template>

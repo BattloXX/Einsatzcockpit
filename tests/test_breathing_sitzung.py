@@ -33,7 +33,7 @@ def ctx(breathing_routes, client, monkeypatch):
     monkeypatch.setattr(settings, "ASUEW_MIN_APP_VERSION", "")
     data = dict(incident_id=c.incident_id, fcm_token=token.token, app_version="2026.11.05",
                 selbsttest={"online": True}, akku_prozent=80, laedt=False, geraet_label="Überwachung 1")
-    return SimpleNamespace(**vars(c), user=user, token=token, settings=org_settings, client=client,
+    return SimpleNamespace(**{**vars(c), "client": client}, user=user, token=token, settings=org_settings,
                            data=data, now=datetime.now(UTC).replace(tzinfo=None))
 
 

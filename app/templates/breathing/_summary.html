@@ -1,0 +1,19 @@
+{# Auch bei einem partiellen Grid-Reload Hinweise und Zaehler aktualisieren. #}
+<div id="breathingSummary" {% if summary_oob | default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% if breathing_alerts %}
+  {% set first = breathing_alerts[0] %}
+  <section id="breathingAlertBar" class="breathing-alert breathing-alert--{{ first.color }}{% if first.emergency %} breathing-alert--emergency{% endif %}"
+           data-alerts='{{ breathing_alerts | tojson }}' aria-label="Aktive Warnungen">
+    <strong data-alert-text>{{ first.text }}</strong>
+    {% if breathing_alerts | length > 1 %}<span>+{{ breathing_alerts | length - 1 }} weitere</span>{% endif %}
+    <button type="button" class="btn" data-alert-jump aria-label="Zur Karte des angezeigten Trupps">Zur Karte</button>
+    {% if breathing_alerts | length > 1 %}<button type="button" class="btn" data-alert-next aria-label="Nächste Warnung anzeigen">Nächste</button>{% endif %}
+  </section>
+  {% endif %}
+  <div class="breathing-overview" aria-label="Truppübersicht">
+    <span>{{ trupp_uebersicht.im_einsatz + trupp_uebersicht.rueckzug }} im Einsatz</span>
+    <span>{{ trupp_uebersicht.bereit }} bereit</span>
+    <span>{{ trupp_uebersicht.sicherheitstrupp_bereit }} Sicherheitstrupp bereit</span>
+    <span>{{ trupp_uebersicht.zurueck }} in Erholung</span>
+  </div>
+</div>

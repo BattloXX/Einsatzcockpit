@@ -1,6 +1,7 @@
 """Atemschutzüberwachung UI."""
 
 from datetime import UTC, datetime
+from math import ceil
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -38,6 +39,8 @@ from app.services.breathing_service import (
     report_objective_reached,
     set_funk_verloren,
     start_troop,
+    troop_timeline,
+    troop_urgency,
     update_meldung,
     update_troop_status,
 )
@@ -141,9 +144,23 @@ def breathing_board(
     incident = db.get(Incident, incident_id)
     if not incident:
         raise HTTPException(404)
+    return templates.TemplateResponse(request, "breathing/board.html", _board_kontext(request, db, incident, user))
+
+
+def _board_kontext(request: Request, db: Session, incident: Incident, user) -> dict:
+    incident_id = incident.id
     db.refresh(incident, ["breathing_troops", "vehicles"])
     all_members = db.query(Member).filter(Member.active == True).order_by(Member.lastname).all()  # noqa: E712
     members = [m for m in all_members if m.is_agt]
+    belegte_mitglieder = {
+        m.member_id: t.name for t in incident.breathing_troops
+        if t.status in ("bereit", "im_einsatz", "rueckzug")
+        for m in t.active_members if m.member_id
+    }
+    personen = [{"id": m.id, "name": m.full_name, "firstname": m.firstname,
+                 "lastname": m.lastname, "is_agt": m.is_agt,
+                 "occupied": belegte_mitglieder.get(m.id, "")} for m in members]
+    now = datetime.now(UTC).replace(tzinfo=None)
     vehicles = [v for v in incident.vehicles if not v.removed_at]
 
     app_pflicht = _asuew_app_pflicht(db, incident_id)
@@ -155,6 +172,10 @@ def breathing_board(
         (t, *get_warning_level(t, asuew_settings.gelb_prozent), get_time_warning(t), check_troop_warnings(t))
         for t in incident.breathing_troops
     ]
+    erholzeit_rest = {
+        t.id: max(0, ceil(asuew_settings.erholzeit_min - (now - t.back_at).total_seconds() / 60))
+        for t in incident.breathing_troops if t.back_at and asuew_settings.erholzeit_min
+    }
     trupp_uebersicht = dict.fromkeys(TROOP_STATUS_LABELS, 0)
     trupp_uebersicht["sicherheitstrupp_bereit"] = 0
     troop_ids = [t.id for t in incident.breathing_troops]
@@ -171,19 +192,100 @@ def breathing_board(
             BreathingWarnung.erledigt_at.is_(None),
         ).order_by(BreathingWarnung.ausgeloest_at, BreathingWarnung.id).all():
             warnungen_by_troop.setdefault(warnung.troop_id, []).append(warnung)
-    return templates.TemplateResponse(request, "breathing/board.html", {
+    hinweise = incident_hinweise(incident.breathing_troops)
+    kein_heartbeat = asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None))
+    alert_kinds = {
+        "notfall": (0, "red", "ATEMSCHUTZNOTFALL"),
+        "funk_verloren": (1, "orange", "Kein Funkkontakt"),
+        "withdraw": (2, "red", "Rückzugsdruck erreicht"),
+        "max_exceeded": (3, "orange", "Max-Zeit überschritten"),
+        "two_third_due": (4, "yellow", "Kontrolle fällig (2/3)"),
+        "one_third_due": (4, "yellow", "Kontrolle fällig (1/3)"),
+        "kein_heartbeat": (5, "yellow", "Kein Überwachungsgerät in der App aktiv "
+                           "(kein Heartbeat seit über 60 Sekunden). "
+                           "Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen."),
+        "kein_sicherheitstrupp": (6, "yellow", "Kein bereiter Sicherheitstrupp: "
+                                "Rettungstrupp ab Einsatzbeginn bereitstellen"),
+        "assp": (7, "yellow", "Atemschutzsammelplatz (ASSP) über die Einsatzleitung alarmieren; "
+                 "die Überwachung bleibt beim Gruppenkommandanten"),
+    }
+    alerts = []
+
+    def add_alert(troop, kind):
+        rank, color, message = alert_kinds[kind]
+        alerts.append({"troop_id": troop.id, "key": f"{troop.id}:{kind}",
+                       "rank": rank, "color": color, "emergency": kind == "notfall",
+                       "text": f"{troop.name}: {message}"})
+
+    for troop, _, _, _, active_warnings in troops_with_warnings:
+        for kind in active_warnings:
+            if kind in alert_kinds:
+                add_alert(troop, kind)
+        if troop.funk_verloren_at and "funk_verloren" not in active_warnings:
+            add_alert(troop, "funk_verloren")
+    for kind, troop in hinweise.items():
+        add_alert(troop, kind)
+    if kein_heartbeat and incident.breathing_troops:
+        anchor = next((t for t in incident.breathing_troops if t.status in ("im_einsatz", "rueckzug")),
+                      incident.breathing_troops[0])
+        add_alert(anchor, "kein_heartbeat")
+    alerts.sort(key=lambda alert: (alert["rank"], alert["troop_id"], alert["key"]))
+    return {
         "asuew_app_pflicht": app_pflicht, "asuew_session_ok": session_ok,
         "asuew_readonly": readonly, "can_alarm": can_alarm,
         "can_edit": can_alarm and not readonly,
-        "user": user, "incident": incident,
+        "request": request, "user": user, "incident": incident,
+        "server_now_iso": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "troop_urgency": troop_urgency, "troop_timeline": troop_timeline,
+        "safety": {"troop": next((t for t in incident.breathing_troops
+                                 if t.status == "bereit" and t.is_sicherheitstrupp), None)},
         "troops_with_warnings": troops_with_warnings, "members": members,
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
+        "belegte_mitglieder": belegte_mitglieder, "personen": personen,
+        "naechste_trupp_nr": len(incident.breathing_troops) + 1, "erholzeit_rest": erholzeit_rest,
         "troop_status_labels": TROOP_STATUS_LABELS,
         "asuew_settings": asuew_settings, "current_user_label": _current_user_label(request),
-        "hinweise": incident_hinweise(incident.breathing_troops),
-        "kein_heartbeat": asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None)),
+        "hinweise": hinweise, "breathing_alerts": alerts,
+        "kein_heartbeat": kein_heartbeat,
         "trupp_uebersicht": trupp_uebersicht, "warnungen_by_troop": warnungen_by_troop,
-    })
+    }
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/uebersicht", response_class=HTMLResponse)
+def breathing_summary(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(404)
+    return templates.TemplateResponse(
+        request, "breathing/_summary.html", _board_kontext(request, db, incident, user),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/{troop_id}/karte", response_class=HTMLResponse)
+def breathing_troop_card(
+    incident_id: int, troop_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    troop = db.get(BreathingTroop, troop_id)
+    if not incident or not troop or troop.incident_id != incident_id:
+        raise HTTPException(404)
+    context = _board_kontext(request, db, incident, user)
+    values = next(row for row in context["troops_with_warnings"] if row[0].id == troop_id)
+    context.update(zip(("troop", "warning", "warning_member", "time_warning", "active_warnings"), values, strict=True))
+    return templates.TemplateResponse(
+        request, "breathing/_troop_card.html", context, headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/trupp")
@@ -261,6 +363,13 @@ def create_breathing_troop(
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/erneut-einsetzen")
 def redeploy_troop_view(
     incident_id: int, troop_id: int, request: Request,
+    name: str | None = Form(None),
+    unit_name: str | None = Form(None),
+    vehicle_id: int | None = Form(None),
+    ueberwacher_name: str | None = Form(None),
+    angriffsweg: str | None = Form(None),
+    funkkanal: str | None = Form(None),
+    is_sicherheitstrupp: bool | None = Form(None),
     task_text: str | None = Form(None),
     location_text: str | None = Form(None),
     bottle_preset: str | None = Form(None),
@@ -296,6 +405,17 @@ def redeploy_troop_view(
         )
     except ValueError as exc:
         return Response(str(exc), status_code=400)
+    for field, value in {"name": name, "unit_name": unit_name,
+                         "ueberwacher_name": ueberwacher_name,
+                         "angriffsweg": angriffsweg, "funkkanal": funkkanal}.items():
+        if value is not None:
+            setattr(troop, field, value.strip())
+    if "vehicle_id" in form_data:
+        troop.vehicle_id = vehicle_id
+    if is_sicherheitstrupp is not None or "name" in form_data:
+        troop.is_sicherheitstrupp = bool(is_sicherheitstrupp)
+    if ueberwacher_name is not None:
+        troop.ueberwacher_user_id = request.state.user.id
     db.commit()
     lfd_nr = troop.deployments[-1].lfd_nr
     run_async(manager.broadcast, incident_id, {

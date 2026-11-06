@@ -1,5 +1,6 @@
 """HTML-Regressionen fuer Board und Bildschirmschoner mit echtem Login."""
 
+import json
 import re
 
 import pytest
@@ -110,7 +111,10 @@ def test_due_control_requires_pressure_or_no_contact(client, breathing_routes, m
     response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
 
     assert response.status_code == 200
-    assert f"Kontrolle fällig ({label}): niedrigsten Druck des Trupps abfragen" in response.text
+    assert f"Kontrolle fällig ({label})" in response.text
+    warning_row = response.text.split('class="warning-actions"', 1)[1].split('</div>\n        </div>', 1)[0]
+    assert ">Druck abgefragt</button>" in warning_row
+    assert ">Kein Funkkontakt</button>" in warning_row
     forms = re.findall(r'<form\b[^>]*hx-post="' + re.escape(ctx.url) + r'/kontrolle".*?</form>', response.text, re.S)
     due_forms = [form for form in forms if f'name="stufe" value="{stufe}"' in form]
     assert len(due_forms) == 2
@@ -233,7 +237,9 @@ def test_control_summary_shows_three_latest_active_controls(client, breathing_ro
 
 
 def _board_summary(html):
-    return html.split('<div id="breathingSummary"', 1)[1].split('<div class="troops-grid"', 1)[0]
+    summary = html.split('<div id="breathingSummary"', 1)[1].split('<div class="troops-grid"', 1)[0]
+    data = re.search(r"data-alerts='([^']+)'", summary)
+    return summary + (" ".join(alert["text"] for alert in json.loads(data[1])) if data else "")
 
 
 def _add_board_troop(ctx, name, status="bereit", safety=False):
@@ -258,7 +264,7 @@ def test_three_deployed_troops_show_assp_hint(client, breathing_routes):
 
     assert response.status_code == 200
     summary = _board_summary(response.text)
-    assert "Kritische Hinweise" in summary
+    assert 'id="breathingAlertBar"' in summary
     assert "Atemschutzsammelplatz (ASSP)" in summary
     assert "die Überwachung bleibt beim Gruppenkommandanten" in summary
     assert 'hx-swap-oob="outerHTML"' in summary
@@ -284,7 +290,7 @@ def test_missing_ready_safety_troop_hint(client, breathing_routes, safety_status
     assert response.status_code == 200
     summary = _board_summary(response.text)
     assert ("Kein bereiter Sicherheitstrupp" in summary) is (safety_status != "bereit")
-    assert ("Kritische Hinweise" in summary) is (safety_status != "bereit")
+    assert ('id="breathingAlertBar"' in summary) is (safety_status != "bereit")
 
 
 def test_summary_links_to_emergency_and_radio_loss(client, breathing_routes):
@@ -300,9 +306,9 @@ def test_summary_links_to_emergency_and_radio_loss(client, breathing_routes):
 
     assert response.status_code == 200
     summary = _board_summary(response.text)
-    assert f'href="#troop-{ctx.troop.id}">ATEMSCHUTZNOTFALL: Trupp A</a>' in summary
-    assert f'href="#troop-{radio.id}">Kein Funkkontakt: Funktrupp</a>' in summary
-    assert 'class="breathing-critical__notfall"' in summary
+    assert "Trupp A: ATEMSCHUTZNOTFALL" in summary
+    assert "Funktrupp: Kein Funkkontakt" in summary
+    assert "breathing-alert--emergency" in summary
 
 
 @pytest.mark.parametrize("closed", [False, True])
@@ -400,16 +406,17 @@ def test_overview_counts_all_statuses(client, breathing_routes):
     response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
 
     assert response.status_code == 200
-    assert "Trupps: 2 im Einsatz, 2 bereit (davon 1 Sicherheitstrupp), 3 in Erholung" in _board_summary(response.text)
+    for chip in ["2 im Einsatz", "2 bereit", "1 Sicherheitstrupp bereit", "3 in Erholung"]:
+        assert f"<span>{chip}</span>" in _board_summary(response.text)
 
 
-def test_warning_event_reloads_board_for_all_kinds(client, breathing_routes):
+def test_warning_event_refreshes_card_for_all_kinds(client, breathing_routes):
     response = client.get(f"/einsatz/{breathing_routes.incident_id}/atemschutz")
 
     assert response.status_code == 200
     handler = response.text.split("window.addEventListener('breathing-warning',", 1)[1].split('});', 1)[0]
     assert "_playWarning(kind, troopId);" in handler
-    assert "if (document.getElementById('troopsGrid')) doBreathingReload();" in handler
+    assert "if (document.getElementById('troopsGrid')) refreshBreathingTroop(troopId);" in handler
     assert "if (!src) return;" in response.text
 
 
@@ -469,9 +476,9 @@ def test_board_heartbeat_hint(client, breathing_routes, pflicht, age, status, ex
     page = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
     assert page.status_code == 200
     assert page.context["kein_heartbeat"] is expected
-    assert ("Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden)." in page.text) is expected
+    assert ("Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden)." in _board_summary(page.text)) is expected
     if expected:
-        assert "Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen." in page.text
+        assert "Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen." in _board_summary(page.text)
 
 
 def test_board_offline_outbox_and_pressure_correction(client, breathing_routes):
@@ -492,3 +499,47 @@ def test_board_offline_outbox_and_pressure_correction(client, breathing_routes):
     for form in re.findall(r'<form\b.*?</form>', response.text, re.S):
         assert "ECPBreathingNet.showError(" not in form
     assert "ECPBreathingNet.formFailed($event)" in response.text
+
+
+@pytest.mark.parametrize("status,label", [
+    ("bereit", "Einsetzen"), ("im_einsatz", "Rückzug"), ("rueckzug", "Zurück"),
+    ("zurueck", "Erholt"), ("erholt", "Erneut einsetzen"),
+])
+def test_redesigned_card_primary_and_pressure_bars(client, breathing_routes, status, label):
+    from datetime import UTC, datetime, timedelta
+
+    ctx = breathing_routes
+    ctx.troop.status = status
+    ctx.troop.entry_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=11)
+    ctx.troop.planned_duration_min = 30
+    for index, member in enumerate(ctx.troop.active_members):
+        member.current_press = 220 - index * 10
+        member.withdraw_press = 60
+    ctx.db.commit()
+    page = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+    card = client.get(f"{ctx.url}/karte")
+    assert page.status_code == card.status_code == 200
+    assert '<link rel="stylesheet" href="/static/css/breathing.css?v=' in page.text
+    for html in [page.text, card.text]:
+        primary = html.split('class="troop-card__actions troop-primary-actions"', 1)[1].split('</div>', 1)[0]
+        assert f" {label}</button>" in primary
+        assert primary.count('<button') == 1
+        assert 'gauge-svg' not in html
+        assert 'needleAngle' not in html
+        assert html.count('class="member-withdraw-marker"') == (0 if status == "bereit" else len(ctx.troop.active_members))
+        assert html.count('class="member-pressure-track"') == len(ctx.troop.active_members)
+        assert ('class="member-lowest">niedrigster</span>' in html) is (status in ["im_einsatz", "rueckzug"])
+        timeline = html.split('aria-label="Fristen"', 1)[1].split('</div>', 1)[0]
+        for event in ["Eintritt", "1/3", "2/3", "Max", "fällig", "offen"]:
+            assert event in timeline
+        if status == "erholt":
+            assert html.index(' Erneut einsetzen</button>') < html.index('<details class="recovered-details">')
+
+
+def test_dialog_loads_shared_helpers_without_alert_calls(client, breathing_routes):
+    ctx = breathing_routes
+    html = client.get(f"/einsatz/{ctx.incident_id}/atemschutz").text
+    assert '/static/js/breathing_dialog.js?v=' in html
+    assert '/static/js/person_select_flyout.js?v=' in html
+    assert 'alert(' not in html
+    assert 'class="bt-dialog-footer"' in html

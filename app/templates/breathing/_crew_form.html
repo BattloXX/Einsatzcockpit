@@ -1,0 +1,56 @@
+<section class="bt-dialog-section" aria-label="Besatzung">
+  <h4>Besatzung</h4>
+  <p>Mindestens 2 Mitglieder ausfüllen. Anfangsdruck für jedes ausgefüllte Mitglied bewusst wählen.</p>
+  <template x-for="(m, i) in members" :key="m.key">
+    <div class="bt-dialog-member">
+      <div class="bt-dialog-person" @person-select-change="m.id = $event.detail.id; m.name = $event.detail.name; m.free = false"
+           @person-select-freitext="m.free = true; $nextTick(() => $el.querySelector('input[type=text]').focus())">
+        <span class="form-label" x-text="'Mitglied ' + (i + 1)"></span>
+        {% with person_field='crew', person_label='Person', person_title='AGT auswählen', person_required=false,
+                person_show_label=false, person_placeholder='Person auswählen', person_id='', person_name='',
+                person_id_expr='m.id', person_name_expr='m.name', person_external_fields=true,
+                person_teleport='#' ~ dialog_id, person_freitext_label='Freie Eingabe (nicht im Register)' %}
+        {% include "components/person_select_flyout.html" %}
+        {% endwith %}
+        <input type="hidden" :name="`member_${i}_id`" :value="m.id">
+        <label x-show="m.free" class="bt-dialog-free">Name (freie Eingabe)
+          <input type="text" :name="`member_${i}_name`" x-model="m.name" :disabled="!m.free" class="form-input"
+                 autocomplete="off" :data-field="`member_${i}_name`">
+        </label>
+        <p class="bt-dialog-occupied" x-show="occupied[m.id]" x-text="occupied[m.id] ? 'bereits in Trupp ' + occupied[m.id] : ''"></p>
+        <p class="bt-dialog-error" x-show="errorFor(`member_${i}_name`)" x-text="errorFor(`member_${i}_name`)"></p>
+      </div>
+      <div class="bt-dialog-roles" role="group" aria-label="Rolle">
+        <input type="hidden" :name="`member_${i}_role`" :value="m.role">
+        <button type="button" :aria-pressed="m.role === 'truppfuehrer'" @click="m.role='truppfuehrer'" aria-label="Truppführer">TF</button>
+        <button type="button" :aria-pressed="m.role === 'truppmann'" @click="m.role='truppmann'" aria-label="Truppmann">TM</button>
+      </div>
+      <button type="button" class="bt-dialog-remove btn btn--ghost" @click="removeMember(i)" aria-label="Mitglied entfernen">{{ icon("x") }}</button>
+      <div class="bt-dialog-pressure">
+        <span class="form-label">Anfangsdruck (bar)</span>
+        <input type="hidden" :name="`member_${i}_press`" :value="m.press">
+        <output class="bt-dialog-pressure-value" :class="m.press === null ? '' : (m.press >= 200 ? 'bt-dialog-good' : m.press >= 100 ? 'bt-dialog-warn' : 'bt-dialog-danger')"
+                x-text="m.press === null ? 'Noch nicht gewählt' : m.press + ' bar'"></output>
+        <div class="bt-dialog-quick">
+          {% for pressure in [300, 290, 280, 270] %}
+          <button type="button" :aria-pressed="m.press === {{ pressure }}" @click="m.press={{ pressure }}"
+                  :data-field="{{ '`member_${i}_press`' if loop.first else 'null' }}">{{ pressure }}</button>
+          {% endfor %}
+          <button type="button" @click="m.pickerOpen = !m.pickerOpen" :aria-expanded="m.pickerOpen">andere...</button>
+        </div>
+        <div class="bt-dialog-picker" @click.outside="m.pickerOpen=false">
+          <div class="press-picker-popup" x-show="m.pickerOpen" x-cloak>
+            <div class="press-grid">
+              <template x-for="val in pressValues" :key="val">
+                <button type="button" class="press-btn" :class="{'press-btn--selected':m.press === val}"
+                        @click="m.press=val; m.pickerOpen=false" x-text="val"></button>
+              </template>
+            </div>
+          </div>
+        </div>
+        <p class="bt-dialog-error" x-show="errorFor(`member_${i}_press`)" x-text="errorFor(`member_${i}_press`)"></p>
+      </div>
+    </div>
+  </template>
+  <button type="button" class="btn btn--ghost bt-dialog-add" @click="addMember()">+ Mitglied</button>
+</section>
