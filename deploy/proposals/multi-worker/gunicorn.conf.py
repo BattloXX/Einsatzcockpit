@@ -1,6 +1,9 @@
 """Opt-in-Vorschlag; bestehende Service-/Docker-Kommandos bleiben unveraendert."""
 
+import faulthandler
 import os
+import sys
+from contextlib import suppress
 
 raw_workers = os.environ.get("ECP_GUNICORN_WORKERS", "1")
 if raw_workers not in {"1", "2", "3", "4"}:
@@ -21,6 +24,16 @@ accesslog = "-"
 access_log_format = '%(h)s %(t)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(D)s'
 errorlog = "-"
 preload_app = False
+if os.path.isdir("/dev/shm"):
+    worker_tmp_dir = "/dev/shm"
+
+
+def worker_abort(worker):
+    """Bei SIGABRT alle Thread-Stacks sichern, auch wenn das Logging scheitert."""
+    with suppress(Exception):
+        worker.log.critical("WORKER TIMEOUT: Thread-Stacks fuer PID %s", worker.pid)
+    with suppress(Exception):
+        faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
 
 # Empfehlung DB_POOL_SIZE/DB_MAX_OVERFLOW je Workerzahl:
 # 2 Worker: 10/20, 3 Worker: 8/15, 4 Worker: 8/12.
