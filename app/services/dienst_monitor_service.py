@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.dienst_monitor import DienstStatus, ausgeschaltete_dienste
 
 # Wie lange ein Alarmierungsauftrag mit unklarem Zustellergebnis die Alarm-Outbox auf "teilweise" haelt.
@@ -235,7 +236,9 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         elif probe.last_probe_ok is False:
             dibos_state, dibos_detail = "down", probe.last_probe_error or "DIBOS-Poll fehlgeschlagen."
         elif jetzt - (_naive_utc(probe.last_probe_at) or jetzt) > timedelta(
-            seconds=max(180, 6 * (cfg.poll_interval_seconds if cfg else 5))
+            seconds=max(180, 6 * (cfg.poll_interval_seconds if cfg else 5),
+                        4 * max(settings.DIBOS_POLL_IDLE_INTERVAL_S, settings.dibos_active_interval())
+                        * (1 + settings.POLL_JITTER_PCT))
         ):
             dibos_state, dibos_detail = "down", "Kein DIBOS-Poll innerhalb des erwarteten Intervalls."
         else:

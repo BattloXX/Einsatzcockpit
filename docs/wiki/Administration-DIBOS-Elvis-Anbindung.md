@@ -38,7 +38,7 @@ Einsatzcockpit kann sich an den **DIBOS EventHub** der Landeswarnzentrale Vorarl
 ```
  Landeswarnzentrale                       Einsatzcockpit
 ┌──────────────────────┐   HTTPS/JSON   ┌────────────────────────────────────────────┐
-│ DIBOS EventHub       │◄───────────────│ dibos_poll_loop (Takt DIBOS_POLL_INTERVAL_S)│
+│ DIBOS EventHub       │◄───────────────│ dibos_poll_loop (adaptiver Takt je Org)     │
 │  Main/GetCurrent...  │  SOAP-Umschlag │   pro aktivierter Org, ein Client je Org:   │
 │  Main/GetPublicEvents│  + Basic-Auth  │   1) GetCurrentEvents                       │
 │  Main/GetCurrentUnits│                │   2) neue Leitstellennummer? → Fast Path:   │
@@ -64,7 +64,7 @@ Zwei Betriebsarten mit klar getrennten Aufgaben:
 
 | Betriebsart | Auslöser | Zweck |
 |---|---|---|
-| **Leichter Poll** (`dibos_loop.py`) | Läuft dauerhaft im Hintergrund, global im festen Takt `DIBOS_POLL_INTERVAL_S` | Produktivbetrieb: Einsätze erkennen, anlegen, anreichern, schließen. **Einzige** Stelle, die in die DB schreibt. Schreibt keine Rohdaten auf Platte |
+| **Leichter Poll** (`dibos_loop.py`) | Läuft dauerhaft im Hintergrund, adaptiv je Org: aktiv 5 s, idle 15 s, jeweils ±20 % Jitter | Produktivbetrieb: Einsätze erkennen, anlegen, anreichern, schließen. **Einzige** Stelle, die in die DB schreibt. Schreibt keine Rohdaten auf Platte |
 | **Voll-Aufzeichnung (Trace)** (`dibos_capture.py`) | Automatisch bei einem eigenen Einsatz (`auto_trace_on_event`) oder manuell durch System-Admin | Reine Diagnose: zeichnet alle Rohantworten auf, ändert **nichts** in der DB |
 
 Der leichte Poll läuft auch während eines Traces unverändert weiter. Bis Oktober 2026 pausierte er während eines Traces und überließ dem Trace die Anreicherung. Ein zweiter Einsatz wurde dann nur im langsameren Trace-Takt erkannt (im Mitschnitt ~20 s), und die Anlage wartete auf alle fünf Abfragen des Zyklus. `GetCurrentEvents` wird in dieser Zeit bewusst doppelt abgefragt (Antwort ~6 KB).
@@ -108,7 +108,7 @@ Unter **Admin → DIBOS / Elvis-Anbindung** (`/admin/dibos`) für die eigene Org
 | Host | `einsatzcockpit` | Kennung, die als Parameter bei `GetElvisNotification` mitgesendet wird |
 | Agentur (`ag`) | `FW` | Agentur-Filter für `GetPublicEvents` (regionale Einsätze) |
 | Wache-UNID | leer | Kennung der eigenen Wache für den [Wachenstatus](#wachenstatus). Leer = alle zum Einsatz gemeldeten Wachen werden übernommen |
-| Poll-Intervall (Sek.) | 5 (Minimum 5) | **Nur für die Voll-Aufzeichnung** und die [Dienstüberwachung](#dienstüberwachung). Der reguläre Hintergrund-Poll läuft global über `DIBOS_POLL_INTERVAL_S` und bestimmt allein, wie schnell ein Einsatz erkannt wird |
+| Poll-Intervall (Sek.) | 5 (Minimum 5) | **Nur für die Voll-Aufzeichnung** und die [Dienstüberwachung](#dienstüberwachung). Der reguläre Hintergrund-Poll nutzt den adaptiven Aktiv-/Idle-Takt und bestimmt, wie schnell ein Einsatz erkannt wird |
 | Auto-Trace bei Einsatz | ein | Startet bei einem eigenen aktiven Einsatz automatisch eine Voll-Aufzeichnung |
 | Auto-Trace-Dauer (Min.) | 120 (Minimum 5) | Höchstdauer dieser automatischen Aufzeichnung. Sie endet früher, wenn 10 min lang kein eigener Einsatz mehr aktiv ist |
 | Einsätze anreichern | aus | Siehe [Betriebsmodi](#betriebsmodi-die-drei-schalter) |
@@ -124,13 +124,22 @@ Mit **Verbindung testen** wird `GetCurrentEvents` aufgerufen, ohne etwas zu spei
 
 ```dotenv
 DIBOS_TRACE_ENABLED=true     # Globaler Kill-Switch für den gesamten DIBOS-Hintergrund-Poll
-DIBOS_POLL_INTERVAL_S=5      # Poll-Intervall in Sekunden, gilt für alle Orgs
+DIBOS_POLL_ACTIVE_INTERVAL_S=5  # Aktiv-Takt in Sekunden
+DIBOS_POLL_IDLE_INTERVAL_S=15   # Leerlauf-Takt in Sekunden
+DIBOS_ACTIVE_WINDOW_S=1800     # Aktiv bis 30 min nach letztem echten Event
+POLL_JITTER_PCT=0.2            # Zufällige Abweichung ±20 % (mindestens 0,5 s)
+POLL_BACKOFF_MAX_S=300         # Maximale Fehlerpause vor Jitter
+DIBOS_UNITS_MIN_INTERVAL_S=20  # Units-Drossel bei unveränderten Events
+# DIBOS_POLL_INTERVAL_S=5      # Legacy-Alias; nur Werte ungleich 5 überschreiben ACTIVE
+# DIBOS_USER_AGENT=Einsatzcockpit/<App-Version> (+https://einsatzcockpit.com)
 ```
 
 Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **Aktiviert** ein-/ausgeschlossen. Ein Fehler bei einer Organisation (z. B. falsches Passwort) blockiert nie den Zyklus für andere Organisationen.
 
-- **Erster Poll sofort** nach dem Serverstart, danach im **festen Takt** (Start-zu-Start): Die Arbeitszeit eines Zyklus wird vom Intervall abgezogen und verlängert das Erkennungsfenster nicht. Dauert ein Zyklus länger als das Intervall, folgt der nächste ohne Pause.
-- Da `GetCurrentEvents` ohne Einsatz nur `[]` liefert und `GetPublicEvents` im Leerlauf nicht mehr abgefragt wird, ist ein kurzes Intervall (5 s) für die Leitstelle unkritisch.
+- **Erster Poll sofort**; jede Org gilt zunächst 60 s als aktiv. Danach ohne echte Events Leerlauf (12–18 s). Ein echtes Event aktiviert sofort den Aktiv-Takt (4–6 s), bis 1800 s nach der letzten nicht leeren Event-Liste. Ignorierte F30-Proberufe zählen nicht. Die Aktivität wird anhand der Events bestimmt.
+- Jede Org hat einen eigenen Fälligkeitszeitpunkt (Start-zu-Start). Der Loop tickt weiter im Aktiv-Takt mit Jitter und wacht bei früherer Org-Fälligkeit entsprechend früher auf.
+- Bei `GetCurrentEvents`-Fehlern, auch anhaltendem 401/Login-Fehler: je Org 10 → 30 → 60 → 120 → 300 s Fehlerpause, jeweils mit Jitter. Erst danach wird ein neuer Client aufgebaut; Erfolg setzt den Backoff zurück. Der Fehler wird weiterhin an die Dienstüberwachung gemeldet.
+- `GetCurrentUnits` höchstens alle 20 s bei unveränderten Events; bei neuen Nummern oder geändertem Event-Fingerabdruck sofort. Die Einsatzanlage/Alarmierung im Fast Path wartet weiterhin nicht auf Units.
 
 ### Schritt 3 — Betriebsmodus wählen und testen
 
@@ -162,10 +171,10 @@ Der Hintergrund-Poll wird für eine Organisation nur aktiv, wenn **mindestens ei
 
 Pro aktivierter, vollständig konfigurierter Organisation (leichter Poll). Der Ablauf ist darauf ausgelegt, dass ein **neuer Einsatz so früh wie möglich angelegt und alarmiert** wird:
 
-1. **`GetCurrentEvents`** — eigene aktive Einsätze. Schlägt das fehl, wird der Fehler für die [Dienstüberwachung](#dienstüberwachung) protokolliert, der Client der Org verworfen (im nächsten Poll neu aufgebaut) und der Zyklus für diese Org beendet.
+1. **`GetCurrentEvents`** — eigene aktive Einsätze. Schlägt das fehl, wird der Fehler für die [Dienstüberwachung](#dienstüberwachung) protokolliert, der Client der Org verworfen (erst nach der Backoff-Pause neu aufgebaut) und der Zyklus für diese Org beendet.
 2. **Fast Path:** Enthält die Antwort eine Leitstellennummer, die im vorherigen Poll nicht dabei war, und ist *anreichern* oder *anlegen* aktiv, läuft die Anreicherung (`enrich_and_broadcast`) **sofort** — nur mit den Daten aus `GetCurrentEvents`, ohne auf weitere Abfragen zu warten. Damit wird der Einsatz angelegt und alarmiert.
 3. **Folgeabfragen, parallel** (Fehler werden je Abfrage geloggt, der Zyklus läuft weiter):
-   - `GetCurrentUnits` — nur mit *anreichern* **und** wenn mindestens ein eigener Einsatz aktiv ist.
+   - `GetCurrentUnits` — nur mit *anreichern* **und** wenn mindestens ein eigener Einsatz aktiv ist; höchstens alle 20 s, außer bei neuen Nummern oder geändertem Event-Fingerabdruck.
    - `GetPublicEvents?qty=15&ag=<ag>` — nur, wenn ein **aktiver Einsatz** der Org eine Leitstellennummer hat, die **nicht** (mehr) in `GetCurrentEvents` steht. Beim ersten Verschwinden sofort, danach höchstens alle 60 s.
 4. **Anreicherung** mit `GetCurrentEvents` + Units + PublicEvents — **übersprungen**, wenn
    - sich gegenüber dem letzten erfolgreichen Durchlauf nichts geändert hat (Fingerabdruck über alle drei Antworten), oder
@@ -447,11 +456,11 @@ DIBOS ist Teil der [Systemstatus-Überwachung](Administration-Dienstueberwachung
 
 | Zustand | Bedingung |
 |---|---|
-| ok | Letzter `GetCurrentEvents`-Poll erfolgreich und nicht älter als `max(180 s, 6 × Poll-Intervall der Org)` |
+| ok | Letzter `GetCurrentEvents`-Poll erfolgreich und nicht älter als `max(180 s, 6 × Aufzeichnungsintervall der Org, 4 × max(Aktiv-Takt, Idle-Takt) × (1 + Jitter))` |
 | down | Letzter Poll fehlgeschlagen (mit Fehlertext) oder länger als diese Frist keiner |
 | unbekannt | Noch nie geprüft |
 
-Die Proben werden sowohl vom leichten Poll als auch von der Voll-Aufzeichnung geschrieben.
+Die Proben werden sowohl vom leichten Poll als auch von der Voll-Aufzeichnung geschrieben. Erfolgreiche Idle-Polls bleiben damit ok; ein Fehler während des Backoffs bleibt down. Der Loop-Heartbeat tickt unabhängig von den Org-Pausen weiter.
 
 ---
 
@@ -503,7 +512,7 @@ Alle Aufrufe sind `POST` mit einem minimalen SOAP-1.1-Umschlag (`Content-Type: t
 
 | Nutzer | Client-Lebensdauer |
 |---|---|
-| Leichter Poll | **Ein persistenter Client pro Org** über alle Polls (`dibos_loop._org_clients`). Neu aufgebaut bei geänderten Verbindungsdaten (Hash-Fingerabdruck über URL, Host, `ag`, beide Konten), nach einem Fehler bei `GetCurrentEvents` und wenn die Org nicht mehr pollt. Beim Beenden des Loops werden alle Clients geschlossen. Vorher entstand pro Poll ein neuer Client — also bei **jedem** Poll 401 + Wiederholung + neuer TLS-Handshake |
+| Leichter Poll | **Ein persistenter Client pro Org** über alle Polls (`dibos_loop._org_clients`). Neu aufgebaut bei geänderten Verbindungsdaten (Hash-Fingerabdruck über URL, Host, `ag`, beide Konten), nach einem Fehler bei `GetCurrentEvents` erst nach der Backoff-Pause; beim Deaktivieren oder Löschen der Org wird er geschlossen. Beim Beenden des Loops werden alle Clients geschlossen. Vorher entstand pro Poll ein neuer Client — also bei **jedem** Poll 401 + Wiederholung + neuer TLS-Handshake |
 | Voll-Aufzeichnung | Ein eigener Client für die Dauer der Aufzeichnung |
 | Verbindungstest | Ein Client je Test |
 
@@ -513,7 +522,7 @@ Clients werden nie parallel geteilt; innerhalb eines Polls laufen `GetCurrentUni
 |---|---|---|---|---|---|---|
 | `GetCurrentEvents` | `Main/GetCurrentEvents` | — | Eigene aktive Einsätze der Org; `[]` ohne Einsatz | ~6 KB je Einsatz | jeden Poll | Erkennen, Anlegen (Fast Path), Anreichern, Verbindungstest, Monitoring |
 | `GetPublicEvents` | `Main/GetPublicEvents` | `qty` (15), `ag` | Die 15 neuesten Einsätze der Agentur **landesweit** (alle `lev3`), offen und geschlossen, je Event mit vollem Meldungsprotokoll | **~490 KB** | nur wenn ein aktiver Einsatz in `GetCurrentEvents` fehlt (sofort, dann ≤ 1×/60 s) | Abschluss-Erkennung |
-| `GetCurrentUnits` | `Main/GetCurrentUnits` | — | Einheiten/Wachen der **eigenen** Org (`lev3`) mit Status | ~32 KB | mit *anreichern*, solange ein eigener Einsatz aktiv ist | Wachenstatus; Statuszeiten im Live-Snapshot |
+| `GetCurrentUnits` | `Main/GetCurrentUnits` | — | Einheiten/Wachen der **eigenen** Org (`lev3`) mit Status | ~32 KB | mit *anreichern* bei eigenem Einsatz: alle ≥20 s, bei neuen/geänderten Events sofort | Wachenstatus; Statuszeiten im Live-Snapshot |
 | `GetCurrentRadios` | `Main/GetCurrentRadios` | — | Funkgeräte der Org (ISSI, Alias, Gesprächsgruppe, Position) | ~25 KB | nie | nur Diagnose |
 | `GetElvisNotification` | `Elvis/GetElvisNotification` | `serviceUser`, `host` | Elvis-Hinweise (im Mitschnitt immer `[]`) | 2 B | nie | nur Diagnose |
 
@@ -568,6 +577,9 @@ Aus dem Mitschnitt zu Einsatz f26008764 (04.10.2026, 2 h, 350 Zyklen à 5 Abfrag
 |---|---|---|
 | `_org_clients` | `org_id → (Fingerabdruck, DibosClient)` | Persistenter Client je Org |
 | `_previous_event_numbers` | Leitstellennummern des letzten Polls | Fast Path (neu) und sofortige `GetPublicEvents`-Abfrage (verschwunden) |
+| `_next_poll_at`, `_last_activity_at`, `_startup_active_until` | Monotone Zeitpunkte je Org | Fälligkeit, Aktiv-Fenster und 60-s-Startphase |
+| `_backoffs` | Fehlerfolge je Org | Login-/Poll-Fehlerpausen, Reset bei Erfolg |
+| `_last_units_at`, `_last_events_fingerprint`, `_cached_units` | Letzter Abruf, Event-Fingerabdruck, Units-Stand | Units-Drossel; Cache für unveränderte Events |
 | `_last_public_events_at` | Zeitpunkt des letzten `GetPublicEvents` | 60-s-Drossel (`_PUBLIC_EVENTS_MIN_INTERVAL_S`) |
 | `_last_enrich_fingerprint` | SHA-256 über Events + Units + PublicEvents des letzten erfolgreichen Durchlaufs | Unveränderte Daten überspringen |
 
@@ -594,7 +606,7 @@ Langsame Folgearbeit (Autodruck, Objekt-Einsatzinfo, WordPress-Bericht) startet 
 | Datei | Aufgabe |
 |---|---|
 | `app/services/dibos/dibos_client.py` | HTTP-/SOAP-Client, Parser `parse_events`/`parse_units`/`parse_radios` |
-| `app/services/dibos/dibos_loop.py` | Globaler Hintergrund-Poll (fester Takt), Org-Auswahl, persistente Clients, Fast Path, bedarfsgesteuerte Folgeabfragen, Fingerabdruck-Skip, Auto-Trace-Start |
+| `app/services/dibos/dibos_loop.py` | Adaptiver Hintergrund-Poll je Org (Aktiv/Idle, Jitter, Backoff), Org-Auswahl, persistente Clients, Fast Path, bedarfsgesteuerte Folgeabfragen, Fingerabdruck-Skip, Auto-Trace-Start |
 | `app/services/dibos/dibos_enrich.py` | Einsatzanlage (Commit + Alarmierung vor der Folgearbeit), Anreicherung, Wache, Zu-/Absagen, Schließen, Broadcasts, Hintergrund-Tasks |
 | `app/services/dibos/dibos_capture.py` | Diagnose-Aufzeichnung (rein lesend), Passwort-Maskierung, Früh-Ende, Live-Snapshot, Aufbewahrung |
 | `app/services/dibos/dibos_mapping.py` | Zuordnung der bestätigten Wachenstatus und Fahrzeugstatus (S4/S5) |
