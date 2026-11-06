@@ -283,3 +283,37 @@ test('getOffsetMs starts unknown and tracks latest successful server time in mil
   await e.next();
   assert.equal(e.api.getOffsetMs(), -2000);
 });
+
+test('iOS readonly keeps heartbeat and device data, then recovers monitoring', async () => {
+  let starts = 0, ready = 0;
+  const denied = { status: 409, session_key: 'ios-1', platform: 'ios', ampel: 'gruen',
+    monitoring_erlaubt: false, plattform_hinweis: 'Android muss mitüberwachen.',
+    error: 'ios_android_erforderlich', message: 'iOS bleibt nur lesend.' };
+  const e = env([denied, { ...denied, error: 'ios_selbsttest', ampel: 'rot' },
+    { ...started(), platform: 'ios', monitoring_erlaubt: true }], {
+      onStarted: () => ready++, native: { getFcmToken: async () => 'ios-token',
+        asuew: { start: async () => starts++, keepScreenOn: async () => {} } } });
+  await e.controller.ready;
+  assert.equal(e.api.getState().zustand, 'fehler');
+  assert.equal(e.api.getState().platform, 'ios');
+  assert.equal(e.api.getState().monitoring_erlaubt, false);
+  assert.equal(e.api.getState().plattform_hinweis, denied.plattform_hinweis);
+  await e.next();
+  assert.equal(e.calls[1].url, '/api/asuew/heartbeat');
+  assert.equal(e.calls[1].headers['X-ECP-ASUEW'], 'ios-1');
+  assert.equal(e.api.getState().ampel, 'rot');
+  await e.next();
+  assert.equal(e.api.getState().zustand, 'aktiv');
+  assert.equal(e.api.getState().monitoring_erlaubt, true);
+  assert.equal(starts, 1);
+  assert.equal(ready, 1);
+});
+
+test('board device check renders iOS platform and server rule', () => {
+  const e = boardEnv();
+  e.state({ zustand: 'fehler', ampel: 'gruen', platform: 'ios', monitoring_erlaubt: false,
+    plattform_hinweis: 'iOS braucht Android.', message: 'iOS bleibt nur lesend.' });
+  assert.equal(e.element('asuewDeviceLight').textContent, 'Selbsttest: gruen · Plattform: ios');
+  assert.deepEqual(e.element('asuewDeviceProblems').children.map(c => c.textContent),
+    ['iOS braucht Android.', 'iOS bleibt nur lesend.']);
+});

@@ -108,8 +108,11 @@ if (window.ELNative && ELNative.isNative) {
     deviceCheck.hidden = false;
     const light = document.getElementById('asuewDeviceLight');
     light.textContent = lastSessionState.ampel ? 'Selbsttest: ' + lastSessionState.ampel : 'Selbsttest wird gelesen';
+    if (lastSessionState.platform) light.textContent += ' · Plattform: ' + lastSessionState.platform;
     light.style.color = { rot: '#e53e3e', gelb: '#ed8936', gruen: '#48bb78' }[lastSessionState.ampel] || '';
-    const problems = lastSessionState.probleme || [];
+    const problems = [...(lastSessionState.probleme || [])];
+    if (lastSessionState.plattform_hinweis) problems.push(lastSessionState.plattform_hinweis);
+    if (lastSessionState.message) problems.push(lastSessionState.message);
     const list = document.getElementById('asuewDeviceProblems');
     list.replaceChildren();
     problems.forEach(function (problem) {
