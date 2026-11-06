@@ -143,7 +143,7 @@ def test_dashboard_assp_and_standby_counter_row(breathing_routes):  # noqa: F811
     response = ctx.client.get(f"/einsatz/{ctx.incident_id}/dashboard/inhalt")
     assert response.status_code == 200
     assert "Ab 3 Trupps: ASSP alarmieren" in response.text
-    assert "/atemschutz/assp" not in response.text
+    assert f'href="/einsatz/{ctx.incident_id}/atemschutz/assp">Ab 3 Trupps: ASSP alarmieren</a>' in response.text
     assert "3 im Einsatz" in response.text and "1 bereit" in response.text
     assert "Sicherheitstrupp bereit" in response.text
     for troop in ctx.db.query(BreathingTroop).filter(BreathingTroop.incident_id == ctx.incident_id):

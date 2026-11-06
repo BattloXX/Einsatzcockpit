@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Atemschutzsammelplatz – Einsatz #{{ incident.id }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/breathing.css?v={{ ASSET_VERSION }}">
+{% endblock %}
+{% block content %}
+<div id="breathingBoard" class="breathing-board assp-page">
+  <script src="/static/js/breathing_contrast.js?v={{ ASSET_VERSION }}"></script>
+  <script>ECPBreathingContrast.restore(document.getElementById('breathingBoard'), function () { return window.localStorage; });</script>
+  <header class="assp-header">
+    <h1>Atemschutzsammelplatz (ASSP)</h1>
+    <p>Der ASSP übernimmt nur Logistik. Die Überwachung der Trupps bleibt beim zuständigen Gruppenkommandanten (auch Maschinist oder Melder).</p>
+    <div class="assp-actions">
+      <a class="btn btn--ghost" href="/einsatz/{{ incident.id }}/atemschutz">Zur Überwachung</a>
+      <button type="button" class="btn btn--ghost" id="breathingContrastToggle" aria-pressed="false">{{ icon("sun") }} Hochkontrast</button>
+    </div>
+  </header>
+  <p id="asspError" role="alert" hidden></p>
+  <p id="asspConnection" role="status" hidden>Verbindung unterbrochen. Logistikdaten werden nach Wiederverbindung aktualisiert.</p>
+  {% include "breathing/_assp_content.html" %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/server_clock.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/breathing_net.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/breathing_ws.js?v={{ ASSET_VERSION }}"></script>
+<script>
+(function () {
+  const url = '/einsatz/{{ incident.id }}/atemschutz/assp';
+  let pending;
+  function refresh() {
+    clearTimeout(pending);
+    pending = setTimeout(function () {
+      const focused = document.activeElement;
+      if (focused && document.getElementById('asspContent').contains(focused)
+          && focused.matches('input, textarea, select')) { refresh(); return; }
+      htmx.ajax('GET', url, {target: '#asspContent', swap: 'outerHTML'});
+    }, 100);
+  }
+  function syncClock() {
+    const content = document.getElementById('asspContent');
+    if (content && window.ECPServerClock) ECPServerClock.sync(content.dataset.serverNow);
+  }
+  syncClock();
+  document.body.addEventListener('htmx:afterSwap', syncClock);
+  document.body.addEventListener('assp-refresh', function () {
+    document.getElementById('asspError').hidden = true;
+    refresh();
+  });
+  document.body.addEventListener('htmx:responseError', function (event) {
+    const error = document.getElementById('asspError');
+    error.hidden = false;
+    error.textContent = event.detail.xhr.responseText || 'Speichern fehlgeschlagen.';
+  });
+  ECPBreathingWS.connect({incidentId: {{ incident.id }},
+    events: ['assp_updated', 'troop_created', 'troop_started', 'troop_status_changed', 'troop_redeployed', 'troop_details'],
+    refresh: refresh,
+    connection: function (connected) { document.getElementById('asspConnection').hidden = connected; }
+  });
+})();
+</script>
+{% endblock %}

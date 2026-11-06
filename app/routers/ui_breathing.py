@@ -13,7 +13,7 @@ from app.core.audit import write_incident_change
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingTroop, BreathingWarnung
+from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingAssp, BreathingTroop, BreathingWarnung
 from app.models.incident import Incident
 from app.models.master import Member, OrgSettings
 from app.services.breathing_events import claim_client_event, event_audit, parse_erfasst_at, valid_client_event_id
@@ -23,12 +23,14 @@ from app.services.breathing_service import (
     PressureIncreaseConflict,
     ReadinessWarning,
     ack_warning,
+    assp_uebersicht,
     asuew_heartbeat_fehlt,
     check_troop_warnings,
     clear_notfall,
     create_troop,
     declare_notfall,
     get_asuew_settings,
+    get_or_none_assp,
     get_time_warning,
     get_warning_level,
     incident_hinweise,
@@ -192,7 +194,8 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
             BreathingWarnung.erledigt_at.is_(None),
         ).order_by(BreathingWarnung.ausgeloest_at, BreathingWarnung.id).all():
             warnungen_by_troop.setdefault(warnung.troop_id, []).append(warnung)
-    hinweise = incident_hinweise(incident.breathing_troops)
+    assp = get_or_none_assp(db, incident_id)
+    hinweise = incident_hinweise(incident.breathing_troops, bool(assp and assp.aktiv))
     kein_heartbeat = asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None))
     alert_kinds = {
         "notfall": (0, "red", "ATEMSCHUTZNOTFALL"),
@@ -249,6 +252,116 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
         "kein_heartbeat": kein_heartbeat,
         "trupp_uebersicht": trupp_uebersicht, "warnungen_by_troop": warnungen_by_troop,
     }
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/assp", response_class=HTMLResponse)
+def breathing_assp(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(404)
+    assp = get_or_none_assp(db, incident_id)
+    now = datetime.now(UTC)
+    context = {
+        "incident": incident, "user": user, "assp": assp, "server_now": now,
+        "can_edit": has_role(user, "breathing_supervisor", "incident_leader", "admin", "recorder"),
+        "uebersicht": assp_uebersicht(incident.breathing_troops, _incident_asuew_settings(db, incident_id), assp, now),
+    }
+    template = "breathing/_assp_content.html" if request.headers.get("HX-Request") else "breathing/assp.html"
+    return templates.TemplateResponse(request, template, context, headers={"Cache-Control": "no-store"})
+
+
+def _assp_speichern(db: Session, incident_id: int, request: Request, values: dict, *, delta: bool = False) -> Response:
+    # Der Einsatz wird vor jedem Zugriff geprueft (inklusive Tenant-Filter).
+    if db.get(Incident, incident_id) is None:
+        raise HTTPException(404)
+    assp = get_or_none_assp(db, incident_id)
+    fields = ("aktiv", "leiter_name", "standort", "flaschen_voll", "flaschen_leer", "notiz")
+    before = {key: getattr(assp, key) for key in fields} if assp else None
+    if delta:
+        values = {key: max(0, (getattr(assp, key) if assp else 0) + value) for key, value in values.items()}
+        if any(value > 999 for value in values.values()):
+            return Response("Flaschenzahl muss zwischen 0 und 999 liegen.", status_code=400, media_type="text/plain")
+    if assp is None:
+        assp = BreathingAssp(incident_id=incident_id, aktiv=False, flaschen_voll=0, flaschen_leer=0)
+        db.add(assp)
+    for key, value in values.items():
+        setattr(assp, key, value)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if assp.aktiv and assp.aktiviert_at is None:
+        assp.aktiviert_at = now
+    assp.updated_at, assp.updated_by_user_id = now, request.state.user.id
+    db.flush()
+    write_incident_change(
+        db, incident_id, "assp.updated", "breathing_assp", assp.id,
+        before, {key: getattr(assp, key) for key in fields}, user_id=request.state.user.id,
+    )
+    db.commit()
+    run_async(manager.broadcast, incident_id, {"type": "assp_updated"})
+    return Response(status_code=204, headers={"HX-Trigger": "assp-refresh"})
+
+
+def _assp_form_values(form: FormData, *, delta: bool = False) -> dict:
+    values: dict = {}
+    for key in (("delta_voll", "delta_leer") if delta else ("flaschen_voll", "flaschen_leer")):
+        if key not in form:
+            continue
+        raw = str(form[key]).strip()
+        try:
+            value = int(raw)
+        except ValueError:
+            raise ValueError("Flaschenzahl muss eine ganze Zahl sein.") from None
+        if not (-999 if delta else 0) <= value <= 999:
+            raise ValueError("Flaschenzahl ausserhalb des erlaubten Bereichs.")
+        values[key.replace("delta_", "flaschen_")] = value
+    if not delta:
+        for key, limit in (("leiter_name", 150), ("standort", 200), ("notiz", 300)):
+            if key in form:
+                value_text = str(form[key]).strip()
+                if len(value_text) > limit:
+                    raise ValueError(f"{key}: maximal {limit} Zeichen.")
+                values[key] = value_text or None
+        if "aktiv" in form:
+            raw = str(form["aktiv"]).lower()
+            if raw not in ("true", "false", "1", "0", "on", "off"):
+                raise ValueError("Ungueltiger ASSP-Status.")
+            values["aktiv"] = raw in ("true", "1", "on")
+    return values
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/assp")
+def update_breathing_assp(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    if db.get(Incident, incident_id) is None:
+        raise HTTPException(404)
+    try:
+        values = _assp_form_values(run_async(request.form))
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    return _assp_speichern(db, incident_id, request, values)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/assp/flaschen")
+def update_breathing_assp_flaschen(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    if db.get(Incident, incident_id) is None:
+        raise HTTPException(404)
+    try:
+        values = _assp_form_values(run_async(request.form), delta=True)
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    return _assp_speichern(db, incident_id, request, values, delta=True)
 
 
 @router.get("/einsatz/{incident_id}/atemschutz/uebersicht", response_class=HTMLResponse)

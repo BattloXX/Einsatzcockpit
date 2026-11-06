@@ -14,6 +14,7 @@ from app.core.audit import write_incident_change
 from app.models.breathing import (
     BOTTLE_PRESET_NOMINAL_BAR,
     TROOP_STATUSES,
+    BreathingAssp,
     BreathingDeployment,
     BreathingGeraetSitzung,
     BreathingKontrolle,
@@ -945,7 +946,56 @@ def check_troop_warnings(troop: BreathingTroop, now: datetime | None = None) -> 
     return warnings
 
 
-def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTroop]:
+def get_or_none_assp(db: Session, incident_id: int) -> BreathingAssp | None:
+    """Eine Logistikzeile je Einsatz; Zugriff immer ueber den Einsatz abgrenzen."""
+    return db.query(BreathingAssp).filter(BreathingAssp.incident_id == incident_id).one_or_none()
+
+
+def assp_uebersicht(
+    troops: Iterable[BreathingTroop], settings: AsuewSettings, assp: BreathingAssp | None, now: datetime,
+) -> dict:
+    """Reine Logistikansicht ohne Druckueberwachung oder Warnungsberechnung."""
+    now = now if now.tzinfo else now.replace(tzinfo=UTC)
+    groups: dict[str, list[dict]] = {"bereit": [], "im_einsatz": [], "erholung": []}
+    counters = {"bereit": 0, "im_einsatz": 0, "erholung": 0,
+                "agt_bereit": 0, "agt_im_einsatz": 0, "agt_erholung": 0, "sicherheitstrupp_bereit": 0}
+    for troop in troops:
+        group = {"bereit": "bereit", "im_einsatz": "im_einsatz", "rueckzug": "im_einsatz",
+                 "zurueck": "erholung", "erholt": "erholung"}.get(troop.status)
+        if group is None:
+            continue
+        members = troop.active_members
+        row = {"name": troop.name, "is_sicherheitstrupp": bool(troop.is_sicherheitstrupp),
+               "unit_name": troop.unit_name}
+        if group == "bereit":
+            row["members"] = [{"name": m.display_name, "start_press": m.start_press} for m in members]
+            counters["sicherheitstrupp_bereit"] += int(bool(troop.is_sicherheitstrupp))
+        elif group == "im_einsatz":
+            entry = troop.entry_at
+            if entry and not entry.tzinfo:
+                entry = entry.replace(tzinfo=UTC)
+            row.update(entry_at=entry, laufzeit_s=max(0, int((now - entry).total_seconds())) if entry else 0,
+                       geplant_min=troop.planned_duration_min)
+        else:
+            back = troop.back_at or (troop.deployments[-1].back_at if troop.deployments else None)
+            if back and not back.tzinfo:
+                back = back.replace(tzinfo=UTC)
+            ready = back + timedelta(minutes=settings.erholzeit_min) if back else None
+            row.update(back_at=back, wieder_einsatzbereit_at=ready,
+                       erholt_fertig=bool(ready and ready <= now))
+            if not members and troop.deployments:
+                members = troop.deployments[-1].members
+        groups[group].append(row)
+        counters[group] += 1
+        counters["agt_" + group] += len(members)
+    deadlines = [row["wieder_einsatzbereit_at"] for row in groups["erholung"]
+                 if row["wieder_einsatzbereit_at"] and not row["erholt_fertig"]]
+    return {**groups, "zaehler": counters,
+            "wieder_einsatzbereit_at": min(deadlines) if deadlines else None,
+            "flaschen": {"voll": assp.flaschen_voll if assp else 0, "leer": assp.flaschen_leer if assp else 0}}
+
+
+def incident_hinweise(troops: Iterable[BreathingTroop], assp_aktiv: bool = False) -> dict[str, BreathingTroop]:
     """Einsatzbezogene Hinweise am eingesetzten Trupp mit der niedrigsten ID verankern.
 
     Erwartet die Trupps eines Einsatzes. Bei einem Ankerwechsel wird die alte
@@ -957,7 +1007,7 @@ def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTr
         return {}
     anker = min(eingesetzt, key=lambda troop: troop.id)
     hinweise = {}
-    if len(eingesetzt) >= 3:
+    if len(eingesetzt) >= 3 and not assp_aktiv:
         hinweise["assp"] = anker
     if any(not troop.is_sicherheitstrupp for troop in eingesetzt) and not any(
         troop.is_sicherheitstrupp and troop.status == "bereit" for troop in troops
@@ -966,7 +1016,9 @@ def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTr
     return hinweise
 
 
-def dashboard_summary(troops: list[BreathingTroop], settings: AsuewSettings, now: datetime) -> dict:
+def dashboard_summary(
+    troops: list[BreathingTroop], settings: AsuewSettings, now: datetime, assp_aktiv: bool = False,
+) -> dict:
     """Verdichtet bereits geladene Trupps ohne Datenbankzugriff für die EL-Kachel."""
     now = now if now.tzinfo else now.replace(tzinfo=UTC)
     counters = {
@@ -1013,7 +1065,7 @@ def dashboard_summary(troops: list[BreathingTroop], settings: AsuewSettings, now
             "urgency": troop_urgency(troop, pressure.level, warnings),
         })
     rows.sort(key=lambda row: (row["urgency"], row["id"]))
-    hints = incident_hinweise(troops)
+    hints = incident_hinweise(troops, assp_aktiv)
     return {
         "zaehler": counters, "hinweise": {key: key in hints for key in ("assp", "kein_sicherheitstrupp")},
         "trupps": rows, "gesamt": len(troops), "server_now": now,
@@ -1077,7 +1129,8 @@ def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
             if not enabled_by_org[org_id]:
                 continue
             db.refresh(incident, ["breathing_troops"])
-            hinweise = incident_hinweise(incident.breathing_troops)
+            assp = get_or_none_assp(db, incident.id)
+            hinweise = incident_hinweise(incident.breathing_troops, bool(assp and assp.aktiv))
             if asuew_heartbeat_fehlt(db, incident, now):
                 hinweise["kein_heartbeat"] = min(
                     (t for t in incident.breathing_troops if t.status in ("im_einsatz", "rueckzug")),

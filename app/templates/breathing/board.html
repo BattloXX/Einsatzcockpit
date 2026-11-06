@@ -45,6 +45,7 @@
   <h2>Atemschutzüberwachung – {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <button type="button" class="btn btn--ghost" id="breathingContrastToggle" aria-label="Hochkontrast umschalten" aria-pressed="false">{{ icon("sun") }} Hochkontrast</button>
+    <a class="btn btn--ghost" href="/einsatz/{{ incident.id }}/atemschutz/assp">ASSP</a>
     {% if can_edit is not defined or can_edit %}
     <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newTroopModal">+ Trupp anlegen</button>
     {% endif %}
@@ -828,7 +829,9 @@ function troopCard(lastLogIso, entryIso, plannedMin, backIso, recoveryMin) {
       }
       if (ev.type === 'troop_notfall_cleared') _stopLoopingWarning('notfall', ev.troop_id);
       if (ev.type === 'troop_funk') _stopLoopingWarning('funk_verloren', ev.troop_id);
-      if (ev.type === 'troop_created' || ev.type === 'troop_redeployed') {
+      if (ev.type === 'assp_updated') {
+        refreshBreathingSummary();
+      } else if (ev.type === 'troop_created' || ev.type === 'troop_redeployed') {
         doBreathingReload();
       } else if (['pressure_logged', 'troop_status_changed', 'troop_meldung',
           'troop_kontrolle', 'troop_funk', 'troop_notfall', 'troop_notfall_cleared',

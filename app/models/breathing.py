@@ -37,6 +37,29 @@ BOTTLE_PRESET_DURATIONS = {slug: dur for slug, _, dur in BOTTLE_PRESETS}
 BOTTLE_PRESET_NOMINAL_BAR = {"1x6": 300, "1x6_8": 300, "1x9": 300, "manuell": None}
 
 
+class BreathingAssp(Base):
+    """Einsatzbezogene Logistik des Atemschutzsammelplatzes."""
+
+    __tablename__ = "breathing_assp"
+    __table_args__ = (UniqueConstraint("incident_id", name="uq_breathing_assp_incident"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False
+    )
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    leiter_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    standort: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    flaschen_voll: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    flaschen_leer: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    notiz: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    aktiviert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class BreathingTroop(Base):
     __tablename__ = "breathing_troop"
 

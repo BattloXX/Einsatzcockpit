@@ -72,6 +72,7 @@ from app.services.breathing_service import (
     breathing_effective_enabled,
     dashboard_summary,
     get_asuew_settings,
+    get_or_none_assp,
 )
 from app.services.broadcast import broadcast_org, manager
 from app.services.db_transactions import commit_db_operation
@@ -1687,7 +1688,8 @@ def _dashboard_breathing_summary(incident: Incident, db: Session, request: Reque
     ).filter(BreathingTroop.incident_id == incident.id).all()
     settings = (get_asuew_settings(db, incident.primary_org_id)
                 if incident.primary_org_id else AsuewSettings(30, 60, 75, 30))
-    return dashboard_summary(troops, settings, datetime.now(UTC))
+    assp = get_or_none_assp(db, incident.id)
+    return dashboard_summary(troops, settings, datetime.now(UTC), bool(assp and assp.aktiv))
 
 
 @router.get("/einsatz/{incident_id}/atemschutz/kachel", response_class=HTMLResponse)

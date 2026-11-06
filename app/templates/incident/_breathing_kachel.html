@@ -29,6 +29,6 @@
     </span>
   </div>
   {% endfor %}
-  {% if summary.hinweise.assp %}<p class="asuew-kachel__hint">Ab 3 Trupps: ASSP alarmieren</p>{% endif %}
+  {% if summary.hinweise.assp %}<p class="asuew-kachel__hint"><a href="/einsatz/{{ incident.id }}/atemschutz/assp">Ab 3 Trupps: ASSP alarmieren</a></p>{% endif %}
 </section>
 {% endif %}
