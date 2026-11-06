@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from app.models.dienst_monitor import DienstStatus
+from app.models.dienst_monitor import DienstStatus, ausgeschaltete_dienste
 
 # Wie lange ein Alarmierungsauftrag mit unklarem Zustellergebnis die Alarm-Outbox auf "teilweise" haelt.
 UNKLAR_FENSTER = timedelta(hours=2)
@@ -93,7 +93,8 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     from app.models.dibos import OrgDibosConfig
     from app.models.gateway import Gateway
     from app.models.incident import IncidentAlarmJob
-    from app.models.master import FireDept
+    from app.models.lis import OrgLisConfig
+    from app.models.master import FireDept, OrgSettings
     from app.models.user import SmsGatewayToken
     from app.routers.ws import connected_gateway_token_ids
     from app.services.sms_service import resolve_sms_config
@@ -242,6 +243,26 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         dibos_teile = (DienstTeil("dibos", "DIBOS-Poll", dibos_state, dibos_detail),)
         dibos = DienstCheck("alarm_dibos", aggregiere(dibos_teile), dibos_detail, True, dibos_teile)
 
+    lis_cfg = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == org_id).first()
+    lis_probe = db.query(DienstStatus).filter(
+        DienstStatus.org_id == org_id, DienstStatus.key == "alarm_lis"
+    ).execution_options(include_all_tenants=True).first()
+    if not lis_cfg or not lis_cfg.enabled or not lis_cfg.is_fully_configured:
+        lis = DienstCheck("alarm_lis", "nicht_konfiguriert", "LIS-Poll ist nicht eingerichtet.", False)
+    else:
+        if not lis_probe or lis_probe.last_probe_at is None:
+            lis_state, lis_detail = "unknown", "LIS wurde noch nicht geprueft."
+        elif lis_probe.last_probe_ok is False:
+            lis_state, lis_detail = "down", lis_probe.last_probe_error or "LIS-Poll fehlgeschlagen."
+        elif jetzt - (_naive_utc(lis_probe.last_probe_at) or jetzt) > timedelta(
+            seconds=max(180, 6 * lis_cfg.poll_interval_seconds)
+        ):
+            lis_state, lis_detail = "down", "Kein LIS-Poll innerhalb des erwarteten Intervalls."
+        else:
+            lis_state, lis_detail = "ok", "LIS-Poll erfolgreich."
+        lis = DienstCheck("alarm_lis", lis_state, lis_detail, True,
+                          (DienstTeil("lis", "LIS-Poll", lis_state, lis_detail),))
+
     jobs = db.query(IncidentAlarmJob).filter(IncidentAlarmJob.org_id == org_id).execution_options(
         include_all_tenants=True
     ).all()
@@ -287,7 +308,15 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     outbox = DienstCheck("alarm_outbox", outbox_state, detail, True, outbox_teile)
     from app.services.worker_monitor import checks, snapshot
 
-    return [print_check, sms_check, serial, dibos, outbox, *checks(snapshot(db, org_id, jetzt))]
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    ausgeschaltet = ausgeschaltete_dienste(
+        org_settings.dienst_monitor_ausgeschaltet if org_settings else "alarm_lis"
+    )
+    return [
+        DienstCheck(c.key, "nicht_konfiguriert", "Ueberwachung ausgeschaltet.", False)
+        if c.key in ausgeschaltet else c
+        for c in [print_check, sms_check, serial, dibos, lis, outbox, *checks(snapshot(db, org_id, jetzt))]
+    ]
 
 
 def entscheide(
@@ -359,6 +388,12 @@ def dienst_zustand(check: DienstCheck, row: DienstStatus | None, karenz_min: int
 def claim_meldung(db: Session, row: DienstStatus, org_id: int, art: str, now: datetime, wiederholung_min: int) -> bool:
     jetzt = _naive_utc(now)
     assert jetzt is not None
+    from app.models.master import OrgSettings
+
+    # Auch eine vor dem Umschalten getroffene Entscheidung darf keinen Versand claimen.
+    wert = db.query(OrgSettings.dienst_monitor_ausgeschaltet).filter(OrgSettings.org_id == org_id).scalar()
+    if row.key in ausgeschaltete_dienste(wert):
+        return False
     stmt = update(DienstStatus).where(DienstStatus.id == row.id, DienstStatus.org_id == org_id)
     if art == "stoerung":
         cutoff = jetzt - timedelta(minutes=wiederholung_min)

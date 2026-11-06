@@ -44,6 +44,15 @@
         <div class="form-group"><label class="form-label" {{ tip('Mehrere Rufnummern mit Komma trennen.') }}>SMS-Nummern (kommagetrennt)</label><input class="form-input" type="text" name="sms" value="{{ org_settings.dienst_monitor_sms or '' }}"></div>
         <div class="form-group"><label class="form-label" {{ tip('Erst nach dieser Zeit gilt ein Dienst als gestört.') }}>Karenz (Minuten)</label><input class="form-input" type="number" min="1" name="karenz_min" value="{{ org_settings.dienst_monitor_karenz_min or 5 }}"></div>
         <div class="form-group"><label class="form-label" {{ tip('Abstand der Erinnerungen bei anhaltender Störung.') }}>Wiederholung (Minuten)</label><input class="form-input" type="number" min="1" name="wiederholung_min" value="{{ org_settings.dienst_monitor_wiederholung_min or 60 }}"></div>
+        <fieldset class="form-group sys-fieldset-voll">
+          <legend class="form-label">Ueberwachte Dienste</legend>
+          <p class="sys-muted sys-small">Nur ausgewaehlte Dienste werden ueberwacht. Ausschalten beendet offene Stoerungen ohne Entwarnung. Die Schnittstellen arbeiten weiter; LIS-Ueberwachung ist standardmaessig aus.</p>
+          <div class="sys-form-grid">
+            {% for key in org_dienst_keys %}
+            <label class="sys-check"><input type="checkbox" name="ueberwachte_dienste" value="{{ key }}" {% if key not in ausgeschaltet %}checked{% endif %}> {{ labels[key] }}</label>
+            {% endfor %}
+          </div>
+        </fieldset>
         <button class="btn btn--primary" type="submit">Speichern</button>
       </form>
       <div class="sys-actions">

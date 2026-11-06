@@ -201,6 +201,9 @@ def test_alte_abgelaufene_worker_warnen_nicht_mehr(diagnose_db, monkeypatch):
 def test_service_summary_separates_unconfigured(diagnose_db, state, expected):
     from app.models.dienst_monitor import DienstStatus
 
+    from app.models.master import OrgSettings
+
+    OrgSettings.__table__.create(diagnose_db.get_bind())
     DienstStatus.__table__.create(diagnose_db.get_bind())
     diagnose_db.add(DienstStatus(id=1, org_id=1, key="sms_gateway", state=state))
     diagnose_db.flush()
