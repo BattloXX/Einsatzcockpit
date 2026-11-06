@@ -13,11 +13,35 @@ erreichbar.
 | SMS-Gateway | Jeder aktive Gateway-Token wird einzeln geprüft. Eine bestehende Verbindung oder ein Heartbeat innerhalb der letzten zehn Minuten gilt als erreichbar. Eine konfigurierte EUS-Anbindung ist ein zusätzliches, funktionierendes Teil, wird aber nicht aktiv auf Erreichbarkeit geprüft. |
 | Alarm-Outbox | Meldet eine Störung, wenn ein Alarmierungsjob länger als zwei Minuten offen ist oder innerhalb der letzten 24 Stunden fehlgeschlagen ist. |
 | Alarm seriell (W&T) | Jede konfigurierte W&T-Verbindung wird einzeln geprüft. Das zugehörige Gateway muss über `last_seen_at` frisch sein und die serielle Verbindung als verbunden melden. |
-| Alarm DIBOS | Der einzelne DIBOS-Poll muss erfolgreich sein und innerhalb des erwarteten Poll-Intervalls stattgefunden haben. |
+| Alarm DIBOS | Aktiv und vollstaendig konfiguriert, mit Einsatzanlage, Anreicherung oder automatischer Aufzeichnung. Letzter Poll erfolgreich und hoechstens `max(180, 6 * poll_interval_seconds)` Sekunden alt. |
+| LIS-Schnittstelle | Aktiv und vollstaendig konfiguriert. Letzter ActiveParticipation-Poll erfolgreich und hoechstens `max(180, 6 * poll_interval_seconds)` Sekunden alt. Vor der ersten Probe unbekannt; Ueberwachung standardmaessig aus. |
 
 Der Dienst ist OK, wenn kein Gerät ausgefallen und mindestens eines OK ist. Sind nur
 einige Geräte ausgefallen, liegt eine Teilstörung vor; sind alle ausgefallen, liegt ein
 Vollausfall vor. Die Detailzeilen nennen den Zustand und Grund jedes einzelnen Geräts.
+
+## Dienste einzeln ausnehmen
+
+Im Benachrichtigungsformular unter **Ueberwachte Dienste** waehlen Org-Admins die
+Dienste der eigenen Organisation aus: Print-Gateway, SMS-Gateway, Alarm seriell,
+DIBOS, LIS und Alarm-Outbox. Nicht ausgewaehlte Dienste erscheinen grau als
+**Ueberwachung ausgeschaltet**. Die Schnittstelle beziehungsweise Verarbeitung
+arbeitet weiter. Globale Worker-/Redis-Pruefungen besitzen hier keinen Schalter.
+
+Ausschalten unterdrueckt Stoerung, Wiederholung und Entwarnung auf allen Kanaelen
+(SMS, Teams, E-Mail) und schliesst offene Ausfaelle still. Beim Wiedereinschalten
+beginnt die Karenz neu. Gespeicherte Poll-Ergebnisse bleiben erhalten.
+
+**Migration 0353** setzt `dienst_monitor_ausgeschaltet` fuer alle vorhandenen
+Organisationen auf `alarm_lis`; neue Organisationen erhalten denselben Standard.
+Die neue LIS-Ueberwachung muss damit bewusst eingeschaltet werden. Die Spalte
+enthaelt ausgeschaltete Dienstschluessel, mit Komma getrennt.
+
+Die Health-Endpunkte liefern fuer ausgeschaltete Dienste `nicht_konfiguriert`,
+`ueberwacht: false`, keine Geraetedetails und keinen Ausfallbeginn. Sie tragen
+weder zu HTTP 207 noch zu HTTP 503 bei. Die Systemdiagnose und
+`admin_dienste_pruefen` zaehlen sie separat als `ausgeschaltet`, ohne alte
+Ausfallzustaende oder freie Fehlermeldungen in diese Zaehler zu uebernehmen.
 
 ## Druck-Gateways für Offline-Alarme auswählen
 
@@ -91,8 +115,8 @@ sofort. Ein widerrufener Token kann nicht mehr verwendet werden.
 | Endpunkt | Token | Bedeutung / gültige Schlüssel |
 |----------|-------|-------------------------------|
 | `GET /health` | nein | Prüft Anwendung und Datenbankverbindung; antwortet mit `{"status":"ok","db":"up"}` oder bei nicht erreichbarer Datenbank mit HTTP 503 und `{"status":"error","db":"down"}` |
-| `GET /health/dienste` | ja | Gesamtstatus aller vier Dienste |
-| `GET /health/dienst/{key}` | ja | Einzelstatus; gültig sind `print_gateway`, `sms_gateway`, `alarm_seriell` und `alarm_dibos` |
+| `GET /health/dienste` | ja | Gesamtstatus der Org-Dienste sowie Worker-/Auftragspruefungen |
+| `GET /health/dienst/{key}` | ja | Einzelstatus; Org-Schluessel: `print_gateway`, `sms_gateway`, `alarm_seriell`, `alarm_dibos`, `alarm_lis`, `alarm_outbox`; zusaetzlich `worker_runtime`, `redis_bus`, `sms_jobs`, `print_jobs`. Alias: `/health/dienste/{key}` |
 
 `/health` beantwortet die Frage „Läuft die Cloud?“, während `/health/dienste`
 beantwortet: „Laufen die Dienste dieser Organisation?“. Nur die Dienst-Endpunkte
@@ -127,7 +151,7 @@ Beispiel für die Antwort des Gesamtstatus:
 
 | HTTP-Status | Bedeutung |
 |-------------|-----------|
-| `200` | Alle relevanten Dienste sind OK; nicht eingerichtete Dienste gelten ebenfalls nicht als Ausfall |
+| `200` | Alle relevanten Dienste sind OK; nicht eingerichtete und ausgeschaltete Dienste gelten ebenfalls nicht als Ausfall |
 | `207` | Mindestens ein Dienst arbeitet nach Ablauf der Karenz nur teilweise |
 | `503` | Mindestens ein Dienst ist nach Ablauf der Karenz vollständig ausgefallen |
 | `401` | Token ist ungültig, abgelaufen oder widerrufen |

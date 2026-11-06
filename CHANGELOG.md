@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Dienst-Monitor je Dienst schaltbar:** Unter Systemstatus koennen Org-Admins Print-/SMS-Gateway, seriellen Alarm, DIBOS, LIS und Alarm-Outbox einzeln von der Ueberwachung ausnehmen. Abschalten beendet offene Stoerungen ohne Entwarnung oder Wiederholung; Einschalten startet die Karenz neu. Uptime-API und Admin-MCP zaehlen ausgeschaltete Dienste nicht als Ausfall. Die neue LIS-Ueberwachung verwendet persistierte Poll-Ergebnisse und ist fuer bestehende und neue Organisationen standardmaessig ausgeschaltet (opt-in). Migration 0353.
+
 - **Weniger ausgehender Medienverkehr:** Geschuetzte Objektmedien validieren private Browser-Caches mit ETag und Last-Modified; unveraenderte Dateien und gedrehte Bilder liefern 304 ohne erneutes Bildrendering. Der statische App-Fallback setzt Cache-Laufzeiten. Einsatzcockpit- und Organisationslogos werden auf maximal 512 Pixel verkleinert; bestehende Organisationslogos lassen sich mit `python -m app.cli logos-verkleinern` nachziehen. Keine Migration.
 
 - **Hintergrund-Loops blockieren den Worker bei langsamer Datenbank seltener:** LIS-Synchronisation, DIBOS-Konfiguration und Dienstproben, Einsatzrouten, Dienstueberwachung und Atemschutz-Zustellungen fuehren ihre DB-Arbeit in Threads aus. HTTP, Broadcasts und SMS bleiben auf dem aufrufenden Event-Loop; bestehende Claim-, Alarmierungs- und Eskalationsregeln bleiben erhalten. Ein AST-Waechter mit Baseline und Thread-Tests sichern die Umstellung. Die verzahnte DIBOS-Anreicherung folgt separat. Keine Migration.

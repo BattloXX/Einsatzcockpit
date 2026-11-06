@@ -547,6 +547,9 @@ class OrgSettings(Base):
     mailing_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Dienstueberwachung und Benachrichtigung der Organisations-Admins.
     dienst_monitor_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    dienst_monitor_ausgeschaltet: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, default="alarm_lis", server_default="alarm_lis"
+    )
     dienst_monitor_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dienst_monitor_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     dienst_monitor_sms: Mapped[str | None] = mapped_column(String(255), nullable=True)

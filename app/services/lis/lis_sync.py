@@ -1146,6 +1146,8 @@ async def sync_organization(
         logger.exception("LIS-Passwort für Org %s konnte nicht entschlüsselt werden", org.id)
         from app.services.lis.lis_health import mark_lis_failed
         mark_lis_failed(org.id)
+        from app.services.dienst_monitor_service import record_probe
+        await asyncio.to_thread(record_probe, org.id, "alarm_lis", False, "LIS-Poll fehlgeschlagen.")
         return
 
     owns_client = client is None
@@ -1206,6 +1208,8 @@ async def _sync_organization_with_client(
         logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
         from app.services.lis.lis_health import mark_lis_failed
         mark_lis_failed(org.id)
+        from app.services.dienst_monitor_service import record_probe
+        await asyncio.to_thread(record_probe, org.id, "alarm_lis", False, "LIS-Poll fehlgeschlagen.")
         return
 
     root_org_map = await _load_root_org_map(org, client)
@@ -1229,10 +1233,14 @@ async def _sync_organization_with_client(
         logger.exception("LIS-Abfrage (ActiveParticipation) für Org %s fehlgeschlagen", org.id)
         from app.services.lis.lis_health import mark_lis_failed
         mark_lis_failed(org.id)
+        from app.services.dienst_monitor_service import record_probe
+        await asyncio.to_thread(record_probe, org.id, "alarm_lis", False, "LIS-Poll fehlgeschlagen.")
         return
 
     from app.services.lis.lis_health import mark_lis_ok
     mark_lis_ok(org.id)
+    from app.services.dienst_monitor_service import record_probe
+    await asyncio.to_thread(record_probe, org.id, "alarm_lis", True)
 
     for op in operations:
         try:

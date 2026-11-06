@@ -194,24 +194,33 @@ def version_info() -> dict:
 
 def service_summary(db: Session) -> dict:
     """Nur bekannte Dienstschluessel/Zustaende zaehlen, niemals freie Meldungen."""
-    from sqlalchemy import func
-
-    from app.models.dienst_monitor import DIENST_LABELS, DienstStatus
+    from app.models.dienst_monitor import DIENST_LABELS, DienstStatus, ausgeschaltete_dienste
+    from app.models.master import OrgSettings
 
     now = presence.utc()
-    rows = db.query(DienstStatus.key, DienstStatus.state, func.count(DienstStatus.id)).filter(
+    schalter: dict[int | None, set[str]] = {
+        org_id: ausgeschaltete_dienste(wert)
+        for org_id, wert in db.query(OrgSettings.org_id, OrgSettings.dienst_monitor_ausgeschaltet)
+        .execution_options(include_all_tenants=True).all()
+    }
+    evidence = {key: {"ok": 0, "down": 0, "unknown": 0, "teilweise": 0,
+                      "nicht_konfiguriert": 0, "ausgeschaltet": 0} for key in DIENST_LABELS}
+    for keys in schalter.values():
+        for key in keys:
+            evidence[key]["ausgeschaltet"] += 1
+    rows = db.query(DienstStatus.org_id, DienstStatus.key, DienstStatus.state).filter(
         DienstStatus.key.in_(DIENST_LABELS),
         DienstStatus.state.in_(("ok", "down", "unknown", "teilweise", "nicht_konfiguriert")),
-    ).execution_options(include_all_tenants=True).group_by(DienstStatus.key, DienstStatus.state).all()
-    evidence = {key: {"ok": 0, "down": 0, "unknown": 0, "teilweise": 0, "nicht_konfiguriert": 0}
-                for key in DIENST_LABELS}
-    for key, state, count in rows:
-        evidence[key][state] = count
-    status = "unbekannt" if not rows else "fail" if any(r[1] == "down" for r in rows) else (
-        "warn" if any(r[1] in ("unknown", "teilweise") for r in rows) else "ok")
+    ).execution_options(include_all_tenants=True).all()
+    for org_id, key, state in rows:
+        if key not in schalter.get(org_id, set()):
+            evidence[key][state] += 1
+    vorhanden = any(sum(werte.values()) for werte in evidence.values())
+    status = "unbekannt" if not vorhanden else "fail" if any(w["down"] for w in evidence.values()) else (
+        "warn" if any(w["unknown"] or w["teilweise"] for w in evidence.values()) else "ok")
     return {"status": status, "checked_at": now,
             "evidence": {"dienste": evidence, "datenbasis": "gespeicherter Dienstmonitor-Zustand"
-                         if rows else "nicht verfuegbar"}}
+                         if vorhanden else "nicht verfuegbar"}}
 
 
 def gateway_summary(db: Session) -> dict:
