@@ -1,0 +1,86 @@
+<dialog class="modal bt-dialog" id="{{ dialog_id }}" aria-labelledby="{{ dialog_id }}-title">
+  <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ (troop.id|string ~ '/erneut-einsetzen') if redeploy else 'trupp' }}"
+        hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ (troop.id|string ~ '/erneut-einsetzen') if redeploy else 'trupp' }}"
+        hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML" novalidate
+        class="bt-dialog-form"
+        x-data='newTroopForm({
+          initialMembers: [{% if redeploy %}{% for cm in troop.active_members %}{id:{{ (cm.member_id|string if cm.member_id else "")|tojson }},name:{{ (cm.member.full_name if cm.member_id and cm.member else cm.free_text_name or "")|tojson }},role:{{ cm.role|tojson }}}{{ "," if not loop.last }}{% endfor %}{% endif %}],
+          bottlePreset: {{ (troop.bottle_preset or "" if redeploy else "")|tojson }},
+          occupied: {{ belegte_mitglieder|tojson }},
+          nameSuggestion: {{ (troop.name if redeploy else "Trupp " ~ naechste_trupp_nr)|tojson }}
+        })'
+        @submit.capture="if (!validate()) { $event.preventDefault(); $event.stopImmediatePropagation(); }"
+        @htmx:before-request="if (!validate()) $event.preventDefault()"
+        @htmx:after-request="afterRequest($event)">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <header class="bt-dialog-header">
+      <h3 id="{{ dialog_id }}-title">{{ troop.name ~ ' erneut einsetzen' if redeploy else 'Trupp anlegen' }}</h3>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="btn btn--ghost">{{ icon("x") }}</button>
+    </header>
+    <div class="bt-dialog-body">
+      <div class="bt-dialog-errors" role="alert" tabindex="-1" x-show="errors.length" x-cloak>
+        <strong>Bitte Eingaben prüfen.</strong>
+        <template x-for="error in errors" :key="error.field"><p x-text="error.message"></p></template>
+      </div>
+      {% if not redeploy and request.query_params.get('error') in ['min_two_members', 'invalid_input'] %}
+      <div class="alert alert--error" role="alert">
+        {{ 'Es müssen mindestens 2 Truppmitglieder ausgefüllt sein.' if request.query_params.get('error') == 'min_two_members' else 'Ungültige Eingabe: Bitte Druckwerte (0 bis 330 bar) und Namen prüfen.' }}
+      </div>
+      {% endif %}
+      {% if redeploy and erholzeit_rest.get(troop.id, 0) %}
+      <p class="bt-dialog-occupied" role="status">Erholzeit läuft noch: noch {{ erholzeit_rest[troop.id] }} Min.</p>
+      {% endif %}
+      <section class="bt-dialog-section">
+        <h4>Trupp</h4>
+        <div class="bt-dialog-fields">
+          <label>Bezeichnung<input type="text" name="name" class="form-input" autocomplete="off"
+                 placeholder="{{ troop.name if redeploy else 'Trupp ' ~ naechste_trupp_nr }}" value="{{ troop.name if redeploy else '' }}"></label>
+          <label>Funkrufname<input type="text" name="unit_name" class="form-input" autocomplete="off"
+                 value="{{ troop.unit_name or '' if redeploy else '' }}" @input="unitEdited=true"></label>
+          <label>Fahrzeug<select name="vehicle_id" class="form-select" @change="suggestUnit($event)">
+            <option value="">Kein Fahrzeug</option>
+            {% for v in vehicles %}
+            <option value="{{ v.id }}" {% if redeploy and troop.vehicle_id == v.id %}selected{% endif %}>{{ v.vehicle_master.name }}</option>
+            {% endfor %}
+          </select></label>
+        </div>
+      </section>
+      <section class="bt-dialog-section">
+        <h4>Auftrag</h4>
+        <div class="bt-dialog-chips">
+          {% for task in ['Brandbekämpfung', 'Menschenrettung', 'Sicherheitstrupp'] %}
+          <button type="button" class="btn btn--ghost" @click="$refs.taskInput.value={{ task|tojson|forceescape }}">{{ task }}</button>
+          {% endfor %}
+        </div>
+        <div class="bt-dialog-fields">
+          <label>Auftrag<input type="text" name="task_text" x-ref="taskInput" class="form-input" autocomplete="off" value="{{ troop.task_text or '' if redeploy else '' }}"></label>
+          <label>Einsatzziel und Angriffsweg<input type="text" name="angriffsweg" class="form-input" autocomplete="off" value="{{ troop.angriffsweg or '' if redeploy else '' }}"></label>
+          <label>Standort / Einsatzabschnitt<input type="text" name="location_text" class="form-input" autocomplete="off" value="{{ troop.location_text or '' if redeploy else '' }}"></label>
+        </div>
+      </section>
+      {% include "breathing/_crew_form.html" %}
+      <section class="bt-dialog-section">
+        <h4>Überwachung</h4>
+        <div class="bt-dialog-fields">
+          <label>Überwacher<input type="text" name="ueberwacher_name" class="form-input" autocomplete="name" value="{{ current_user_label }}"></label>
+          <label>Funkkanal<input type="text" name="funkkanal" class="form-input" autocomplete="off" value="{{ troop.funkkanal or '' if redeploy else '' }}"></label>
+          <label>Flasche (Anzeige)<select name="bottle_preset" class="form-select" x-model="bottlePreset">
+            <option value="">Bitte wählen</option>
+            {% for slug, label, duration in bottle_presets %}<option value="{{ slug }}">{{ label }}</option>{% endfor %}
+          </select></label>
+          <label x-show="bottlePreset === 'manuell'" x-cloak>Einsatzzeit (Minuten, manuell)
+            <input type="number" name="planned_duration_min" class="form-input" inputmode="numeric" min="1" max="120"
+                   :disabled="bottlePreset !== 'manuell'" value="{{ troop.planned_duration_min or '' if redeploy else '' }}">
+            <span class="bt-dialog-error" x-text="errorFor('planned_duration_min')"></span>
+          </label>
+          <label class="bt-dialog-switch"><input type="checkbox" role="switch" name="is_sicherheitstrupp" value="true" {% if redeploy and troop.is_sicherheitstrupp %}checked{% endif %}> Ist Sicherheitstrupp</label>
+        </div>
+        <p class="form-hint">Einsatzzeit {{ asuew_settings.erwartete_einsatzzeit_min }} Min. (Einstellung der Organisation), Kontrollen nach {{ (asuew_settings.erwartete_einsatzzeit_min / 3) | round | int }} und {{ (asuew_settings.erwartete_einsatzzeit_min * 2 / 3) | round | int }} Min.</p>
+      </section>
+    </div>
+    <footer class="bt-dialog-footer">
+      <button type="button" class="btn btn--ghost" @click="$el.closest('dialog').close()">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">{{ 'Neuen Zyklus vorbereiten' if redeploy else 'Trupp anlegen' }}</button>
+    </footer>
+  </form>
+</dialog>

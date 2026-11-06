@@ -3,6 +3,9 @@
 {% block title %}AS-Überwachung – Einsatz #{{ incident.id }}{% endblock %}
 
 {% block head_extra %}
+<script src="/static/js/person_select_flyout.js?v={{ ASSET_VERSION }}" defer></script>
+<script src="/static/js/breathing_dialog.js?v={{ ASSET_VERSION }}" defer></script>
+{% include "components/_person_select_styles.html" %}
 <link rel="stylesheet" href="/static/css/breathing.css?v={{ ASSET_VERSION }}">
 {% endblock %}
 
@@ -62,175 +65,9 @@
 
 <!-- ── Neuer Trupp Modal ── -->
 {% if can_edit is not defined or can_edit %}
-<dialog class="modal modal--wide" id="newTroopModal">
-  <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/trupp"
-        hx-post="/einsatz/{{ incident.id }}/atemschutz/trupp"
-        hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML"
-        class="modal__content" x-data="newTroopForm()"
-        @submit="if (!validate()) $event.preventDefault()">
-    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <div class="modal__header">
-      <h3>Trupp anlegen</h3>
-      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
-    </div>
-    <div class="modal__body">
-      {% if request.query_params.get('error') == 'min_two_members' %}
-      <div class="alert alert--error" style="margin-bottom:10px;">
-        Es müssen mindestens 2 Truppmitglieder ausgefüllt sein.
-      </div>
-      {% endif %}
-      {% if request.query_params.get('error') == 'invalid_input' %}
-      <div class="alert alert--error" style="margin-bottom:10px;">
-        Ungültige Eingabe: Bitte Druckwerte (0 bis 330 bar) und Namen prüfen.
-      </div>
-      {% endif %}
-
-      <div class="new-troop-fields">
-        <div class="form-group">
-          <label>Trupp-Bezeichnung</label>
-          <input type="text" name="name" class="form-input" placeholder="Trupp 1" required>
-        </div>
-        <div class="form-group" x-data="{task:''}">
-          <label>Auftrag</label>
-          <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap;">
-            <button type="button" class="btn btn--ghost btn--sm"
-                    @click="task='Brandbekämpfung'; $nextTick(()=>$refs.taskInput.value=task)">Brandbekämpfung</button>
-            <button type="button" class="btn btn--ghost btn--sm"
-                    @click="task='Menschenrettung'; $nextTick(()=>$refs.taskInput.value=task)">Menschenrettung</button>
-            <button type="button" class="btn btn--ghost btn--sm"
-                    @click="task='Sicherheitstrupp'; $nextTick(()=>$refs.taskInput.value=task)">Sicherheitstrupp</button>
-          </div>
-          <input type="text" name="task_text" x-ref="taskInput" x-model="task"
-                 class="form-input" placeholder="Innenangriff...">
-        </div>
-        <div class="form-group">
-          <label>Standort / Einsatzabschnitt</label>
-          <input type="text" name="location_text" class="form-input" placeholder="z.B. Treppenhaus Süd">
-        </div>
-        <div class="form-group">
-          <label>Einheit (Funkrufname)</label>
-          <input type="text" name="unit_name" class="form-input" placeholder="z.B. 1. Gruppe">
-        </div>
-        <div class="form-group">
-          <label>Überwacher (GRKDT/Maschinist/Melder)</label>
-          <input type="text" name="ueberwacher_name" class="form-input" value="{{ current_user_label }}">
-        </div>
-        <div class="form-group">
-          <label>Einsatzziel und Angriffsweg</label>
-          <input type="text" name="angriffsweg" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>Funkkanal</label>
-          <input type="text" name="funkkanal" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>Flasche (Anzeige)</label>
-          <select name="bottle_preset" class="form-select" x-model="bottlePreset" @change="onPresetChange()">
-            <option value="">– bitte wählen –</option>
-            {% for slug, label, dur in bottle_presets %}
-            <option value="{{ slug }}">{{ label }}</option>
-            {% endfor %}
-          </select>
-          <p class="form-hint">Einsatzzeit {{ asuew_settings.erwartete_einsatzzeit_min }} Min. (Einstellung der Organisation), Kontrollen nach {{ (asuew_settings.erwartete_einsatzzeit_min / 3) | round | int }} und {{ (asuew_settings.erwartete_einsatzzeit_min * 2 / 3) | round | int }} Min.</p>
-        </div>
-        {% if vehicles %}
-        <div class="form-group">
-          <label>Fahrzeug</label>
-          <select name="vehicle_id" class="form-select">
-            <option value="">— kein Fahrzeug —</option>
-            {% for v in vehicles %}
-            <option value="{{ v.id }}">{{ v.vehicle_master.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        {% else %}
-        <div></div>
-        {% endif %}
-        <div class="form-group form-group--full" x-show="bottlePreset === 'manuell'">
-          <label>Einsatzzeit (Minuten, manuell)</label>
-          <input type="number" name="planned_duration_min" class="form-input" placeholder="z.B. 45" min="1" max="120"
-                 :required="bottlePreset === 'manuell'">
-        </div>
-        <div class="form-group form-group--full">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" name="is_sicherheitstrupp" value="true">
-            Ist Sicherheitstrupp
-          </label>
-        </div>
-      </div>
-
-      <p class="form-hint" style="margin-bottom:8px;">
-        Mindestens 2 Mitglieder ausfüllen — Anfangsdruck ist Pflichtfeld für jedes ausgefüllte Mitglied.
-      </p>
-
-      <div class="troop-member-list">
-        <template x-for="(m, i) in members" :key="i">
-          <div class="troop-member-row">
-            <select :name="`member_${i}_id`" x-model="m.id" class="form-select">
-              <option value="">Freie Eingabe</option>
-              {% for member in members %}
-              <option value="{{ member.id }}">{{ member.full_name }}{% if member.is_agt %} (AGT){% endif %}</option>
-              {% endfor %}
-            </select>
-            <input :name="`member_${i}_name`" x-model="m.name" type="text"
-                   class="form-input" placeholder="oder Name">
-            <select :name="`member_${i}_role`" x-model="m.role" class="form-select form-select--xs">
-              <option value="truppfuehrer">TF</option>
-              <option value="truppmann">TM</option>
-            </select>
-
-            <!-- Pressure picker per member -->
-            <input :name="`member_${i}_press`" type="hidden" :value="m.press">
-            <div class="press-picker-wrap" @click.outside="m.pickerOpen = false">
-              <button type="button"
-                      class="btn btn--ghost btn--sm press-trigger"
-                      :class="{ 'press-trigger--set': m.press }"
-                      @click="
-                        const r = $event.currentTarget.getBoundingClientRect();
-                        const popupH = 290;
-                        const below = r.bottom + 4;
-                        m.pickerTop = (below + popupH > window.innerHeight - 8)
-                          ? Math.max(8, r.top - popupH - 4)
-                          : below;
-                        m.pickerLeft = Math.max(4, Math.min(r.left, window.innerWidth - 284));
-                        m.pickerOpen = !m.pickerOpen;
-                      ">
-                <span x-text="m.press ? m.press + ' bar' : 'Druck *'"></span>
-              </button>
-              <div x-show="m.pickerOpen" class="press-picker-popup"
-                   :style="`position:fixed; top:${m.pickerTop}px; left:${m.pickerLeft}px; right:auto; z-index:9999;`">
-                <div class="press-grid">
-                  <template x-for="val in pressValues" :key="val">
-                    <button type="button"
-                            class="press-btn"
-                            :class="{
-                              'press-btn--high':     val >= 200,
-                              'press-btn--warn':     val >= 100 && val < 200,
-                              'press-btn--danger':   val < 100,
-                              'press-btn--selected': m.press == val
-                            }"
-                            @click="m.press = val; m.pickerOpen = false"
-                            x-text="val">
-                    </button>
-                  </template>
-                </div>
-              </div>
-            </div>
-
-            <button aria-label="Schließen" type="button" @click="removeMember(i)" class="btn btn--icon btn--danger">×</button>
-          </div>
-        </template>
-      </div>
-      <button type="button"
-              @click="members.push({id:'',name:'',press:null,role:'truppmann',pickerOpen:false,pickerTop:0,pickerLeft:0})"
-              class="btn btn--ghost btn--sm">+ Mitglied</button>
-    </div>
-    <div class="modal__footer">
-      <button type="button" @click="$el.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
-      <button type="submit" class="btn btn--primary">Trupp anlegen</button>
-    </div>
-  </form>
-</dialog>
+{% with dialog_id='newTroopModal', redeploy=false %}
+{% include "breathing/_troop_dialog.html" %}
+{% endwith %}
 {% endif %}
 <div id="breathing-outbox" role="status" hidden>
   <div class="breathing-outbox-toolbar"><strong id="breathing-outbox-count"></strong>
@@ -853,48 +690,6 @@ function troopCard(lastLogIso, entryIso, plannedMin, backIso, recoveryMin) {
 }
 
 /* ── New-troop form ── */
-function newTroopForm(initialMembers, initialBottlePreset) {
-  const defaults = [
-    {id:'', name:'', press:null, role:'truppfuehrer'},
-    {id:'', name:'', press:null, role:'truppmann'},
-    {id:'', name:'', press:null, role:'truppmann'},
-  ];
-  const sourceMembers = initialMembers && initialMembers.length ? initialMembers : defaults;
-  return {
-    members: sourceMembers.map(m => ({
-      id:m.id || '', name:m.name || '', press:m.press || null,
-      role:m.role || 'truppmann', pickerOpen:false, pickerTop:0, pickerLeft:0
-    })),
-    pressValues: Array.from({length: 30}, (_, i) => 300 - i * 10),
-    bottlePreset: initialBottlePreset || '',
-
-    onPresetChange() {
-      // nichts nötig – Alpine x-show auf 'manuell' regelt Sichtbarkeit
-    },
-
-    validate() {
-      const filled = this.members.filter(m =>
-        (m.id && m.id !== '') || (m.name && m.name.trim().length > 0)
-      );
-      if (filled.length < 2) {
-        alert('Bitte mindestens 2 Truppmitglieder ausfüllen.');
-        return false;
-      }
-      const missingPress = filled.filter(m => !m.press || m.press <= 0);
-      if (missingPress.length > 0) {
-        alert('Bitte für alle ausgefüllten Truppmitglieder einen Anfangsdruck eingeben (Druck *).');
-        return false;
-      }
-      return true;
-    },
-
-    removeMember(i) {
-      if (this.members.length <= 2) { alert('Mindestens 2 Slots nötig.'); return; }
-      this.members.splice(i, 1);
-    },
-  };
-}
-
 /* ── Atemschutz-Board: WebSocket + Sicherheitswarnungen ─────────────────── */
 (function () {
   {% set ns_act = namespace(cnt=0, live_troops=false) %}

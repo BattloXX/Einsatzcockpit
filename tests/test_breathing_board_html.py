@@ -534,3 +534,12 @@ def test_redesigned_card_primary_and_pressure_bars(client, breathing_routes, sta
             assert event in timeline
         if status == "erholt":
             assert html.index(' Erneut einsetzen</button>') < html.index('<details class="recovered-details">')
+
+
+def test_dialog_loads_shared_helpers_without_alert_calls(client, breathing_routes):
+    ctx = breathing_routes
+    html = client.get(f"/einsatz/{ctx.incident_id}/atemschutz").text
+    assert '/static/js/breathing_dialog.js?v=' in html
+    assert '/static/js/person_select_flyout.js?v=' in html
+    assert 'alert(' not in html
+    assert 'class="bt-dialog-footer"' in html

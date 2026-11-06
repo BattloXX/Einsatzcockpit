@@ -195,3 +195,20 @@
 .breathing-hc .press-btn--danger { background:var(--breathing-red); color:#fff; }
 .breathing-hc .press-btn--selected { outline:3px solid #000; outline-offset:1px; }
 .breathing-hc .badge--unit, .breathing-hc .badge--agt { background:var(--breathing-blue); color:#fff; border:2px solid var(--border); }
+
+/* Gemeinsame Dialoge fuer neue Trupps und weitere Einsatzzyklen. */
+.bt-dialog{width:min(820px,calc(100vw - 32px));max-width:820px;max-height:calc(100dvh - 32px);padding:0;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);color:var(--text);overflow:hidden;}
+.bt-dialog::backdrop{background:rgba(0,0,0,.65);}
+.bt-dialog-form{display:flex;flex-direction:column;max-height:calc(100dvh - 34px);margin:0;}
+.bt-dialog-header,.bt-dialog-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;padding:16px;background:var(--surface);}
+.bt-dialog-header{border-bottom:1px solid var(--border);}.bt-dialog-header h3{margin:0;font-size:1.25rem;}.bt-dialog-header button{min-width:48px;min-height:48px;}
+.bt-dialog-body{overflow-y:auto;overscroll-behavior:contain;padding:16px;min-height:0;}
+.bt-dialog-section{padding:0 0 20px;margin:0 0 20px;border-bottom:1px solid var(--border);}.bt-dialog-section h4{font-size:1.15rem;margin:0 0 12px;}.bt-dialog-section p{margin:8px 0;}
+.bt-dialog-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}.bt-dialog label{display:flex;flex-direction:column;gap:6px;font-weight:600;}.bt-dialog input:not([type=hidden]),.bt-dialog select{min-height:48px;width:100%;font-size:1rem;}.bt-dialog .bt-dialog-switch{flex-direction:row;align-items:center;}.bt-dialog-switch input{width:24px!important;min-width:24px;}
+.bt-dialog-chips,.bt-dialog-quick{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;}.bt-dialog-chips button,.bt-dialog-quick button,.bt-dialog-roles button,.bt-dialog-add{min-height:48px;min-width:48px;}
+.bt-dialog-member{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:16px;margin:16px 0;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-low);}.bt-dialog-person{min-width:0;}.bt-dialog-roles{display:flex;align-items:start;gap:4px;}.bt-dialog-roles button,.bt-dialog-quick button{padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-weight:700;}.bt-dialog button[aria-pressed=true]{outline:2px solid var(--red-light);background:var(--surface-high);}.bt-dialog-remove{min-width:44px;min-height:44px;align-self:start;}
+.bt-dialog-pressure{grid-column:1/-1;}.bt-dialog-pressure-value{display:block;font-weight:800;font-size:1.25rem;}.bt-dialog-good{color:var(--green,#18703c);}.bt-dialog-warn{color:var(--orange,#986000);}.bt-dialog-danger,.bt-dialog-error{color:var(--red-light,#c53030);}.bt-dialog-errors{padding:12px;border:2px solid var(--red-light);margin-bottom:16px;}.bt-dialog-occupied{font-size:.9rem;font-weight:600;}.bt-dialog-free{margin-top:8px;}
+.bt-dialog .bt-dialog-picker .press-picker-popup{position:static;width:100%;max-width:400px;max-height:none;margin:8px 0;box-shadow:none;}.bt-dialog .press-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));}.bt-dialog .press-btn{min-height:48px;}
+.bt-dialog-footer{position:sticky;bottom:0;border-top:1px solid var(--border);padding-bottom:max(16px,env(safe-area-inset-bottom));}.bt-dialog-footer button{min-height:56px;flex:1;white-space:normal;}
+.bt-dialog .person-flyout-backdrop{z-index:10;}
+@media(max-width:600px){.bt-dialog{width:100vw;max-width:none;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;}.bt-dialog-form{height:100dvh;max-height:100dvh;}.bt-dialog-body{flex:1;padding:12px;}.bt-dialog-fields{grid-template-columns:1fr;}.bt-dialog-member{grid-template-columns:minmax(0,1fr) auto;padding:12px;}.bt-dialog-person{grid-column:1/-1;}.bt-dialog-roles{grid-column:1;}.bt-dialog-remove{grid-column:2;}.bt-dialog-header,.bt-dialog-footer{padding:12px;}.bt-dialog-footer{padding-bottom:max(12px,env(safe-area-inset-bottom));}}

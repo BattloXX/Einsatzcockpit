@@ -63,10 +63,12 @@ def _session(playwright, ctx, viewport):
             response = ctx.client.get(path)
         else:
             response = ctx.client.post(path, content=route.request.post_data_buffer or b"",
-                                       headers=route.request.headers, follow_redirects=False)
+                                       # Redirects ebenfalls im TestClient verfolgen: Playwright leitet
+                                       # Folgeanfragen eines erfuellten Redirects nicht erneut an diese Route.
+                                       headers=route.request.headers, follow_redirects=True)
         route.fulfill(status=response.status_code, body=response.content,
                       headers={k: v for k, v in response.headers.items()
-                               if k.lower() in ("content-type", "cache-control")})
+                               if k.lower() in ("content-type", "cache-control", "location")})
 
     page.route("http://localhost/**", handle)
     page.set_viewport_size({"width": viewport[0], "height": viewport[1]})
@@ -147,5 +149,58 @@ def test_card_swap_reinitializes_without_duplicate_timers(breathing_routes):  # 
             # Jede Karte darf je Swap hoechstens EIN neues Intervall anlegen (kein Anwachsen).
             assert created <= 5 * 2, created
             assert [t for t in messages if t[0] == "pageerror"] == []
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize("name", ["handy", "tablet_hoch", "desktop"])
+def test_dialog_screenshot_and_creation(breathing_routes, name):  # noqa: F811
+    from playwright.sync_api import sync_playwright
+    ctx = breathing_routes
+    _seed(ctx)
+    OUT.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        browser, page, messages = _session(playwright, ctx, VIEWPORTS[name])
+        dialogs = []
+        page.on("dialog", lambda dialog: (dialogs.append(dialog.type), dialog.dismiss()))
+        try:
+            page.context.add_cookies([
+                {"name": key, "value": value, "url": "http://localhost"} for key, value in ctx.client.cookies.items()
+            ])
+            _open_board(page, ctx)
+            page.get_by_role("button", name="+ Trupp anlegen", exact=True).click()
+            dialog = page.locator("#newTroopModal")
+            assert dialog.is_visible()
+            assert dialog.locator(".bt-dialog-member").count() == 3
+            page.screenshot(path=str(OUT / f"dialog_{name}.png"))
+            dialog.locator(".bt-dialog-member").first.scroll_into_view_if_needed()
+            page.screenshot(path=str(OUT / f"dialog_besatzung_{name}.png"))
+            footer = dialog.locator(".bt-dialog-footer").bounding_box()
+            assert footer["y"] + footer["height"] <= VIEWPORTS[name][1] + 1
+            assert dialog.locator('.bt-dialog-footer button[type=submit]').bounding_box()["height"] >= 56
+            for index, person in enumerate(["Browser Person Eins", "Browser Person Zwei"]):
+                row = dialog.locator(".bt-dialog-member").nth(index)
+                row.locator(".person-select__trigger").click()
+                flyout = dialog.locator(".person-flyout:visible")
+                flyout.wait_for(state="visible")
+                flyout.get_by_role("button", name="Freie Eingabe (nicht im Register)", exact=True).click()
+                row.locator('input[type=text]').fill(person)
+            dialog.locator(".bt-dialog-member").nth(0).get_by_role("button", name="300", exact=True).click()
+            dialog.locator('.bt-dialog-footer button[type=submit]').click()
+            page.wait_for_timeout(100)
+            assert [t for t in messages if t[0] == "pageerror"] == []
+            dialog.locator(".bt-dialog-errors").wait_for(state="visible")
+            assert "Mitglied 2" in dialog.locator(".bt-dialog-errors").inner_text()
+            assert dialog.is_visible()
+            assert dialogs == []
+            dialog.locator(".bt-dialog-member").nth(1).get_by_role("button", name="290", exact=True).click()
+            dialog.locator('.bt-dialog-footer button[type=submit]').click()
+            page.wait_for_timeout(100)
+            assert [t for t in messages if t[0] == "pageerror"] == []
+            page.wait_for_selector(".troop-card:has-text('Browser Person Eins')")
+            assert not dialog.is_visible()
+            assert page.locator(".troop-card").count() == 4
+            assert [t for t in messages if t[0] == "pageerror"] == []
+            assert dialogs == []
         finally:
             browser.close()

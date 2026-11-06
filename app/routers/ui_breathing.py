@@ -1,6 +1,7 @@
 """Atemschutzüberwachung UI."""
 
 from datetime import UTC, datetime
+from math import ceil
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -151,6 +152,15 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
     db.refresh(incident, ["breathing_troops", "vehicles"])
     all_members = db.query(Member).filter(Member.active == True).order_by(Member.lastname).all()  # noqa: E712
     members = [m for m in all_members if m.is_agt]
+    belegte_mitglieder = {
+        m.member_id: t.name for t in incident.breathing_troops
+        if t.status in ("bereit", "im_einsatz", "rueckzug")
+        for m in t.active_members if m.member_id
+    }
+    personen = [{"id": m.id, "name": m.full_name, "firstname": m.firstname,
+                 "lastname": m.lastname, "is_agt": m.is_agt,
+                 "occupied": belegte_mitglieder.get(m.id, "")} for m in members]
+    now = datetime.now(UTC).replace(tzinfo=None)
     vehicles = [v for v in incident.vehicles if not v.removed_at]
 
     app_pflicht = _asuew_app_pflicht(db, incident_id)
@@ -162,6 +172,10 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
         (t, *get_warning_level(t, asuew_settings.gelb_prozent), get_time_warning(t), check_troop_warnings(t))
         for t in incident.breathing_troops
     ]
+    erholzeit_rest = {
+        t.id: max(0, ceil(asuew_settings.erholzeit_min - (now - t.back_at).total_seconds() / 60))
+        for t in incident.breathing_troops if t.back_at and asuew_settings.erholzeit_min
+    }
     trupp_uebersicht = dict.fromkeys(TROOP_STATUS_LABELS, 0)
     trupp_uebersicht["sicherheitstrupp_bereit"] = 0
     troop_ids = [t.id for t in incident.breathing_troops]
@@ -227,6 +241,8 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
                                  if t.status == "bereit" and t.is_sicherheitstrupp), None)},
         "troops_with_warnings": troops_with_warnings, "members": members,
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
+        "belegte_mitglieder": belegte_mitglieder, "personen": personen,
+        "naechste_trupp_nr": len(incident.breathing_troops) + 1, "erholzeit_rest": erholzeit_rest,
         "troop_status_labels": TROOP_STATUS_LABELS,
         "asuew_settings": asuew_settings, "current_user_label": _current_user_label(request),
         "hinweise": hinweise, "breathing_alerts": alerts,
@@ -347,6 +363,13 @@ def create_breathing_troop(
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/erneut-einsetzen")
 def redeploy_troop_view(
     incident_id: int, troop_id: int, request: Request,
+    name: str | None = Form(None),
+    unit_name: str | None = Form(None),
+    vehicle_id: int | None = Form(None),
+    ueberwacher_name: str | None = Form(None),
+    angriffsweg: str | None = Form(None),
+    funkkanal: str | None = Form(None),
+    is_sicherheitstrupp: bool | None = Form(None),
     task_text: str | None = Form(None),
     location_text: str | None = Form(None),
     bottle_preset: str | None = Form(None),
@@ -382,6 +405,17 @@ def redeploy_troop_view(
         )
     except ValueError as exc:
         return Response(str(exc), status_code=400)
+    for field, value in {"name": name, "unit_name": unit_name,
+                         "ueberwacher_name": ueberwacher_name,
+                         "angriffsweg": angriffsweg, "funkkanal": funkkanal}.items():
+        if value is not None:
+            setattr(troop, field, value.strip())
+    if "vehicle_id" in form_data:
+        troop.vehicle_id = vehicle_id
+    if is_sicherheitstrupp is not None or "name" in form_data:
+        troop.is_sicherheitstrupp = bool(is_sicherheitstrupp)
+    if ueberwacher_name is not None:
+        troop.ueberwacher_user_id = request.state.user.id
     db.commit()
     lfd_nr = troop.deployments[-1].lfd_nr
     run_async(manager.broadcast, incident_id, {
