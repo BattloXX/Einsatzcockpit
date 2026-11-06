@@ -118,8 +118,28 @@ Drehung, Originalauswahl und Einzeichnungsversion sind Teil des Seiten-ETags.
 Ein `If-None-Match` hat Vorrang vor `If-Modified-Since`. Fuer unmittelbare
 Erkennung solcher Variantenwechsel sollen Clients den ETag verwenden;
 `Last-Modified` beschreibt die Aenderungszeit der ausgelieferten Quelldatei.
+Das Sync-Manifest (weiterhin Version 2) ergaenzt pro Seite `version` und
+`versioned_urls`; die bisherigen `urls` bleiben queryfrei. Fuer Thumb/Bild/PDF
+setzt die App bei `?v=<aktuelle Medienversion>`
+`Cache-Control: private, max-age=31536000, immutable`. Bei fehlendem, leerem
+oder veraltetem `v` bleibt es bei `private, no-cache`. ETag, Last-Modified,
+304 und die vorherige Org-Pruefung bleiben erhalten. Die Medienversion umfasst
+Dateigroessen/mtime_ns, Drehung, Einzeichnungsversion und Ausgabeformatversion.
+
+Der Android-Sync speichert Medien unter queryfreien Cache-Storage-Schluesseln
+und merkt sich deren Version in localStorage. Fehlt Cache Storage nach dem
+Beenden des Hintergrund-WebViews, kann der HTTP-Cache den versionierten Abruf
+bedienen. Nur erfolgreiche Cache-Schreibvorgaenge bestaetigen eine Version;
+Speicherfehler (z. B. QuotaExceededError) erscheinen in der App-Diagnose.
+Parallele Aufrufe teilen einen Lauf. Nach erfolgreichem Sync gilt ein
+Mindestabstand von 30 Minuten (auch fuer WorkManager ohne Argumente);
+`window.objektOfflineSync({force:true})` erzwingt einen neuen Lauf.
 Private Medien duerfen im Reverse-Proxy nicht oeffentlich gecacht werden.
 
+Im produktiven Vhost ist der `/static/`-Block derzeit auskommentiert.
+Empfohlen ist die Aktivierung mit `expires 7d; add_header Cache-Control "public";`
+und gzip fuer CSS/JavaScript/JSON (`gzip_static on` allein benoetigt vorhandene
+`.gz`-Dateien). Die deploy-Vorlagen sind nicht die aktive Produktionskonfiguration.
 Falls nginx `/static` nicht selbst ausliefert, setzt der App-Fallback
 `Cache-Control: public, max-age=604800`; mit Query-Parameter `v` gilt
 `public, max-age=31536000, immutable`. Bei versionierten URLs muss sich `v`

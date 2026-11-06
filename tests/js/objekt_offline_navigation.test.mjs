@@ -121,3 +121,12 @@ test('Android startet Sync mit leerem Cache sofort; Plattform und native Einstel
     assert.ok(timers.every(delay => delay === 6 * 60 * 60 * 1000));
   }
 });
+
+test('versionierte Medienabrufe passieren den SW zum HTTP-Cache', async () => {
+  const sw = worker();
+  await sw.put('/objekt-medien/seite/1/bild', 'ALTES BILD');
+  await sw.put('/objekt-medien/seite/1/bild?v=alt', 'ALTE VERSION');
+  assert.equal(await sw.fetch('/objekt-medien/seite/1/bild?v=neu', 'cors'), undefined);
+  assert.equal(await sw.fetch('/objekt-medien/seite/1/bild?v=alt', 'cors'), undefined);
+  assert.equal(await (await sw.fetch('/objekt-medien/seite/1/bild', 'cors')).text(), 'ALTES BILD');
+});
