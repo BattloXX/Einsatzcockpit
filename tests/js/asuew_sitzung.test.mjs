@@ -270,3 +270,16 @@ test('readonly board shows problems, settings, alarm confirmation and visible-ta
   await e.listeners.visibilitychange();
   assert.equal(e.calls.at(-1), 'getState');
 });
+
+
+test('getOffsetMs starts unknown and tracks latest successful server time in milliseconds', async () => {
+  const e = env([started(), { server_time: '2026-11-05T12:00:05Z' }, new Error()]);
+  assert.equal(e.api.getOffsetMs(), 0);
+  await e.controller.ready;
+  assert.equal(e.api.getOffsetMs(), 12000);
+  assert.equal(e.controller.getOffsetMs(), 12000);
+  await e.next();
+  assert.equal(e.api.getOffsetMs(), -2000);
+  await e.next();
+  assert.equal(e.api.getOffsetMs(), -2000);
+});

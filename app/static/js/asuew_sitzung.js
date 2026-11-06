@@ -112,6 +112,7 @@
     if (current) current.stop();
     current = {
       getState() { return state; },
+      getOffsetMs() { return Number.isFinite(offset) ? offset * 1000 : 0; },
       refresh() { cancel(timer); return tick(); },
       stop() { stopped = true; cancel(timer); }
     };
@@ -120,7 +121,7 @@
     return current;
   }
 
-  const api = { start, getState() { return current ? current.getState() : { zustand: 'verbindet' }; } };
+  const api = { start, getOffsetMs() { return current ? current.getOffsetMs() : 0; }, getState() { return current ? current.getState() : { zustand: 'verbindet' }; } };
   if (typeof window !== 'undefined') window.ECPAsuewSitzung = api;
   if (typeof module !== 'undefined') module.exports = api;
 })();
