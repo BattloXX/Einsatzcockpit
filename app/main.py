@@ -1,5 +1,10 @@
 """FastAPI application – Einsatzcockpit (Multi-Org) v2.0.0."""
 
+# ruff: noqa: E402 -- Logging muss vor allen MCP-Imports eingerichtet sein.
+from app.logging_setup import einrichten, rich_handler_entfernen
+
+einrichten()
+
 import asyncio
 import logging
 import os
@@ -159,6 +164,8 @@ from app.services.background_runtime import BackgroundRuntime, supervised_loop
 from app.services.gateway_presence import worker_id
 from app.services.loop_lag_watchdog import VerzugsWatchdog
 from app.services.suche.outbox import registriere_listener
+
+rich_handler_entfernen()
 
 registriere_listener()
 
