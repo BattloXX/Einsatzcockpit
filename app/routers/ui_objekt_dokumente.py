@@ -52,7 +52,7 @@ from app.services.objekt_seite_annotation import (
     seite_pdf_datei,
     seite_thumb_datei,
 )
-from app.services.objekt_service import STANDARD_MERKMALE, lade_auswahl, write_objekt_change
+from app.services.objekt_service import STANDARD_MERKMALE, lade_auswahl, seite_medien_version, write_objekt_change
 
 router = APIRouter(tags=["objekt-dokumente"])
 
@@ -847,6 +847,8 @@ def seite_thumb(
     rotation = seite.rotation
     annotationsversion = annotierte_seiten(db, [seite.id]).get(seite.id)
     headers = datei_cache_header(pfad, ["thumb", original, rotation, annotationsversion])
+    if (version := request.query_params.get("v")) and version == seite_medien_version(seite, annotationsversion):
+        headers["Cache-Control"] = "private, max-age=31536000, immutable"
     db.close()
     if antwort := unveraendert(request, headers):
         return antwort
@@ -873,6 +875,8 @@ def seite_bild(
     rotation = seite.rotation
     annotationsversion = annotierte_seiten(db, [seite.id]).get(seite.id)
     headers = datei_cache_header(pfad, ["bild", original, rotation, annotationsversion])
+    if (version := request.query_params.get("v")) and version == seite_medien_version(seite, annotationsversion):
+        headers["Cache-Control"] = "private, max-age=31536000, immutable"
     db.close()
     if antwort := unveraendert(request, headers):
         return antwort
@@ -899,6 +903,8 @@ def seite_pdf(
     dateiname = f"seite_{seite.seiten_nr:04d}.pdf"
     annotationsversion = annotierte_seiten(db, [seite.id]).get(seite.id)
     headers = datei_cache_header(pfad, ["pdf", original, seite.rotation, annotationsversion])
+    if (version := request.query_params.get("v")) and version == seite_medien_version(seite, annotationsversion):
+        headers["Cache-Control"] = "private, max-age=31536000, immutable"
     db.close()
     if antwort := unveraendert(request, headers):
         return antwort

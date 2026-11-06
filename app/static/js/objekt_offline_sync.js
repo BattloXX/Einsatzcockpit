@@ -10,7 +10,7 @@
  * dort cacht der SW nur besuchte Seiten (network-first, Bestandsverhalten).
  *
  * Sync-Zeitpunkte: direkt nach App-Start, danach alle 6 h; Delta ueber die
- * URL-Menge (Seiten-Dateien sind unveraenderlich, UUID-Pfade). Entfernte
+ * Medienversionen (mit URL-Menge als Fallback fuer alte Manifeste). Entfernte
  * Seiten/Objekte werden aus dem Cache geraeumt.
  */
 (function () {
@@ -19,6 +19,28 @@
   var CACHE_NAME = "ec-objekt-v2";
   var SYNC_INTERVALL_MS = 6 * 60 * 60 * 1000; // 6 h
   var LS_KEY = "ec_objekt_sync_zuletzt";
+  var MEDIEN_KEY = "ec_objekt_medien_stand";
+  var MIN_INTERVALL_MS = 30 * 60 * 1000;
+  var laufenderSync = null;
+
+  function pathname(url) { return new URL(url, window.location.origin).pathname; }
+
+  function medienStandLesen() {
+    try {
+      var stand = JSON.parse(localStorage.getItem(MEDIEN_KEY) || "{}");
+      return stand && typeof stand === "object" && !Array.isArray(stand) ? stand : {};
+    } catch (e) { return {}; }
+  }
+
+  function medienStandSpeichern(stand) {
+    try { localStorage.setItem(MEDIEN_KEY, JSON.stringify(stand)); } catch (e) { /* optional */ }
+  }
+
+  function synchronisieren(optionen) {
+    if (laufenderSync) { return laufenderSync; }
+    laufenderSync = syncAusfuehren(optionen || {}).finally(function () { laufenderSync = null; });
+    return laufenderSync;
+  }
   var DETAIL_FRAGMENTE = [
     "stammdaten", "gefahren", "bma", "merkmale", "kontakte",
     "benachrichtigung", "wohnanlage", "zusatzadressen", "einsaetze", "protokoll",
@@ -78,7 +100,19 @@
     return detailReady && einsatzReady;
   }
 
-  async function synchronisieren() {
+  async function syncAusfuehren(optionen) {
+    // Nur der Aufruf beim Seitenaufruf (planen) wird entprellt: jeder Seitenaufruf in
+    // der App wuerde sonst alle Objektansichten erneut laden. WorkManager (6 h,
+    // Login, manuelles Aktualisieren) ruft ohne Option auf und synchronisiert immer;
+    // dank Versionsstand ist das ein guenstiges Delta.
+    try {
+      var zuletzt = Number(localStorage.getItem(LS_KEY));
+      var alter = Date.now() - zuletzt;
+      if (optionen.entprellen && !optionen.force && zuletzt > 0 && alter >= 0 && alter < MIN_INTERVALL_MS) {
+        cacheStatus(0, 0, "Objekt-Sync übersprungen: letzter erfolgreicher Lauf vor weniger als 30 Minuten");
+        return true;
+      }
+    } catch (e) { /* Ohne localStorage weiterhin synchronisieren. */ }
     if (!await syncIstAktiv()) {
       cacheStatus(0, 0, "Objekt-Sync ist deaktiviert");
       return true;
@@ -129,6 +163,8 @@
     // scheitert bereits /objekte/ bevor ein Objekt geöffnet werden kann.
     soll.add("/objekte/");
     var objektPfade = [];
+    var medienVersionen = new Map();
+    var fetchUrls = new Map();
     objektListe.forEach(function (o) {
       var pfade = [];
       // Die Listenansicht verlinkt auf die Verwaltungsansicht (/objekte/<id>),
@@ -148,14 +184,31 @@
       pfade.push(o.einsatz_url);
       (o.seiten || []).forEach(function (s) {
         (s.urls || []).forEach(function (u) {
-          soll.add(u);
-          pfade.push(u);
+          var pfad = pathname(u);
+          soll.add(pfad);
+          pfade.push(pfad);
+          // Beide additiven Felder muessen vorhanden sein, sonst alte Logik.
+          var versionierteUrl = (s.versioned_urls || []).find(function (v) { return pathname(v) === pfad; });
+          if (s.version && versionierteUrl) {
+            medienVersionen.set(pfad, s.version);
+            fetchUrls.set(pfad, versionierteUrl);
+          } else { fetchUrls.set(pfad, u); }
         });
       });
       objektPfade.push(pfade);
     });
     kontaktPfade.forEach(function (pfad) { soll.add(pfad); });
 
+    // Cache-Schluessel und Mengenvergleiche verwenden stets denselben Pfad,
+    // auch bei Query-Parametern in aelteren Manifesten/Kontakt-URLs.
+    soll = new Set(Array.from(soll).map(pathname));
+    objektPfade = objektPfade.map(function (pfade) { return pfade.map(pathname); });
+    kontaktPfade.forEach(function (url) { fetchUrls.set(pathname(url), url); });
+    var medienStand = medienStandLesen();
+    Object.keys(medienStand).forEach(function (pfad) {
+      if (!soll.has(pfad)) { delete medienStand[pfad]; }
+    });
+    medienStandSpeichern(medienStand);
     var cache = await caches.open(CACHE_NAME);
 
     // Veraltete Eintraege raeumen (geloeschte Seiten/Objekte, zurueckgezogene Objekte)
@@ -190,18 +243,49 @@
       "Objekte werden synchronisiert … " + cachedObjects + "/" + objektListe.length + " offline verfügbar",
     );
     var failedDownloads = 0;
+    var geladen = 0;
+    var uebersprungen = 0;
+    var bytesGeladen = 0;
+    var fehlertexte = [];
+    function statistik() {
+      return " · Geladen: " + geladen + " · Übersprungen: " + uebersprungen
+        + " · Bytes geladen: " + bytesGeladen + " · Fehler: " + failedDownloads
+        + (fehlertexte.length ? " · " + fehlertexte.join("; ") : "");
+    }
     for (var j = 0; j < urls.length; j++) {
       var url = urls[j];
       var istDynamischeSeite = /^\/objekte\/\d+(\/(einsatz|stammdaten|gefahren|bma|merkmale|kontakte|benachrichtigung|wohnanlage|zusatzadressen|einsaetze|protokoll))?$/.test(url)
         || url === "/kontakte" || /^\/kontakte\/\d+(\/profilbild)?$/.test(url);
       // HTML-Ansichten und Kontaktbilder immer aktualisieren, Dateien nur wenn fehlend.
-      if (istDynamischeSeite || !vorhandenPfade.has(url)) {
+      var version = medienVersionen.get(url);
+      var hatEintrag = version ? !!await cache.match(url) : vorhandenPfade.has(url);
+      if (istDynamischeSeite || !hatEintrag
+          || (version && medienStand[url] !== version)) {
         try {
-          var res = await fetch(url, { credentials: "same-origin" });
-          if (res.ok) { await cache.put(url, res); }
-          else { await cache.delete(url); failedDownloads++; }
-        } catch (e) { failedDownloads++; /* einzelner Fehler stoppt den Sync nicht */ }
-      }
+          // Kein cache:"reload"/"no-store": der kurzlebige WebView darf den
+          // persistenten HTTP-Cache mit privaten immutable-Antworten verwenden.
+          var res = await fetch(fetchUrls.get(url) || url, { credentials: "same-origin" });
+          if (!res.ok) {
+            await cache.delete(url);
+            throw new Error("HTTP " + res.status + " " + url);
+          }
+          var groesse = 0;
+          // Sequentiell: jeweils nur ein zusaetzliches Blob fuer die Diagnose.
+          try { groesse = (await res.clone().blob()).size; } catch (e) { /* optional */ }
+          await cache.put(url, res);
+          geladen++;
+          bytesGeladen += groesse;
+          if (version) {
+            medienStand[url] = version;
+            medienStandSpeichern(medienStand);
+          }
+        } catch (e) {
+          failedDownloads++;
+          var fehler = (e && e.name ? e.name + ": " : "") + (e && e.message ? e.message : String(e));
+          if (fehlertexte.length < 3 && !fehlertexte.includes(fehler)) { fehlertexte.push(fehler); }
+          cacheStatus(cachedObjects, objektListe.length, "Objekt-Sync: " + url + statistik());
+        }
+      } else { uebersprungen++; }
 
       // Nach jedem Objekt den echten Cache-Stand melden. Wird die kurzlebige
       // WorkManager-WebView beendet, bleibt so der letzte Zwischenstand sichtbar.
@@ -218,7 +302,7 @@
         cacheStatus(
           cachedObjects,
           objektListe.length,
-          "Objekte werden synchronisiert … " + cachedObjects + "/" + objektListe.length + " offline verfügbar",
+          "Objekte werden synchronisiert … " + cachedObjects + "/" + objektListe.length + " offline verfügbar" + statistik(),
         );
       }
     }
@@ -231,10 +315,13 @@
       cachedObjects,
       objektListe.length,
       "Objekte aktualisiert: " + cachedObjects + "/" + objektListe.length + " offline verfügbar"
-        + (failedDownloads ? " · " + failedDownloads + " Dateien konnten nicht geladen werden" : ""),
+        + statistik(),
     );
 
-    try { localStorage.setItem(LS_KEY, String(Date.now())); } catch (e) { /* egal */ }
+    if (!failedDownloads) {
+      try { localStorage.setItem(LS_KEY, String(Date.now())); } catch (e) { /* optional */ }
+    }
+    // Wie bisher true: ein einzelner Fehler soll den WorkManager nicht in eine Wiederholungsschleife schicken.
     return true;
   }
 
@@ -242,7 +329,7 @@
     // Der erste erfolgreiche Login ist der einzige verlässliche Zeitpunkt,
     // bevor das Gerät ins Funkloch fährt. Die frühere 90-s-Wartezeit ließ
     // genau diesen Fall ohne Objektübersicht und Einsatzdaten zurück.
-    synchronisieren().catch(function () {});
+    synchronisieren({ entprellen: true }).catch(function () {});
     setTimeout(function lauf() {
       synchronisieren().catch(function () {});
       setTimeout(lauf, SYNC_INTERVALL_MS);
@@ -258,7 +345,10 @@
     if (window.ecKontaktCacheReady) { await window.ecKontaktCacheReady; }
     try {
       await caches.delete(CACHE_NAME);
-      try { localStorage.removeItem(LS_KEY); } catch (e) { /* egal */ }
+      try {
+        localStorage.removeItem(LS_KEY);
+        localStorage.removeItem(MEDIEN_KEY);
+      } catch (e) { /* optional */ }
       cacheStatus(0, 0, "Objektcache wurde gelöscht");
       return true;
     } catch (e) {

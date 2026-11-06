@@ -162,3 +162,35 @@ def test_logo_upload_verkleinert(client, medien_daten, tmp_path, monkeypatch):
         assert gespeichert.size == (512, 256)
         assert gespeichert.mode == "RGBA"
         assert gespeichert.getpixel((0, 0))[3] == 80
+
+
+@pytest.mark.parametrize("variante", ["thumb", "bild", "pdf"])
+def test_medienversion_private_immutable_nur_bei_passendem_v(client, medien_daten, variante):
+    from app.services.objekt_seite_annotation import annotierte_seiten
+    from app.services.objekt_service import build_sync_manifest, seite_medien_version
+
+    d = medien_daten
+    einsatzinfo._anmelden(client, d.org, "readonly")
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        seite = db.get(ObjektDokumentSeite, d.seite)
+        version = seite_medien_version(seite, annotierte_seiten(db, [seite.id]).get(seite.id))
+        manifest = build_sync_manifest(db, d.org)
+        eintrag = next(s for o in manifest["objekte"] for s in o["seiten"] if s["seite_id"] == d.seite)
+        assert eintrag["version"] == version
+    url = _url(d, variante)
+    for suffix, cache in (
+        ("", "private, no-cache"), ("?v=alt", "private, no-cache"),
+        ("?v=", "private, no-cache"), (f"?v={version}", "private, max-age=31536000, immutable"),
+    ):
+        antwort = client.get(url + suffix)
+        assert antwort.status_code == 200
+        assert antwort.headers["cache-control"] == cache
+        for header in ({"If-None-Match": antwort.headers["etag"]},
+                       {"If-Modified-Since": antwort.headers["last-modified"]}):
+            bedingt = client.get(url + suffix, headers=header)
+            assert bedingt.status_code == 304
+            assert bedingt.headers["cache-control"] == cache
+    client.cookies.clear()
+    einsatzinfo._anmelden(client, d.fremd, "readonly")
+    assert client.get(url + f"?v={version}", headers={"If-None-Match": antwort.headers["etag"]}).status_code == 404
