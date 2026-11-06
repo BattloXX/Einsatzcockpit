@@ -42,12 +42,14 @@ import logging
 import re
 from collections import deque
 from datetime import UTC, datetime
+from functools import partial
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.services.background_runtime import create_leader_task
 from app.services.dibos.dibos_client import parse_events
+from app.services.loop_thread_io import ALARM_POOL, auf_event_loop, im_db_thread, thread_ablauf
 
 logger = logging.getLogger("einsatzleiter.dibos.enrich")
 
@@ -717,6 +719,9 @@ def _sync_person_responses(db: Session, org_id: int, org, incident, person_respo
     return changed
 
 
+# Bewusst noch nicht ausgelagert: _broadcast liest die gemeinsame Session
+# entkoppelt vom Alarmversand und kann diesen ueberleben. Ein Worker-Loop
+# wuerde den Task beim Ende abbrechen; ein Snapshot aendert den Lesezeitpunkt.
 async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
     """Broadcastet und alarmiert einen frisch committeten DIBOS-Einsatz."""
     from app.config import settings
@@ -769,30 +774,43 @@ async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
 
 
 async def _geocode_and_match_dibos_incident(incident_id: int, org_id: int) -> None:
-    """Folgearbeit erst nach dem Anlage-Commit: BMA kann bereits einen Link
-    erzeugt haben; match_incident_background dedupliziert diesen Objekt-Link."""
+    """Geocoding und Matching nach Anlage mit unveraenderten Commit-Grenzen."""
+    await im_db_thread(_geocode_and_match_dibos_incident_sync, incident_id, org_id, pool=ALARM_POOL)
+
+
+def _geocode_and_match_dibos_incident_sync(incident_id: int, org_id: int) -> None:
+    # Gleicher ORM-Stand ueber Geocoding, Commit und Matching; nur HTTP/IDs
+    # gehen auf den Hauptloop, die Session bleibt bis zum bisherigen Ende hier.
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
-    from app.models.incident import Incident
     db = SessionLocal()
     set_tenant_context(db, None)
+    try:
+        thread_ablauf(_geocode_and_match_mit_db(db, incident_id))
+    finally:
+        db.close()
+
+
+async def _geocode_and_match_mit_db(db: Session, incident_id: int) -> None:
+    from app.models.incident import Incident
+
     try:
         incident = db.get(Incident, incident_id)
         if incident is None or incident.status == "closed":
             return
         if incident.lat is None and incident.lng is None and (incident.address_street or incident.address_city):
             from app.services.geocoding import geocode_address
-            geo = await geocode_address(incident.address_street, incident.address_no, incident.address_city)
+            geo = await auf_event_loop(
+                geocode_address, incident.address_street, incident.address_no, incident.address_city,
+            )
             if geo:
                 incident.lat, incident.lng = geo.lat, geo.lng
                 db.commit()
         from app.services.objekt_matching_service import match_incident_background
-        await match_incident_background(incident_id)
+        await auf_event_loop(match_incident_background, incident_id)
     except Exception:
         db.rollback()
         logger.exception("Geocoding/Objekt-Matching nach DIBOS-Anlage fehlgeschlagen (Einsatz %s)", incident_id)
-    finally:
-        db.close()
 
 
 def enrich_events_for_org(
@@ -811,7 +829,7 @@ def enrich_events_for_org(
     _get_or_create_incident_for_event()).
 
     Läuft synchron in einer eigenen DB-Session (aus dibos_loop.py per
-    asyncio.to_thread aufgerufen) — parallel zum bestehenden LIS/IPR-Sync, ohne
+    im_db_thread/ALARM_POOL aufgerufen) — parallel zum bestehenden LIS/IPR-Sync, ohne
     dessen Matching/Dedup zu berühren. Ein Fehler bricht nur den eigenen
     Anreicherungs-Durchlauf ab (Rollback + Log), nie den DIBOS-Poll selbst.
 
@@ -1012,6 +1030,86 @@ def enrich_events_for_org(
     }
 
 
+def _incident_alarm_started_sync(incident_id: int) -> bool:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.services.incident_notify import incident_alarm_started
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        return incident_alarm_started(db, incident_id)
+    finally:
+        db.close()
+
+
+async def _start_closed_report(incident_id: int) -> None:
+    _start_background(_post_incident_report(incident_id), "DIBOS-Auto-Close: WordPress-Bericht", incident_id)
+
+
+def _closed_incidents_sync(closed_ids: list[int], org_id: int) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        thread_ablauf(_closed_incidents_mit_db(db, closed_ids, org_id))
+    finally:
+        db.close()
+
+
+async def _closed_incidents_mit_db(db: Session, closed_ids: list[int], org_id: int) -> None:
+    from app.models.incident import Incident
+    from app.services.broadcast import manager
+
+    for incident_id in closed_ids:
+        incident = db.get(Incident, incident_id)
+        if incident is None:
+            continue
+        await auf_event_loop(_start_closed_report, incident_id)
+        try:
+            await auf_event_loop(manager.broadcast, incident_id, {"type": "incident_closed"})
+        except Exception:
+            logger.exception(
+                "DIBOS-Auto-Close: Broadcast fehlgeschlagen (Einsatz %s)",
+                incident.id,
+            )
+        try:
+            from app.services.incident_live_notify import notify_incident_live
+            await notify_incident_live(
+                db, incident, org_id=org_id, reason="closed", background_tasks=None,
+            )
+        except Exception:
+            logger.exception("DIBOS-Auto-Close: Live-Push fehlgeschlagen (Einsatz %s)", incident_id)
+
+
+def _vehicle_live_sync(incident_id: int, org_id: int) -> None:
+    # Der Live-Push liest in eigener Session, daher erst nach dem Worker-Commit.
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    live_db = SessionLocal()
+    set_tenant_context(live_db, None)
+    try:
+        thread_ablauf(_vehicle_live_mit_db(live_db, incident_id, org_id))
+    finally:
+        live_db.close()
+
+
+async def _vehicle_live_mit_db(live_db: Session, incident_id: int, org_id: int) -> None:
+    from app.models.incident import Incident
+    from app.services.incident_live_notify import notify_incident_live
+
+    try:
+        incident = live_db.get(Incident, incident_id)
+        if incident:
+            await notify_incident_live(
+                live_db, incident, org_id=org_id, reason="unit_status", background_tasks=None,
+            )
+    except Exception:
+        logger.exception("DIBOS-Live-Push (Fahrzeugstatus) fehlgeschlagen (Einsatz %s)", incident_id)
+
+
 async def enrich_and_broadcast(
     org_id: int,
     raw_events: list[dict],
@@ -1040,10 +1138,10 @@ async def enrich_and_broadcast(
     """
     loop = asyncio.get_running_loop()
     try:
-        result = await asyncio.to_thread(
-            enrich_events_for_org, org_id, raw_events, raw_public_events=raw_public_events,
-            raw_units=raw_units,
-            wache_unid=wache_unid, create_incidents=create_incidents, loop=loop,
+        result = await im_db_thread(
+            partial(enrich_events_for_org, org_id, raw_events, raw_public_events=raw_public_events,
+                    raw_units=raw_units, wache_unid=wache_unid, create_incidents=create_incidents, loop=loop),
+            pool=ALARM_POOL,
         )
     except Exception:
         logger.exception("DIBOS-Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
@@ -1056,15 +1154,7 @@ async def enrich_and_broadcast(
     created_ids = result.get("created_ids") or []
     created_match_ids = result.get("created_match_ids") or []
     for incident_id in created_ids:
-        from app.core.tenant import set_tenant_context
-        from app.db import SessionLocal
-        from app.services.incident_notify import incident_alarm_started
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            scheduled = incident_alarm_started(db, incident_id)
-        finally:
-            db.close()
+        scheduled = await im_db_thread(_incident_alarm_started_sync, incident_id, pool=ALARM_POOL)
         if not scheduled:
             logger.warning(
                 "DIBOS-Alarmierung für Einsatz %s war nicht eingeplant und wird nachgeholt",
@@ -1090,36 +1180,7 @@ async def enrich_and_broadcast(
         )
     from app.services.broadcast import manager
     if closed_ids:
-        from app.core.tenant import set_tenant_context
-        from app.db import SessionLocal
-        from app.models.incident import Incident
-
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            for incident_id in closed_ids:
-                incident = db.get(Incident, incident_id)
-                if incident is None:
-                    continue
-                _start_background(
-                    _post_incident_report(incident_id), "DIBOS-Auto-Close: WordPress-Bericht", incident_id
-                )
-                try:
-                    await manager.broadcast(incident_id, {"type": "incident_closed"})
-                except Exception:
-                    logger.exception(
-                        "DIBOS-Auto-Close: Broadcast fehlgeschlagen (Einsatz %s)",
-                        incident.id,
-                    )
-                try:
-                    from app.services.incident_live_notify import notify_incident_live
-                    await notify_incident_live(
-                        db, incident, org_id=org_id, reason="closed", background_tasks=None,
-                    )
-                except Exception:
-                    logger.exception("DIBOS-Auto-Close: Live-Push fehlgeschlagen (Einsatz %s)", incident_id)
-        finally:
-            db.close()
+        await im_db_thread(_closed_incidents_sync, closed_ids, org_id, pool=ALARM_POOL)
     ok = bool(result.get("ok"))
     if not changed_ids and not rsvp_changed_ids:
         return ok
@@ -1129,23 +1190,7 @@ async def enrich_and_broadcast(
         except Exception:
             logger.exception("DIBOS-Broadcast für Einsatz %s fehlgeschlagen", incident_id)
     for incident_id in vehicle_changed_ids:
-        # Der Live-Push liest in eigener Session, daher erst nach dem Worker-Commit.
-        from app.core.tenant import set_tenant_context
-        from app.db import SessionLocal
-        from app.models.incident import Incident
-        from app.services.incident_live_notify import notify_incident_live
-        live_db = SessionLocal()
-        set_tenant_context(live_db, None)
-        try:
-            incident = live_db.get(Incident, incident_id)
-            if incident:
-                await notify_incident_live(
-                    live_db, incident, org_id=org_id, reason="unit_status", background_tasks=None,
-                )
-        except Exception:
-            logger.exception("DIBOS-Live-Push (Fahrzeugstatus) fehlgeschlagen (Einsatz %s)", incident_id)
-        finally:
-            live_db.close()
+        await im_db_thread(_vehicle_live_sync, incident_id, org_id, pool=ALARM_POOL)
     for incident_id in rsvp_changed_ids:
         try:
             await manager.broadcast(incident_id, {"type": "rsvp:changed"})
@@ -1177,8 +1222,13 @@ def _start_background(coro, label: str, incident_id: int) -> None:
 
 
 async def _post_incident_report(incident_id: int) -> None:
-    """WordPress-Bericht als Hintergrund-Task — mit eigener Session, da die des
-    Aufrufers beim Start des Tasks bereits geschlossen sein kann."""
+    """Bericht mit unveraenderter Transaktion im Alarm-DB-Thread erstellen."""
+    await im_db_thread(_post_incident_report_sync, incident_id, pool=ALARM_POOL)
+
+
+def _post_incident_report_sync(incident_id: int) -> None:
+    # Der Report-Service verzahnt Dedupe, HTTP und Ergebnis-Commit. Seine
+    # auf_event_loop-Bruecke transportiert ausschliesslich Webhook-Nutzdaten.
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.incident import Incident
@@ -1189,6 +1239,6 @@ async def _post_incident_report(incident_id: int) -> None:
     try:
         incident = db.get(Incident, incident_id)
         if incident is not None:
-            await post_incident_report(db, incident)
+            thread_ablauf(post_incident_report(db, incident))
     finally:
         db.close()

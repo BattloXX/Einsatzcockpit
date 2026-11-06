@@ -420,7 +420,7 @@ async def test_7_live_notifications_continue_after_one_failure(monkeypatch):
     vehicle_id = _incident(db, "dibos-live-unit-7")
     db.close()
 
-    async def fake_thread(*args, **kwargs):
+    def fake_enrich(*args, **kwargs):
         return {
             "changed_ids": [vehicle_id],
             "vehicle_changed_ids": [vehicle_id],
@@ -445,7 +445,7 @@ async def test_7_live_notifications_continue_after_one_failure(monkeypatch):
     def background(coro, *args):
         coro.close()
 
-    monkeypatch.setattr(dibos_enrich.asyncio, "to_thread", fake_thread)
+    monkeypatch.setattr(dibos_enrich, "enrich_events_for_org", fake_enrich)
     monkeypatch.setattr("app.services.incident_live_notify.notify_incident_live", notify)
     monkeypatch.setattr("app.services.broadcast.manager.broadcast", broadcast)
     monkeypatch.setattr(dibos_enrich, "_start_background", background)

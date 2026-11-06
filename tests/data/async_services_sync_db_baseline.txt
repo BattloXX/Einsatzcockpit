@@ -1,4 +1,1 @@
-app/services/dibos/dibos_enrich.py:enrich_and_broadcast
-app/services/dibos/dibos_enrich.py:_geocode_and_match_dibos_incident
 app/services/dibos/dibos_enrich.py:_notify_new_dibos_incident
-app/services/dibos/dibos_enrich.py:_post_incident_report

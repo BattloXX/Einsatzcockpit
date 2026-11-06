@@ -687,3 +687,168 @@ async def test_objekt_kontakt_abbruch_bleibt_wiederholbar(monkeypatch, versand):
     db.expire_all()
     assert db.query(ObjektKontaktBenachrichtigung).one().status == "gesendet"
     assert len(mails) == 1
+
+
+@pytest.mark.parametrize("fehler", [None, "http", "matching"])
+async def test_dibos_geocode_alarm_thread_commit_vor_matching_und_rollback(monkeypatch, caplog, fehler):
+    from types import SimpleNamespace
+
+    from app.services.dibos import dibos_enrich
+
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        inc = Incident(primary_org_id=1, alarm_type_code="B2", address_street="Threadstrasse")
+        db.add(inc)
+        db.commit()
+        incident_id = inc.id
+    loop, schritte = asyncio.get_running_loop(), []
+
+    async def geocode(*args):
+        assert asyncio.get_running_loop() is loop
+        assert args == ("Threadstrasse", None, None)
+        schritte.append("http")
+        if fehler == "http":
+            raise RuntimeError("Geocode-Testfehler")
+        return SimpleNamespace(lat=47.5, lng=9.7)
+
+    async def match(iid):
+        assert asyncio.get_running_loop() is loop and iid == incident_id
+        with TestingSession() as db:
+            set_tenant_context(db, None)
+            assert (db.get(Incident, iid).lat, db.get(Incident, iid).lng) == (47.5, 9.7)
+        schritte.append("matching")
+        if fehler == "matching":
+            raise RuntimeError("Matching-Testfehler")
+
+    monkeypatch.setattr("app.services.geocoding.geocode_address", geocode)
+    monkeypatch.setattr("app.services.objekt_matching_service.match_incident_background", match)
+    with alarm_db_threads(monkeypatch):
+        assert await dibos_enrich._geocode_and_match_dibos_incident(incident_id, 1) is None
+        await dibos_enrich._geocode_and_match_dibos_incident(-1, 1)
+    assert schritte == (["http"] if fehler == "http" else ["http", "matching"])
+    assert ("Geocoding/Objekt-Matching nach DIBOS-Anlage fehlgeschlagen" in caplog.text) == bool(fehler)
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        assert db.get(Incident, incident_id).lat == (None if fehler == "http" else 47.5)
+
+
+@pytest.mark.parametrize("fehler", [False, True])
+async def test_dibos_report_alarm_thread_http_commit_und_fehler(monkeypatch, caplog, fehler):
+    from app.models.master import FireDept
+    from app.models.wordpress_report import WordPressReportConfig
+    from app.services import wordpress_report_service as report
+    from app.services.dibos import dibos_enrich
+
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug=uuid4().hex, name="DIBOS-Bericht")
+        db.add(org)
+        db.flush()
+        db.add(WordPressReportConfig(org_id=org.id, enabled=True, webhook_url="https://report.invalid",
+                                     webhook_token="secret"))
+        inc = Incident(primary_org_id=org.id, alarm_type_code="B2", status="closed")
+        db.add(inc)
+        db.commit()
+        incident_id = inc.id
+    loop, aufrufe = asyncio.get_running_loop(), []
+
+    async def webhook(url, token, payload):
+        assert asyncio.get_running_loop() is loop
+        assert (url, token, payload["incident_id"]) == ("https://report.invalid", "secret", incident_id)
+        aufrufe.append(payload)
+        if fehler:
+            raise RuntimeError("Report-Testfehler")
+        return {"post_id": 123, "edit_url": "https://report.invalid/edit"}
+
+    monkeypatch.setattr(report, "_sende_webhook", webhook)
+    with alarm_db_threads(monkeypatch):
+        await dibos_enrich._post_incident_report(incident_id)
+        await dibos_enrich._post_incident_report(-1)
+    assert len(aufrufe) == 1
+    assert ("WordPress-Bericht: Webhook-Fehler" in caplog.text) == fehler
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        assert db.get(Incident, incident_id).wp_report_post_id == (None if fehler else 123)
+
+
+@pytest.mark.parametrize("fehler", [False, True])
+async def test_dibos_enrich_alarm_thread_write_broadcast_live_reihenfolge(monkeypatch, caplog, fehler):
+    from app.services import incident_live_notify
+    from app.services.broadcast import manager
+    from app.services.dibos import dibos_enrich
+    from app.services.loop_thread_io import auf_event_loop
+
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        inc = Incident(primary_org_id=1, alarm_type_code="B2")
+        db.add(inc)
+        db.commit()
+        incident_id = inc.id
+    loop, schritte = asyncio.get_running_loop(), []
+
+    def enrich(*args, **kwargs):
+        assert threading.current_thread().name.startswith("alarm-db")
+        with datenbank.SessionLocal() as db:
+            set_tenant_context(db, None)
+            db.get(Incident, incident_id).reason = "committed"
+            db.commit()
+        schritte.append("commit")
+        return {"ok": True, "created_ids": [incident_id], "closed_ids": [incident_id, -1],
+                "changed_ids": [incident_id], "vehicle_changed_ids": [incident_id],
+                "rsvp_changed_ids": [incident_id]}
+
+    def gestartet(db, iid):
+        assert not threading.get_ident() == loop_thread
+        assert db.get(Incident, iid).reason == "committed"
+        schritte.append("alarm_check")
+        return True
+
+    def background(coro, label, iid):
+        assert asyncio.get_running_loop() is loop
+        coro.close()
+        schritte.append("report_start" if "WordPress" in label else "print_start")
+
+    async def broadcast(iid, payload):
+        assert asyncio.get_running_loop() is loop and iid == incident_id
+        with TestingSession() as db:
+            set_tenant_context(db, None)
+            assert db.get(Incident, iid).reason == "committed"
+        schritte.append(payload["type"])
+        if fehler:
+            raise RuntimeError("Broadcast-Testfehler")
+
+    async def live(db, incident, **kwargs):
+        assert threading.current_thread().name.startswith("alarm-db")
+        assert db.get(Incident, incident.id).reason == "committed"
+        await auf_event_loop(live_transport, kwargs["reason"])
+        if fehler:
+            raise RuntimeError("Live-Testfehler")
+
+    async def live_transport(reason):
+        assert asyncio.get_running_loop() is loop
+        schritte.append(reason)
+
+    loop_thread = threading.get_ident()
+    monkeypatch.setattr(dibos_enrich, "enrich_events_for_org", enrich)
+    monkeypatch.setattr(dibos_enrich, "_start_background", background)
+    monkeypatch.setattr("app.services.incident_notify.incident_alarm_started", gestartet)
+    monkeypatch.setattr(manager, "broadcast", broadcast)
+    monkeypatch.setattr(incident_live_notify, "notify_incident_live", live)
+    with alarm_db_threads(monkeypatch):
+        assert await dibos_enrich.enrich_and_broadcast(1, []) is True
+    assert schritte == ["commit", "alarm_check", "print_start", "report_start", "incident_closed",
+                        "closed", "dibos_sync", "unit_status", "rsvp:changed"]
+    assert ("DIBOS-Auto-Close: Broadcast fehlgeschlagen" in caplog.text) == fehler
+    assert ("DIBOS-Live-Push (Fahrzeugstatus) fehlgeschlagen" in caplog.text) == fehler
+
+
+async def test_dibos_enrich_worker_fehler_bleibt_false(monkeypatch, caplog):
+    from app.services.dibos import dibos_enrich
+
+    def fehler(*args, **kwargs):
+        assert threading.current_thread().name.startswith("alarm-db")
+        raise RuntimeError("Enrichment-Testfehler")
+
+    monkeypatch.setattr(dibos_enrich, "enrich_events_for_org", fehler)
+    assert await dibos_enrich.enrich_and_broadcast(1, []) is False
+    assert "DIBOS-Einsatzanreicherung fehlgeschlagen (Org 1)" in caplog.text
