@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Android-Objektcache mit Delta-Sync:** Medienversionen erkennen geaenderte Dateien, Drehungen und Einzeichnungen. Passende `?v=`-Abrufe nutzen ein Jahr privaten immutable-HTTP-Cache, auch wenn der kurzlebige Hintergrund-WebView seinen Cache Storage verliert. Gleichzeitige Sync-Aufrufe teilen einen Lauf; erfolgreiche Laeufe pausieren mindestens 30 Minuten. Die App-Diagnose zeigt geladene/uebersprungene Dateien, Bytes und Speicherfehler. Alte Manifest-Clients bleiben kompatibel; der serverseitige JS-Fix erreicht Tablets ohne APK-Release. Keine Migration.
+
 - **Weniger ausgehender Medienverkehr:** Geschuetzte Objektmedien validieren private Browser-Caches mit ETag und Last-Modified; unveraenderte Dateien und gedrehte Bilder liefern 304 ohne erneutes Bildrendering. Der statische App-Fallback setzt Cache-Laufzeiten. Einsatzcockpit- und Organisationslogos werden auf maximal 512 Pixel verkleinert; bestehende Organisationslogos lassen sich mit `python -m app.cli logos-verkleinern` nachziehen. Keine Migration.
 
 - **Hintergrund-Loops blockieren den Worker bei langsamer Datenbank seltener:** LIS-Synchronisation, DIBOS-Konfiguration und Dienstproben, Einsatzrouten, Dienstueberwachung und Atemschutz-Zustellungen fuehren ihre DB-Arbeit in Threads aus. HTTP, Broadcasts und SMS bleiben auf dem aufrufenden Event-Loop; bestehende Claim-, Alarmierungs- und Eskalationsregeln bleiben erhalten. Ein AST-Waechter mit Baseline und Thread-Tests sichern die Umstellung. Die verzahnte DIBOS-Anreicherung folgt separat. Keine Migration.

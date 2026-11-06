@@ -383,8 +383,10 @@ self.addEventListener('fetch', e => {
 
   // Objekt-Medien (Thumbs/Seitenbilder/Einzel-PDFs) — cache-first aus dem
   // Offline-Precache (objekt_offline_sync.js, Android-App), Netz als Fallback.
-  // Dateien sind unveraenderlich (UUID-Pfade) → cache-first ist sicher.
+  // Versionierte Sync-Abrufe nutzen direkt den HTTP-Cache; nur der Sync
+  // schreibt sie nach erfolgreichem Abruf unter dem queryfreien Pfad.
   if (url.pathname.startsWith('/objekt-medien/')) {
+    if (url.searchParams.has('v')) return;
     e.respondWith(
       caches.open(OBJEKT_CACHE).then(cache =>
         cache.match(e.request).then(cached => {
