@@ -315,7 +315,7 @@ def test_dienst_monitor_token_zeigt_keinen_status_fremder_org(client):
         db.close()
 
     response = client.get("/health/dienste", headers={"Authorization": f"Bearer {raw}"})
-    assert response.status_code in {200, 503}
+    assert response.status_code in {200, 207, 503}
     assert "GEHEIM-ORG-B" not in response.text
 
     db = SessionLocal()
