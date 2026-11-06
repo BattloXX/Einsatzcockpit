@@ -21,8 +21,8 @@ def mark_lis_ok(org_id: int) -> None:
 def mark_lis_failed(org_id: int) -> None:
     # Bewusst kein Zurücksetzen von _last_ok: ein einzelner Fehlzyklus soll den
     # Fallback nicht sofort umschalten — erst wenn der letzte Erfolg älter als die
-    # Frist in lis_delivers_for() ist. Die Funktion markiert die Stelle im LIS-Sync
-    # und ist der Ansatzpunkt für eine spätere Dienstüberwachung.
+    # Frist in lis_delivers_for() ist.
+    # Die persistente Dienstueberwachung zeichnet den Poll separat in lis_sync auf.
     return None
 
 

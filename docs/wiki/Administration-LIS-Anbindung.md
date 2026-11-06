@@ -91,3 +91,19 @@ Für die Fehlersuche bei der Erstanbindung gibt es unter `/admin/lis` einen Butt
 ---
 
 **Verwandt:** [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindung) · [Einsatz starten](Anwender-Einsatz-starten) · [Stammdaten pflegen](Administration-Stammdaten-pflegen)
+
+## Dienstueberwachung im Systemstatus
+
+Seit Migration 0353 gibt es den Dienst **LIS-Schnittstelle** (`alarm_lis`).
+Die Ueberwachung ist fuer bestehende und neue Organisationen standardmaessig
+**ausgeschaltet**. Org-Admins koennen sie unter
+**Systemstatus → Ueberwachte Dienste** bewusst einschalten.
+
+Bei aktivierter und vollstaendiger LIS-Konfiguration bewertet sie die gespeicherten
+Ergebnisse des ActiveParticipation-Polls: vor der ersten Probe unbekannt, bei
+Fehler oder einem Erfolg aelter als `max(180, 6 * Poll-Intervall)` Sekunden down,
+sonst OK. Erst nach der konfigurierten Karenz werden Ausfaelle gemeldet.
+Ausschalten beendet offene Stoerungen still und unterdrueckt alle Kanaele,
+Wiederholungen sowie Entwarnungen; Einschalten startet die Karenz neu. Die
+LIS-Synchronisierung und der DIBOS-Fallback laufen unabhaengig davon weiter.
+Details: [Dienstueberwachung](Administration-Dienstueberwachung).

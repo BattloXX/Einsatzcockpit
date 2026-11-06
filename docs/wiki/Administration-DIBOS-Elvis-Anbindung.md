@@ -437,6 +437,12 @@ Ablage: `app_storage/dibos_trace/<org_id>/<run_id>/` (`run_id` = Startzeit in UT
 
 ## Dienstüberwachung
 
+Unter **Systemstatus → Ueberwachte Dienste** kann ein Org-Admin die Ueberwachung
+von **Alarm DIBOS** ausschalten. DIBOS pollt und verarbeitet Einsaetze weiterhin.
+Die Kachel erscheint grau, Uptime-API und Admin-MCP zaehlen keinen Ausfall.
+Offene Stoerungen schliessen ohne Entwarnung; beim Einschalten beginnt die
+Karenz neu (Migration 0353).
+
 DIBOS ist Teil der [Systemstatus-Überwachung](Administration-Dienstueberwachung) („Alarm DIBOS"). Die Prüfung ist nur **relevant**, wenn die Org aktiviert, vollständig konfiguriert ist und mindestens einen der drei Schalter gesetzt hat; sonst steht „DIBOS-Poll ist nicht eingerichtet".
 
 | Zustand | Bedingung |

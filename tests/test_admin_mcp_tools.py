@@ -234,3 +234,29 @@ def test_worker_ressourcen_evidenz_und_gesamtstatus(monkeypatch):
         assert registry.collect(db, "admin_system_uebersicht")["evidence"]["teilchecks"]["admin_worker_pruefen"] == "fail"
         db.query(WorkerRuntime).delete()
         db.commit()
+
+
+def test_admin_dienste_pruefen_zaehlt_ausgeschaltet_ohne_alten_fehler(client, admin_env):
+    from app.models.master import OrgSettings
+
+    with SessionLocal() as db:
+        org = FireDept(slug=uuid4().hex, name="GEHEIME-ORG")
+        db.add(org)
+        db.flush()
+        org_id = org.id
+        db.add(OrgSettings(org_id=org_id, dienst_monitor_ausgeschaltet="alarm_lis,alarm_dibos"))
+        db.add(DienstStatus(org_id=org_id, key="alarm_lis", state="down", last_error="GEHEIMER-FEHLER"))
+        db.commit()
+    try:
+        values = tokens(client, admin_env)
+        answer = call(client, values["access_token"], "admin_dienste_pruefen")
+        assert answer["evidenz"]["dienste"]["alarm_lis"]["ausgeschaltet"] >= 1
+        assert answer["evidenz"]["dienste"]["alarm_lis"]["down"] == 0
+        assert "GEHEIM" not in json.dumps(answer)
+    finally:
+        with SessionLocal() as db:
+            for model in (DienstStatus, OrgSettings):
+                for row in db.query(model).filter_by(org_id=org_id).all():
+                    db.delete(row)
+            db.delete(db.get(FireDept, org_id))
+            db.commit()

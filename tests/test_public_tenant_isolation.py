@@ -317,6 +317,11 @@ def test_dienst_monitor_token_zeigt_keinen_status_fremder_org(client):
     response = client.get("/health/dienste", headers={"Authorization": f"Bearer {raw}"})
     assert response.status_code in {200, 503}
     assert "GEHEIM-ORG-B" not in response.text
+    for pfad in ("/health/dienst/print_gateway", "/health/dienste/print_gateway"):
+        einzel = client.get(pfad, headers={"Authorization": f"Bearer {raw}"})
+        assert einzel.status_code in {200, 207, 503}
+        assert "GEHEIM-ORG-B" not in einzel.text
+        assert einzel.json()["status"] != "down"
 
     db = SessionLocal()
     set_tenant_context(db, None)

@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
+from app.models.dienst_monitor import ORG_DIENST_KEYS, DienstStatus, ausgeschaltete_dienste
 from app.models.master import FireDept
 from app.models.user import User
 
@@ -60,6 +61,10 @@ def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
         "loop_letzter_lauf_dt": loop_letzter_lauf_dt,
         "labels": DIENST_LABELS,
         "dienst_keys": list(DIENST_LABELS.keys()),
+        "org_dienst_keys": ORG_DIENST_KEYS,
+        "ausgeschaltet": ausgeschaltete_dienste(
+            settings.dienst_monitor_ausgeschaltet if settings else "alarm_lis"
+        ),
         "runtime": snapshot(db, org_id, jetzt),
         "tokens": db.query(DienstMonitorToken)
         .filter(DienstMonitorToken.org_id == org_id)
@@ -118,6 +123,7 @@ def empfaenger(
     karenz_min: int = Form(5),
     wiederholung_min: int = Form(60),
     enabled: str = Form(""),
+    ueberwachte_dienste: list[str] = Form([]),
     target_org_id: int | None = Form(None),
 ):
     from app.core.audit import write_audit
@@ -128,6 +134,17 @@ def empfaenger(
     if row is None:
         row = OrgSettings(org_id=org_id)
         db.add(row)
+    vorher = ausgeschaltete_dienste(row.dienst_monitor_ausgeschaltet if row.id else "alarm_lis")
+    ausgeschaltet = set(ORG_DIENST_KEYS) - set(ueberwachte_dienste)
+    geaendert = vorher ^ ausgeschaltet
+    row.dienst_monitor_ausgeschaltet = ",".join(k for k in ORG_DIENST_KEYS if k in ausgeschaltet)
+    # Beide Schaltrichtungen beginnen ohne alte Ausfallmarker; Karenz startet neu.
+    for status in db.query(DienstStatus).filter(
+        DienstStatus.org_id == org_id, DienstStatus.key.in_(geaendert)
+    ).all():
+        status.down_since = status.outage_notified_at = status.last_repeat_at = None
+        status.fail_cycles = status.ok_cycles = 0
+        status.last_error = None
     row.dienst_monitor_enabled = enabled == "on"
     row.dienst_monitor_mail = mail.strip()[:255] or None
     webhook = teams_webhook.strip()
@@ -135,7 +152,10 @@ def empfaenger(
     row.dienst_monitor_sms = sms.strip()[:255] or None
     row.dienst_monitor_karenz_min = min(1440, max(1, karenz_min))
     row.dienst_monitor_wiederholung_min = min(10080, max(1, wiederholung_min))
-    write_audit(db, "admin.dienst_monitor.empfaenger_geaendert", org_id=org_id, user_id=user.id)
+    write_audit(
+        db, "admin.dienst_monitor.empfaenger_geaendert", org_id=org_id, user_id=user.id,
+        payload={"geaenderte_dienste": sorted(geaendert), "ausgeschaltet": sorted(ausgeschaltet)},
+    )
     db.commit()
     return templates.TemplateResponse(
         request, "admin/systemstatus.html", _context(request, db, user, org_id, gespeichert=True)

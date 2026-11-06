@@ -39,7 +39,7 @@ beruecksichtigt. Die Login-Seite erklaert diese Grenze, Fehler verraten keine Ko
 | Werkzeug | Ausgabe |
 | --- | --- |
 | `admin_system_uebersicht` | Version, Commit, Build, Deploy-Abstand zu main und Gesamtstatus der Teilchecks |
-| `admin_dienste_pruefen` | Aggregierte gespeicherte Dienstmonitor-Zustaende aller Organisationen |
+| `admin_dienste_pruefen` | Aggregierte gespeicherte Dienstmonitor-Zustaende aller Organisationen; je Dienst ausgeschaltete Organisationen separat als `ausgeschaltet`, ohne deren alte Ausfaelle zu zaehlen |
 | `admin_worker_pruefen` | Worker/Leader/Loops, RSS/Swap/Threads, Loop-Verzug und langsame Queries (15 min), letzter Stillstand, unsaubere Enden je Host (1 h/24 h), Host-Speicher/Swap/PSI |
 | `admin_backup_pruefen` | Backup-/Restore-Alter, Off-Site-Ergebnis, Dump-Zähler, Größen und freier Speicher; ohne Parameter, Modul `backup`, nur lesend |
 | `admin_osm_pruefen` | Lokaler OSM-Bestand, persistente Statistik und optionale Live-Proben (`live=true`) |

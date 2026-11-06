@@ -13,12 +13,23 @@ DIENST_LABELS = {
     "sms_gateway": "SMS-Gateway",
     "alarm_seriell": "Alarm seriell (W&T)",
     "alarm_dibos": "Alarm DIBOS",
+    "alarm_lis": "LIS-Schnittstelle",
     "alarm_outbox": "Alarm-Outbox",
     "worker_runtime": "Worker und Leader",
     "redis_bus": "Redis-Bus",
     "sms_jobs": "SMS-Aufträge",
     "print_jobs": "Druckaufträge",
 }
+
+
+# Nur diese organisationsbezogenen Dienste besitzen einen Ueberwachungsschalter.
+ORG_DIENST_KEYS = (
+    "print_gateway", "sms_gateway", "alarm_seriell", "alarm_dibos", "alarm_lis", "alarm_outbox",
+)
+
+
+def ausgeschaltete_dienste(wert: str | None) -> set[str]:
+    return {key.strip() for key in (wert or "").split(",")} & set(ORG_DIENST_KEYS)
 
 
 class DienstStatus(TenantScoped, Base):

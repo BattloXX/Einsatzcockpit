@@ -100,6 +100,8 @@ async def _run_all_orgs() -> None:
         try:
             await _sync_one_org(org_id, config_id)
         except Exception:
+            from app.services.dienst_monitor_service import record_probe
+            await asyncio.to_thread(record_probe, org_id, "alarm_lis", False, "LIS-Poll fehlgeschlagen.")
             logger.exception("lis_poll_loop: Org %s fehlgeschlagen", org_id)
 
 
