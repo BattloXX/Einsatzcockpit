@@ -98,3 +98,27 @@ def test_dashboard_fragment_ohne_login_401():
 
     r = client.get(f"/einsatz/{incident_id}/dashboard/inhalt")
     assert r.status_code == 401
+
+
+def test_dashboard_geschlossener_einsatz_traegt_timerzeiten_auch_im_fragment(client):
+    from datetime import datetime
+
+    from app.services.einsatz_live_service import build_incident_live_payload
+
+    _, incident_id = _setup_incident("dash_ws_closed_user")
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        incident = db.get(Incident, incident_id)
+        incident.status = "closed"
+        incident.started_at = datetime(2026, 11, 6, 8)
+        incident.closed_at = datetime(2026, 11, 6, 9, 15, 30)
+        db.commit()
+        assert build_incident_live_payload(db, incident)["closed_at"] == "2026-11-06T09:15:30Z"
+    _login(client, "dash_ws_closed_user", "Test1234!")
+    for suffix in ("", "/inhalt"):
+        response = client.get(f"/einsatz/{incident_id}/dashboard{suffix}")
+        assert response.status_code == 200, response.text[:300]
+        assert 'data-started-at="2026-11-06T08:00:00Z"' in response.text
+        assert 'data-closed-at="2026-11-06T09:15:30Z"' in response.text
+        assert "Einsatzdauer (abgeschlossen)" in response.text
+        assert "einsatzdauer-abgeschlossen" in response.text

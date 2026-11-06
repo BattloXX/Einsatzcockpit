@@ -57,8 +57,8 @@
     </div>
 
     <div class="hdr-block" style="text-align:center; min-width:11.5rem;">
-      <div class="hdr-block__label" style="text-align:center;">Einsatzdauer</div>
-      <div class="hdr-block__value--timer" id="elapsedTimer">00:00:00</div>
+      <div class="hdr-block__label" style="text-align:center;">{{ 'Einsatzdauer (abgeschlossen)' if closed_at_iso else 'Einsatzdauer' }}</div>
+      <div class="hdr-block__value--timer{{ ' einsatzdauer-abgeschlossen' if closed_at_iso else '' }}" id="elapsedTimer" data-started-at="{{ started_at_iso }}" data-closed-at="{{ closed_at_iso or '' }}">00:00:00</div>
     </div>
 
     <div class="hdr-block" style="text-align:right; min-width:12rem;">

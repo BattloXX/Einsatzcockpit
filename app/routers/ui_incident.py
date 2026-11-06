@@ -1703,6 +1703,7 @@ async def _build_dashboard_context(
             person_stats[p.status].append(p)
 
     started_at_iso = incident.started_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    closed_at_iso = incident.closed_at.strftime("%Y-%m-%dT%H:%M:%SZ") if incident.closed_at else None
     _at_board2 = (
         get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)  # type: ignore[arg-type]
         if incident.alarm_type_code else None
@@ -1861,6 +1862,7 @@ async def _build_dashboard_context(
         "msgs_done": msgs_done,
         "person_stats": person_stats,
         "started_at_iso": started_at_iso,
+        "closed_at_iso": closed_at_iso,
         "lage_hints": lage_hints,
         "lage_hints_ai": lage_hints_ai,
         "breathing_troops": breathing_troops,

@@ -123,6 +123,7 @@ def build_incident_live_payload(
         "meldung": incident.report_text or incident.reason or None,
         "objekt": _linked_objekt_summary(db, incident.id),
         "started_at": incident.started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "closed_at": incident.closed_at.strftime("%Y-%m-%dT%H:%M:%SZ") if incident.closed_at else None,
         "is_exercise": incident.is_exercise,
         "phase": phase["phase"],
         "phase_index": phase_index,

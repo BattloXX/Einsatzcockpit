@@ -226,6 +226,7 @@ def test_org_einsatz_aendert_fahrzeug_tracking_nicht(client, setup_db):
         "meldung": None,
         "objekt": None,
         "started_at": "2026-08-03T11:02:00Z",
+        "closed_at": None,
         "is_exercise": False,
         "phase": "einsatzstelle",
         "phase_index": 2,
@@ -484,6 +485,7 @@ def test_bearer_duty_state_liefert_aktive_lage_ohne_fahrzeugzuordnung(
         "name": "Live Lage",
         "is_exercise": is_exercise,
         "started_at": "2026-08-03T11:00:00Z",
+        "ended_at": None,
         "counts": {"neu": 0, "in_arbeit": 0, "erledigt": 0, "gesamt": 0},
     }
     assert data["my_lage_queue"] is None

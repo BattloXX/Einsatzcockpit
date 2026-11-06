@@ -723,12 +723,15 @@
   // Elemente werden bei jedem WS-Swap ersetzt -> pro Tick frisch abfragen
   // statt Referenz einmalig zu cachen (sonst schreibt der Timer nach dem
   // ersten Swap in einen bereits aus dem DOM entfernten Knoten).
-  const startTime = new Date('{{ started_at_iso }}');
   function pad(n) { return String(n).padStart(2, '0'); }
   function tickTimer() {
     const el = document.getElementById('elapsedTimer');
     if (!el) return;
-    const s = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+    if (el.dataset.closedAt && el.dataset.timerRendered === el.dataset.startedAt + el.dataset.closedAt) return;
+    const startTime = Date.parse(el.dataset.startedAt);
+    const endTime = el.dataset.closedAt ? Date.parse(el.dataset.closedAt) : Date.now();
+    const s = Math.max(0, Math.floor((endTime - startTime) / 1000));
+    el.dataset.timerRendered = el.dataset.startedAt + el.dataset.closedAt;
     el.textContent = `${pad(Math.floor(s/3600))}:${pad(Math.floor(s%3600/60))}:${pad(s%60)}`;
   }
   setInterval(tickTimer, 1000);
