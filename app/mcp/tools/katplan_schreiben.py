@@ -41,7 +41,8 @@ _FELDER = {
 _HINWEIS = "Nur Arbeitsstand: Ein Bearbeiter muss den Entwurf prüfen und ein Mensch muss ihn freigeben."
 
 
-def _tool(name: str, description: str, *, lesen: bool = False):
+def _tool(name: str, description: str, *, lesen: bool = False, hauptloop: bool = False):
+    # Verortungs-Handler brauchen den globalen asyncio.Lock aus geocoding.
     def decorator(handler):
         @wraps(handler)
         async def aufruf(context: MCPContext, **kwargs) -> dict[str, object]:
@@ -75,7 +76,7 @@ def _tool(name: str, description: str, *, lesen: bool = False):
                         verzeichnis.rmdir()
         return register_tool(name=name, description=description,
                              required_roles=tuple(KATPLAN_LESE_ROLLEN if lesen else KATPLAN_VERWALTER_ROLES),
-                             module_check=katplan_effective_enabled)(aufruf)
+                             module_check=katplan_effective_enabled, hauptloop=hauptloop)(aufruf)
     return decorator
 
 
@@ -284,7 +285,7 @@ _SCHREIB_HINWEIS = (
     "verwendet); mehrdeutige Treffer liefern Kandidaten zur Auswahl mit katplan_elemente_verorten. "
     "geometrie (GeoJSON) hat Vorrang. typ: info, massnahme, kontrollstelle, gefahrenbereich, "
     "ablauf, ressource, medien, zustaendigkeit, objektverweis." + _SCHREIB_HINWEIS
-))
+), hauptloop=True)
 async def katplan_element_entwurf_anlegen(
     context: MCPContext, plan_id: int, typ: str, titel: str, beschreibung: str = "",
     kapitel_id: int | None = None, kapitel_titel: str | None = None, phasen: list[str] | None = None,
@@ -353,7 +354,7 @@ async def katplan_element_entwurf_anlegen(
     "liefern Kandidaten zur Auswahl mit katplan_elemente_verorten. "
     "version aus katplan_element_lesen(fassung=arbeitsstand), Feld version, NICHT element_version_id, verwenden."
     + _SCHREIB_HINWEIS
-))
+), hauptloop=True)
 async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, element_id: str,
                                          version: int, felder: dict, verorten: bool = False,
                                          streng: bool = False, pruefen: bool = False) -> dict[str, object]:
@@ -913,7 +914,7 @@ async def katplan_anhang_aus_quellseite(
     "für bestehende geprüfte Orte ueberschreiben_geprueft=true und nur_ohne_ort=false verwenden. "
     "weitere zählt nicht bearbeitete Elemente. Nominatim-Suche wird gedrosselt und kann dauern. "
     "pruefen=true führt einen Trockenlauf mit Rollback aus. Lage vor Ort prüfen und im Editor als geprüft markieren."
-))
+), hauptloop=True)
 async def katplan_elemente_verorten(
     context: MCPContext, plan_id: int, element_ids: list[str] | None = None, nur_ohne_ort: bool = True,
     auswahl: dict[str, str] | None = None, pruefen: bool = False, ueberschreiben_geprueft: bool = False,

@@ -401,6 +401,7 @@ async def gsl_einsatzstelle_foto_upload_vorbereiten(
 @register_tool(
     name="gsl_einsatzstelle_foto_uebergeben",
     description="Übernimmt ein zuvor hochgeladenes Einsatzstellenfoto.", required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_einsatzstelle_foto_uebergeben(context: MCPContext, lage_id: int, upload_id: str) -> dict[str, object]:
     try:
@@ -451,6 +452,7 @@ async def gsl_uebergreifend_liste(
     name="gsl_einsatzstelle_anlegen",
     description="Legt eine Einsatzstelle in einer aktiven GSL-Lage an.",
     required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_einsatzstelle_anlegen(
     context: MCPContext, lage_id: int, bezeichnung: str, einsatzgrund: str = "", ort: str = "",
@@ -503,6 +505,7 @@ async def gsl_einsatzstelle_anlegen(
     name="gsl_einsatzstelle_aendern",
     description="Ändert Felder einer Einsatzstelle in einer aktiven Lage.",
     required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_einsatzstelle_aendern(
     context: MCPContext, lage_id: int, site_id: int, felder: dict[str, Any],
@@ -578,6 +581,7 @@ async def gsl_einsatzstelle_aendern(
     name="gsl_einsatzstelle_phase_setzen",
     description="Setzt eine manuelle Phase einer Einsatzstelle.",
     required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_einsatzstelle_phase_setzen(
     context: MCPContext, lage_id: int, site_id: int, phase: str,
@@ -615,6 +619,7 @@ async def gsl_einsatzstelle_phase_setzen(
         "(Lagemeldungen über gsl_lagemeldung_erfassen)."
     ),
     required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_einsatzstelle_eintrag(
     context: MCPContext, lage_id: int, site_id: int, text: str, art: str = "note",
@@ -642,6 +647,7 @@ async def gsl_einsatzstelle_eintrag(
     name="gsl_lagemeldung_erfassen",
     description="Erfasst eine strukturierte Lagemeldung und setzt deren Timer zurück.",
     required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_lagemeldung_erfassen(
     context: MCPContext, lage_id: int, site_id: int, lage: str = "", gefahren: str = "", massnahmen: str = "",
@@ -674,6 +680,7 @@ async def gsl_lagemeldung_erfassen(
     name="gsl_einheit_status_melden",
     description="Erfasst eine per Funk gemeldete Statusänderung einer Einheit.",
     required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_einheit_status_melden(
     context: MCPContext, lage_id: int, dispatch_id: int, status: str, kommentar: str | None = None,
@@ -715,7 +722,8 @@ async def gsl_einheit_status_melden(
 
 
 @register_tool(
-    name="gsl_auftrag_wiedereroeffnen", description="Öffnet einen beendeten Auftrag wieder.", required_roles=READ
+    name="gsl_auftrag_wiedereroeffnen", description="Öffnet einen beendeten Auftrag wieder.", required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_auftrag_wiedereroeffnen(context: MCPContext, lage_id: int, dispatch_id: int) -> dict[str, object]:
     try:
@@ -749,7 +757,8 @@ def _plain_html(text: str) -> str:
 
 
 @register_tool(
-    name="gsl_journal_eintrag", description="Erfasst einen Klartext-Eintrag im Lagejournal.", required_roles=READ
+    name="gsl_journal_eintrag", description="Erfasst einen Klartext-Eintrag im Lagejournal.", required_roles=READ,
+    hauptloop=True,
 )
 async def gsl_journal_eintrag(
     context: MCPContext, lage_id: int, betreff: str, kategorie: str = "sonstiges", text: str = "",
@@ -779,7 +788,7 @@ async def gsl_journal_eintrag(
 
 
 @register_tool(name="gsl_funkjournal_eintrag", description="Erfasst einen Funkjournaleintrag.", required_roles=READ,
-               module_check=_feature("funkjournal"))
+               module_check=_feature("funkjournal"), hauptloop=True)
 async def gsl_funkjournal_eintrag(
     context: MCPContext, lage_id: int, text: str, richtung: str = "in", partner: str = "", kanal: str = "",
     anfrage: bool = False, site_id: int | None = None,
@@ -801,7 +810,7 @@ async def gsl_funkjournal_eintrag(
 
 
 @register_tool(name="gsl_funkjournal_erledigt", description="Setzt den Erledigt-Status eines Funkjournaleintrags.",
-               required_roles=READ, module_check=_feature("funkjournal"))
+               required_roles=READ, module_check=_feature("funkjournal"), hauptloop=True)
 async def gsl_funkjournal_erledigt(
     context: MCPContext, lage_id: int, entry_id: int, erledigt: bool = True,
 ) -> dict[str, object]:
@@ -825,6 +834,7 @@ async def gsl_funkjournal_erledigt(
 @register_tool(
     name="gsl_meldung_bearbeiten", description="Bearbeitet eine Bürgermeldung datensparsam.",
     required_roles=READ, module_check=_feature("meldungen"),
+    hauptloop=True,
 )
 async def gsl_meldung_bearbeiten(
     context: MCPContext, lage_id: int, report_id: int, aktion: str, site_id: int | None = None,
@@ -884,6 +894,7 @@ async def gsl_meldung_bearbeiten(
 @register_tool(
     name="gsl_uebergreifend_anlegen", description="Erstellt eine übergreifende Lageinfo.",
     required_roles=READ, module_check=_feature("uebergreifend"),
+    hauptloop=True,
 )
 async def gsl_uebergreifend_anlegen(
     context: MCPContext, lage_id: int, titel: str, typ: str = "sonstiges", beschreibung: str = "", ort: str = "",
@@ -911,7 +922,7 @@ async def gsl_uebergreifend_anlegen(
 
 
 @register_tool(name="gsl_uebergreifend_aendern", description="Ändert eine übergreifende Lageinfo.", required_roles=READ,
-               module_check=_feature("uebergreifend"))
+               module_check=_feature("uebergreifend"), hauptloop=True)
 async def gsl_uebergreifend_aendern(
     context: MCPContext, lage_id: int, marker_id: int, felder: dict[str, Any] | None = None,
     status: str | None = None, eintrag: str | None = None,
