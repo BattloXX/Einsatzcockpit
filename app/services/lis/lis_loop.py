@@ -8,7 +8,7 @@ import logging
 from time import monotonic
 from typing import TYPE_CHECKING, cast
 
-from app.services.loop_utils import iteration_watch
+from app.services.loop_utils import Backoff, iteration_watch, jittered
 
 if TYPE_CHECKING:
     from app.services.lis.lis_client import LisClient
@@ -17,7 +17,29 @@ logger = logging.getLogger("einsatzleiter.lis.loop")
 
 _TICK_INTERVAL_S = 5
 _org_clients: dict[int, tuple[str, LisClient]] = {}
-_last_started_at: dict[int, float] = {}
+_next_poll_at: dict[int, float] = {}
+_last_activity_at: dict[int, float] = {}
+_startup_active_until: dict[int, float] = {}
+_backoffs: dict[int, Backoff] = {}
+
+
+def _schedule_success(
+    org_id: int, has_events: bool, interval: int, started_at: float, *, has_active_incident: bool = False,
+) -> None:
+    from app.config import settings
+
+    now = monotonic()
+    if has_events:
+        _last_activity_at[org_id] = now
+    active = has_active_incident or now < _startup_active_until.setdefault(org_id, started_at + 60) or (
+        org_id in _last_activity_at
+        and now - _last_activity_at[org_id] < settings.LIS_ACTIVE_WINDOW_S
+    )
+    interval = max(20, interval)
+    if not active:
+        interval = max(settings.LIS_POLL_IDLE_INTERVAL_S, interval)
+    _backoffs.setdefault(org_id, Backoff(settings.POLL_BACKOFF_MAX_S)).success()
+    _next_poll_at[org_id] = started_at + jittered(interval, settings.POLL_JITTER_PCT)
 
 
 def _fingerprint(value: object) -> str:
@@ -31,7 +53,6 @@ async def _close_org_client(org_id: int) -> None:
             await entry[1].aclose()
         except Exception:
             logger.exception("lis_poll_loop: Client für Org %s konnte nicht geschlossen werden", org_id)
-    _last_started_at.pop(org_id, None)
 
 
 async def _close_all_clients() -> None:
@@ -94,9 +115,13 @@ async def _run_all_orgs() -> None:
             db.close()
 
     pairs = await asyncio.to_thread(_load_pairs)
-    for stale_org_id in set(_org_clients) - {org_id for org_id, _ in pairs}:
+    for stale_org_id in (set(_org_clients) | set(_next_poll_at)) - {org_id for org_id, _ in pairs}:
         await _close_org_client(stale_org_id)
+        for state in (_next_poll_at, _last_activity_at, _startup_active_until, _backoffs):
+            state.pop(stale_org_id, None)
     for org_id, config_id in pairs:
+        if monotonic() < _next_poll_at.get(org_id, 0.0):
+            continue
         try:
             await _sync_one_org(org_id, config_id)
         except Exception:
@@ -105,23 +130,24 @@ async def _run_all_orgs() -> None:
             logger.exception("lis_poll_loop: Org %s fehlgeschlagen", org_id)
 
 
-async def _bereite_poll_vor(org_id: int, schluessel: str, interval: int, values: tuple) -> bool:
+async def _bereite_poll_vor(org_id: int, schluessel: str, values: tuple) -> bool:
     from app.core.crypto import decrypt_secret
     from app.services.loop_thread_io import registriere_loop_client
 
     now = monotonic()
-    if now - _last_started_at.get(org_id, float("-inf")) < interval:
+    if now < _next_poll_at.get(org_id, 0.0):
         return False
     values = values[:3] + (decrypt_secret(values[3]),) + values[4:]
     client = await _get_client(org_id, values)
-    _last_started_at[org_id] = now
+    _startup_active_until.setdefault(org_id, now + 60)
     registriere_loop_client(schluessel, client)
     return True
 
 
-def _synchronisiere_org_sync(org_id: int, config_id: int, schluessel: str) -> None:
+def _synchronisiere_org_sync(org_id: int, config_id: int, schluessel: str) -> tuple[bool, bool, int] | None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
+    from app.models.incident import Incident
     from app.models.lis import OrgLisConfig
     from app.models.master import FireDept
     from app.services.lis.lis_sync import sync_organization
@@ -132,28 +158,52 @@ def _synchronisiere_org_sync(org_id: int, config_id: int, schluessel: str) -> No
     with SessionLocal() as db:
         set_tenant_context(db, None)
 
-        async def synchronisieren() -> None:
+        async def synchronisieren() -> tuple[bool, bool, int] | None:
             org = db.get(FireDept, org_id)
             config = db.get(OrgLisConfig, config_id)
             if not org or not config or not config.enabled or not config.is_fully_configured:
                 await auf_event_loop(_close_org_client, org_id)
-                return
+                return None
             assert config.base_url and config.username and config.password_enc and config.organization_id
             values = (
                 config.base_url, config.site, config.username, config.password_enc, config.password_enc,
                 config.project_id, config.password_is_hash, config.organization_id,
             )
             if not await auf_event_loop(
-                _bereite_poll_vor, org_id, schluessel, max(10, config.poll_interval_seconds), values,
+                _bereite_poll_vor, org_id, schluessel, values,
             ):
-                return
-            await sync_organization(db, org, config, client=cast("LisClient", LoopClientBruecke(schluessel)))
+                return None
+            delivered = await sync_organization(
+                db, org, config, client=cast("LisClient", LoopClientBruecke(schluessel)),
+            )
+            if delivered is None:
+                from app.services.lis.lis_client import LisClientError
+                raise LisClientError("LIS-Poll fehlgeschlagen.")
+            has_active_incident = not delivered and db.query(Incident.id).filter(
+                Incident.primary_org_id == org_id,
+                Incident.status == "active",
+                Incident.lis_operation_id.isnot(None),
+            ).first() is not None
+            return delivered, has_active_incident, config.poll_interval_seconds
 
-        thread_ablauf(synchronisieren())
+        return thread_ablauf(synchronisieren())
 
 
 async def _sync_one_org(org_id: int, config_id: int) -> None:
+    from app.config import settings
     from app.services.loop_thread_io import im_db_thread, loop_client_schluessel
 
-    with loop_client_schluessel() as schluessel:
-        await im_db_thread(_synchronisiere_org_sync, org_id, config_id, schluessel)
+    if monotonic() < _next_poll_at.get(org_id, 0.0):
+        return
+    try:
+        started_at = monotonic()
+        with loop_client_schluessel() as schluessel:
+            result = await im_db_thread(_synchronisiere_org_sync, org_id, config_id, schluessel)
+        if result is not None:
+            _schedule_success(org_id, result[0], result[2], started_at, has_active_incident=result[1])
+    except Exception:
+        backoff = _backoffs.setdefault(org_id, Backoff(settings.POLL_BACKOFF_MAX_S))
+        backoff.failure()
+        _next_poll_at[org_id] = monotonic() + jittered(backoff.delay(), settings.POLL_JITTER_PCT)
+        await _close_org_client(org_id)
+        raise

@@ -539,6 +539,12 @@ class Settings(BaseSettings):
     LIS_ENABLED: bool = True  # globaler Kill-Switch
     LIS_POLL_INTERVAL_S: int = 30  # Kompatibilitätswert; LIS nutzt Intervall je Organisation
 
+    LIS_POLL_IDLE_INTERVAL_S: int = 60
+    LIS_ACTIVE_WINDOW_S: int = 1800
+    LIS_USER_AGENT: str = Field(
+        default_factory=lambda data: f"Einsatzcockpit/{data.get('APP_VERSION') or '1.0'} (+https://einsatzcockpit.com)"
+    )
+
     # DIBOS EventHub / Elvis-Anbindung (Landeswarnzentrale Vorarlberg) - reines
     # Tracing/Diagnose-Feature, siehe app/services/dibos/
     DIBOS_TRACE_ENABLED: bool = True  # globaler Kill-Switch für den Auto-Erkennungs-Loop

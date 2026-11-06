@@ -258,7 +258,9 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         elif lis_probe.last_probe_ok is False:
             lis_state, lis_detail = "down", lis_probe.last_probe_error or "LIS-Poll fehlgeschlagen."
         elif jetzt - (_naive_utc(lis_probe.last_probe_at) or jetzt) > timedelta(
-            seconds=max(180, 6 * lis_cfg.poll_interval_seconds)
+            seconds=max(180, 6 * lis_cfg.poll_interval_seconds,
+                        3 * max(settings.LIS_POLL_IDLE_INTERVAL_S, lis_cfg.poll_interval_seconds, 20)
+                        * (1 + settings.POLL_JITTER_PCT))
         ):
             lis_state, lis_detail = "down", "Kein LIS-Poll innerhalb des erwarteten Intervalls."
         else:

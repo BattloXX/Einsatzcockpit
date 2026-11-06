@@ -30,7 +30,7 @@ Unter **Admin → LIS / Leitstellenanbindung** (`/admin/lis`) für die eigene Or
 | Organisation-ID (LIS-GUID) | Eindeutige Kennung der eigenen Feuerwehr im LIS |
 | Site | Standardwert `LIS`, nur ändern wenn von der Leitstelle vorgegeben |
 | Benutzername / Passwort | Zugangsdaten der SOAP-Schnittstelle; Passwort wird Fernet-verschlüsselt gespeichert |
-| Poll-Intervall (Sek.) | Intervall des regulären Abgleichs für diese Organisation (mindestens 10 Sekunden); gilt auch für das Diagnose-Aufzeichnungstool |
+| Aktiv-Intervall (Sek.) | Intervall bei aktiven Einsätzen (Standard 30, mindestens 20 Sekunden); im Leerlauf wird automatisch seltener abgefragt. Das Org-Intervall gilt auch für das Diagnose-Aufzeichnungstool. |
 
 Mit **Verbindung testen** prüft Einsatzcockpit Login + Abfrage der aktiven Einsätze, ohne etwas zu speichern — die Anzahl gefundener aktiver Einsätze wird zurückgemeldet.
 
@@ -42,8 +42,15 @@ System-Admins sehen zusätzlich eine Org-Auswahl, um die Anbindung für jede Org
 
 ```dotenv
 LIS_ENABLED=true          # Globaler Kill-Switch für den Hintergrund-Poll-Loop
-LIS_POLL_INTERVAL_S=30    # Kompatibilitätswert; die effektiven Intervalle kommen je Org aus Schritt 1
+LIS_POLL_INTERVAL_S=30    # Kompatibilitätswert; Aktiv-Intervall je Org aus Schritt 1
+LIS_POLL_IDLE_INTERVAL_S=60  # Leerlauf: mindestens dieses oder das Org-Intervall
+LIS_ACTIVE_WINDOW_S=1800    # 30 Minuten Aktiv-Fenster nach gelieferten Einsätzen
+POLL_JITTER_PCT=0.2         # Zufällige Abweichung ±20 % (auch DIBOS)
+POLL_BACKOFF_MAX_S=300      # Maximale Fehlerpause vor Jitter (auch DIBOS)
+# LIS_USER_AGENT=Einsatzcockpit/<Version> (+https://einsatzcockpit.com)
 ```
+
+Nach Neustart bleibt jede Org zunächst 60 Sekunden aktiv. Gelieferte Einsätze verlängern das Aktiv-Fenster; auch ein bestehender aktiver Einsatz mit LIS-Verknüpfung hält den Aktiv-Takt. Alle Poll-Intervalle erhalten Jitter. Fehler einschließlich Login führen zu Pausen von 10, 30, 60, 120 bis maximal 300 Sekunden (jeweils mit Jitter); erst danach wird der Client neu aufgebaut. Erfolg setzt die Fehlerpause zurück.
 
 Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **Aktiviert** in Schritt 1 ein-/ausgeschlossen. Ein Fehler bei einer Org (z.B. falsches Passwort) blockiert nie den Zyklus für andere Organisationen.
 
@@ -64,7 +71,7 @@ Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **
 
 ## DIBOS als Fallback
 
-Läuft parallel die [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindung) mit *Einsätze anreichern*, übernimmt DIBOS **Fahrzeugstatus, Fahrzeugpositionen und (optional) fremde Einheiten** für jeden Einsatz, für den LIS keine Daten liefert: LIS nicht eingerichtet, letzter erfolgreicher LIS-Abruf älter als `max(3 × Poll-Intervall, 120 s)`, oder der Einsatz ist (noch) nicht mit einer LIS-Operation verknüpft. Solange LIS liefert, bleibt LIS die einzige Quelle für diese Daten — auch für Abschluss und Wiedereröffnung. Details: [Fahrzeuge im LIS-Ausfall](Administration-DIBOS-Elvis-Anbindung#fahrzeuge-im-lis-ausfall-fallback).
+Läuft parallel die [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindung) mit *Einsätze anreichern*, übernimmt DIBOS **Fahrzeugstatus, Fahrzeugpositionen und (optional) fremde Einheiten** für jeden Einsatz, für den LIS keine Daten liefert: LIS nicht eingerichtet, letzter erfolgreicher LIS-Abruf älter als `max(3 × max(LIS_POLL_IDLE_INTERVAL_S, Aktiv-Intervall, 20 s) × (1 + POLL_JITTER_PCT), 120 s)`, oder der Einsatz ist (noch) nicht mit einer LIS-Operation verknüpft. Solange LIS liefert, bleibt LIS die einzige Quelle für diese Daten — auch für Abschluss und Wiedereröffnung. Details: [Fahrzeuge im LIS-Ausfall](Administration-DIBOS-Elvis-Anbindung#fahrzeuge-im-lis-ausfall-fallback).
 
 ---
 

@@ -381,7 +381,10 @@ class LisClient:
         }
         try:
             if self._http_client is None:
-                self._http_client = httpx.AsyncClient(timeout=self.timeout)
+                from app.config import settings
+                self._http_client = httpx.AsyncClient(
+                    timeout=self.timeout, headers={"User-Agent": settings.LIS_USER_AGENT},
+                )
             resp = await self._http_client.post(url, content=envelope.encode("utf-8"), headers=headers)
         except httpx.HTTPError as exc:
             raise LisClientError(f"Transportfehler bei {url}: {exc}") from exc
@@ -591,7 +594,10 @@ class LisClient:
         url = f"{self.base_url}/CoreService.svc/streamExtension"
         try:
             if self._http_client is None:
-                self._http_client = httpx.AsyncClient(timeout=self.timeout)
+                from app.config import settings
+                self._http_client = httpx.AsyncClient(
+                    timeout=self.timeout, headers={"User-Agent": settings.LIS_USER_AGENT},
+                )
             resp = await self._http_client.post(url, content=envelope.encode("utf-8"), headers=headers)
         except httpx.HTTPError as exc:
             raise LisClientError(f"Transportfehler bei Dokument-Download: {exc}") from exc

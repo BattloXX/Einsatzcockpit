@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from app.config import settings
 from app.models.lis import OrgLisConfig
 
 _started_at = datetime.now(UTC)
@@ -29,7 +30,8 @@ def mark_lis_failed(org_id: int) -> None:
 def lis_delivers_for(db, org_id: int, incident) -> bool:
     """True, wenn LIS für diesen Einsatz autoritativ liefert: Org hat LIS aktiv und
     vollständig konfiguriert, der letzte erfolgreiche ActiveParticipation-Abruf ist
-    höchstens max(3 × Poll-Intervall, 120 s) her (bzw. Schonfrist nach Neustart),
+    höchstens drei gejitterte Aktiv-/Leerlauf-Intervalle her (mindestens 120 s),
+    bzw. es gilt die Schonfrist nach Neustart,
     und LIS hat den Einsatz verknüpft (lis_operation_id). Sonst übernimmt DIBOS
     Fahrzeugstatus/-positionen als Fallback (siehe dibos_enrich.py)."""
     config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == org_id).first()
@@ -39,5 +41,6 @@ def lis_delivers_for(db, org_id: int, incident) -> bool:
     last_ok = _last_ok.get(org_id)
     if last_ok is None:
         return now - _started_at <= timedelta(seconds=120)
-    max_age = max(3 * config.poll_interval_seconds, 120)
+    max_age = max(3 * max(settings.LIS_POLL_IDLE_INTERVAL_S, config.poll_interval_seconds, 20)
+                  * (1 + settings.POLL_JITTER_PCT), 120)
     return now - last_ok <= timedelta(seconds=max_age)

@@ -39,7 +39,7 @@ def test_lis_health_requires_config_and_link():
         db.flush()
         lis_health.mark_lis_ok(1)
         assert lis_health.lis_delivers_for(db, 1, incident) is True
-        lis_health._last_ok[1] = datetime.now(UTC) - timedelta(seconds=121)
+        lis_health._last_ok[1] = datetime.now(UTC) - timedelta(seconds=217)
         assert lis_health.lis_delivers_for(db, 1, incident) is False
         incident.lis_operation_id = None
         assert lis_health.lis_delivers_for(db, 1, incident) is False

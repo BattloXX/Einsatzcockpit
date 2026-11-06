@@ -140,10 +140,11 @@
                  class="form-input">
         </div>
         <div class="form-group sys-m-0">
-          <label for="poll_interval_seconds">Poll-Intervall (Sek.)</label>
-          <input type="number" id="poll_interval_seconds" name="poll_interval_seconds" min="10" max="3600"
+          <label for="poll_interval_seconds">Aktiv-Intervall (Sek.)</label>
+          <input type="number" id="poll_interval_seconds" name="poll_interval_seconds" min="20" max="3600"
                  value="{{ config.poll_interval_seconds if config else 30 }}"
                  class="form-input">
+          <p class="form-hint">Im Leerlauf wird automatisch seltener abgefragt.</p>
         </div>
       </div>
 

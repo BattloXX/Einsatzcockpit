@@ -128,7 +128,7 @@ def lis_settings_save(
     cfg.site = site.strip() or "LIS"
     cfg.organization_id = organization_id.strip() or None
     cfg.project_id = project_id.strip() or None
-    cfg.poll_interval_seconds = max(10, poll_interval_seconds or 30)
+    cfg.poll_interval_seconds = max(20, poll_interval_seconds or 30)
     cfg.username = username.strip() or None
     cfg.password_is_hash = password_is_hash == "1"
     cfg.updated_at = datetime.now(UTC)

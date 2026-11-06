@@ -8,7 +8,7 @@ from tests.conftest import TestingSession
 
 
 class _LoopClient:
-    created = []
+    created: list[_LoopClient] = []
 
     def __init__(self, *args, **kwargs):
         self.args = args
@@ -33,7 +33,7 @@ def test_get_client_reuses_matching_fingerprint_and_closes_replaced_client(monke
     assert first.closed is True
 
 
-def test_sync_one_org_honors_ten_second_interval(monkeypatch, setup_db):
+def test_sync_one_org_honors_twenty_second_interval(monkeypatch, setup_db):
     db = TestingSession()
     config = None
     try:
@@ -49,17 +49,21 @@ def test_sync_one_org_honors_ten_second_interval(monkeypatch, setup_db):
 
         async def fake_sync(*args, **kwargs):
             calls.append(kwargs["client"])
+            return False
 
         async def fake_get_client(*args):
             return object()
 
-        times = iter([100.0, 109.9, 110.0])
+        now = [100.0]
+        monkeypatch.setattr(lis_loop, "jittered", lambda seconds, pct: seconds)
         monkeypatch.setattr("app.core.crypto.decrypt_secret", lambda value: "secret")
         monkeypatch.setattr("app.services.lis.lis_sync.sync_organization", fake_sync)
         monkeypatch.setattr(lis_loop, "_get_client", fake_get_client)
-        monkeypatch.setattr(lis_loop, "monotonic", lambda: next(times))
+        monkeypatch.setattr(lis_loop, "monotonic", lambda: now[0])
         asyncio.run(lis_loop._sync_one_org(1, config_id))
+        now[0] = 119.9
         asyncio.run(lis_loop._sync_one_org(1, config_id))
+        now[0] = 120.0
         asyncio.run(lis_loop._sync_one_org(1, config_id))
         assert len(calls) == 2
     finally:
