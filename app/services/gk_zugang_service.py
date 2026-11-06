@@ -996,6 +996,35 @@ async def sende_zugangs_sms(
 
 async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
     """Versendet einen bereits committeten Auto-Auftrag ohne Wiederholung."""
+    try:
+        daten = await im_db_thread(_auto_sms_laden_sync, auftrag)
+        if daten is None:
+            return
+        phone, text = daten["phone"], daten["text"]
+        now, result = _now(), None
+        try:
+            result = await send_sms(
+                auftrag.org_id, phone, text, timeout=15, job_id=f"gk-versand:{auftrag.versand_id}")
+            success = bool(getattr(result, "success", result is True))
+            status, error = ("gesendet", None) if success else ("fehlgeschlagen", _kurzer_fehler(None))
+            if not success and getattr(result, "status", None) in (
+                "queued", "claimed", "dispatched", "acknowledged", "uncertain"
+            ):
+                status, error = "unklar", "Versandbestaetigung ausstehend oder Ergebnis unbekannt; nicht erneut senden"
+        except TimeoutError:
+            success, status, error = False, "unklar", "Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen"
+        except Exception:
+            success, status, error = False, "fehlgeschlagen", _kurzer_fehler(Exception())
+        result_daten = {key: getattr(result, key, None) for key in ("provider", "job_id", "status")}
+        await im_db_thread(_auto_sms_ergebnis_sync, auftrag, daten, now, success, status, error, result_daten)
+    except Exception:
+        # Providerfehler koennen Empfaenger- oder Nachrichtendaten enthalten.
+        await im_db_thread(_auto_sms_fehler_sync, auftrag)
+    finally:
+        await broadcast_lage(auftrag.lage_id, {"type": "ressource:changed", "einheit_id": auftrag.einheit_id})
+
+
+def _auto_sms_laden_sync(auftrag: AutoSmsAuftrag) -> dict | None:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -1004,7 +1033,7 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
             LageEinheitZugangVersand.org_id == auftrag.org_id,
         ).first()
         if not row or row.status != "geplant":
-            return
+            return None
         lage = db.query(MajorIncident).filter(
             MajorIncident.id == auftrag.lage_id, MajorIncident.org_id == auftrag.org_id
         ).first()
@@ -1032,53 +1061,56 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
                 "verworfen", "Gruppenkommandant oder Nummer inzwischen geaendert", _now()
             )
             db.commit()
-            return
+            return None
         assert lage is not None and einheit is not None and leader is not None and zugang is not None
         phone = leader.phone_e164
         assert phone is not None
         if not sms_available(auftrag.org_id, db):
             row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Kein SMS-Anbieter verbunden", _now()
             db.commit()
-            return
+            return None
         if not darf_extern(
             "gk_sms", is_exercise=lage.is_exercise, org_id=auftrag.org_id, db=db,
             planspiel_run_id=lage.planspiel_run_id,
         ):
             row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Übung: GK-SMS unterdrückt", _now()
             db.commit()
-            return
+            return None
         if auftrag.ereignis is not None:
             dispatch_id = str(row.auto_schluessel or "").split(":")[1]
             dispatch = db.get(EinheitSiteDispatch, int(dispatch_id))
             if not dispatch:
                 row.status, row.fehler, row.abgeschlossen_at = "verworfen", "Auftrag nicht mehr vorhanden", _now()
                 db.commit()
-                return
+                return None
             text = auftrag.text or auftrag_nachricht_rendern(
                 cfg, lage, einheit, dispatch, auftrag.ereignis, auftrag.link
             )
         else:
             text = nachricht_rendern(cfg, lage, einheit, leader, auftrag.link)
         chars, _encoding, segments = sms_laenge(text)
-        now, result = _now(), None
-        try:
-            result = await send_sms(auftrag.org_id, phone, text, timeout=15, job_id=f"gk-versand:{row.id}")
-            success = bool(getattr(result, "success", result is True))
-            status, error = ("gesendet", None) if success else ("fehlgeschlagen", _kurzer_fehler(None))
-            if not success and getattr(result, "status", None) in (
-                "queued", "claimed", "dispatched", "acknowledged", "uncertain"
-            ):
-                status, error = "unklar", "Versandbestaetigung ausstehend oder Ergebnis unbekannt; nicht erneut senden"
-        except TimeoutError:
-            success, status, error = False, "unklar", "Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen"
-        except Exception:
-            success, status, error = False, "fehlgeschlagen", _kurzer_fehler(Exception())
+        return {"phone": phone, "text": text, "chars": chars, "segments": segments, "generation": zugang.generation}
+    finally:
+        db.close()
+
+
+def _auto_sms_ergebnis_sync(
+    auftrag: AutoSmsAuftrag, daten: dict, now: datetime, success: bool, status: str,
+    error: str | None, result: dict,
+) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(LageEinheitZugangVersand).filter(
+            LageEinheitZugangVersand.id == auftrag.versand_id, LageEinheitZugangVersand.org_id == auftrag.org_id,
+        ).one()
+        phone, text, chars, segments = daten["phone"], daten["text"], daten["chars"], daten["segments"]
         log = SmsLog(org_id=auftrag.org_id, source="gk_auftrag" if auftrag.ereignis else "gk_zugang",
                      text=schwaerze_link(text), recipient_count=1,
-                     success_count=1 if success else 0, provider=getattr(result, "provider", None), completed_at=now)
+                     success_count=1 if success else 0, provider=result["provider"], completed_at=now)
         log.recipients.append(SmsLogRecipient(phone_number=phone, name="Gruppenkommandant", success=success,
-            sent_at=now, provider=getattr(result, "provider", None), dispatch_job_id=getattr(result, "job_id", None),
-            dispatch_status=getattr(result, "status", None)))
+            sent_at=now, provider=result["provider"], dispatch_job_id=result["job_id"],
+            dispatch_status=result["status"]))
         db.add(log)
         row.status, row.fehler, row.ziel_maske, row.zeichen, row.segmente, row.abgeschlossen_at = (
             status, error, _mask_phone(phone), chars, segments, now)
@@ -1086,25 +1118,27 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
         row.sms_log_id = log.id
         write_audit(db, "gsl.auftrag.sms_auto" if auftrag.ereignis else "gsl.zugang.sms_auto",
                     org_id=auftrag.org_id, user_id=None, entity_type="lage_einheit",
-                    entity_id=einheit.id, payload={"lage_id": lage.id, "einheit_id": einheit.id,
-                                                     "generation": zugang.generation, "status": status})
+                    entity_id=auftrag.einheit_id, payload={"lage_id": auftrag.lage_id, "einheit_id": auftrag.einheit_id,
+                                                     "generation": daten["generation"], "status": status})
         db.commit()
-    except Exception:
-        # Do not expose provider errors (they can contain recipient or message data).
-        try:
-            row = db.query(LageEinheitZugangVersand).filter(
-                LageEinheitZugangVersand.id == auftrag.versand_id, LageEinheitZugangVersand.org_id == auftrag.org_id
-            ).first()
-            if row and row.status == "geplant":
-                row.status, row.fehler, row.abgeschlossen_at = "fehlgeschlagen", "SMS-Versand fehlgeschlagen", _now()
-                db.commit()
-        except Exception:
-            db.rollback()
     finally:
-        try:
-            await broadcast_lage(auftrag.lage_id, {"type": "ressource:changed", "einheit_id": auftrag.einheit_id})
-        finally:
-            db.close()
+        db.close()
+
+
+def _auto_sms_fehler_sync(auftrag: AutoSmsAuftrag) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(LageEinheitZugangVersand).filter(
+            LageEinheitZugangVersand.id == auftrag.versand_id, LageEinheitZugangVersand.org_id == auftrag.org_id,
+        ).first()
+        if row and row.status == "geplant":
+            row.status, row.fehler, row.abgeschlossen_at = "fehlgeschlagen", "SMS-Versand fehlgeschlagen", _now()
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _gk_versand_aufraeum_loop_sync() -> None:

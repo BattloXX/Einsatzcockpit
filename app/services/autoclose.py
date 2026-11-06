@@ -22,6 +22,7 @@ from app.models.incident import Incident
 from app.models.master import OrgSettings, SystemSettings
 from app.services.broadcast import manager
 from app.services.incident_service import close_incident
+from app.services.loop_thread_io import im_db_thread, thread_ablauf
 
 logger = logging.getLogger("einsatzleiter.autoclose")
 
@@ -154,24 +155,32 @@ async def _broadcast_events(
         await _send_warning(incident_id, grace_minutes)
     for incident_id, org_id in closed:
         await manager.broadcast(incident_id, {"type": "incident_closed"})
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            incident = db.get(Incident, incident_id)
-            if incident is not None:
-                from app.services.incident_live_notify import notify_incident_live
-                await notify_incident_live(
-                    db, incident, org_id=org_id, reason="closed", background_tasks=None,
+        await im_db_thread(_nach_abschluss_sync, incident_id, org_id)
+
+
+def _nach_abschluss_sync(incident_id: int, org_id: int | None) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    thread_ablauf(_nach_abschluss_ablauf(db, incident_id, org_id))
+
+
+async def _nach_abschluss_ablauf(db, incident_id: int, org_id: int | None) -> None:
+    try:
+        incident = db.get(Incident, incident_id)
+        if incident is not None:
+            from app.services.incident_live_notify import notify_incident_live
+            await notify_incident_live(
+                db, incident, org_id=org_id, reason="closed", background_tasks=None,
+            )
+            try:
+                from app.services.wordpress_report_service import post_incident_report
+                await post_incident_report(db, incident)
+            except Exception:
+                logger.exception(
+                    "autoclose: WordPress-Bericht fehlgeschlagen (Einsatz %s)", incident.id
                 )
-                try:
-                    from app.services.wordpress_report_service import post_incident_report
-                    await post_incident_report(db, incident)
-                except Exception:
-                    logger.exception(
-                        "autoclose: WordPress-Bericht fehlgeschlagen (Einsatz %s)", incident.id
-                    )
-        finally:
-            db.close()
+    finally:
+        db.close()
 
 
 async def autoclose_loop() -> None:

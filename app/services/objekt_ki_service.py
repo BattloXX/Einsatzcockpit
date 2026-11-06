@@ -22,6 +22,7 @@ from app.models.objekt import (
     ObjektSeiteKiVorschlag,
     ObjektStammdatenVorschlag,
 )
+from app.services.loop_thread_io import im_db_thread
 
 logger = logging.getLogger("einsatzleiter.objekt_ki")
 
@@ -380,22 +381,38 @@ async def analysiere_objektbeschreibung_fuer_seite(
 
 
 async def analysiere_unklassifizierte_seiten(objekt_id: int, *, limit: int = 20) -> int:
-    """Background-Task: erzeugt Vorschlaege fuer unklassifizierte Seiten eines Objekts
-    UND holt die Stammdaten-Extraktion fuer bereits als "objektinformation"
-    klassifizierte Seiten nach, die noch nie einen Stammdaten-Vorschlag hatten
-    (z. B. Seiten, die schon vor Einfuehrung dieser Erweiterung klassifiziert
-    wurden - ohne diesen Nachhol-Schritt wuerde der "KI-Vorschläge"-Button fuer
-    sie fuer immer nur die alte Klassifikation wiederholen).
+    """Analysiert Klassifikation und nachzuholende Stammdaten ohne Session am API-Aufruf."""
+    erzeugt = 0
+    ergebnisse = []
+    try:
+        seiten = await im_db_thread(_objekt_analyse_laden_sync, objekt_id, limit)
+        for seite_id, nachholen in seiten:
+            daten = await im_db_thread(_objekt_seite_laden_sync, seite_id, nachholen)
+            if daten is None:
+                continue
+            klassifikation = stammdaten = None
+            if not daten["nachholen"]:
+                klassifikation = await _klassifikation_aus_nutzdaten(daten)
+            if daten["nachholen"] or (klassifikation and klassifikation.get("dokumentart") == "objektinformation"):
+                stammdaten = await _stammdaten_aus_nutzdaten(daten)
+            if klassifikation is not None or stammdaten is not None:
+                ids = {key: daten[key] for key in ("seite_id", "org_id", "objekt_id")}
+                ergebnisse.append((ids, klassifikation, stammdaten))
+                erzeugt += 1
+        if erzeugt:
+            await im_db_thread(_objekt_analyse_speichern_sync, ergebnisse)
+        return erzeugt
+    except Exception:
+        logger.exception("KI-Analyse fuer Objekt %d fehlgeschlagen", objekt_id)
+        return erzeugt
 
-    Gibt die Anzahl erzeugter Vorschlaege (beider Art) zurueck. Eigene Session,
-    Opt-in-Gate.
-    """
+
+def _objekt_analyse_laden_sync(objekt_id: int, limit: int) -> list[tuple[int, bool]]:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
 
     db = SessionLocal()
     set_tenant_context(db, None)
-    erzeugt = 0
     try:
         seiten = (
             db.query(ObjektDokumentSeite)
@@ -422,10 +439,10 @@ async def analysiere_unklassifizierte_seiten(objekt_id: int, *, limit: int = 20)
             .all()
         )
         if not seiten and not nachzuholen:
-            return 0
+            return []
         org_id = (seiten[0] if seiten else nachzuholen[0]).org_id
         if not ki_klassifikation_enabled(org_id, db):
-            return 0
+            return []
         # Seiten mit bereits offenem Klassifikations-Vorschlag ueberspringen
         offene = {
             v.seite_id
@@ -436,25 +453,114 @@ async def analysiere_unklassifizierte_seiten(objekt_id: int, *, limit: int = 20)
             )
             .all()
         }
-        for seite in seiten:
-            if seite.id in offene:
-                continue
-            vorschlag = await analysiere_seite(seite, db)
-            if vorschlag is not None:
-                erzeugt += 1
-        for seite in nachzuholen:
-            stammdaten_vorschlag = await analysiere_objektbeschreibung_fuer_seite(seite, db)
-            if stammdaten_vorschlag is not None:
-                erzeugt += 1
-        if erzeugt:
-            db.commit()
-        return erzeugt
-    except Exception:
-        logger.exception("KI-Analyse fuer Objekt %d fehlgeschlagen", objekt_id)
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        return erzeugt
+        return ([(seite.id, False) for seite in seiten if seite.id not in offene]
+                + [(seite.id, True) for seite in nachzuholen])
+    finally:
+        db.close()
+
+
+def _objekt_seite_laden_sync(seite_id: int, nachholen: bool) -> dict | None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.services.objekt_service import lade_auswahl
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        seite = db.get(ObjektDokumentSeite, seite_id)
+        if seite is None:
+            return None
+        bild = _lade_bild_fuer_ki(seite)
+        if bild is None:
+            return None
+        objekt = db.get(Objekt, seite.objekt_id)
+        return {
+            "seite_id": seite.id, "org_id": seite.org_id, "objekt_id": seite.objekt_id,
+            "bild": bild, "text": (seite.volltext or "").strip(), "nachholen": nachholen,
+            "dokumentarten": list(lade_auswahl(db, seite.org_id, "dokumentart")) if not nachholen else [],
+            "bereits": _bereits_vorhanden(objekt) if objekt is not None else None,
+        }
+    finally:
+        db.close()
+
+
+async def _klassifikation_aus_nutzdaten(daten: dict) -> dict | None:
+    from app.services.ai_service import AIServiceError, complete_vision
+
+    prompt = "Klassifiziere diese Dokumentseite."
+    if daten["text"]:
+        prompt += ("\n\nExtrahierter Text dieser Seite (PDF-Textlayer/OCR, kann Fehler enthalten):\n"
+                   + daten["text"][:4000])
+    try:
+        antwort = await complete_vision(
+            _system_prompt(daten["dokumentarten"]), prompt, [daten["bild"]],
+            feature="objekt_dokumentklassifizierung", org_id=daten["org_id"],
+        )
+    except AIServiceError as exc:
+        logger.warning("KI-Klassifizierung fehlgeschlagen (Seite %d): %s", daten["seite_id"], exc)
+        return None
+    geparst = _parse_antwort(antwort, set(daten["dokumentarten"]))
+    if geparst is None:
+        logger.warning("KI-Antwort unparsebar (Seite %d): %.200s", daten["seite_id"], antwort)
+    return geparst
+
+
+async def _stammdaten_aus_nutzdaten(daten: dict) -> dict | None:
+    from app.services.ai_service import AIServiceError, complete_vision
+    from app.services.objekt_service import STANDARD_MERKMALE
+
+    if daten["bereits"] is None:
+        return None
+    prompt = "Extrahiere die Stammdaten dieser Objektbeschreibungs-Seite."
+    if daten["text"]:
+        prompt += ("\n\nExtrahierter Text dieser Seite (PDF-Textlayer/OCR, kann Fehler enthalten):\n"
+                   + daten["text"][:4000])
+    try:
+        antwort = await complete_vision(
+            _system_prompt_stammdaten([code for code, _name, _icon in STANDARD_MERKMALE]),
+            prompt, [daten["bild"]], feature="objekt_stammdaten_extraktion", org_id=daten["org_id"],
+        )
+    except AIServiceError as exc:
+        logger.warning("KI-Stammdaten-Extraktion fehlgeschlagen (Seite %d): %s", daten["seite_id"], exc)
+        return None
+    geparst = _parse_stammdaten_antwort(antwort)
+    if geparst is None:
+        logger.warning("KI-Stammdaten-Antwort unparsebar (Seite %d): %.200s", daten["seite_id"], antwort)
+        return None
+    geparst = _ohne_bereits_vorhandenes(geparst, daten["bereits"])
+    return geparst if any(v for k, v in geparst.items() if k != "begruendung") else None
+
+
+def _objekt_analyse_speichern_sync(ergebnisse: list) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        for daten, klassifikation, stammdaten in ergebnisse:
+            if klassifikation is not None:
+                alte = db.query(ObjektSeiteKiVorschlag).filter(
+                    ObjektSeiteKiVorschlag.seite_id == daten["seite_id"],
+                    ObjektSeiteKiVorschlag.status == KI_VORSCHLAG_OFFEN,
+                ).all()
+                for alt in alte:
+                    db.delete(alt)
+                db.add(ObjektSeiteKiVorschlag(
+                    org_id=daten["org_id"], seite_id=daten["seite_id"], status=KI_VORSCHLAG_OFFEN,
+                    **klassifikation,
+                ))
+            if stammdaten is not None:
+                alte_stammdaten = db.query(ObjektStammdatenVorschlag).filter(
+                    ObjektStammdatenVorschlag.seite_id == daten["seite_id"],
+                    ObjektStammdatenVorschlag.status == KI_VORSCHLAG_OFFEN,
+                ).all()
+                for alt_stammdaten in alte_stammdaten:
+                    db.delete(alt_stammdaten)
+                db.add(ObjektStammdatenVorschlag(
+                    org_id=daten["org_id"], objekt_id=daten["objekt_id"],
+                    seite_id=daten["seite_id"], status=KI_VORSCHLAG_OFFEN, **stammdaten,
+                ))
+        db.commit()
     finally:
         db.close()

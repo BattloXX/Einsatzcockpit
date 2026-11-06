@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.fahrtenbuch import Fahrt, FahrtBenachrichtigung
 from app.models.master import OrgSettings, VehicleMaster
+from app.services.loop_thread_io import auf_event_loop, im_db_thread, thread_ablauf
 
 logger = logging.getLogger("einsatzleiter.schaden")
 
@@ -20,11 +21,19 @@ async def melde_schaden_background(fahrt_id: int, base_url: str = "") -> None:
     committet selbst. Fehler werden geloggt, aber nie propagiert — ein
     Mail-/Teams-Ausfall darf den Fahrtenbuch-Eintrag nicht beeinträchtigen.
     """
+    await im_db_thread(_melde_schaden_background_sync, fahrt_id, base_url)
+
+
+def _melde_schaden_background_sync(fahrt_id: int, base_url: str) -> None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
 
     db = SessionLocal()
     set_tenant_context(db, None)
+    return thread_ablauf(_melde_schaden_background_ablauf(db, fahrt_id, base_url))
+
+
+async def _melde_schaden_background_ablauf(db: Session, fahrt_id: int, base_url: str) -> None:
     try:
         fahrt = db.get(Fahrt, fahrt_id)
         if not fahrt:
@@ -140,7 +149,7 @@ async def melde_schaden(fahrt: Fahrt, db: Session, base_url: str = "") -> None:
             fahrt, fahrzeug, betreff=betreff,
             foto_urls=_foto_urls(fahrt), detail_url=detail_url or None,
         )
-        ok = await post_teams_adaptive_card(teams_url, payload)
+        ok = await auf_event_loop(post_teams_adaptive_card, teams_url, payload)
         db.add(FahrtBenachrichtigung(
             fahrt_id=fahrt.id,
             org_id=fahrt.org_id,
