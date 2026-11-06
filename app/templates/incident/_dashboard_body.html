@@ -2,7 +2,7 @@
    (dashboard.html) als auch vom Fragment-Endpoint GET /einsatz/{id}/dashboard/inhalt
    gerendert -- identischer Kontext, kein Render-Drift.
    Variablen: incident, active_vehicles, lanes_overview, tasks_open, tasks_done,
-   msgs_open, msgs_done, person_stats, lage_hints, lage_hints_ai, breathing_troops,
+   msgs_open, msgs_done, person_stats, lage_hints, lage_hints_ai, breathing_summary,
    qr_img, qr_url, uas_einsatz, uas_flug_count, dash_weather, brand #}
 
 <!-- ══ HEADER ══ -->
@@ -111,53 +111,7 @@
 </div>
 {% endif %}
 
-<!-- ══ ATEMSCHUTZ-STRIP ══ -->
-{% if breathing_troops %}
-<div class="bs-strip">
-  <div class="bs-strip__label">
-    <span style="font-size:1rem;">{{ status_dot("rot", "Atemschutz") }}</span> Atemschutz
-  </div>
-  {% for troop in breathing_troops %}
-  {# Druckklasse berechnen (300-bar-Welt: ≥150 ok, ≥100 warn, <100 crit) #}
-  {% set press = troop.lowest_current_pressure %}
-  {% if press is none %}
-    {% set press_class = 'none' %}
-  {% elif press >= 150 %}
-    {% set press_class = 'ok' %}
-  {% elif press >= 100 %}
-    {% set press_class = 'warn' %}
-  {% else %}
-    {% set press_class = 'crit' %}
-  {% endif %}
-  <div class="bs-card bs-card--{{ troop.status }}">
-    <div class="bs-info">
-      <div class="bs-name">{{ troop.name }}</div>
-      {% if troop.unit_name %}
-      <div class="bs-unit">{{ troop.unit_name }}</div>
-      {% endif %}
-      {% if troop.location_text %}
-      <div class="bs-unit" style="font-size:.65rem;opacity:.8">{{ troop.location_text }}</div>
-      {% endif %}
-    </div>
-    <div class="bs-metrics">
-      {% if press is not none %}
-      <div class="bs-press bs-press--{{ press_class }}">{{ press|int }} bar</div>
-      {% else %}
-      <div class="bs-press bs-press--none">kein Druck</div>
-      {% endif %}
-      {% if troop.entry_at %}
-      <div class="bs-time"
-           data-entry="{{ troop.entry_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
-           data-planned="{{ troop.planned_duration_min or 0 }}">–</div>
-      {% endif %}
-    </div>
-    <div class="bs-badge bs-badge--{{ troop.status }}">
-      {% if troop.status == 'im_einsatz' %}Im Einsatz{% elif troop.status == 'rueckzug' %}Rückzug!{% else %}{{ troop.status }}{% endif %}
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+{% include "incident/_breathing_kachel.html" %}
 
 <!-- ══ MAIN ══ -->
 {% if request.state.probenplanung_enabled %}

@@ -204,3 +204,48 @@ def test_dialog_screenshot_and_creation(breathing_routes, name):  # noqa: F811
             assert dialogs == []
         finally:
             browser.close()
+
+
+@pytest.mark.parametrize("name", ["handy", "desktop"])
+def test_dashboard_kachel_screenshot_and_live_refresh(breathing_routes, name):  # noqa: F811
+    """EL-Kachel auf dem Dashboard, inklusive WS-Swap und Serverzeit-Ticker."""
+    from playwright.sync_api import sync_playwright
+    ctx = breathing_routes
+    _seed(ctx)
+    OUT.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        browser, page, messages = _session(playwright, ctx, VIEWPORTS[name])
+        try:
+            page.context.add_cookies([
+                {"name": key, "value": value, "url": "http://localhost"} for key, value in ctx.client.cookies.items()
+            ])
+            # Die TestClient-Bruecke transportiert HTTP; WS-Ereignisse gezielt einspeisen.
+            page.add_init_script("""window.WebSocket = class {
+              constructor() { this.readyState = 1; setTimeout(() => this.onopen && this.onopen(), 0); }
+              send() {}
+            };""")
+            page.goto(f"http://localhost/einsatz/{ctx.incident_id}/dashboard", wait_until="networkidle")
+            page.wait_for_selector('#breathingKachel')
+            assert page.locator('.asuew-kachel__troop').count() == 2
+            assert page.locator('#breathingKachel').evaluate("el => el.scrollWidth <= el.clientWidth")
+            timer = page.locator('.asuew-kachel__time').first
+            before = timer.inner_text()
+            page.evaluate('ECPServerClock.setOffsetMs(120000)')
+            page.wait_for_timeout(1100)
+            assert timer.inner_text() != before
+            page.screenshot(path=str(OUT / f"dashboard_{name}.png"), full_page=True)
+            ctx.troop.active_members[0].current_press = 50
+            ctx.db.commit()
+            page.evaluate("ws.onmessage({data: JSON.stringify({type: 'pressure_logged'})})")
+            page.wait_for_function("document.querySelector('#breathingKachel').textContent.includes('50 bar')")
+            assert page.locator('.asuew-kachel__pressure.asuew-kachel--rot').count() >= 1
+            page.evaluate("ws.onmessage({data: JSON.stringify({type: 'troop_updated'})})")
+            page.wait_for_timeout(600)
+            assert page.locator('#breathingKachel').count() == 1
+            assert [t for t in messages if t[0] == "pageerror"] == []
+            # Auch die Einsatzseite aus dem Aufgabenaufruf dokumentieren.
+            page.goto(f"http://localhost/einsatz/{ctx.incident_id}", wait_until="networkidle")
+            assert page.locator('body').is_visible()
+            page.screenshot(path=str(OUT / f"einsatz_{name}.png"), full_page=True)
+        finally:
+            browser.close()

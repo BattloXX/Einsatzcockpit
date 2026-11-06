@@ -61,7 +61,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def troop_timeline(troop: BreathingTroop) -> list[dict]:
+def troop_timeline(troop: BreathingTroop, now: datetime | None = None) -> list[dict]:
     """Fristen und dokumentierte Ereignisse des aktuellen Einsatzzyklus."""
     if not troop.entry_at:
         return []
@@ -71,7 +71,10 @@ def troop_timeline(troop: BreathingTroop) -> list[dict]:
         events.append(dict(label=label, soll_at=soll_at, ist_at=ist_at, status=status, detail=detail))
 
     add("Eintritt", ist_at=troop.entry_at)
-    elapsed = troop.elapsed_seconds or 0
+    entry = troop.entry_at if troop.entry_at.tzinfo else troop.entry_at.replace(tzinfo=UTC)
+    end = troop.back_at or now or _now()
+    end = end if end.tzinfo else end.replace(tzinfo=UTC)
+    elapsed = (end - entry).total_seconds()
     for label, stufe, seconds in [
         ("1/3", "one_third", troop.one_third_seconds),
         ("2/3", "two_third", troop.two_third_seconds),
@@ -872,7 +875,7 @@ def troop_urgency(troop: BreathingTroop, warning_level: str, active_warnings: It
     return {"im_einsatz": 7, "bereit": 8, "zurueck": 9, "erholt": 10}[troop.status]
 
 
-def get_time_warnings(troop: BreathingTroop) -> list[str]:
+def get_time_warnings(troop: BreathingTroop, now: datetime | None = None) -> list[str]:
     """Gibt alle gleichzeitig aktiven Zeitwarnungen nach ASÜW-Leitfaden/FwDV 7 zurück.
 
     Trigger-Regeln (Leitfaden ASÜW / FwDV 7):
@@ -883,7 +886,8 @@ def get_time_warnings(troop: BreathingTroop) -> list[str]:
     if troop.entry_at is None or troop.status not in ("im_einsatz", "rueckzug"):
         return []
 
-    now = _now()
+    now = now or _now()
+    now = now if now.tzinfo else now.replace(tzinfo=UTC)
     entry = troop.entry_at if troop.entry_at.tzinfo else troop.entry_at.replace(tzinfo=UTC)
     elapsed = (now - entry).total_seconds()
 
@@ -922,7 +926,7 @@ def get_time_warning(troop: BreathingTroop) -> str:
     return "ok"
 
 
-def check_troop_warnings(troop: BreathingTroop) -> list[str]:
+def check_troop_warnings(troop: BreathingTroop, now: datetime | None = None) -> list[str]:
     """Gibt alle aktuell aktiven Warnstufen zurück (für Watchdog-Task)."""
     warnings = []
     if troop.notfall_at is not None:
@@ -937,7 +941,7 @@ def check_troop_warnings(troop: BreathingTroop) -> list[str]:
         or (trigger_press is not None and ack_press is not None and trigger_press < ack_press)
     ):
         warnings.append("withdraw")
-    warnings.extend(get_time_warnings(troop))
+    warnings.extend(get_time_warnings(troop, now))
     return warnings
 
 
@@ -960,6 +964,60 @@ def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTr
     ):
         hinweise["kein_sicherheitstrupp"] = anker
     return hinweise
+
+
+def dashboard_summary(troops: list[BreathingTroop], settings: AsuewSettings, now: datetime) -> dict:
+    """Verdichtet bereits geladene Trupps ohne Datenbankzugriff für die EL-Kachel."""
+    now = now if now.tzinfo else now.replace(tzinfo=UTC)
+    counters = {
+        "im_einsatz": sum(t.status in ("im_einsatz", "rueckzug") for t in troops),
+        "bereit": sum(t.status == "bereit" for t in troops),
+        "sicherheitstrupp_bereit": sum(bool(t.is_sicherheitstrupp) and t.status == "bereit" for t in troops),
+        "in_erholung": sum(t.status in ("zurueck", "erholt") for t in troops),
+    }
+    rows = []
+    for troop in troops:
+        if troop.status not in ("im_einsatz", "rueckzug"):
+            continue
+        pressure = get_warning_level(troop, settings.gelb_prozent)
+        warnings = check_troop_warnings(troop, now)
+        measured = [m for m in troop.active_members if m.current_press is not None]
+        lowest = min(measured, key=lambda m: m.current_press or 0) if measured else None
+        known = any(m.current_press is not None and m.start_press is not None for m in troop.active_members)
+        entry = troop.entry_at
+        if entry and not entry.tzinfo:
+            entry = entry.replace(tzinfo=UTC)
+        deadline = None
+        kinds = {"1/3": "one_third", "2/3": "two_third", "Max": "max"}
+        for event in troop_timeline(troop, now):
+            if event["soll_at"] is None or event["status"] == "erledigt":
+                continue
+            due = event["soll_at"]
+            due = due if due.tzinfo else due.replace(tzinfo=UTC)
+            deadline = {
+                "kind": kinds[event["label"]],
+                "label": "Max-Zeit" if event["label"] == "Max" else f"Kontrolle {event['label']}",
+                "in_s": int((due - now).total_seconds()), "due_at": due,
+            }
+            break
+        rows.append({
+            "id": troop.id, "name": troop.name, "status": troop.status,
+            "entry_at": entry, "entry_iso": entry.astimezone(UTC).isoformat() if entry else None,
+            "laufzeit_s": max(0, int((now - entry).total_seconds())) if entry else 0,
+            "geplant_min": troop.planned_duration_min,
+            "niedrigster_druck": lowest.current_press if lowest else None,
+            "niedrigster_name": lowest.display_name if lowest else None,
+            "druck_klasse": {"red": "rot", "yellow": "gelb", "ok": "gruen"}[pressure.level] if known else "unbekannt",
+            "naechste_frist": deadline, "warnungen": warnings,
+            "notfall": troop.notfall_at is not None, "funk_verloren": troop.funk_verloren_at is not None,
+            "urgency": troop_urgency(troop, pressure.level, warnings),
+        })
+    rows.sort(key=lambda row: (row["urgency"], row["id"]))
+    hints = incident_hinweise(troops)
+    return {
+        "zaehler": counters, "hinweise": {key: key in hints for key in ("assp", "kein_sicherheitstrupp")},
+        "trupps": rows, "gesamt": len(troops), "server_now": now,
+    }
 
 
 def asuew_heartbeat_fehlt(db: Session, incident: Incident, now: datetime) -> bool:
