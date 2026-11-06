@@ -44,6 +44,7 @@ from app.services.dibos.dibos_client import (
     parse_units,
 )
 from app.services.gateway_presence import worker_id
+from app.services.loop_thread_io import im_db_thread
 
 logger = logging.getLogger("einsatzleiter.dibos.capture")
 
@@ -301,23 +302,7 @@ async def cancel_trace(org_id: int) -> bool:
     return await org_job_state.request_cancel("dibos", org_id)
 
 
-async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str:
-    """Lädt die Org-Konfiguration, baut einen DibosClient und startet die
-    Aufzeichnung als Hintergrund-Task. Gibt die run_id zurück.
-
-    Wirft ValueError, wenn die Org nicht vollständig konfiguriert ist oder
-    bereits eine Aufzeichnung läuft.
-    """
-    if await is_trace_running(org_id):
-        raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
-
-    # Opportunistische Bereinigung, falls der tägliche Retention-Loop seit dem
-    # letzten Start noch nicht gelaufen ist (z.B. kurz nach einem Neustart).
-    try:
-        await purge_old_traces()
-    except Exception:
-        logger.exception("Opportunistische DIBOS-Trace-Bereinigung fehlgeschlagen")
-
+def _load_capture_config_sync(org_id: int) -> tuple:
     from app.core.crypto import decrypt_secret
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -341,8 +326,33 @@ async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str
         gateway_password = decrypt_secret(config.gateway_password_enc)
         service_user = config.service_user
         service_password = decrypt_secret(config.service_password_enc)
+        return (
+            base_url, host, ag, poll_interval_seconds, gateway_user, gateway_password, service_user, service_password,
+        )
     finally:
         db.close()
+
+
+async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str:
+    """Lädt die Org-Konfiguration, baut einen DibosClient und startet die
+    Aufzeichnung als Hintergrund-Task. Gibt die run_id zurück.
+
+    Wirft ValueError, wenn die Org nicht vollständig konfiguriert ist oder
+    bereits eine Aufzeichnung läuft.
+    """
+    if await is_trace_running(org_id):
+        raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
+
+    # Opportunistische Bereinigung, falls der tägliche Retention-Loop seit dem
+    # letzten Start noch nicht gelaufen ist (z.B. kurz nach einem Neustart).
+    try:
+        await purge_old_traces()
+    except Exception:
+        logger.exception("Opportunistische DIBOS-Trace-Bereinigung fehlgeschlagen")
+
+    (
+        base_url, host, ag, poll_interval_seconds, gateway_user, gateway_password, service_user, service_password,
+    ) = await im_db_thread(_load_capture_config_sync, org_id)
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     token = await org_job_state.try_start(

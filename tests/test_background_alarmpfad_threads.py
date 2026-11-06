@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import event, inspect
+from sqlalchemy.orm import sessionmaker
 
 from app import db as datenbank
 from app.core.tenant import set_tenant_context
@@ -22,6 +23,7 @@ from app.services import linux_print_service
 from app.services import print_dispatcher as service
 from tests.conftest import TestingSession
 from tests.test_ressourcenkarte_zugang_routes import _daten
+from tests.test_objekt_kontakt_benachrichtigung import versand  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -41,15 +43,15 @@ def druckdaten_aufraeumen():
 
 
 @contextmanager
-def alarm_db_threads(monkeypatch):
+def alarm_db_threads(monkeypatch, *module, pool_prefix="alarm-db", session_factory=TestingSession):
     loop_thread = threading.get_ident()
     aufrufe, fehler, offen = [], [], set()
 
     def session():
         thread = threading.get_ident()
-        if thread == loop_thread or not threading.current_thread().name.startswith("alarm-db"):
+        if thread == loop_thread or not threading.current_thread().name.startswith(pool_prefix):
             fehler.append("Session ausserhalb des Alarm-Pools")
-        db = TestingSession()
+        db = session_factory()
         offen.add(id(db))
 
         def pruefen(*args):
@@ -72,6 +74,8 @@ def alarm_db_threads(monkeypatch):
     with monkeypatch.context() as patch:
         patch.setattr(datenbank, "SessionLocal", session)
         patch.setattr(linux_print_service, "SessionLocal", session)
+        for modul in module:
+            patch.setattr(modul, "SessionLocal", session)
         yield offen
     assert aufrufe
     assert not fehler, fehler  # Auch von best-effort-Hooks abgefangene Fehler erkennen.
@@ -424,3 +428,262 @@ async def test_objekt_matching_rollback_und_fehlerprotokoll_im_thread(monkeypatc
     with TestingSession() as db:
         set_tenant_context(db, None)
         assert db.get(Incident, incident_id).reason == "unveraendert"
+
+
+async def test_einsatzinfo_mail_db_im_alarm_pool_bcc_retry_und_skip(monkeypatch, caplog):
+    from app.models.einsatzinfo_mail import MailEinsatzinfoLog, MailEinsatzinfoLogRecipient, MailEinsatzinfoRecipient
+    from app.models.master import FireDept
+    from app.services import einsatzinfo_mail_service as mail, mail_service
+
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug=uuid4().hex, name="Mail-Thread")
+        db.add(org)
+        db.flush()
+        db.add(OrgSettings(org_id=org.id, einsatzinfo_mail_enabled=True))
+        inc = Incident(primary_org_id=org.id, alarm_type_code="B2", reason="Brand")
+        db.add(inc)
+        db.add_all([MailEinsatzinfoRecipient(org_id=org.id, email=f"thread{i}@example.invalid") for i in range(51)])
+        db.commit()
+        org_id, incident_id = org.id, inc.id
+    monkeypatch.setattr(mail_service, "mail_available", lambda *args: True)
+    monkeypatch.setattr(mail_service, "versandweg", lambda *args: {"absender": "ff@example.invalid"})
+    loop, nachrichten = asyncio.get_running_loop(), []
+
+    async def senden(msg, smtp):
+        assert asyncio.get_running_loop() is loop and not offen
+        nachrichten.append(msg)
+        if len(nachrichten) == 2:
+            raise RuntimeError("SMTP-Testfehler")
+
+    monkeypatch.setattr(mail_service, "_send", senden)
+    with alarm_db_threads(monkeypatch, mail) as offen:
+        with pytest.raises(RuntimeError, match="SMTP-Testfehler"):
+            await mail.dispatch_einsatzinfo_mail(org_id, incident_id, variant="test", text_prefix="Nachalarm: ")
+        result = await mail.dispatch_einsatzinfo_mail(org_id, incident_id, variant="test", text_prefix="Nachalarm: ")
+        assert result == mail.EinsatzinfoMailResult(True, recipient_count=51)
+        assert await mail.dispatch_einsatzinfo_mail(org_id, incident_id, variant="test") == (
+            mail.EinsatzinfoMailResult(True, "bereits versendet", 51, True))
+        with caplog.at_level("INFO"):
+            assert await mail.dispatch_einsatzinfo_mail(org_id, -1) == mail.EinsatzinfoMailResult(
+                False, "Einsatz nicht gefunden")
+    assert "Einsatz -1 nicht gefunden" in caplog.text
+    assert [len(msg["Bcc"].addresses) for msg in nachrichten] == [50, 1, 1]
+    assert all(msg["To"] == "ff@example.invalid" and str(msg["Subject"]).startswith("Nachalarm: ")
+               for msg in nachrichten)
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        log = db.query(MailEinsatzinfoLog).filter_by(incident_id=incident_id).one()
+        assert log.success_count == log.recipient_count == 51 and log.completed_at
+        assert log.error == "SMTP-Testfehler" and log.variant == "test"
+        assert db.query(MailEinsatzinfoLogRecipient).filter_by(log_id=log.id, success=True).count() == 51
+
+
+async def test_objekt_kontakt_db_im_alarm_pool_transporte_ohne_session_und_retry(monkeypatch, versand):
+    from app.models.user import AuditLog
+    from app.models.objekt import ObjektKontaktBenachrichtigung
+
+    db, org, _, objekt, _, incident, _, mails, sms, notify = versand
+    incident_id, org_id, objekt_id = incident.id, org.id, objekt.id
+    factory = sessionmaker(bind=db.get_bind())
+    loop, versuche = asyncio.get_running_loop(), []
+
+    async def mail(config, oid, msg, smtp):
+        assert asyncio.get_running_loop() is loop and not offen and oid == org_id
+        assert msg["To"] == "kontakt@example.at"
+        versuche.append("mail")
+        if len(versuche) == 1:
+            raise RuntimeError("Kontakt-SMTP-Testfehler")
+        mails.append(msg)
+
+    async def sms_senden(oid, nummer, text, ctx):
+        assert asyncio.get_running_loop() is loop and not offen and oid == org_id
+        sms.append((nummer, text))
+        return True
+
+    monkeypatch.setattr(notify, "deliver", mail)
+    monkeypatch.setattr(notify, "send_sms", sms_senden)
+    with alarm_db_threads(monkeypatch, notify, session_factory=factory) as offen:
+        assert await notify.dispatch_objekt_einsatzinfo(incident_id, objekt_ids=[objekt_id]) == {
+            "gesendet": 1, "fehler": 1, "uebersprungen": 0}
+        assert await notify.dispatch_objekt_einsatzinfo(incident_id, force=True) == {
+            "gesendet": 1, "fehler": 0, "uebersprungen": 1}
+        assert await notify.dispatch_objekt_einsatzinfo(incident_id) == {
+            "gesendet": 0, "fehler": 0, "uebersprungen": 2}
+    db.expire_all()
+    assert len(mails) == len(sms) == 1 and versuche == ["mail", "mail"]
+    assert {row.status for row in db.query(ObjektKontaktBenachrichtigung)} == {"gesendet"}
+    assert db.query(AuditLog).filter_by(action="objekt.kontakt_info_gesendet").count() == 2
+
+
+@pytest.mark.parametrize("art", ["lis", "dibos"])
+async def test_capture_start_db_im_standardpool_client_und_lebenszyklus_auf_loop(monkeypatch, tmp_path, art):
+    from types import SimpleNamespace
+
+    from app.models.dibos import OrgDibosConfig
+    from app.models.lis import OrgLisConfig
+    from app.models.master import FireDept
+    from app.services import org_job_state
+    from app.services.dibos import dibos_capture
+    from app.services.lis import lis_capture
+
+    modul = lis_capture if art == "lis" else dibos_capture
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug=uuid4().hex, name="Capture-Thread")
+        db.add(org)
+        db.flush()
+        config = (OrgLisConfig(org_id=org.id, base_url="https://lis.invalid", organization_id="guid",
+                               username="user", password_enc="enc", poll_interval_seconds=17)
+                  if art == "lis" else OrgDibosConfig(
+                      org_id=org.id, base_url="https://dibos.invalid", gateway_user="gateway",
+                      gateway_password_enc="gw-enc", service_user="service", service_password_enc="svc-enc",
+                      poll_interval_seconds=17))
+        db.add(config)
+        db.commit()
+        org_id = org.id
+        site = config.site if art == "lis" else None
+    loop, aufrufe = asyncio.get_running_loop(), []
+    token = "capture-token"
+
+    async def nicht_aktiv(oid):
+        return False
+
+    async def purge():
+        return 0
+
+    async def claim(*args, **kw):
+        assert asyncio.get_running_loop() is loop and not offen
+        aufrufe.append(("claim", args, kw))
+        return token
+
+    async def finish(*args):
+        assert asyncio.get_running_loop() is loop and not offen
+        aufrufe.append(("finish", args))
+
+    async def run(kind, oid, claim_token, fn):
+        assert kind == art and oid == org_id and claim_token == token
+        await fn()
+
+    async def capture(client, recorder, *args):
+        assert asyncio.get_running_loop() is loop and not offen
+        assert args == (("guid", 3, 17, token) if art == "lis" else (3, 17, token))
+        aufrufe.append(("capture",))
+
+    class Client:
+        def __init__(self, *args, **kw):
+            assert asyncio.get_running_loop() is loop and not offen
+            assert args == (("https://lis.invalid", site, "user", "secret-enc") if art == "lis" else (
+                "https://dibos.invalid", "gateway", "secret-gw-enc", "service", "secret-svc-enc"))
+            aufrufe.append(("client",))
+
+        async def select_operation(self, organization_id):
+            assert asyncio.get_running_loop() is loop and not offen and organization_id == "guid"
+            aufrufe.append(("select",))
+
+    monkeypatch.setattr("app.core.crypto.decrypt_secret", lambda value: "secret-" + value)
+    monkeypatch.setattr(modul, "LisClient" if art == "lis" else "DibosClient", Client)
+    monkeypatch.setattr(modul, "CAPTURE_ROOT" if art == "lis" else "TRACE_ROOT", tmp_path)
+    monkeypatch.setattr(modul, "is_capture_running" if art == "lis" else "is_trace_running", nicht_aktiv)
+    monkeypatch.setattr(modul, "purge_old_captures" if art == "lis" else "purge_old_traces", purge)
+    monkeypatch.setattr(modul, "capture_traffic", capture)
+    monkeypatch.setattr(org_job_state, "try_start", claim)
+    monkeypatch.setattr(org_job_state, "finish", finish)
+    monkeypatch.setattr(org_job_state, "backend", SimpleNamespace(run=run))
+    with alarm_db_threads(monkeypatch, pool_prefix="hintergrund-db") as offen:
+        run_id = await (modul.start_capture_for_org(org_id, 3) if art == "lis" else modul.start_trace_for_org(org_id, 3))
+        assert datetime.strptime(run_id, "%Y%m%dT%H%M%SZ")
+        tasks = modul._active_captures if art == "lis" else modul._active_traces
+        await tasks[org_id]
+        for _ in range(3):
+            await asyncio.sleep(0)
+        assert org_id not in tasks
+    assert [entry[0] for entry in aufrufe] == (["claim", "client", "select", "capture", "finish"] if art == "lis"
+                                              else ["claim", "client", "capture", "finish"])
+
+
+async def test_lis_status_db_im_standardpool_http_ohne_session_und_audit(monkeypatch):
+    from app.models.incident import IncidentChange, IncidentVehicle
+    from app.services.lis import lis_sync
+    from app.models.master import FireDept
+    from tests import test_lis_sync as lis_tests
+
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug=uuid4().hex, name="Status-Thread")
+        db.add(org)
+        db.commit()
+        org_id = org.id
+    monkeypatch.setattr(lis_tests, "ORG_ID", org_id)
+    iv_id, calls = lis_tests._push_setup(monkeypatch)
+    loop = asyncio.get_running_loop()
+    original = lis_sync.LisClient
+
+    class Client(original):
+        async def get_operation_unit_status_types(self):
+            assert asyncio.get_running_loop() is loop and not offen
+            return await super().get_operation_unit_status_types()
+
+        async def set_operation_unit_status(self, *args):
+            assert asyncio.get_running_loop() is loop and not offen
+            await super().set_operation_unit_status(*args)
+
+    monkeypatch.setattr(lis_sync, "LisClient", Client)
+    with alarm_db_threads(monkeypatch, pool_prefix="hintergrund-db") as offen:
+        await lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort")
+        await lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort")
+        await lis_sync.push_vehicle_status_to_lis(-1, "Am Einsatzort")
+    assert calls == [("unit-ecp05", "s5")]
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        iv = db.get(IncidentVehicle, iv_id)
+        assert iv.lis_pushed_status == "S5" and iv.lis_pushed_at
+        changes = db.query(IncidentChange).filter_by(incident_id=iv.incident_id, action="lis.status_pushed").all()
+        assert len(changes) == 1
+
+
+async def test_objekt_kontakt_vorbereitungsfehler_zaehlt_und_sms_laeuft_weiter(monkeypatch, versand):
+    from app.models.objekt import ObjektKontaktBenachrichtigung
+
+    db, _, _, _, _, incident, _, _, sms, notify = versand
+    incident_id = incident.id
+    factory = sessionmaker(bind=db.get_bind())
+
+    def kaputt(**kwargs):
+        raise ValueError("Mailvorbereitung fehlgeschlagen")
+
+    monkeypatch.setattr(notify, "_build_message", kaputt)
+    with alarm_db_threads(monkeypatch, notify, session_factory=factory):
+        assert await notify.dispatch_objekt_einsatzinfo(incident_id) == {
+            "gesendet": 1, "fehler": 1, "uebersprungen": 0}
+    db.expire_all()
+    mail = db.query(ObjektKontaktBenachrichtigung).filter_by(kanal="mail").one()
+    assert mail.status == "fehler" and mail.fehlertext == "Mailvorbereitung fehlgeschlagen"
+    assert len(sms) == 1
+
+
+async def test_objekt_kontakt_abbruch_bleibt_wiederholbar(monkeypatch, versand):
+    from app.models.objekt import ObjektKontaktBenachrichtigung
+
+    db, _, _, _, kontakt, incident, _, mails, _, notify = versand
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = freigabe.kanal == "mail"
+    db.commit()
+    incident_id = incident.id
+    factory = sessionmaker(bind=db.get_bind())
+    senden = notify.deliver
+
+    async def abbrechen(*args):
+        assert not offen
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(notify, "deliver", abbrechen)
+    with alarm_db_threads(monkeypatch, notify, session_factory=factory) as offen:
+        with pytest.raises(asyncio.CancelledError):
+            await notify.dispatch_objekt_einsatzinfo(incident_id)
+        monkeypatch.setattr(notify, "deliver", senden)
+        assert await notify.dispatch_objekt_einsatzinfo(incident_id) == {
+            "gesendet": 1, "fehler": 0, "uebersprungen": 0}
+    db.expire_all()
+    assert db.query(ObjektKontaktBenachrichtigung).one().status == "gesendet"
+    assert len(mails) == 1

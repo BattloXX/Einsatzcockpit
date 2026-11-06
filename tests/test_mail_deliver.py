@@ -25,8 +25,23 @@ from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 
 
-@pytest.fixture()
-def deliver_db():
+@pytest.fixture(params=[False, True], ids=["session", "vorbereitet"])
+def deliver_db(request, monkeypatch):
+    if request.param:
+        original = mail_service.deliver
+
+        async def vorbereitet(db, org_id, msg, smtp_cfg=None):
+            config = mail_service.prepare_delivery(db, org_id, msg, smtp_cfg)
+
+            def keine_query(*args, **kwargs):
+                raise AssertionError("Vorbereiteter Versand darf keine Session benutzen")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(db, "query", keine_query)
+                await original(config, org_id, msg, smtp_cfg)
+
+        monkeypatch.setattr(mail_service, "deliver", vorbereitet)
+
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)

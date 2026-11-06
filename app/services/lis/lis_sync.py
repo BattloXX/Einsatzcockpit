@@ -33,7 +33,7 @@ from app.services.lis.lis_mapping import (
     unit_status_to_lis_prefix,
 )
 from app.services.lis.lis_matching import find_matching_incident
-from app.services.loop_thread_io import auf_event_loop
+from app.services.loop_thread_io import auf_event_loop, im_db_thread
 from app.services.major_incident_service import incident_belongs_to_major_incident, incident_major_incident_id
 
 logger = logging.getLogger("einsatzleiter.lis.sync")
@@ -1275,32 +1275,78 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
     dürfen den lokalen Statuswechsel nie beeinflussen, er ist zu diesem Zeitpunkt bereits
     gespeichert. Öffnet eine eigene DB-Session (Background-Task-Kontext, kein Request).
     """
+    prefix = unit_status_to_lis_prefix(status)
+    if not prefix:
+        return
+    daten = await im_db_thread(_prepare_vehicle_status_push_sync, incident_vehicle_id, prefix)
+    if daten is None:
+        return
+    client = LisClient(
+        daten["base_url"], daten["site"], daten["username"], daten["password"],
+        project_id=daten["project_id"], password_is_hash=daten["password_is_hash"],
+        organization_id=daten["organization_id"],
+    )
+    try:
+        status_types = await client.get_operation_unit_status_types()
+        target = next(
+            (s for s in status_types if (s.get("Label") or "").strip().upper().startswith(prefix)),
+            None,
+        )
+        if not target or not target.get("Id"):
+            logger.warning(
+                "LIS-Status-Typ %s nicht im Katalog gefunden (Org %s) — Status-Push übersprungen",
+                prefix, daten["org_id"],
+            )
+            return
+        for versuch in range(1, _PUSH_VERSUCHE + 1):
+            try:
+                await client.set_operation_unit_status(daten["unit_id"], target["Id"])
+            except LisClientError:
+                logger.warning(
+                    "SetOperationUnitStatus für IncidentVehicle %s fehlgeschlagen (Org %s, Versuch %s/%s)",
+                    incident_vehicle_id, daten["org_id"], versuch, _PUSH_VERSUCHE,
+                    exc_info=versuch == _PUSH_VERSUCHE,
+                )
+                if versuch < _PUSH_VERSUCHE:
+                    await asyncio.sleep(_PUSH_BACKOFF_S[min(versuch - 1, len(_PUSH_BACKOFF_S) - 1)])
+                continue
+            await im_db_thread(
+                _finish_vehicle_status_push_sync, incident_vehicle_id, daten["incident_id"], status, prefix,
+            )
+            logger.info("Fahrzeugstatus %s (IncidentVehicle %s) zurück ins LIS geschrieben (Org %s)",
+                        status, incident_vehicle_id, daten["org_id"])
+            break
+    except LisClientError:
+        logger.exception(
+            "LIS-Statuskatalog für IncidentVehicle %s nicht abrufbar (Org %s)",
+            incident_vehicle_id, daten["org_id"],
+        )
+
+
+def _prepare_vehicle_status_push_sync(incident_vehicle_id: int, prefix: str) -> dict | None:
     from app.core.crypto import decrypt_secret
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.incident import Incident, IncidentVehicle
 
-    prefix = unit_status_to_lis_prefix(status)
-    if not prefix:
-        return
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         vehicle = db.get(IncidentVehicle, incident_vehicle_id, populate_existing=True)
         if not vehicle or not vehicle.lis_operation_unit_id:
-            return
+            return None
         if vehicle.lis_pushed_status == prefix and _lokal_status_geschuetzt(vehicle):
             logger.debug("LIS-Status-Push fuer IncidentVehicle %s uebersprungen (unveraendert %s)",
                          incident_vehicle_id, prefix)
-            return
+            return None
         if vehicle.vehicle_master and vehicle.vehicle_master.is_external:
             # Fremde Organisationen (inkl. automatisch aus LIS übernommene externe
             # Einheiten, siehe _get_or_create_external_vehicle) dürfen wir niemals per
             # SetOperationUnitStatus kommandieren.
-            return
+            return None
         incident = db.get(Incident, vehicle.incident_id)
         if not incident or not incident.primary_org_id:
-            return
+            return None
         from app.services.exercise_guard import darf_extern
         if not darf_extern(
             "lis_status",
@@ -1309,10 +1355,10 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
             db=db,
             planspiel_run_id=incident.planspiel_run_id,
         ):
-            return
+            return None
         config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == incident.primary_org_id).first()
         if not config or not config.enabled or not config.push_vehicle_status or not config.is_fully_configured:
-            return
+            return None
         assert config.base_url and config.organization_id and config.username and config.password_enc
         try:
             password = decrypt_secret(config.password_enc)
@@ -1320,57 +1366,32 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
             logger.exception(
                 "LIS-Passwort für Org %s konnte nicht entschlüsselt werden (Status-Push)", incident.primary_org_id,
             )
-            return
+            return None
 
-        client = LisClient(
-            config.base_url, config.site, config.username, password,
-            project_id=config.project_id, password_is_hash=config.password_is_hash,
-            organization_id=config.organization_id,
-        )
-        try:
-            status_types = await client.get_operation_unit_status_types()
-            target = next(
-                (s for s in status_types if (s.get("Label") or "").strip().upper().startswith(prefix)),
-                None,
-            )
-            if not target or not target.get("Id"):
-                logger.warning(
-                    "LIS-Status-Typ %s nicht im Katalog gefunden (Org %s) — Status-Push übersprungen",
-                    prefix, incident.primary_org_id,
-                )
-                return
-            for versuch in range(1, _PUSH_VERSUCHE + 1):
-                try:
-                    await client.set_operation_unit_status(vehicle.lis_operation_unit_id, target["Id"])
-                except LisClientError:
-                    logger.warning(
-                        "SetOperationUnitStatus für IncidentVehicle %s fehlgeschlagen (Org %s, Versuch %s/%s)",
-                        incident_vehicle_id, incident.primary_org_id, versuch, _PUSH_VERSUCHE,
-                        exc_info=versuch == _PUSH_VERSUCHE,
-                    )
-                    if versuch < _PUSH_VERSUCHE:
-                        await asyncio.sleep(_PUSH_BACKOFF_S[min(versuch - 1, len(_PUSH_BACKOFF_S) - 1)])
-                    continue
-                db.execute(
-                    update(IncidentVehicle)
-                    .where(IncidentVehicle.id == incident_vehicle_id, IncidentVehicle.incident_id == incident.id)
-                    .values(lis_pushed_status=prefix, lis_pushed_at=datetime.now(UTC).replace(tzinfo=None))
-                )
-                logger.info(
-                    "Fahrzeugstatus %s (IncidentVehicle %s) zurück ins LIS geschrieben (Org %s)",
-                    status, incident_vehicle_id, incident.primary_org_id,
-                )
-                from app.core.audit import write_incident_change
-                write_incident_change(
-                    db, incident.id, "lis.status_pushed", "incident_vehicle", incident_vehicle_id,
-                    before=None, after={"status": status, "lis_prefix": prefix}, user_id=None,
-                )
-                db.commit()
-                break
-        except LisClientError:
-            logger.exception(
-                "LIS-Statuskatalog für IncidentVehicle %s nicht abrufbar (Org %s)",
-                incident_vehicle_id, incident.primary_org_id,
-            )
+        return {
+            "base_url": config.base_url, "site": config.site, "username": config.username,
+            "password": password, "project_id": config.project_id, "password_is_hash": config.password_is_hash,
+            "organization_id": config.organization_id, "org_id": incident.primary_org_id,
+            "incident_id": incident.id, "unit_id": vehicle.lis_operation_unit_id,
+        }
     finally:
         db.close()
+
+
+def _finish_vehicle_status_push_sync(incident_vehicle_id: int, incident_id: int, status: str, prefix: str) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        db.execute(
+            update(IncidentVehicle)
+            .where(IncidentVehicle.id == incident_vehicle_id, IncidentVehicle.incident_id == incident_id)
+            .values(lis_pushed_status=prefix, lis_pushed_at=datetime.now(UTC).replace(tzinfo=None))
+        )
+        from app.core.audit import write_incident_change
+        write_incident_change(
+            db, incident_id, "lis.status_pushed", "incident_vehicle", incident_vehicle_id,
+            before=None, after={"status": status, "lis_prefix": prefix}, user_id=None,
+        )
+        db.commit()

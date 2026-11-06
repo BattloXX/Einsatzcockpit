@@ -12,7 +12,9 @@ ohne die .env-Datei anpassen zu müssen.
 import html
 import logging
 import re
+from dataclasses import dataclass
 from email.message import EmailMessage
+from types import SimpleNamespace
 from typing import Any
 
 try:
@@ -240,30 +242,82 @@ def _set_resend_reply_to_if_enabled(db, org_id: int | None, msg: EmailMessage) -
         logger.exception("Reply-To fuer Resend konnte nicht gesetzt werden (Org %s)", org_id)
 
 
+@dataclass(frozen=True)
+class MailDeliveryConfig:
+    """Sessionfreie Momentaufnahme fuer den Versand auf dem Event-Loop."""
+
+    graph: dict | None
+    own_resend: dict | None
+    global_resend: dict | None
+    from_addr: str | None
+    reply_to: str | None
+    smtp: dict
+
+
+def prepare_delivery(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | None = None) -> MailDeliveryConfig:
+    graph = None
+    if org_id is not None and settings.O365_MAIL_ENABLED:
+        try:
+            from app.models.org_mail import OrgO365MailConfig
+
+            cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
+            if cfg and cfg.enabled and cfg.is_fully_configured:
+                graph = {name: getattr(cfg, name) for name in (
+                    "org_id", "tenant_id", "client_id", "client_secret_enc", "sender_address",
+                )}
+        except Exception:
+            logger.exception("O365-Config-Lookup fehlgeschlagen (Org %s) — Fallback Resend", org_id)
+    own = _org_resend_cfg(db, org_id)
+    global_cfg = None if own else get_resend_cfg(db)
+    from_addr = _resend_from_addr_for_org(db, org_id, global_cfg["from_domain"]) if global_cfg else None
+    # Reply-To erst beim Resend-Versuch setzen; Graph behaelt die bisherige Nachricht.
+    from copy import deepcopy
+
+    resend_msg = deepcopy(msg)
+    if own or global_cfg:
+        _set_resend_reply_to_if_enabled(db, org_id, resend_msg)
+    return MailDeliveryConfig(graph, own, global_cfg, from_addr, resend_msg["Reply-To"],
+                              smtp_cfg if smtp_cfg is not None else (_org_smtp_cfg(db, org_id) or get_smtp_cfg(db)))
+
+
+def _delivery_reply_to(db, org_id, msg):
+    if isinstance(db, MailDeliveryConfig):
+        if db.reply_to and not msg["Reply-To"]:
+            msg["Reply-To"] = db.reply_to
+    else:
+        _set_resend_reply_to_if_enabled(db, org_id, msg)
+
+
 async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | None = None) -> None:
     """Zentraler Versand-Dispatcher: Office 365 (falls für die Org aktiviert +
     vollständig konfiguriert) zuerst versuchen, danach Resend (Org, sonst global)
     und zuletzt SMTP (Org, sonst global).
+
+    Statt einer Session kann eine mit prepare_delivery geladene Momentaufnahme
+    uebergeben werden; dann greift der Versand nicht mehr auf die DB zu.
 
     Graph-Fehler werden verschluckt (das ist der Sinn des Fallbacks) und nur
     geloggt; ein anschließender SMTP-Fehler wird wie bisher propagiert, damit
     Aufrufer (z.B. schaden_service) einen echten Fehlschlag weiterhin korrekt
     protokollieren können.
     """
+    prepared = db if isinstance(db, MailDeliveryConfig) else None
     if org_id is not None and settings.O365_MAIL_ENABLED:
-        o365_cfg = None
+        o365_cfg: Any = None
         try:
             from app.models.org_mail import OrgO365MailConfig
 
             o365_cfg = (
                 db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
-                if db is not None else None
+                if db is not None and prepared is None else None
             )
+            if prepared and prepared.graph:
+                o365_cfg = SimpleNamespace(**prepared.graph)
         except Exception:
             logger.exception("O365-Config-Lookup fehlgeschlagen (Org %s) — Fallback Resend", org_id)
             o365_cfg = None
 
-        if o365_cfg and o365_cfg.enabled and o365_cfg.is_fully_configured:
+        if o365_cfg and (prepared is not None or (o365_cfg.enabled and o365_cfg.is_fully_configured)):
             try:
                 from app.services.o365_mail_service import send_via_graph
                 await send_via_graph(msg, o365_cfg)
@@ -273,26 +327,26 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
                     "O365-Mailversand fehlgeschlagen (Org %s) — Fallback Resend: %s", org_id, exc,
                 )
 
-    own_resend_cfg = _org_resend_cfg(db, org_id)
+    own_resend_cfg = prepared.own_resend if prepared else _org_resend_cfg(db, org_id)
     if own_resend_cfg:
         try:
             from app.services.resend_mail_service import send_via_resend
 
-            _set_resend_reply_to_if_enabled(db, org_id, msg)
+            _delivery_reply_to(db, org_id, msg)
             await auf_event_loop(send_via_resend, msg, own_resend_cfg["api_key"], own_resend_cfg["from_addr"])
             return
         except Exception as exc:
             logger.warning("Resend (Org) fehlgeschlagen (Org %s) — Fallback SMTP: %s", org_id, exc)
     else:
-        global_resend_cfg = get_resend_cfg(db)
+        global_resend_cfg = prepared.global_resend if prepared else get_resend_cfg(db)
         if global_resend_cfg:
             try:
                 from app.services.resend_mail_service import send_via_resend
 
-                from_addr = _resend_from_addr_for_org(
+                from_addr = prepared.from_addr if prepared else _resend_from_addr_for_org(
                     db, org_id, global_resend_cfg["from_domain"],
                 )
-                _set_resend_reply_to_if_enabled(db, org_id, msg)
+                _delivery_reply_to(db, org_id, msg)
                 await auf_event_loop(send_via_resend, msg, global_resend_cfg["api_key"], from_addr)
                 return
             except Exception as exc:
@@ -302,7 +356,7 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
 
     cfg = smtp_cfg
     if cfg is None:
-        cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
+        cfg = prepared.smtp if prepared else (_org_smtp_cfg(db, org_id) or get_smtp_cfg(db))
     await auf_event_loop(_send, msg, cfg)
 
 

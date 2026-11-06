@@ -33,6 +33,7 @@ from app.services import org_job_state
 from app.services.background_runtime import create_leader_task
 from app.services.gateway_presence import worker_id
 from app.services.lis.lis_client import LisClient, LisClientError
+from app.services.loop_thread_io import im_db_thread
 
 logger = logging.getLogger("einsatzleiter.lis.capture")
 
@@ -255,26 +256,7 @@ async def cancel_capture(org_id: int) -> bool:
     return await org_job_state.request_cancel("lis", org_id)
 
 
-async def start_capture_for_org(
-    org_id: int,
-    duration_minutes: float = 120,
-) -> str:
-    """Lädt die Org-Konfiguration, baut einen LisClient und startet die
-    Aufzeichnung als Hintergrund-Task. Gibt die run_id zurück.
-
-    Wirft ValueError, wenn die Org nicht vollständig konfiguriert ist oder
-    bereits eine Aufzeichnung läuft.
-    """
-    if await is_capture_running(org_id):
-        raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
-
-    # Opportunistische Bereinigung, falls der tägliche Retention-Loop seit dem
-    # letzten Start noch nicht gelaufen ist (z.B. kurz nach einem Neustart).
-    try:
-        await purge_old_captures()
-    except Exception:
-        logger.exception("Opportunistische LIS-Capture-Bereinigung fehlgeschlagen")
-
+def _load_capture_config_sync(org_id: int) -> tuple:
     from app.core.crypto import decrypt_secret
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -295,8 +277,36 @@ async def start_capture_for_org(
         poll_interval_seconds = config.poll_interval_seconds
         password = decrypt_secret(config.password_enc)
         password_is_hash = config.password_is_hash
+        return (
+            base_url, site, organization_id, username, project_id, poll_interval_seconds, password, password_is_hash,
+        )
     finally:
         db.close()
+
+
+async def start_capture_for_org(
+    org_id: int,
+    duration_minutes: float = 120,
+) -> str:
+    """Lädt die Org-Konfiguration, baut einen LisClient und startet die
+    Aufzeichnung als Hintergrund-Task. Gibt die run_id zurück.
+
+    Wirft ValueError, wenn die Org nicht vollständig konfiguriert ist oder
+    bereits eine Aufzeichnung läuft.
+    """
+    if await is_capture_running(org_id):
+        raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
+
+    # Opportunistische Bereinigung, falls der tägliche Retention-Loop seit dem
+    # letzten Start noch nicht gelaufen ist (z.B. kurz nach einem Neustart).
+    try:
+        await purge_old_captures()
+    except Exception:
+        logger.exception("Opportunistische LIS-Capture-Bereinigung fehlgeschlagen")
+
+    (
+        base_url, site, organization_id, username, project_id, poll_interval_seconds, password, password_is_hash,
+    ) = await im_db_thread(_load_capture_config_sync, org_id)
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     token = await org_job_state.try_start(
