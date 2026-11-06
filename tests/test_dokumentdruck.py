@@ -191,10 +191,9 @@ def test_generierter_plan_bleibt_abrufbar_trotz_pdf_metadaten(client, dokumente,
 
 
 def a3_datei(info):
-    source = PdfReader(io.BytesIO(dokument_pdf(1)))
-    source.pages[0].scale_to(841.89, 1190.551)
-    writer = PdfWriter()
-    writer.add_page(source.pages[0])
+    # pypdf 7: Seiten nur noch veraendern, wenn sie einem Writer gehoeren.
+    writer = PdfWriter(clone_from=io.BytesIO(dokument_pdf(1)))
+    writer.pages[0].scale_to(841.89, 1190.551)
     stream = io.BytesIO()
     writer.write(stream)
     info["dateien"][0]["path"].write_bytes(stream.getvalue())
