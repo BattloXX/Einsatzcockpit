@@ -30,6 +30,7 @@ def build_gsl_live_payload(db: Session, lage: MajorIncident) -> dict:
         "id": lage.id, "url": f"/lage/{lage.id}", "name": lage.name,
         "is_exercise": lage.is_exercise,
         "started_at": lage.started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ended_at": lage.ended_at.strftime("%Y-%m-%dT%H:%M:%SZ") if lage.ended_at else None,
         "counts": counts,
     }
 

@@ -18,7 +18,8 @@ def test_board_renders_fertig_gemeldet_and_abgeschlossen_columns(client):
     data = _api_daten(); _leader(client, data)
     response = client.get(f"/lage/{data['lage']}")
     assert response.status_code == 200
-    assert response.text.index("Fertig gemeldet") < response.text.index("Abgeschlossen")
+    # "Abgeschlossen" steht auch im Live-Banner (abgeschlossene Einsatzdauer) – Spaltenreihenfolge ab "Fertig gemeldet" pruefen.
+    assert "Abgeschlossen" in response.text[response.text.index("Fertig gemeldet"):]
     assert 'data-phase="fertig_gemeldet"' in response.text
     assert ">Erledigt<" not in response.text
 

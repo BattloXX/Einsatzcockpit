@@ -13,7 +13,7 @@
             <span class="ec-live__bar-seg ec-live__bar-seg--erledigt" :style="'flex-grow:' + lage.counts.erledigt"></span>
           </div>
           <span class="ec-live__counts" x-text="formatCounts(lage.counts)"></span>
-          <span class="ec-live__duration" x-text="duration"></span>
+          <span class="ec-live__duration" :class="{ 'einsatzdauer-abgeschlossen': !!((lage || incident)?.closed_at || (lage || incident)?.ended_at) }" x-text="duration + (((lage || incident)?.closed_at || (lage || incident)?.ended_at) ? ' (Abgeschlossen)' : '')"></span>
         </div>
         <a href="/" class="ec-live__more" x-show="incidentCount > 0" x-text="'+' + incidentCount + ' Einsätze'"></a>
       </div>
@@ -37,7 +37,7 @@
         </template>
       </div>
       <span class="ec-live__phase" x-text="incident?.phase_label"></span>
-      <span class="ec-live__duration" x-text="duration"></span>
+      <span class="ec-live__duration" :class="{ 'einsatzdauer-abgeschlossen': !!((lage || incident)?.closed_at || (lage || incident)?.ended_at) }" x-text="duration + (((lage || incident)?.closed_at || (lage || incident)?.ended_at) ? ' (Abgeschlossen)' : '')"></span>
     </div>
     <a href="/" class="ec-live__more" x-show="incidentCount > 1"
        x-text="'+' + (incidentCount - 1) + ' weitere'"></a>

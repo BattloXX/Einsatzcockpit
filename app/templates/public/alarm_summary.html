@@ -44,7 +44,7 @@
       </dl>
 
       {% if has_coords %}
-      <div id="alarm-karte"
+      <div id="alarm-karte" class="hydranten-blau"
            data-lat="{{ incident.lat }}" data-lng="{{ incident.lng }}"
            data-hydranten="/alarm/{{ token }}/hydranten.json"
            data-objekt="/alarm/{{ token }}/objekt.json"
@@ -61,7 +61,7 @@
         </a>
         {% endif %}
       </div>
-      <div id="alarm-hydranten"></div>
+      <div id="alarm-hydranten" class="hydranten-blau"></div>
       {% endif %}
 
       <h2 style="font-size:1.05rem;margin:18px 0 12px;">Teilnehmen</h2>
@@ -91,7 +91,7 @@
     var karte = L.map(el, { zoomControl: true }).setView([lat, lng], 17);
     window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
     L.marker([lat, lng], {
-      icon: ecpMarkerIcon("urgent", {size: 32}),
+      icon: ecpMarkerIcon("urgent", {color: "#d42225", size: 32, border: "3px solid #fff"}),
       zIndexOffset: 1000
     }).addTo(karte).bindPopup("<strong>Einsatzort</strong>");
 
