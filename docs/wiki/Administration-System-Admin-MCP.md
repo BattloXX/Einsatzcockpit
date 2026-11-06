@@ -40,7 +40,7 @@ beruecksichtigt. Die Login-Seite erklaert diese Grenze, Fehler verraten keine Ko
 | --- | --- |
 | `admin_system_uebersicht` | Version, Commit, Build, Deploy-Abstand zu main und Gesamtstatus der Teilchecks |
 | `admin_dienste_pruefen` | Aggregierte gespeicherte Dienstmonitor-Zustaende aller Organisationen |
-| `admin_worker_pruefen` | Anzahl aktiver/abgelaufener Worker, Leader und fehlerhafter Loops |
+| `admin_worker_pruefen` | Worker/Leader/Loops, RSS/Swap/Threads, Loop-Verzug und langsame Queries (15 min), letzter Stillstand, unsaubere Enden je Host (1 h/24 h), Host-Speicher/Swap/PSI |
 | `admin_backup_pruefen` | Backup-/Restore-Alter, Off-Site-Ergebnis, Dump-Zähler, Größen und freier Speicher; ohne Parameter, Modul `backup`, nur lesend |
 | `admin_osm_pruefen` | Lokaler OSM-Bestand, persistente Statistik und optionale Live-Proben (`live=true`) |
 | `admin_redis_pruefen` | Lokaler Konfigurations- und Verbindungszustand, ohne Netzwerkprobe |
@@ -202,7 +202,8 @@ zwischen Hosts. Der Stundenzaehler liegt ebenfalls in der Datenbank.
 | ID | Modul | Kosten | Datenbasis |
 | --- | --- | --- | --- |
 | `db.zustand` | datenbank | leicht | Verbindung, Code-Head/Alembic-Stand, Pool-Auslastung; MariaDB: Prozess-IDs mit Laufzeit >30 Sekunden und wartende InnoDB-Transaktionen, ohne SQL-Texte |
-| `worker.zustand` | worker | leicht | Abgelaufene Worker, alte Heartbeats, fehlender Leader, mehrere Leader auf demselben Host, fehlerhafte/ueberfaellige Loops |
+| `system.ressourcen` | system | leicht | Lokaler Host: verfuegbarer Speicher, Swap-Belegung, PSI memory/io full avg300 |
+| `worker.zustand` | worker | leicht | Abgelaufene Worker, alte Heartbeats, Leader/Loops, RSS, Loop-Verzug, langsame Queries und unsaubere Neustarts |
 | `redis.zustand` | redis | leicht | Publisher/Subscriber, Reconnects und Fehlerzaehler aus lokalem Status und aktiven Worker-Heartbeats |
 | `gateway.jobs` | gateway | leicht | SMS/Druck/Alarm-Outbox-Fristen, viele Attempts, fehlende Quittierungen, Presence, abgelaufene Transportnachrichten, parallele offene SMS-Claims als Indikator, W&T-Dienstmonitor |
 | `einsatz.integritaet` | einsatz | mittel | Verwaiste Referenzen, ungueltige aktuelle Auftrags-/Dispositionszustaende, widerspruechliche Abschlussmarkierungen, offene Auftraege in geschlossenen Einsaetzen, Disposition zwischen unterschiedlichen Lagen |

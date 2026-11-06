@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Worker- und Host-Ueberwachung:** Heartbeats erfassen RSS, Prozess-Swap, Threads, Loop-Verzug, langsame Queries und den letzten Stillstand. Systemdiagnose und Admin-MCP warnen bei unsauberen Worker-Neustarts, Speicher-/Swap-Engpaessen und PSI-Ressourcendruck. Die Systemuebersicht beruecksichtigt diese Warnungen. Migration 0352.
+
 - **Worker-Stabilitaet und Speicher:** Einfaches Logging statt Rich vermeidet aufwendige Traceback-Darstellung im Event-Loop. Worker-Timeouts schreiben alle Thread-Stacks zur Diagnose. WeasyPrint wird fuer Objekteinzeichnungen erst bei PDF-Bedarf geladen; der Kartenkachel-Cache ist auf 300 Eintraege pro Worker begrenzt. Keine Migration.
 - **Server blockiert bei langsamer Datenbank nicht mehr komplett:** Die Session-Pruefung laeuft nicht mehr im Event-Loop; behebt die Blockade beim Vorfall vom 06.11.2026.
 

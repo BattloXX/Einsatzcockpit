@@ -66,13 +66,15 @@ def test_deliver_all_erreicht_alle_kanaele(fresh_manager):
     assert a.received and b.received
 
 
-def test_slow_query_logging_warnt_ueber_schwelle(caplog):
+def test_slow_query_logging_warnt_ueber_schwelle(caplog, monkeypatch):
     import time as time_mod
 
     from sqlalchemy import create_engine, event, text
 
     from app.db import register_slow_query_logging
 
+    messungen = []
+    monkeypatch.setattr("app.services.prozess_metriken.sammler.langsame_query", messungen.append)
     engine = create_engine("sqlite:///:memory:")
     register_slow_query_logging(engine, threshold_ms=10)
 
@@ -89,6 +91,7 @@ def test_slow_query_logging_warnt_ueber_schwelle(caplog):
     meldungen = [r.message for r in caplog.records]
     assert any("Langsame Query" in m and "py_sleep" in m for m in meldungen)
     assert not any("SELECT 1" == m[-8:] for m in meldungen)
+    assert len(messungen) == 1 and messungen[0] >= 10
 
 
 def test_slow_query_logging_schwelle_null_deaktiviert(caplog):
