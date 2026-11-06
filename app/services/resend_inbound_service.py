@@ -16,7 +16,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang, OrgResendConfig
-from app.services.loop_thread_io import im_db_thread
+from app.services.loop_thread_io import auf_event_loop, im_db_thread, thread_ablauf
 from app.services.mail_eingang_service import ereignis, normalisiere_absender, speichere_eingang
 
 logger = logging.getLogger("einsatzleiter.mail.inbound")
@@ -91,12 +91,7 @@ async def fetch_inbound_message(db: Session, org_id: int, message_id: int) -> No
         api_key = resend_api_key_fuer_org(db, org_id)
         if not api_key:
             raise RuntimeError("kein Resend-Schluessel")
-        async with httpx.AsyncClient(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
-            response = await client.get(RESEND_RECEIVING_URL + row.extern_id,
-                headers={"Authorization": f"Bearer {api_key}"})
-        if not response.is_success:
-            raise RuntimeError("provider status")
-        payload = response.json()
+        payload = await auf_event_loop(_fetch_inbound_payload, api_key, row.extern_id)
         row.message_id = clean_text(payload.get("message_id"), 500) or row.message_id
         row.absender = normalisiere_absender(str(payload.get("from") or ""))
         row.empfaenger = _json(payload.get("to"))
@@ -123,14 +118,27 @@ async def fetch_inbound_message(db: Session, org_id: int, message_id: int) -> No
     # Erst nach dem persistierten Eingang auslösen; der Hook ist je Mail/Drucker idempotent.
     if row.abgerufen_at and row.status != "abruf_fehler" and row.zuordnung != "abgelehnt":
         from app.services.print_dispatcher import autoprint_mail_eingang_background
-        await autoprint_mail_eingang_background(row.id)
+        await auf_event_loop(autoprint_mail_eingang_background, row.id)
+
+
+async def _fetch_inbound_payload(api_key: str, extern_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
+        response = await client.get(RESEND_RECEIVING_URL + extern_id,
+            headers={"Authorization": f"Bearer {api_key}"})
+    if not response.is_success:
+        raise RuntimeError("provider status")
+    return response.json()
 
 
 async def fetch_inbound_background(org_id: int, message_id: int) -> None:
+    await im_db_thread(_fetch_inbound_background_sync, org_id, message_id)
+
+
+def _fetch_inbound_background_sync(org_id: int, message_id: int) -> None:
     db = SessionLocal()
     set_tenant_context(db, org_id)
     try:
-        await fetch_inbound_message(db, org_id, message_id)
+        thread_ablauf(fetch_inbound_message(db, org_id, message_id))
     finally:
         db.close()
 

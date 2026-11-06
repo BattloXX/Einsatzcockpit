@@ -15,6 +15,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import OrgSettings
 from app.models.sms import SmsForwardRule, SmsInbox
+from app.services.loop_thread_io import im_db_thread
 
 logger = logging.getLogger("einsatzleiter.sms_inbox")
 
@@ -58,22 +59,37 @@ def record_inbound_sms(
 
 
 async def process_inbound_sms(inbox_id: int) -> None:
-    """Wertet Weiterleitungsregeln fuer einen SmsInbox-Eintrag aus und fuehrt sie aus.
-
-    Als asyncio.create_task() nach record_inbound_sms() aufgerufen, damit die
-    WS-Ack an das Gateway nicht auf Teams-/SMS-Latenz wartet.
-
-    Es wird die erste passende aktive Regel (nach display_order) angewendet, nicht alle.
-    """
+    """Wendet die erste passende aktive Regel an; Transporte bleiben auf dem Loop."""
     from app.services.sms_dispatch_service import send_bulk
     from app.services.teams_service import post_teams_karte
 
+    try:
+        daten = await im_db_thread(_inbound_auftrag_sync, inbox_id)
+        if daten is None:
+            return
+        summary_parts: list[str] = []
+        if daten["forward_teams"]:
+            if daten["webhook"]:
+                ok = await post_teams_karte(daten["webhook"], f"SMS von {daten['sender']}", daten["text"])
+                summary_parts.append("Teams ✓" if ok else "Teams ✗")
+            else:
+                summary_parts.append("Teams: kein Webhook konfiguriert")
+        if daten["jobs"]:
+            total, success = await send_bulk(daten["org_id"], daten["jobs"])
+            summary_parts.append(f"{success}/{total} SMS")
+        summary = ", ".join(summary_parts) if summary_parts else "Regel ohne Ziele"
+        await im_db_thread(_inbound_ergebnis_sync, inbox_id, daten, summary)
+    except Exception:
+        logger.exception("Fehler bei der Verarbeitung empfangener SMS (inbox_id=%d)", inbox_id)
+
+
+def _inbound_auftrag_sync(inbox_id: int) -> dict | None:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         entry = db.get(SmsInbox, inbox_id)
         if entry is None or entry.org_id is None:
-            return
+            return None
         org_id = entry.org_id
 
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
@@ -81,7 +97,7 @@ async def process_inbound_sms(inbox_id: int) -> None:
             entry.processed = True
             entry.forward_summary = "Empfang deaktiviert – nur geloggt"
             db.commit()
-            return
+            return None
 
         from_norm = telefon_kompakt(entry.from_number)
         rules = (
@@ -96,20 +112,7 @@ async def process_inbound_sms(inbox_id: int) -> None:
             entry.processed = True
             entry.forward_summary = "Keine Regel getroffen"
             db.commit()
-            return
-
-        entry.matched_rule_id = rule.id
-        summary_parts: list[str] = []
-
-        # ── Teams-Weiterleitung ──────────────────────────────────────────────
-        if rule.forward_teams:
-            webhook = rule.teams_webhook_url or org_settings.sms_receive_teams_webhook_url
-            if webhook:
-                titel = f"SMS von {entry.from_number}"
-                ok = await post_teams_karte(webhook, titel, entry.text)
-                summary_parts.append("Teams ✓" if ok else "Teams ✗")
-            else:
-                summary_parts.append("Teams: kein Webhook konfiguriert")
+            return None
 
         # ── SMS-Weiterleitung (Gruppen + Mitglieder + Ad-hoc, dedupliziert) ───
         phones: dict[str, str] = {}
@@ -134,28 +137,33 @@ async def process_inbound_sms(inbox_id: int) -> None:
             if norm:
                 phones.setdefault(norm, raw.strip())
 
-        if phones:
-            text_out = (
-                f"SMS von {entry.from_number}: {entry.text}"
-                if rule.prepend_sender else entry.text
-            )
-            jobs = [(phone, text_out) for phone in phones]
-            total, success = await send_bulk(org_id, jobs)
-            summary_parts.append(f"{success}/{total} SMS")
+        return {
+            "org_id": org_id, "rule_id": rule.id, "rule_name": rule.name,
+            "forward_teams": rule.forward_teams,
+            "webhook": rule.teams_webhook_url or org_settings.sms_receive_teams_webhook_url,
+            "sender": entry.from_number, "text": entry.text,
+            "jobs": [(phone, f"SMS von {entry.from_number}: {entry.text}" if rule.prepend_sender else entry.text)
+                     for phone in phones],
+        }
+    finally:
+        db.close()
 
+
+def _inbound_ergebnis_sync(inbox_id: int, daten: dict, summary: str) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        entry = db.get(SmsInbox, inbox_id)
+        if entry is None:
+            return
+        entry.matched_rule_id = daten["rule_id"]
         entry.processed = True
-        entry.forward_summary = ", ".join(summary_parts) if summary_parts else "Regel ohne Ziele"
+        entry.forward_summary = summary
         write_audit(
-            db, "sms.inbound_forwarded", org_id=org_id,
+            db, "sms.inbound_forwarded", org_id=daten["org_id"],
             entity_type="sms_inbox", entity_id=entry.id,
-            payload={"rule_id": rule.id, "rule_name": rule.name, "summary": entry.forward_summary},
+            payload={"rule_id": daten["rule_id"], "rule_name": daten["rule_name"], "summary": summary},
         )
         db.commit()
-    except Exception:
-        logger.exception("Fehler bei der Verarbeitung empfangener SMS (inbox_id=%d)", inbox_id)
-        try:
-            db.rollback()
-        except Exception:
-            pass
     finally:
         db.close()

@@ -26,8 +26,9 @@ from app.models.planspiel import (
     PlanspielSzenario,
     PlanspielZiel,
 )
-from app.services.broadcast import broadcast_org
-from app.services.incident_service import add_message, broadcast_message_created
+from app.services.broadcast import broadcast_org, manager
+from app.services.incident_service import add_message
+from app.services.loop_thread_io import auf_event_loop, im_db_thread, thread_ablauf
 from app.services.planspiel_katalog_service import aktive_version, org_stichwort_code, rendern, version_als_dict
 from app.services.planspiel_ort_service import OrtNichtGefunden, OrtWahl, als_verwendet_markieren, ort_waehlen
 from app.services.planspiel_run_service import ZustandsFehler, _variablen, zeitplan_fuer
@@ -520,14 +521,9 @@ def ereignis_ausfuehren(db: Session, ereignis_id: int, org_id: int, steuer_versi
 async def nach_ausfuehrung_benachrichtigen(org_id: int, run_id: int, ergebnis: AusfuehrungsErgebnis) -> None:
     try:
         if ergebnis.message_id is not None:
-            db = SessionLocal()
-            try:
-                set_tenant_context(db, org_id)
-                message = db.get(Message, ergebnis.message_id)
-                if message is not None and ergebnis.incident_id is not None:
-                    await broadcast_message_created(ergebnis.incident_id, message)
-            finally:
-                db.close()
+            event = await im_db_thread(_message_event_sync, org_id, ergebnis.message_id)
+            if event is not None and ergebnis.incident_id is not None:
+                await manager.broadcast(ergebnis.incident_id, event)
         if ergebnis.lage_id is not None:
             from app.services import gsl_broadcast
             await gsl_broadcast.funkjournal_geaendert(ergebnis.lage_id, ergebnis.site_id)
@@ -538,6 +534,18 @@ async def nach_ausfuehrung_benachrichtigen(org_id: int, run_id: int, ergebnis: A
         logger.exception("Planspiel-Benachrichtigung fehlgeschlagen (run=%s)", run_id)
 
 
+def _message_event_sync(org_id: int, message_id: int) -> dict | None:
+    db = SessionLocal()
+    try:
+        set_tenant_context(db, org_id)
+        message = db.get(Message, message_id)
+        if message is not None:
+            return {"type": "message_created", "column_id": message.column_id, "vehicle_uid": message.vehicle_id}
+        return None
+    finally:
+        db.close()
+
+
 async def nach_generierung_benachrichtigen(
     org_id: int, run_id: int, ergebnisse: list[GeneriertErgebnis],
 ) -> None:
@@ -545,21 +553,34 @@ async def nach_generierung_benachrichtigen(
     if not ergebnisse:
         return
     try:
-        from app.services.gsl_broadcast import stelle_angelegt
-        db = SessionLocal()
-        try:
-            set_tenant_context(db, org_id)
-            for ergebnis in ergebnisse:
-                lage = db.query(MajorIncident).filter(
-                    MajorIncident.id == ergebnis.lage_id, MajorIncident.org_id == org_id,
-                ).one_or_none()
-                if lage is not None:
-                    await stelle_angelegt(db, lage, ergebnis.site_id)
-        finally:
-            db.close()
+        await im_db_thread(_generierung_benachrichtigen_sync, org_id, ergebnisse)
         await broadcast_org(org_id, {"type": "planspiel_changed", "run_id": run_id})
     except Exception:
         logger.exception("Planspiel-Generator-Benachrichtigung fehlgeschlagen (run=%s)", run_id)
+
+
+def _generierung_benachrichtigen_sync(org_id: int, ergebnisse: list[GeneriertErgebnis]) -> None:
+    db = SessionLocal()
+    try:
+        set_tenant_context(db, org_id)
+        thread_ablauf(_generierung_benachrichtigen_ablauf(db, org_id, ergebnisse))
+    finally:
+        db.close()
+
+
+async def _generierung_benachrichtigen_ablauf(
+    db: Session, org_id: int, ergebnisse: list[GeneriertErgebnis],
+) -> None:
+    from app.services.broadcast import broadcast_lage
+    from app.services.gsl_live_notify import notify_gsl_live
+
+    for ergebnis in ergebnisse:
+        lage = db.query(MajorIncident).filter(
+            MajorIncident.id == ergebnis.lage_id, MajorIncident.org_id == org_id,
+        ).one_or_none()
+        if lage is not None:
+            await auf_event_loop(broadcast_lage, lage.id, {"type": "site_created", "site_id": ergebnis.site_id})
+            await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
 
 
 def verpasste_markieren(db: Session, run: PlanspielRun, jetzt: datetime, fenster_s: int = 120) -> int:

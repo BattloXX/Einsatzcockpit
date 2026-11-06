@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.incident import Incident, IncidentOrg
 from app.models.major_incident import MajorIncident, MajorIncidentStatus
 from app.services.incident_live_notify import _duration, _utcnow_naive
+from app.services.loop_thread_io import auf_event_loop
 
 logger = logging.getLogger("einsatzleiter.gsl_live_notify")
 
@@ -103,7 +104,7 @@ async def notify_gsl_live(db: Session, lage: MajorIncident, *, org_id: int | Non
             Incident.status == "active",
             or_(Incident.primary_org_id == org_id, Incident.id.in_(collaborating)),
         ).count()
-        await broadcast_org(org_id, {
+        await auf_event_loop(broadcast_org, org_id, {
             "type": "gsl_live", "lage": None if reason == "closed" else payload,
             "lage_count": lage_count,
             "incident_count": incident_count,
