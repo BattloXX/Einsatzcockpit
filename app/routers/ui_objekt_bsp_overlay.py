@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.core.http_cache import datei_cache_header, unveraendert
 from app.core.permissions import EINSATZ_LESE_ROLLEN, OBJEKT_VERWALTER_ROLES, require_role
 from app.db import get_db
 from app.models.objekt import ObjektBspOverlay, ObjektDokument, ObjektDokumentGeoref, ObjektDokumentSeite
@@ -169,16 +170,16 @@ def overlay_raster(overlay_id: int, request: Request, vorschau: bool = False,
     if not vorschau and not bsp.overlay_ist_auslieferbar(db, overlay):
         raise HTTPException(404, "Raster nicht verfügbar")
     try:
-        inhalt = bsp._pfad(overlay.raster_pfad).read_bytes()
+        pfad = bsp._pfad(overlay.raster_pfad)
+        inhalt = pfad.read_bytes()
     except (ObjektKartenFehler, OSError) as exc:
         raise HTTPException(404, "Raster nicht verfügbar") from exc
     if hashlib.sha256(inhalt).hexdigest() != overlay.raster_sha256:
         raise HTTPException(404, "Raster nicht verfügbar")
-    etag = f'"{overlay.raster_sha256}"'
-    headers = {"Cache-Control": "private, max-age=0, must-revalidate", "ETag": etag}
-    kandidaten = [wert.strip().removeprefix("W/") for wert in request.headers.get("if-none-match", "").split(",")]
-    if etag in kandidaten or "*" in kandidaten:
-        return Response(status_code=304, headers=headers)
+    headers = datei_cache_header(pfad, ["bsp-raster", vorschau, overlay.raster_sha256])
+    db.close()
+    if antwort := unveraendert(request, headers):
+        return antwort
     return Response(inhalt, media_type="image/png", headers=headers)
 
 
@@ -190,12 +191,16 @@ def overlay_ausschnitt(overlay_id: int, request: Request, db: Session = Depends(
     if not bsp.overlay_ist_auslieferbar(db, overlay):
         raise HTTPException(404, "Ausschnitt nicht verfügbar")
     try:
+        seite = db.query(ObjektDokumentSeite).filter_by(
+            org_id=overlay.org_id, objekt_id=overlay.objekt_id,
+            dokument_id=overlay.dokument_id, seiten_nr=overlay.seite).one()
+        headers = datei_cache_header(bsp._pfad(seite.bild_pfad),
+                                    ["bsp-ausschnitt", seite.rotation, overlay.ausschnitt_json])
+        if antwort := unveraendert(request, headers):
+            db.close()
+            return antwort
         inhalt = bsp.original_ausschnitt_png(db, overlay)
     except (ObjektKartenFehler, OSError, ValueError) as exc:
         raise HTTPException(404, "Ausschnitt nicht verfügbar") from exc
-    etag = '"' + hashlib.sha256(inhalt).hexdigest() + '"'
-    headers = {"Cache-Control": "private, max-age=0, must-revalidate", "ETag": etag}
-    kandidaten = [wert.strip().removeprefix("W/") for wert in request.headers.get("if-none-match", "").split(",")]
-    if etag in kandidaten or "*" in kandidaten:
-        return Response(status_code=304, headers=headers)
+    db.close()
     return Response(inhalt, media_type="image/png", headers=headers)

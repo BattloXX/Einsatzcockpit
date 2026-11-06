@@ -105,3 +105,36 @@ websocat wss://einsatzcockpit.com/ws/incident/1
 ---
 
 **Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup)
+
+
+### Medien-Caches und Logos
+
+Geschuetzte `/objekt-medien/seite/{id}/thumb|bild|pdf`, Dokumentoriginale,
+Symbolbilder und BSP-Raster/Ausschnitte senden `Cache-Control: private, no-cache`
+sowie `ETag` und `Last-Modified`. Der Browser muss jeden Abruf revalidieren;
+bei unveraenderter Darstellung antwortet die App mit 304 ohne Dateiinhalte.
+Organisations- und Freigabepruefungen erfolgen auch vor einer 304-Antwort.
+Drehung, Originalauswahl und Einzeichnungsversion sind Teil des Seiten-ETags.
+Ein `If-None-Match` hat Vorrang vor `If-Modified-Since`. Fuer unmittelbare
+Erkennung solcher Variantenwechsel sollen Clients den ETag verwenden;
+`Last-Modified` beschreibt die Aenderungszeit der ausgelieferten Quelldatei.
+Private Medien duerfen im Reverse-Proxy nicht oeffentlich gecacht werden.
+
+Falls nginx `/static` nicht selbst ausliefert, setzt der App-Fallback
+`Cache-Control: public, max-age=604800`; mit Query-Parameter `v` gilt
+`public, max-age=31536000, immutable`. Bei versionierten URLs muss sich `v`
+aendern, sobald sich der Inhalt aendert. Bei direkter nginx-Auslieferung gelten
+die Header der nginx-Konfiguration.
+
+Neue Organisationslogos werden auf maximal 512 Pixel an der laengsten Seite
+verkleinert und von EXIF-Metadaten bereinigt. PNG-Transparenz und Dateiformat
+bleiben erhalten, SVG bleibt unveraendert. Bestehende Uploads im App-Verzeichnis
+lassen sich einmalig (oder wiederholt) mit der Anwendungsumgebung nachziehen:
+
+```bash
+python -m app.cli logos-verkleinern
+```
+
+Der Befehl bearbeitet `app/static/img/uploads/logo_org*` direkt und gibt die
+Dateigroessen vorher/nachher in Bytes aus. Bereits bereinigte kleine Logos
+bleiben unveraendert; wiederholte Laeufe aendern diese Dateien nicht.

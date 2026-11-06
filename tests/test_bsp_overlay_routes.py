@@ -98,10 +98,8 @@ def test_etag_304_und_leserauslieferung(client, overlay_plan):
     _rolle(p, "readonly")
     r = client.get(_raster(p))
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
-    assert r.headers["cache-control"] == "private, max-age=0, must-revalidate"
-    with SessionLocal() as db:
-        set_tenant_context(db, p["org_id"])
-        assert r.headers["etag"] == f'"{db.get(ObjektBspOverlay, p["overlay_id"]).raster_sha256}"'
+    assert r.headers["cache-control"] == "private, no-cache"
+    assert "last-modified" in r.headers
     for etag in (r.headers["etag"], "W/" + r.headers["etag"], '*', '"anders", ' + r.headers["etag"]):
         cached = client.get(_raster(p), headers={"If-None-Match": etag})
         assert cached.status_code == 304 and cached.content == b""
@@ -232,3 +230,26 @@ def test_polygon_entwurf_und_validierung(client, overlay_plan, ungueltig):
     assert _aktion(client, p, "aendern", {"ausschnitt": crop, "expected_rotation": 90}).status_code == 409
     antwort = _aktion(client, p, "aendern", {"ausschnitt": crop, "expected_rotation": 0})
     assert antwort.status_code == (400 if ungueltig else 200), antwort.text
+
+
+@pytest.mark.parametrize("art", ["raster", "ausschnitt"])
+def test_medien_validatoren_und_org_schutz(client, overlay_plan, monkeypatch, art):
+    p = overlay_plan
+    _login(client, p)
+    assert _aktion(client, p, "freigeben").status_code == 200
+    url = _raster(p).removesuffix("raster") + art
+    antwort = client.get(url)
+    assert antwort.status_code == 200
+    assert antwort.headers["cache-control"] == "private, no-cache"
+    if art == "ausschnitt":
+        def kein_rendern(*args):
+            raise AssertionError("Ausschnitt darf bei 304 nicht gerendert werden")
+        monkeypatch.setattr(bsp, "original_ausschnitt_png", kein_rendern)
+    for headers in ({"If-None-Match": '"alt", W/' + antwort.headers["etag"]},
+                    {"If-Modified-Since": antwort.headers["last-modified"]}):
+        cached = client.get(url, headers=headers)
+        assert cached.status_code == 304 and cached.content == b""
+    fremd = _seed("bsp-cache-fremd-" + art, {"u": "objekt_verwalter"})
+    client.cookies.clear()
+    _login(client, fremd)
+    assert client.get(url, headers={"If-None-Match": antwort.headers["etag"]}).status_code == 404
