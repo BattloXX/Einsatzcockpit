@@ -5,6 +5,7 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 ## Unreleased
 
 - **Worker-Stabilitaet und Speicher:** Einfaches Logging statt Rich vermeidet aufwendige Traceback-Darstellung im Event-Loop. Worker-Timeouts schreiben alle Thread-Stacks zur Diagnose. WeasyPrint wird fuer Objekteinzeichnungen erst bei PDF-Bedarf geladen; der Kartenkachel-Cache ist auf 300 Eintraege pro Worker begrenzt. Keine Migration.
+- **Server blockiert bei langsamer Datenbank nicht mehr komplett:** Die Session-Pruefung laeuft nicht mehr im Event-Loop; behebt die Blockade beim Vorfall vom 06.11.2026.
 
 - **MCP blockiert den Server nicht mehr:** Synchrone Datenbankabfragen bei Werkzeuglisten und normalen Werkzeugaufrufen laufen in Worker-Threads. Damit blockieren sie den Event-Loop nicht mehr und verursachen keine gleichzeitigen Geraete-Timeouts. Broadcast-Werkzeuge bleiben auf dem Haupt-Loop.
 
