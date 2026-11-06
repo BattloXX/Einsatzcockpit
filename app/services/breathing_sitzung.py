@@ -184,6 +184,12 @@ def bewerte_selbsttest(selbsttest: dict | None, akku_prozent: int | None, laedt:
     ):
         if test.get(key) is False:
             problem(text, 1)
+    lautstaerke = test.get("alarm_lautstaerke_prozent")
+    if isinstance(lautstaerke, (int, float)) and not isinstance(lautstaerke, bool):
+        if lautstaerke == 0:
+            problem("Die Alarmlautstärke ist auf 0 gestellt.", 2)
+        elif 1 <= lautstaerke < 30:
+            problem("Die Alarmlautstärke ist sehr niedrig.", 1)
     if akku_prozent is not None and not laedt:
         if akku_prozent < 10:
             problem("Akku unter 10 Prozent. Bitte Ladegerät anschließen.", 2)

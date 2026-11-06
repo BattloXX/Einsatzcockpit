@@ -32,6 +32,14 @@
 
 {% block head_extra %}
 <style>
+.asuew-device-check { width:100%; max-width:540px; padding:8px; border:1px solid var(--border); border-radius:6px; }
+.asuew-device-check summary, .asuew-device-check button { min-height:44px; }
+.asuew-device-check summary { cursor:pointer; display:list-item; align-content:center; }
+.asuew-device-actions { display:flex; flex-wrap:wrap; gap:8px; }
+@media (max-width:760px) {
+  .asuew-device-check { box-sizing:border-box; max-width:100%; }
+  .asuew-device-actions button { flex:1 1 180px; white-space:normal; }
+}
 /* ── Gauge ───────────────────────────────────────────────────────────────── */
 .gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:8px 0 2px; }
 .gauge-svg  { width:100%; max-width:220px; overflow:visible; }
@@ -168,6 +176,25 @@
 <div class="page-header">
   {% with active="atemschutz" %}{% include "incident/_subnav.html" %}{% endwith %}
   <span id="asuewSessionStatus" role="status"></span>
+  <span id="asuewNativeStatus" role="status" hidden></span>
+  <details id="asuewDeviceCheck" class="asuew-device-check" hidden>
+    <summary>Geräte-Check</summary>
+    <p id="asuewDeviceLight" role="status">Selbsttest wird gelesen</p>
+    <ul id="asuewDeviceProblems"></ul>
+    <div class="asuew-device-actions">
+      <button type="button" class="btn btn--ghost" id="asuewTestAlarm">Alarmton testen</button>
+      <button type="button" class="btn btn--ghost" data-asuew-setting="batterie" hidden>Akku-Optimierung</button>
+      <button type="button" class="btn btn--ghost" data-asuew-setting="wecker" hidden>Exakte Wecker</button>
+      <button type="button" class="btn btn--ghost" data-asuew-setting="vollbild" hidden>Vollbild-Alarm</button>
+      <button type="button" class="btn btn--ghost" data-asuew-setting="benachrichtigung" hidden>Benachrichtigungen</button>
+    </div>
+    <div id="asuewAlarmConfirmation" hidden>
+      <p>Ton gehört?</p>
+      <button type="button" class="btn btn--primary" id="asuewConfirmAlarm">Ja</button>
+      <button type="button" class="btn btn--ghost" id="asuewRejectAlarm">Nein</button>
+    </div>
+    <p id="asuewDeviceMessage" role="status"></p>
+  </details>
   <h2>Atemschutzüberwachung – {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     {% if can_edit is not defined or can_edit %}
@@ -832,9 +859,93 @@
 const ASUEW_READONLY = {{ asuew_readonly | default(false) | tojson }};
 if (window.ELNative && ELNative.isNative) {
   let firstSessionStarted = false;
-  ECPAsuewSitzung.start({
+  const watcher = ELNative.asuew;
+  const deviceCheck = document.getElementById('asuewDeviceCheck');
+  const hasWatcher = watcher && watcher.isAvailable();
+  let lastSessionState = {};
+  let nativeTest = null;
+  function renderDeviceCheck() {
+    if (!hasWatcher) return;
+    deviceCheck.hidden = false;
+    const light = document.getElementById('asuewDeviceLight');
+    light.textContent = lastSessionState.ampel ? 'Selbsttest: ' + lastSessionState.ampel : 'Selbsttest wird gelesen';
+    light.style.color = { rot: '#e53e3e', gelb: '#ed8936', gruen: '#48bb78' }[lastSessionState.ampel] || '';
+    const problems = lastSessionState.probleme || [];
+    const list = document.getElementById('asuewDeviceProblems');
+    list.replaceChildren();
+    problems.forEach(function (problem) {
+      const item = document.createElement('li');
+      item.textContent = problem;
+      list.appendChild(item);
+    });
+    const settings = {
+      batterie: ['akku_optimierung_ausgenommen', 'Akku-Optimierung'],
+      wecker: ['exakte_wecker', 'Exakte Wecker'],
+      vollbild: ['vollbild', 'Vollbildalarme'],
+      benachrichtigung: ['benachrichtigung', 'Benachrichtigungen']
+    };
+    Object.entries(settings).forEach(function ([type, entry]) {
+      const value = nativeTest && nativeTest[entry[0]];
+      document.querySelector('[data-asuew-setting="' + type + '"]').hidden = !(value === false ||
+        (type === 'benachrichtigung' && (value === 'denied' || value === 'default')) ||
+        problems.some(function (problem) { return problem.includes(entry[1]); }));
+    });
+  }
+  if (hasWatcher) {
+    let polling = false;
+    const readNativeState = async function () {
+      if (document.hidden || polling) return;
+      polling = true;
+      try {
+        const state = await watcher.getState();
+        if (document.hidden) return;
+        const el = document.getElementById('asuewNativeStatus');
+        el.hidden = !state;
+        if (state) el.textContent = 'Wächter: ' + state.connection + ' · Akku: ' + state.battery;
+        nativeTest = await watcher.getSelbsttest();
+        renderDeviceCheck();
+      } catch (_) { /* Native Angaben sind optional. */ }
+      finally { polling = false; }
+    };
+    readNativeState();
+    const pollTimer = window.setInterval(readNativeState, 10000);
+    document.addEventListener('visibilitychange', readNativeState);
+    window.addEventListener('pagehide', function () {
+      window.clearInterval(pollTimer);
+      document.removeEventListener('visibilitychange', readNativeState);
+    });
+    document.querySelectorAll('[data-asuew-setting]').forEach(function (button) {
+      button.addEventListener('click', async function () {
+        try { await watcher.openSettings(button.dataset.asuewSetting); } catch (_) {}
+      });
+    });
+    const confirmation = document.getElementById('asuewAlarmConfirmation');
+    const message = document.getElementById('asuewDeviceMessage');
+    document.getElementById('asuewTestAlarm').addEventListener('click', async function () {
+      try {
+        const result = await watcher.playTestAlarm();
+        confirmation.hidden = !result;
+        message.textContent = result ? '' : 'Alarmtest konnte nicht gestartet werden.';
+      } catch (_) { message.textContent = 'Alarmtest konnte nicht gestartet werden.'; }
+    });
+    document.getElementById('asuewRejectAlarm').addEventListener('click', function () { confirmation.hidden = true; });
+    document.getElementById('asuewConfirmAlarm').addEventListener('click', async function () {
+      try {
+        if (!await watcher.confirmAlarmTest()) {
+          message.textContent = 'Bestätigung konnte nicht gespeichert werden.';
+          return;
+        }
+        confirmation.hidden = true;
+        message.textContent = '';
+        if (session.refresh) await session.refresh();
+      } catch (_) { message.textContent = 'Bestätigung konnte nicht gespeichert werden.'; }
+    });
+  }
+  const session = ECPAsuewSitzung.start({
     incidentId: {{ incident.id }},
     onState: function (state) {
+      lastSessionState = state;
+      renderDeviceCheck();
       const el = document.getElementById('asuewSessionStatus');
       const labels = { verbindet: 'Überwachung verbindet', aktiv: 'Überwachung aktiv', gestoert: 'Verbindung gestört' };
       el.textContent = state.zustand === 'fehler' ? state.message : labels[state.zustand];

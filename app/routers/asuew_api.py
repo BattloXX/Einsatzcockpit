@@ -137,6 +137,10 @@ def zustand(
             "entry_at", "notfall_at", "funk_verloren_at", "last_meldung_at",
         )})
         item["warnings"] = check_troop_warnings(troop)
+        # Fuer die lokale Fristberechnung des nativen Waechters (gleiche Regeln wie get_time_warnings).
+        druck_zeiten = [log.ts for log in troop.active_pressure_logs]
+        item["last_pressure_at"] = _iso(max(druck_zeiten)) if druck_zeiten else None
+        item["max_time_acked"] = troop.warn_max_time_acked_at is not None
         item["kontrollen"] = [{
             "stufe": kontrolle.stufe, "art": kontrolle.art, "erledigt_at": _iso(kontrolle.erledigt_at),
             "niedrigster_druck": kontrolle.niedrigster_druck,

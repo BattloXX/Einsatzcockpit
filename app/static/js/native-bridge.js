@@ -125,6 +125,7 @@
   const _DUTY_NORMAL_INTERVAL  = 60_000;          // Dienst-Status-Poll – Normal
   const _DUTY_BATTERY_INTERVAL = 120_000;         // Dienst-Status-Poll – Energiesparen
 
+  let _asuewKeepAwake = false;
   let _batterySaver = false;
   let _isTracking   = false;  // true sobald startLocation() aufgerufen wurde
 
@@ -140,7 +141,7 @@
       // GPS mit neuen Parametern neustarten – keepAwake(true) wird dabei gesetzt
       stopLocation();
       startLocation();
-    } else if (_batterySaver && _isNative()) {
+    } else if (_batterySaver && _isNative() && !_asuewKeepAwake) {
       // Kein Tracking aktiv: Bildschirmsperre im Sparmodus freigeben
       keepAwake(false);
     }
@@ -620,7 +621,7 @@
     _pendingLocation = null;
 
     // Bildschirmsperre im Sparmodus freigeben – kein Tracking mehr aktiv
-    if (_isNative() && _batterySaver) keepAwake(false);
+    if (_isNative() && _batterySaver && !_asuewKeepAwake) keepAwake(false);
 
     if (!_isNative() || !_locationWatch) return;
     try {
@@ -756,8 +757,36 @@
     _init();
   }
 
+  async function _asuewCall(method, args) {
+    try {
+      const plugin = window.Capacitor?.Plugins?.Atemschutz;
+      if (!plugin || typeof plugin[method] !== 'function') return null;
+      const result = await plugin[method](...(args === undefined ? [] : [args]));
+      return result === undefined ? true : result;
+    } catch (_) { return null; }
+  }
+
+  const asuew = {
+    isAvailable() {
+      try { return !!window.Capacitor?.Plugins?.Atemschutz; } catch (_) { return false; }
+    },
+    start(incidentId) { return _asuewCall('start', { incidentId }); },
+    stop() { return _asuewCall('stop'); },
+    refresh() { return _asuewCall('refresh'); },
+    getState() { return _asuewCall('getState'); },
+    async keepScreenOn(on) {
+      _asuewKeepAwake = !!on;
+      return _asuewCall('keepScreenOn', { on: !!on });
+    },
+    getSelbsttest() { return _asuewCall('getSelbsttest'); },
+    playTestAlarm() { return _asuewCall('playTestAlarm'); },
+    confirmAlarmTest() { return _asuewCall('confirmAlarmTest'); },
+    openSettings(type) { return _asuewCall('openSettings', { type }); },
+  };
+
   // ─── Öffentliche API ─────────────────────────────────────────────────────────
   window.ELNative = {
+    asuew,
     get isNative() { return _isNative(); },
     keepAwake,
     startLocation,
