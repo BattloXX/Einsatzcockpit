@@ -233,3 +233,60 @@ def test_sync_berechtigung_lehnt_rollenlosen_normalen_benutzer_ab():
     with pytest.raises(HTTPException) as exc:
         require_role_or_device("readonly")(request)
     assert exc.value.status_code == 403
+
+
+def test_manifest_medienversionen_additiv_und_annotationen_im_batch(sync_db, monkeypatch):
+    from app.services import objekt_seite_annotation
+    from app.services.objekt_service import seite_medien_version
+
+    db, org_id, _, _ = sync_db
+    aufrufe = []
+
+    def annotationen(db, ids):
+        aufrufe.append(ids)
+        return dict.fromkeys(ids, 7)
+
+    monkeypatch.setattr(objekt_seite_annotation, "annotierte_seiten", annotationen)
+    manifest = build_sync_manifest(db, org_id)
+    seiten = manifest["objekte"][0]["seiten"]
+    assert len(aufrufe) == 1
+    assert set(aufrufe[0]) == {s["seite_id"] for s in seiten}
+    for s in seiten:
+        seite = db.get(ObjektDokumentSeite, s["seite_id"])
+        erwartet = [f"/objekt-medien/seite/{seite.id}/{art}" for art, pfad in (
+            ("thumb", seite.thumb_pfad), ("bild", seite.bild_pfad), ("pdf", seite.einzel_pdf_pfad),
+        ) if pfad]
+        assert s["urls"] == erwartet
+        assert s["version"] == seite_medien_version(seite, 7)
+        assert len(s["version"]) == 16
+        assert s["versioned_urls"] == [f"{url}?v={s['version']}" for url in erwartet]
+
+
+@pytest.mark.parametrize("feld", ["thumb_pfad", "bild_pfad", "einzel_pdf_pfad"])
+def test_medienversion_stabil_und_aenderungen(tmp_path, monkeypatch, feld):
+    import os
+
+    from app.services import objekt_dokument_service
+    from app.services.objekt_service import seite_medien_version
+
+    monkeypatch.setattr(objekt_dokument_service, "absolute_pfad", lambda relativ: tmp_path / relativ)
+    seite = ObjektDokumentSeite(thumb_pfad="thumb", bild_pfad="bild", einzel_pdf_pfad="pdf", rotation=0)
+    # Fehlende Dateien sind stabil und werden beim Auftauchen erkannt.
+    fehlt = seite_medien_version(seite, None)
+    for name in ("thumb", "bild", "pdf"):
+        (tmp_path / name).write_bytes(b"alt")
+    version = seite_medien_version(seite, None)
+    assert version != fehlt
+    assert seite_medien_version(seite, None) == version
+    seite.rotation = 90
+    assert seite_medien_version(seite, None) != version
+    seite.rotation = 0
+    assert seite_medien_version(seite, 1) != version
+    assert seite_medien_version(seite, 1) != seite_medien_version(seite, 2)
+    pfad = tmp_path / getattr(seite, feld)
+    stat = pfad.stat()
+    os.utime(pfad, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+    assert seite_medien_version(seite, None) != version
+    pfad.write_bytes(b"neuer Inhalt")
+    os.utime(pfad, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    assert seite_medien_version(seite, None) != version

@@ -610,3 +610,6 @@ dialog.modal.sys-dialog-wide { max-width: 720px; }
 
 /* Lange Update-Meldungen dürfen auch mobil die Karte nicht verbreitern. */
 .update-status-body { min-width: 0; overflow-wrap: anywhere; }
+
+/* Systemstatus: Fieldset "Ueberwachte Dienste" ueber die volle Formularbreite */
+.sys-page .sys-fieldset-voll { grid-column: 1 / -1; min-width: 0; }

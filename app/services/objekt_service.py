@@ -5,6 +5,7 @@ UND Org-Flag (OrgSettings.objekt_module_enabled == True) — Muster UAS-Modul.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
 from datetime import UTC, datetime
@@ -28,6 +29,7 @@ from app.models.objekt import (
     Objekt,
     ObjektBMA,
     ObjektChange,
+    ObjektDokumentSeite,
     ObjektGefahr,
     ObjektKartenObjekt,
     ObjektKontakt,
@@ -860,6 +862,26 @@ def pruefe_revision_erinnerungen(db: Session) -> list[dict]:
     return faellig
 
 
+def seite_medien_version(seite: ObjektDokumentSeite, annotationsversion: int | None) -> str:
+    """Gemeinsame Medienversion fuer Manifest und Routen, ohne DB-Abfragen.
+
+    Fehlende Dateien bleiben im Manifest erkennbar; ihr spaeteres Auftauchen
+    aendert die Version ebenso wie Drehung, Einzeichnung oder Dateiaustausch.
+    Die Formatversion muss bei Aenderungen der Ausgabe erhoeht werden.
+    """
+    from app.services.objekt_dokument_service import absolute_pfad
+
+    dateien = []
+    for relativ in (seite.thumb_pfad, seite.bild_pfad, seite.einzel_pdf_pfad):
+        try:
+            stat = absolute_pfad(relativ).stat() if relativ else None
+        except FileNotFoundError:
+            stat = None
+        dateien.append([relativ, [stat.st_size, stat.st_mtime_ns] if stat else None])
+    kennung = json.dumps([1, dateien, seite.rotation or 0, annotationsversion], separators=(",", ":"))
+    return hashlib.sha256(kennung.encode()).hexdigest()[:16]
+
+
 def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = False) -> dict:
     """Offline-Sync-Manifest fuer die Android-App (PR9).
 
@@ -868,9 +890,8 @@ def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = Fals
     enthält das Manifest Verwaltungs- und Einsatzansicht,
     aktualisiert_am als Versionsindikator und alle Seiten-Dateien
     (Thumb/Bild/Einzel-PDF).
-    Seiten-Dateien sind unveraenderlich (UUID-Pfade) — ein Eintrag verschwindet
-    nur, wenn die Seite geloescht wurde; der Client kann daher rein ueber die
-    ID-Menge synchronisieren.
+    Medienversionen erlauben Delta-Sync auch bei Drehungen und Einzeichnungen.
+    Die bisherigen queryfreien URLs bleiben fuer alte Clients erhalten.
     """
     from app.models.objekt import (
         OBJEKT_STATUS_FREIGEGEBEN,
@@ -878,6 +899,7 @@ def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = Fals
         ObjektDokument,
         ObjektDokumentSeite,
     )
+    from app.services.objekt_seite_annotation import annotierte_seiten
 
     erlaubte_status = [OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_UEBERARBEITUNG]
     if include_drafts:
@@ -907,8 +929,10 @@ def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = Fals
             .execution_options(include_all_tenants=True)
             .all()
         )
+        annotationen = annotierte_seiten(db, [s.id for s in seiten])
         for s in seiten:
-            eintrag = {
+            version = seite_medien_version(s, annotationen.get(s.id))
+            eintrag: dict[str, Any] = {
                 "seite_id": s.id,
                 "urls": [u for u in (
                     f"/objekt-medien/seite/{s.id}/thumb" if s.thumb_pfad else None,
@@ -917,6 +941,8 @@ def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = Fals
                 ) if u],
                 "dokumentart": s.dokumentart,
             }
+            eintrag["version"] = version
+            eintrag["versioned_urls"] = [f"{url}?v={version}" for url in eintrag["urls"]]
             seiten_by_objekt.setdefault(s.objekt_id, []).append(eintrag)
 
     return {

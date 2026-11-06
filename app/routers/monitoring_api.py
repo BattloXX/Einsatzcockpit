@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorToken, DienstStatus
+from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorToken, DienstStatus, ausgeschaltete_dienste
 from app.models.master import OrgSettings, SystemSettings
 from app.services.dienst_monitor_service import dienst_zustand, pruefe_dienste
 from app.services.worker_monitor import snapshot
@@ -66,6 +66,10 @@ def dienste(request: Request):
     db, org_id = _token_org(request)
     try:
         checks = {c.key: c for c in pruefe_dienste(db, org_id)}
+        schalter = db.query(OrgSettings.dienst_monitor_ausgeschaltet).filter(
+            OrgSettings.org_id == org_id
+        ).first()
+        ausgeschaltet = ausgeschaltete_dienste(schalter[0] if schalter else "alarm_lis")
         rows = {
             r.key: r
             for r in db.query(DienstStatus)
@@ -90,7 +94,8 @@ def dienste(request: Request):
                     "label": label,
                     "status": status,
                     "roh_status": check.state,
-                    "seit": row.down_since.isoformat() if row and row.down_since else None,
+                    "ueberwacht": check.relevant,
+                    "seit": row.down_since.isoformat() if check.relevant and row and row.down_since else None,
                     "detail": check.detail,
                     "anzahl": anzahl,
                     "teile": teile,
@@ -99,7 +104,8 @@ def dienste(request: Request):
         loop = db.get(SystemSettings, "dienst_monitor_last_run")
         gesamt = "down" if down else ("teilweise" if teilweise else "ok")
         return JSONResponse(
-            {"gesamt": gesamt, "dienste": ausgabe, "loop_letzter_lauf": loop.value if loop else None,
+            {"gesamt": gesamt, "dienste": ausgabe, "ausgeschaltet": len(ausgeschaltet),
+             "loop_letzter_lauf": loop.value if loop else None,
              "runtime": _json_runtime(snapshot(db, org_id))},
             status_code=503 if down else (207 if teilweise else 200),
         )
@@ -113,6 +119,7 @@ def _json_runtime(data: dict) -> dict:
     return jsonable_encoder(data)
 
 
+@router.get("/health/dienste/{key}", include_in_schema=False)
 @router.get("/health/dienst/{key}", include_in_schema=False)
 def dienst(key: str, request: Request):
     if key not in DIENST_LABELS:
@@ -134,6 +141,7 @@ def dienst(key: str, request: Request):
             return {
                 "status": "nicht_konfiguriert",
                 "roh_status": check.state,
+                "ueberwacht": check.relevant,
                 "detail": check.detail,
                 "anzahl": anzahl,
                 "teile": teile,
@@ -142,6 +150,7 @@ def dienst(key: str, request: Request):
             {
                 "status": status,
                 "roh_status": check.state,
+                "ueberwacht": check.relevant,
                 "detail": check.detail,
                 "anzahl": anzahl,
                 "teile": teile,
