@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.core.tenant import set_tenant_context
 from app.db import Base
@@ -81,9 +80,11 @@ def test_uebung_opt_ins_geben_jeden_neuen_kanal_frei(setup_db):
 
 
 @pytest.fixture
-def guard_db(monkeypatch):
+def guard_db(monkeypatch, tmp_path):
+    # Datei-DB mit eigenem Pool statt StaticPool: Die Alarm-Outbox laeuft seit #904 in echten
+    # Threads; eine geteilte Verbindung wuerde deren Transaktionen vermischen (Doppel-/Fehlpushes).
     engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        f"sqlite:///{tmp_path / 'guard.db'}", connect_args={"check_same_thread": False, "timeout": 30}
     )
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
