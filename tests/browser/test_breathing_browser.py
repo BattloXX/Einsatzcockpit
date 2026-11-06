@@ -310,3 +310,38 @@ def test_assp_screenshot_and_live_pool(breathing_routes, name):  # noqa: F811
             assert [t for t in messages if t[0] == 'pageerror'] == []
         finally:
             browser.close()
+
+
+@pytest.mark.parametrize("name", ["handy", "desktop"])
+def test_protokoll_screenshot(breathing_routes, name):  # noqa: F811
+    """Protokollseite mit Druckmeldungen und Kontrolle, ohne JS-Fehler und ohne Ueberbreite."""
+    from playwright.sync_api import sync_playwright
+
+    from app.models.breathing import BreathingKontrolle, PressureLog
+    ctx = breathing_routes
+    _seed(ctx)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    member = ctx.troop.active_members[0]
+    ctx.db.add_all([
+        PressureLog(troop_id=ctx.troop.id, troop_member_id=member.id, pressure_bar=230, ts=now - timedelta(minutes=8)),
+        PressureLog(troop_id=ctx.troop.id, troop_member_id=member.id, pressure_bar=210, ts=now - timedelta(minutes=2),
+                    note="Einsatzziel erreicht", nachgetragen=True),
+        BreathingKontrolle(troop_id=ctx.troop.id, stufe="one_third", art="funk", erledigt_at=now - timedelta(minutes=1),
+                           niedrigster_druck=205),
+    ])
+    ctx.db.commit()
+    OUT.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        browser, page, messages = _session(playwright, ctx, VIEWPORTS[name])
+        try:
+            page.context.add_cookies([
+                {"name": key, "value": value, "url": "http://localhost"} for key, value in ctx.client.cookies.items()
+            ])
+            page.goto(f"http://localhost/einsatz/{ctx.incident_id}/atemschutz/{ctx.troop.id}/protokoll",
+                      wait_until="networkidle")
+            assert [t for t in messages if t[0] == "pageerror"] == []
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            page.screenshot(path=str(OUT / f"protokoll_{name}.png"), full_page=True,
+                            style=".profil-sheet:not(.profil-sheet--open) { visibility: hidden; }")
+        finally:
+            browser.close()

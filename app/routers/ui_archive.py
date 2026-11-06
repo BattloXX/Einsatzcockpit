@@ -63,6 +63,10 @@ def _load_archive_incident(incident_id: int, db: Session) -> Incident | None:
         .filter(Incident.id == incident_id)
         .first()
     )
+    if incident is not None:
+        from app.services.breathing_protokoll import load_protokoll_context
+
+        load_protokoll_context(db, incident)
     if incident is not None and incident.vehicles:
         # Der Tenant-Filter laedt VehicleMaster nur fuer die eigene Org. Fahrzeuge
         # einer Partner-Org oder externe Fahrzeuge blieben sonst None und wuerden

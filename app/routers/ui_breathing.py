@@ -1158,6 +1158,33 @@ def troop_auftrag(
     return Response(status_code=204)
 
 
+@router.get("/einsatz/{incident_id}/atemschutz/{troop_id}/protokoll", response_class=HTMLResponse)
+def troop_protokoll(
+    incident_id: int, troop_id: int, request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(404)
+    from app.core.permissions import can_access_incident
+    from app.services.breathing_protokoll import LABELS, gruppiere_nach_zyklus, load_protokoll_context
+
+    if not can_access_incident(user, incident):
+        raise HTTPException(404)
+    troops = load_protokoll_context(db, incident)
+    troop = next((t for t in troops if t.id == troop_id), None)
+    if troop is None:
+        raise HTTPException(404)
+    return templates.TemplateResponse(request, "breathing/protokoll.html", {
+        "user": user, "incident": incident, "troop": troop, "labels": LABELS,
+        "gruppen": gruppiere_nach_zyklus(troop.protokoll_ereignisse),  # type: ignore[attr-defined]
+    })
+
+
 @router.get("/einsatz/{incident_id}/atemschutz/{troop_id}/pdf")
 def troop_pdf(
     incident_id: int, troop_id: int, request: Request,

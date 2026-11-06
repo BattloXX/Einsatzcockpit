@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Protokoll - {{ troop.name }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/breathing.css?v={{ ASSET_VERSION }}">
+{% endblock %}
+{% block content %}
+<div id="breathingBoard" class="breathing-board bp-page" data-contrast-storage="ec-breathing-hc" x-data="{ filter: 'alle' }">
+<script src="/static/js/breathing_contrast.js?v={{ ASSET_VERSION }}"></script>
+<script>ECPBreathingContrast.restore(document.getElementById('breathingBoard'), function () { return window.localStorage; });</script>
+<h1>{{ troop.name }} - Protokoll</h1>
+<p>Überwacher: {{ troop.ueberwacher_name or '–' }}; Funkkanal: {{ troop.funkkanal or '–' }}; Zyklen: {{ get_troop_cycles(troop)|length }}</p>
+<div class="bp-actions">
+  <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--ghost">Zurück zum Board</a>
+  <a href="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf" class="btn btn--ghost">{{ icon("file-text") }} PDF</a>
+  <button type="button" class="btn btn--ghost" id="breathingContrastToggle" aria-label="Hochkontrast umschalten" aria-pressed="false">{{ icon("sun") }} Hochkontrast</button>
+</div>
+<div class="bp-actions" aria-label="Protokoll filtern">
+{% for key, label in [('alle', 'Alle'), ('druck', 'Druck'), ('kontrolle', 'Kontrollen'), ('warnung', 'Warnungen/Eskalation'), ('status', 'Status')] %}
+  <button type="button" class="btn btn--ghost" @click="filter = '{{ key }}'" :aria-pressed="filter === '{{ key }}'">{{ label }}</button>
+{% endfor %}
+</div>
+{% for cycle in get_troop_cycles(troop) %}
+<section class="bp-cycle">
+<h2>Zyklus {{ loop.index }}</h2>
+<p>Überwacher: {{ cycle.ueberwacher_name or '–' }}; Funkkanal: {{ cycle.funkkanal or '–' }}</p>
+<div class="bp-scroll" tabindex="0" role="region" aria-label="Ereignisse Zyklus {{ loop.index }}">
+<table class="bp-table">
+<thead><tr><th>Zeit</th><th>Art</th><th>Text</th><th>Akteur</th><th>Nachtrag</th></tr></thead>
+<tbody>
+{% for e in gruppen.get(loop.index, []) %}
+<tr x-show="filter === 'alle' || filter === '{{ e.art }}'{% if e.art in ['meldung', 'audit'] %} || filter === 'status'{% endif %}">
+<td>{{ e.zeit|local_datetime_sec }}</td><td>{{ icon({'druck': 'activity', 'kontrolle': 'clipboard-check', 'warnung': 'alert-triangle', 'status': 'arrow-right', 'meldung': 'message', 'audit': 'history'}[e.art], size="xs") }} {{ labels[e.art] }}</td>
+<td>{{ e.text }}</td><td>{{ e.akteur or '–' }}</td><td>{% if e.nachgetragen %}<strong>nachgetragen</strong>{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="5">Keine Ereignisse vorhanden.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+</section>
+{% endfor %}
+</div>
+{% endblock %}

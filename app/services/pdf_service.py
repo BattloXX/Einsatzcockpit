@@ -384,6 +384,16 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
     return ergebnis
 
 
+def _load_breathing_protokoll(incident: Incident) -> None:
+    from sqlalchemy.orm import object_session
+
+    from app.services.breathing_protokoll import load_protokoll_context
+
+    db = object_session(incident)
+    if db is not None:
+        load_protokoll_context(db, incident)
+
+
 def render_incident_pdf(
     incident: Incident,
     base_url: str = "",
@@ -391,6 +401,7 @@ def render_incident_pdf(
     qr_datauri: str | None = None,
     qr_url: str | None = None,
 ) -> bytes:
+    _load_breathing_protokoll(incident)
     template = templates.env.get_template("pdf/incident_report.html")
     primary_org, teilnahmen, journal, objekte = _load_pdf_context(incident)
     zusatz = _load_pdf_zusatz(incident)
@@ -432,6 +443,7 @@ def render_incident_pdf(
 
 def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
     """Einzelexport eines Atemschutztrupps als vollständiges A4-PDF."""
+    _load_breathing_protokoll(incident)
     template = templates.env.get_template("pdf/troop_protocol.html")
     primary_org = _resolve_primary_org(incident)
     pseudo_user = SimpleNamespace(org=primary_org)

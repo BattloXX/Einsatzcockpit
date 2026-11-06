@@ -273,3 +273,16 @@
   .assp-pool { gap:12px; }
   .assp-actions > .btn { white-space:normal; }
 }
+
+/* Vollständiges, mobil horizontal scrollbar dargestelltes Trupp-Protokoll. */
+.bp-page { padding: 1rem; }
+.bp-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.bp-actions .btn { min-height: 44px; min-width: 44px; }
+.bp-cycle { margin: 1.5rem 0; }
+.bp-scroll { overflow-x: auto; }
+.bp-table { width: 100%; border-collapse: collapse; }
+.bp-table th, .bp-table td { padding: .7rem; text-align: left; border-bottom: 1px solid var(--border); }
+.bp-table td:first-child { white-space: nowrap; }
+.bp-page.breathing-hc { background: #000; color: #fff; }
+.bp-page.breathing-hc .bp-table th, .bp-page.breathing-hc .bp-table td { background: #000; color: #fff; border-color: #fff; }
+.bp-page.breathing-hc .btn { background: #000; color: #fff; border: 2px solid #fff; }

@@ -427,6 +427,7 @@
         {% endif %}
       </div>
     </div>
+      <a class="btn btn--ghost" style="min-height:44px;min-width:44px;" href="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/protokoll">{{ icon("file-text", size="xs") }} Protokoll</a>
       <button type="button" class="btn btn--ghost btn--sm" aria-label="Trupp-Protokoll als PDF" title="Trupp-Protokoll als PDF"
          onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ troop.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf'})">{{ icon("file-text", size="xs") }} PDF</button>
     </div>
