@@ -4,7 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
-- **Strassensperren mit mehreren Strassen:** Eine Verordnung kann mehrere Straßenabschnitte enthalten. Suche, Dublettenerkennung, Detailansicht, öffentliche Daten und Teams berücksichtigen alle Abschnitte. PDF-Entwürfe liefern Abschnittsvorschläge; MCP unterstützt Anlage und gezielte Geometrieprüfung je Abschnitt. Migration 0351.
+- **Strassensperren mit mehreren Strassen:** Eine Verordnung kann mehrere Straßenabschnitte enthalten. Suche, Dublettenerkennung, Detailansicht, öffentliche Daten und Teams berücksichtigen alle Abschnitte. Das Formular ergänzt Straßen über „+ Weitere Straße“ und bietet Adressprüfung, Geometrieermittlung und Kartenbearbeitung je Abschnitt. PDF-Entwürfe belegen die Abschnittsliste vor; MCP unterstützt Anlage und gezielte Geometrieprüfung je Abschnitt. Migration 0351.
 
 - **Hydranten blau, Einsatztimer stoppt beim Abschluss:** Auf dem Alarm-Infoscreen, der Einsatz-Info-Seite (auch im Druck) und der öffentlichen Alarmzusammenfassung sind Überflurhydranten jetzt blau und Unterflurhydranten dunkelblau. Rot bleibt dem Einsatzort vorbehalten, dessen Marker größer ist und immer über den Hydranten liegt. Objektkarte, Wasserstellen-Verwaltung und Lageführung behalten ihre Farben. Bei abgeschlossenen Einsätzen bleibt die Einsatzdauer im Einsatzboard, auf dem Infoscreen (inklusive GSL) und im Live-Banner auf der tatsächlichen Dauer stehen und ist als „abgeschlossen“ gekennzeichnet. Die Live-Daten (`/api/v1/device/duty-state`, Live-Banner) enthalten zusätzlich `closed_at` (Einsatz) bzw. `ended_at` (Lage). Keine Migration.
 

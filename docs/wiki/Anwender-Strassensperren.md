@@ -32,8 +32,13 @@ PDF-Entwürfe liefern für jede erkannte Straße einen Abschnittsvorschlag. Übe
 mit Status und Qualität. Bei der Geometrieermittlung und -bestätigung wählt `abschnitt_index` den
 Abschnitt **nullbasiert** aus (0 = erster Abschnitt). Bei mehreren Abschnitten erfordert die
 Geometrieübernahme einen Index; sie verändert nur diesen Abschnitt. Ohne Index bestätigt die bisherige
-Gesamtbestätigung weiterhin alle vorhandenen Geometrien. Der Formular- und Karteneditor für mehrere
-Abschnitte folgt in einem eigenen Paket.
+Gesamtbestätigung weiterhin alle vorhandenen Geometrien.
+
+Im Formular fügt **+ Weitere Straße** einen Abschnitt hinzu. Ort und die übrigen Angaben gelten für
+alle Abschnitte. Jeder Abschnitt bietet eigene Adressvorschläge, **Abschnitt aus Adresse ermitteln**
+und **Geometrie geprüft**. Mit **Auf Karte bearbeiten** wählst du den Abschnitt für Zeichnen,
+Bearbeiten oder Entfernen auf der Karte; die anderen bleiben in eigener Farbe und mit Nummer sichtbar.
+**Entfernen** löscht eine Abschnittskarte; mindestens ein Abschnitt bleibt stehen.
 
 ### Adressprüfung
 
