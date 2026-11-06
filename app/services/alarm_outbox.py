@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 from threading import Lock
@@ -481,26 +482,40 @@ async def _run_claimed_ablauf(db: Session, job_id: int, generation: int) -> None
         log_fehler(logger, "Alarm-Outbox fehlgeschlagen", exc, level=logging.ERROR, job_id=job_id)
 
 
+_ABSCHLUSS_SPERRE = threading.Lock()
+
+
 def _finish_if_done(db: Session, incident: Incident, org_id: int | None, user_id: int | None) -> None:
     jobs = db.query(IncidentAlarmJob).filter(IncidentAlarmJob.incident_id == incident.id).all()
     if not jobs or any(job.status not in TERMINAL for job in jobs):
         return
     from app.core.audit import write_audit
     from app.models.user import AuditLog
-    finished = db.query(AuditLog.id).filter(
-        AuditLog.action == "incident.alarm_finished", AuditLog.incident_id == incident.id,
-    ).first()
-    if finished:
-        return
+    incident_id = incident.id
     payload = {job.channel: {"status": job.status, "reason": job.last_error} for job in jobs}
-    write_audit(db, "incident.alarm_finished", org_id=org_id, user_id=user_id, incident_id=incident.id, payload=payload)
-    # Bereits beim Anlegen unterdrueckte Alarme haben ihren gemeinsamen Logeintrag.
-    if not all(job.status == "suppressed" and job.context.get("suppressed_reason") for job in jobs):
-        db.add(IncidentLog(
-            incident_id=incident.id, author_name="System", level="info", text="Alarmierung abgeschlossen",
-        ))
-    db.commit()
-    logger.info("Alarmierung abgeschlossen (Einsatz %s, Kanaele=%s)", incident.id, len(jobs))
+    unterdrueckt = all(job.status == "suppressed" and job.context.get("suppressed_reason") for job in jobs)
+    anzahl = len(jobs)
+    # Die Kanaele laufen in parallelen Threads (Alarm-Pool): Zwei gleichzeitig fertige Kanaele
+    # duerfen den Abschluss nicht doppelt schreiben. Pruefen und Schreiben bilden einen Block;
+    # die Pruefung nutzt eine frische Session, damit sie unter REPEATABLE READ den Commit
+    # des anderen Threads sieht.
+    with _ABSCHLUSS_SPERRE:
+        with SessionLocal() as pruef_db:
+            set_tenant_context(pruef_db, None)
+            finished = pruef_db.query(AuditLog.id).filter(
+                AuditLog.action == "incident.alarm_finished", AuditLog.incident_id == incident_id,
+            ).first()
+        if finished:
+            return
+        write_audit(db, "incident.alarm_finished", org_id=org_id, user_id=user_id, incident_id=incident_id,
+                    payload=payload)
+        # Bereits beim Anlegen unterdrueckte Alarme haben ihren gemeinsamen Logeintrag.
+        if not unterdrueckt:
+            db.add(IncidentLog(
+                incident_id=incident_id, author_name="System", level="info", text="Alarmierung abgeschlossen",
+            ))
+        db.commit()
+    logger.info("Alarmierung abgeschlossen (Einsatz %s, Kanaele=%s)", incident_id, anzahl)
 
 
 def _claim_incident_sync(incident_id: int) -> list[tuple[int, int]]:

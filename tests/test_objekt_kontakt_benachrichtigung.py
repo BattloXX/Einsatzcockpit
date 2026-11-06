@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 @compiles(BigInteger, "sqlite")
@@ -39,7 +40,7 @@ from app.services.sms_dispatch_service import render_template
 
 @pytest.fixture()
 def versand(monkeypatch):
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     db = Session()

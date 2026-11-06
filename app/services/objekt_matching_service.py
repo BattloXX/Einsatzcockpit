@@ -30,6 +30,7 @@ from app.models.objekt import (
     ObjektBMA,
     ObjektEinsatz,
 )
+from app.services.loop_thread_io import ALARM_POOL, im_db_thread
 
 logger = logging.getLogger("einsatzleiter.objekt_matching")
 
@@ -293,36 +294,32 @@ def match_incident(db: Session, incident: Incident, *, nur_geo: bool = False) ->
     return neu
 
 
-async def _broadcast_matches(incident: Incident, neu: list[ObjektEinsatz], db: Session) -> None:
-    """WS-Event fuer Board-Panel + Alarm-Infoscreen."""
-    from app.services.broadcast import broadcast_org
-    if not neu or incident.primary_org_id is None:
-        return
-    objekt_namen = {}
-    for oe in neu:
-        objekt = db.get(Objekt, oe.objekt_id)
-        if objekt:
-            objekt_namen[oe.objekt_id] = objekt.name
-    try:
-        await broadcast_org(incident.primary_org_id, {
-            "type": "objekt_match",
-            "incident_id": incident.id,
-            "matches": [
-                {
-                    "objekt_id": oe.objekt_id,
-                    "name": objekt_namen.get(oe.objekt_id, ""),
-                    "quelle": oe.quelle,
-                    "status": oe.status,
-                }
-                for oe in neu
-            ],
-        })
-    except Exception:
-        logger.exception("objekt_match-Broadcast fehlgeschlagen (Einsatz %d)", incident.id)
-
-
 async def match_incident_background(incident_id: int, *, nur_geo: bool = False) -> None:
     """Background-Task (Muster _geocode_incident): eigene Session, nie Request blockieren."""
+    try:
+        vorbereitet = await im_db_thread(_match_incident_sync, incident_id, nur_geo, pool=ALARM_POOL)
+        if vorbereitet is None:
+            return
+        org_id, payload = vorbereitet
+        if payload is not None:
+            from app.services.broadcast import broadcast_org, manager
+            if org_id is not None:
+                try:
+                    await broadcast_org(org_id, payload)
+                except Exception:
+                    logger.exception("objekt_match-Broadcast fehlgeschlagen (Einsatz %d)", incident_id)
+            try:
+                await manager.broadcast(incident_id, {"type": "objektgefahren"})
+            except Exception:
+                logger.exception("Board-Reload-Broadcast fehlgeschlagen (Einsatz %d)", incident_id)
+        from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+        await dispatch_objekt_einsatzinfo(incident_id)
+    except Exception:
+        logger.exception("Objekt-Matching fehlgeschlagen (Einsatz %d)", incident_id)
+
+
+def _match_incident_sync(incident_id: int, nur_geo: bool) -> tuple[int | None, dict | None] | None:
+    """Matching und Broadcast-Nutzdaten vollstaendig in der eigenen Session vorbereiten."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
 
@@ -331,28 +328,35 @@ async def match_incident_background(incident_id: int, *, nur_geo: bool = False) 
     try:
         incident = db.get(Incident, incident_id)
         if incident is None:
-            return
-        # Modul-Gate: Matching nur, wenn Objektverwaltung fuer die Org aktiv ist
+            return None
         from app.services.objekt_service import objekt_effective_enabled
         if not objekt_effective_enabled(incident.primary_org_id, db):
-            return
+            return None
         neu = match_incident(db, incident, nur_geo=nur_geo)
+        payload = None
         if neu:
             db.commit()
-            await _broadcast_matches(incident, neu, db)
-            # Board neu laden (neue Spalte/Meldungen "Objektgefahren")
-            try:
-                from app.services.broadcast import manager
-                await manager.broadcast(incident_id, {"type": "objektgefahren"})
-            except Exception:
-                logger.exception("Board-Reload-Broadcast fehlgeschlagen (Einsatz %d)", incident_id)
-        from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
-        await dispatch_objekt_einsatzinfo(incident_id)
+            objekt_namen = {}
+            for oe in neu:
+                objekt = db.get(Objekt, oe.objekt_id)
+                if objekt:
+                    objekt_namen[oe.objekt_id] = objekt.name
+            payload = {
+                "type": "objekt_match",
+                "incident_id": incident.id,
+                "matches": [
+                    {"objekt_id": oe.objekt_id, "name": objekt_namen.get(oe.objekt_id, ""),
+                     "quelle": oe.quelle, "status": oe.status}
+                    for oe in neu
+                ],
+            }
+        return incident.primary_org_id, payload
     except Exception:
         logger.exception("Objekt-Matching fehlgeschlagen (Einsatz %d)", incident_id)
         try:
             db.rollback()
         except Exception:
             pass
+        return None
     finally:
         db.close()

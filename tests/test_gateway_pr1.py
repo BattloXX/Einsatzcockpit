@@ -545,10 +545,11 @@ async def test_autoprint_verleih_background_reicht_uebungsstatus_durch(db, monke
 
     zugestellt = []
 
-    async def _dispatch(_db, job):
-        zugestellt.append(job.artifact_ref)
+    async def _dispatch(job_id):
+        werte = await disp.im_db_thread(disp._load_print_job_sync, job_id, pool=disp.ALARM_POOL)
+        zugestellt.append(werte["artifact_ref"])
 
-    monkeypatch.setattr(disp, "dispatch_job", _dispatch)
+    monkeypatch.setattr(disp, "_dispatch_background_job", _dispatch)
     await disp.autoprint_verleih_background(ausleihe_uebung.id)
     await disp.autoprint_verleih_background(ausleihe_echt.id)
 

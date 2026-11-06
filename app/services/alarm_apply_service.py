@@ -17,6 +17,7 @@ from app.models.gateway import PARSE_FAILED, AlarmIngest
 from app.models.incident import Incident
 from app.models.incident_alarm_field import IncidentAlarmField
 from app.models.user import User
+from app.services.loop_thread_io import ALARM_POOL, im_db_thread
 
 logger = logging.getLogger("einsatzleiter.alarm")
 
@@ -274,15 +275,23 @@ def nach_adressaenderung(incident_id: int, background_tasks: BackgroundTasks) ->
 
 
 async def _geocode_adressaenderung(incident_id: int) -> None:
+    from app.routers.api_v1 import _geocode_incident
+
+    adresse = await im_db_thread(_lade_geocode_adresse_sync, incident_id, pool=ALARM_POOL)
+    if adresse is not None:
+        await _geocode_incident(*adresse)
+
+
+def _lade_geocode_adresse_sync(incident_id: int) -> tuple[int, str | None, str | None, str | None] | None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
-    from app.routers.api_v1 import _geocode_incident
 
     with SessionLocal() as db:
         set_tenant_context(db, None)
         incident = db.get(Incident, incident_id)
         if incident is not None and (incident.address_street or incident.address_city):
-            await _geocode_incident(incident.id, incident.address_street, incident.address_no, incident.address_city)
+            return incident.id, incident.address_street, incident.address_no, incident.address_city
+        return None
 
 
 def wende_an(db: Session, ingest: AlarmIngest, org_id: int) -> tuple[Incident | None, str]:
