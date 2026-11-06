@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Server blockiert bei langsamer Datenbank nicht mehr komplett:** Die Session-Pruefung laeuft nicht mehr im Event-Loop; behebt die Blockade beim Vorfall vom 06.11.2026.
+
 - **MCP blockiert den Server nicht mehr:** Synchrone Datenbankabfragen bei Werkzeuglisten und normalen Werkzeugaufrufen laufen in Worker-Threads. Damit blockieren sie den Event-Loop nicht mehr und verursachen keine gleichzeitigen Geraete-Timeouts. Broadcast-Werkzeuge bleiben auf dem Haupt-Loop.
 
 - **Strassensperren mit mehreren Strassen:** Eine Verordnung kann mehrere Straßenabschnitte enthalten. Suche, Dublettenerkennung, Detailansicht, öffentliche Daten und Teams berücksichtigen alle Abschnitte. Das Formular ergänzt Straßen über „+ Weitere Straße“ und bietet Adressprüfung, Geometrieermittlung und Kartenbearbeitung je Abschnitt. PDF-Entwürfe belegen die Abschnittsliste vor; MCP unterstützt Anlage und gezielte Geometrieprüfung je Abschnitt. Migration 0351.
