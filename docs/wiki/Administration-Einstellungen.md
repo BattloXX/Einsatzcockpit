@@ -112,7 +112,7 @@ bleiben im Board sichtbar, bis sie aufgehoben werden.
 
 > **Bis zur unterzeichneten Geräteabnahme (Phase 8) ergänzt die digitale ASÜW
 > die papierbasierte Überwachung und ersetzt sie NICHT.** Tafel/Formular weiterführen;
-> siehe [Abnahme-Checkliste](../plans/atemschutzueberwachung-abnahme.md).
+> siehe Abnahme-Checkliste (docs/plans/atemschutzueberwachung-abnahme.md).
 
 **Rollout:** Den Schalter **Überwachung nur in der App erlauben** unter
 **Einstellungen → Allgemein** erst aktivieren, wenn alle Überwachungsgeräte die

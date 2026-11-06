@@ -6,13 +6,25 @@ from uuid import uuid4
 import pytest
 
 from app.core.tenant import set_tenant_context
-from app.models.breathing import BreathingGeraetSitzung, BreathingWarnung
+from app.models.breathing import BreathingGeraetSitzung, BreathingWarnung, BreathingZustellung
 from app.models.master import FireDept
 from app.models.user import FcmToken, User
 from app.services import breathing_service as bs
 from app.services import breathing_sitzung as svc
 from tests.test_breathing_routes import breathing_routes  # noqa: F401
 from tests.test_breathing_sitzung import ctx, service_start  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def _zustellungen_aufraeumen():
+    """Committete Eskalationszeilen duerfen nachfolgende Zustellungs-Tests nicht stoeren."""
+    yield
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        db.query(BreathingZustellung).delete()
+        db.query(BreathingWarnung).delete()
+        db.commit()
 
 
 def android(c, **changes):

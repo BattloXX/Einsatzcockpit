@@ -8,7 +8,7 @@ Rückzug nach dem doppelten Anmarschverbrauch und Überwachung des gesamten Trup
 
 > **Bis die Geräteabnahme (Phase 8) unterzeichnet ist, ergänzt die digitale
 > Atemschutzüberwachung die papierbasierte ASÜW und ersetzt sie NICHT.** Tafel/Formular
-> weiterführen. Die [Abnahme-Checkliste](../plans/atemschutzueberwachung-abnahme.md)
+> weiterführen. Die Abnahme-Checkliste (docs/plans/atemschutzueberwachung-abnahme.md)
 > dokumentiert Gerätetests und Freigabe. Android wird zuerst abgenommen; das Release
 > mit dem nativen Wächter ist noch nicht veröffentlicht.
 
