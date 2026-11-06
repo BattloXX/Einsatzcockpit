@@ -39,3 +39,6 @@ app_storage/
 e2e/artifacts/
 
 .update-rollback/
+
+# Browser-Prüfstand (tests/browser): Screenshots
+tests/browser/out/

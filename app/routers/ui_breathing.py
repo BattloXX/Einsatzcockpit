@@ -38,6 +38,7 @@ from app.services.breathing_service import (
     report_objective_reached,
     set_funk_verloren,
     start_troop,
+    troop_urgency,
     update_meldung,
     update_troop_status,
 )
@@ -141,6 +142,11 @@ def breathing_board(
     incident = db.get(Incident, incident_id)
     if not incident:
         raise HTTPException(404)
+    return templates.TemplateResponse(request, "breathing/board.html", _board_kontext(request, db, incident, user))
+
+
+def _board_kontext(request: Request, db: Session, incident: Incident, user) -> dict:
+    incident_id = incident.id
     db.refresh(incident, ["breathing_troops", "vehicles"])
     all_members = db.query(Member).filter(Member.active == True).order_by(Member.lastname).all()  # noqa: E712
     members = [m for m in all_members if m.is_agt]
@@ -171,11 +177,15 @@ def breathing_board(
             BreathingWarnung.erledigt_at.is_(None),
         ).order_by(BreathingWarnung.ausgeloest_at, BreathingWarnung.id).all():
             warnungen_by_troop.setdefault(warnung.troop_id, []).append(warnung)
-    return templates.TemplateResponse(request, "breathing/board.html", {
+    return {
         "asuew_app_pflicht": app_pflicht, "asuew_session_ok": session_ok,
         "asuew_readonly": readonly, "can_alarm": can_alarm,
         "can_edit": can_alarm and not readonly,
-        "user": user, "incident": incident,
+        "request": request, "user": user, "incident": incident,
+        "server_now_iso": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "troop_urgency": troop_urgency,
+        "safety": {"troop": next((t for t in incident.breathing_troops
+                                 if t.status == "bereit" and t.is_sicherheitstrupp), None)},
         "troops_with_warnings": troops_with_warnings, "members": members,
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
         "troop_status_labels": TROOP_STATUS_LABELS,
@@ -183,7 +193,44 @@ def breathing_board(
         "hinweise": incident_hinweise(incident.breathing_troops),
         "kein_heartbeat": asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None)),
         "trupp_uebersicht": trupp_uebersicht, "warnungen_by_troop": warnungen_by_troop,
-    })
+    }
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/uebersicht", response_class=HTMLResponse)
+def breathing_summary(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(404)
+    return templates.TemplateResponse(
+        request, "breathing/_summary.html", _board_kontext(request, db, incident, user),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/{troop_id}/karte", response_class=HTMLResponse)
+def breathing_troop_card(
+    incident_id: int, troop_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    troop = db.get(BreathingTroop, troop_id)
+    if not incident or not troop or troop.incident_id != incident_id:
+        raise HTTPException(404)
+    context = _board_kontext(request, db, incident, user)
+    values = next(row for row in context["troops_with_warnings"] if row[0].id == troop_id)
+    context.update(zip(("troop", "warning", "warning_member", "time_warning", "active_warnings"), values, strict=True))
+    return templates.TemplateResponse(
+        request, "breathing/_troop_card.html", context, headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/trupp")

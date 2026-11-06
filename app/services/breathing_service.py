@@ -814,6 +814,26 @@ def get_warning_level(troop: BreathingTroop, gelb_prozent: int = 75) -> Pressure
     return worst
 
 
+def troop_urgency(troop: BreathingTroop, warning_level: str, active_warnings: Iterable[str]) -> int:
+    """Kleinere Werte stehen auf dem Board weiter vorne; Sicherheitslagen gehen vor."""
+    warnings = set(active_warnings)
+    if troop.notfall_at is not None or "notfall" in warnings:
+        return 0
+    if troop.funk_verloren_at is not None or "funk_verloren" in warnings:
+        return 1
+    if "withdraw" in warnings or warning_level == "red":
+        return 2
+    if troop.status == "rueckzug":
+        return 3
+    if "max_exceeded" in warnings:
+        return 4
+    if warnings.intersection({"two_third_due", "one_third_due"}):
+        return 5
+    if warning_level == "yellow":
+        return 6
+    return {"im_einsatz": 7, "bereit": 8, "zurueck": 9, "erholt": 10}[troop.status]
+
+
 def get_time_warnings(troop: BreathingTroop) -> list[str]:
     """Gibt alle gleichzeitig aktiven Zeitwarnungen nach ASÜW-Leitfaden/FwDV 7 zurück.
 

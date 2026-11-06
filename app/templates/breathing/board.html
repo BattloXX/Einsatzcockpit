@@ -1,35 +1,5 @@
 {% extends "base.html" %}
 
-{% macro kontrolle_picker(troop, stufe, label) %}
-<div class="press-picker-wrap" x-data="{open:false}" @click.outside="open = false">
-  <button type="button" class="btn btn--ghost btn--sm" @click="open = !open">{{ label }}</button>
-  <div x-show="open" x-cloak class="press-picker-popup">
-    <div class="press-picker-header">Niedrigster Druck des Trupps</div>
-    <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/kontrolle" hx-swap="none"
-          @htmx:after-request="if ($event.detail.successful) { open = false; } else { ECPBreathingNet.formFailed($event); }"
-          @breathing-queued="open = false;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="hidden" name="stufe" value="{{ stufe }}">
-      <input type="hidden" name="art" value="funk">
-      <div class="press-grid">
-        {% for val in range(300, 0, -10) %}
-        <button type="submit" name="pressure_bar" value="{{ val }}" class="press-btn">{{ val }}</button>
-        {% endfor %}
-      </div>
-    </form>
-  </div>
-</div>
-{% endmacro %}
-{% macro safety_form(troop, route, label, field='', value='') %}
-<form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/{{ route }}" hx-swap="none"
-      @htmx:after-request="if ($event.detail.successful) { $el.reset(); } else { ECPBreathingNet.formFailed($event); }"
-      @breathing-queued="$el.reset();">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  {% if field %}<input type="hidden" name="{{ field }}" value="{{ value }}">{% endif %}
-  <button type="submit" class="btn btn--ghost btn--sm">{{ label }}</button>
-</form>
-{% endmacro %}
-
 {% block title %}AS-Überwachung – Einsatz #{{ incident.id }}{% endblock %}
 
 {% block head_extra %}
@@ -216,489 +186,12 @@
   </div>
 </div>
 
-{% set safety = namespace(troop=None) %}
-{% for troop in incident.breathing_troops %}
-  {% if safety.troop is none and troop.status == 'bereit' and troop.is_sicherheitstrupp %}{% set safety.troop = troop %}{% endif %}
-{% endfor %}
-{# Auch bei einem partiellen Grid-Reload Hinweise und Zaehler aktualisieren. #}
-<div id="breathingSummary" hx-swap-oob="outerHTML">
-  {% if kein_heartbeat or hinweise or incident.breathing_troops | selectattr('notfall_at') | list or incident.breathing_troops | selectattr('funk_verloren_at') | list %}
-  <section class="breathing-critical" aria-labelledby="breathingCriticalTitle">
-    <h3 id="breathingCriticalTitle">{{ icon("alert-triangle") }} Kritische Hinweise</h3>
-    {% if kein_heartbeat %}<p>Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden). Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen.</p>{% endif %}
-    {% if hinweise.assp %}<p>3 oder mehr Trupps gleichzeitig im Einsatz: Atemschutzsammelplatz (ASSP) über die Einsatzleitung alarmieren. Der ASSP übernimmt nur Logistik, die Überwachung bleibt beim Gruppenkommandanten.</p>{% endif %}
-    {% if hinweise.kein_sicherheitstrupp %}<p>Kein bereiter Sicherheitstrupp: Rettungstrupp ab Einsatzbeginn bereitstellen.</p>{% endif %}
-    {% for troop in incident.breathing_troops %}
-    {% if troop.notfall_at %}<p class="breathing-critical__notfall"><a href="#troop-{{ troop.id }}">ATEMSCHUTZNOTFALL: {{ troop.name }}</a></p>{% endif %}
-    {% if troop.funk_verloren_at %}<p><a href="#troop-{{ troop.id }}">Kein Funkkontakt: {{ troop.name }}</a></p>{% endif %}
-    {% endfor %}
-  </section>
-  {% endif %}
-  <p class="breathing-overview">Trupps: {{ trupp_uebersicht.im_einsatz + trupp_uebersicht.rueckzug }} im Einsatz, {{ trupp_uebersicht.bereit }} bereit (davon {{ trupp_uebersicht.sicherheitstrupp_bereit }} Sicherheitstrupp), {{ trupp_uebersicht.zurueck }} in Erholung</p>
-</div>
+{% with summary_oob=true %}{% include "breathing/_summary.html" %}{% endwith %}
 
-<div class="troops-grid" id="troopsGrid" @click.once="unlockAudio()">
+<div class="troops-grid" id="troopsGrid" data-server-now="{{ server_now_iso }}" @click.once="unlockAudio()">
   {% for troop, warning, warning_member, time_warning, active_warnings in troops_with_warnings %}
 
-  {# ── Compute current pressure & last-log timestamp ── #}
-  {% set ns = namespace(last_log=None) %}
-  {% for log in troop.active_pressure_logs %}{% set ns.last_log = log %}{% endfor %}
-
-  {% set current_press = (troop.lowest_current_pressure or troop.start_press_avg or 300) | float %}
-  {% set max_press     = (troop.start_press_avg or 300) | float %}
-  {% set withdraw_press = (troop.withdraw_press_calc or (max_press * 0.5 + 10)) | float %}
-  {% set last_log_iso  = (ns.last_log.ts | local_iso if ns.last_log else '') %}
-  {% set entry_iso = (troop.entry_at | local_iso if troop.entry_at else '') %}
-  {% set back_iso  = (troop.back_at  | local_iso if troop.back_at  else '') %}
-  {% set planned_min = troop.planned_duration_min or 0 %}
-
-  <div class="troop-card troop-card--{{ troop.status }} troop-card--warn-{{ warning }}{% if troop.notfall_at %} troop-card--notfall{% endif %}"
-       id="troop-{{ troop.id }}"
-       x-data="troopCard({{ current_press }}, {{ max_press }}, {{ withdraw_press }}, '{{ last_log_iso }}', '{{ entry_iso }}', {{ planned_min }}, '{{ back_iso }}', {{ asuew_settings.erholzeit_min }})"
-       x-init="init()">
-
-    <!-- Header -->
-    <div class="troop-card__header">
-      <span class="troop-card__name">{{ troop.name }}</span>
-      <span class="troop-card__status-pill status-pill--{{ troop.status }}">
-        {{ troop_status_labels[troop.status] }}
-      </span>
-      {% if troop.is_sicherheitstrupp %}
-      <span class="badge badge--unit">{{ icon("lifebuoy", size="sm") }} Sicherheitstrupp</span>
-      {% endif %}
-
-      {% if troop.notfall_at %}
-      <div class="troop-safety-banner troop-safety-banner--notfall">
-        {{ icon("alert-triangle", size="sm") }} ATEMSCHUTZNOTFALL seit {{ troop.notfall_at | local_time }}
-        {% if can_edit is not defined or can_edit %}{{ safety_form(troop, 'notfall/aufheben', 'Notfall aufheben') }}{% endif %}
-      </div>
-      {% endif %}
-      {% if troop.funk_verloren_at %}
-      <div class="troop-safety-banner troop-safety-banner--funk">
-        Kein Funkkontakt seit {{ troop.funk_verloren_at | local_time }} (Trupp zum Rückzug auffordern, GRKDT verständigen, Rettungstrupp prüfen)
-        {% if can_edit is not defined or can_edit %}{{ safety_form(troop, 'funkverlust', 'Funkkontakt wieder da', 'aktiv', '0') }}{% endif %}
-        <details class="troop-funk-help" x-data="{checked: []}">
-          <summary>Vorgehen bei fehlendem Funkkontakt</summary>
-          {% for item in ['Gruppenkommandant des Trupps verständigt', 'Trupp im Innenangriff muss den Rückzug antreten', 'Rettungstrupp bzw. Sicherheitstrupp einsetzen (Entscheidung GRKDT)', 'Überwacher und Einsatzleitung informiert'] %}
-          <label><input type="checkbox" x-model="checked" value="{{ loop.index }}"> {{ item }}</label>
-          {% endfor %}
-          {% if safety.troop %}<a class="btn btn--ghost btn--sm" href="#troop-{{ safety.troop.id }}">Zum Sicherheitstrupp</a>{% endif %}
-        </details>
-      </div>
-      {% endif %}
-
-      {# Alle aktiven Warnungen, in absteigender Schwere. #}
-      {% if 'max_exceeded' in active_warnings %}
-        <span class="warn-badge warn-badge--max-time" id="warn-max-{{ troop.id }}">
-          {{ icon("alert-triangle", size="sm") }} MAX-EINSATZZEIT
-          {% if can_edit is not defined or can_edit %}
-          <button type="button" class="btn btn--ghost btn--sm btn--ack"
-                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','max_time','warn-max-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
-          {% endif %}
-        </span>
-      {% endif %}
-      {% if 'withdraw' in active_warnings %}
-        <span class="warn-badge warn-badge--red" id="warn-withdraw-{{ troop.id }}">
-          {{ icon("alert-triangle", size="sm") }} RÜCKZUGSDRUCK{% if warning_member %}: {{ warning_member.display_name }}{% endif %}
-          {% if can_edit is not defined or can_edit %}
-          <button type="button" class="btn btn--ghost btn--sm btn--ack"
-                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','withdraw','warn-withdraw-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
-          {% endif %}
-        </span>
-      {% endif %}
-      {% for kind, stufe, label in [('two_third_due', 'two_third', '2/3'), ('one_third_due', 'one_third', '1/3')] %}
-      {% if kind in active_warnings %}
-      <div class="warn-badge warn-badge--one-third troop-safety-banner">
-        {{ icon("alert-triangle", size="sm") }} Kontrolle fällig ({{ label }}): niedrigsten Druck des Trupps abfragen
-        {% if can_edit is not defined or can_edit %}
-        {{ kontrolle_picker(troop, stufe, 'Druck abgefragt') }}
-        <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/kontrolle" hx-swap="none"
-              @htmx:after-request="if ($event.detail.successful) { $el.reset(); } else { ECPBreathingNet.formFailed($event); }"
-              @breathing-queued="$el.reset();">
-          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <input type="hidden" name="stufe" value="{{ stufe }}">
-          <input type="hidden" name="art" value="kein_kontakt">
-          <button type="submit" class="btn btn--ghost btn--sm">Kein Funkkontakt</button>
-        </form>
-        {% endif %}
-      </div>
-      {% endif %}
-      {% endfor %}
-      {% if warning == 'yellow' %}
-        <span class="warn-badge warn-badge--yellow">{{ icon("alert-triangle", size="sm") }} {{ asuew_settings.gelb_prozent }}%{% if warning_member %}: {{ warning_member.display_name }}{% endif %}</span>
-      {% endif %}
-    </div>
-
-    {# Standort + Auftrag + letzter Meldungstext #}
-    <div class="troop-card__meta">
-      {% if troop.unit_name %}<span class="badge badge--unit" style="margin-right:4px">{{ troop.unit_name }}</span>{% endif %}
-      {% if troop.task_text %}<strong>Auftrag:</strong> {{ troop.task_text }} {% endif %}
-    </div>
-    <div class="troop-card__meta">
-      {% if troop.location_text %}<strong>Standort:</strong> {{ troop.location_text }}{% endif %}
-    </div>
-    <div class="troop-card__meta">
-      {% if troop.ueberwacher_name %}<strong>Überwacher:</strong> {{ troop.ueberwacher_name }} {% endif %}
-      {% if troop.funkkanal %}<strong>Funkkanal:</strong> {{ troop.funkkanal }} {% endif %}
-      {% if troop.angriffsweg %}<strong>Angriffsweg:</strong> {{ troop.angriffsweg }}{% endif %}
-    </div>
-    {% if (can_edit is not defined or can_edit) and troop.status != 'erholt' %}
-    <div class="mini-popup-wrap" x-data="{open:false}" @click.outside="open = false">
-      <button type="button" class="btn btn--ghost btn--sm" @click="open = !open">Überwachung/Details</button>
-      <div x-show="open" x-cloak class="mini-popup">
-        <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/details" hx-swap="none"
-              @htmx:after-request="if ($event.detail.successful) { open = false; } else { ECPBreathingNet.formFailed($event); }"
-              @breathing-queued="open = false;">
-          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <label>Überwacher<input type="text" class="form-input" name="ueberwacher_name" value="{{ troop.ueberwacher_name or '' }}"></label>
-          <label>Funkkanal<input type="text" class="form-input" name="funkkanal" value="{{ troop.funkkanal or '' }}"></label>
-          <label>Angriffsweg<input type="text" class="form-input" name="angriffsweg" value="{{ troop.angriffsweg or '' }}"></label>
-          <div class="troop-control-actions">
-            <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
-            <button type="submit" name="uebernehmen" value="1" class="btn btn--ghost btn--sm">Überwachung übernehmen</button>
-          </div>
-        </form>
-      </div>
-    </div>
-    {% endif %}
-    {% if troop.last_meldung_text %}
-    <div class="troop-card__meta">
-      <strong>Letzte Meldung:</strong> {{ troop.last_meldung_text }}
-      {% if troop.last_meldung_at %}<span style="font-size:.68rem;color:var(--text-muted)"> – {{ troop.last_meldung_at | local_time }}</span>{% endif %}
-    </div>
-    {% endif %}
-
-    {% if warnungen_by_troop.get(troop.id) %}
-    <details class="troop-notifications">
-      <summary>Benachrichtigungen</summary>
-      {% set art_labels = {'withdraw': 'Rückzugsdruck', 'max_exceeded': 'Max-Zeit', 'one_third_due': 'Kontrolle 1/3', 'two_third_due': 'Kontrolle 2/3', 'funk_verloren': 'Kein Funkkontakt', 'notfall': 'Notfall', 'kein_sicherheitstrupp': 'Kein bereiter Sicherheitstrupp', 'assp': 'Atemschutzsammelplatz (ASSP)', 'kein_heartbeat': 'Überwachungsgerät ohne Heartbeat'} %}
-      {% set status_labels = {'pending': 'wartend', 'claimed': 'in Bearbeitung', 'sent': 'gesendet', 'failed': 'fehlgeschlagen', 'suppressed': 'unterdrückt'} %}
-      <div class="troop-notifications__table" role="region" aria-label="Zustellungsprotokoll" tabindex="0">
-        <table>
-          <thead><tr><th>Art</th><th>Ausgelöst um</th><th>Stufe</th><th>Kanal</th><th>Empfänger</th><th>Status</th><th>Sendezeit</th></tr></thead>
-          <tbody>
-          {% for warnung in warnungen_by_troop[troop.id] %}
-            {% for zustellung in warnung.zustellungen | sort(attribute='id') %}
-            <tr><td>{{ art_labels.get(warnung.kind, warnung.kind) }}</td><td>{{ warnung.ausgeloest_at | local_time }}</td><td>{{ zustellung.stufe }}</td><td>{{ 'SMS' if zustellung.kanal == 'sms' else 'Push' }}</td><td>{{ zustellung.empfaenger_label or '-' }}</td><td>{{ status_labels.get(zustellung.status, zustellung.status) }}{% if zustellung.fehler %}: {{ zustellung.fehler }}{% endif %}</td><td>{{ zustellung.gesendet_at | local_time if zustellung.gesendet_at else '-' }}</td></tr>
-            {% else %}
-            <tr><td>{{ art_labels.get(warnung.kind, warnung.kind) }}</td><td>{{ warnung.ausgeloest_at | local_time }}</td><td colspan="5">Keine Zustellungen</td></tr>
-            {% endfor %}
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </details>
-    {% endif %}
-
-    <!-- ── Gauge (SVG) ── -->
-    {% if troop.start_press_avg %}
-    <div class="gauge-wrap">
-      <svg class="gauge-svg" viewBox="0 0 200 112" xmlns="http://www.w3.org/2000/svg">
-        <!-- Background track -->
-        <path d="M 20,100 A 80,80 0 0,1 180,100"
-              fill="none" stroke="#2a2a2a" stroke-width="20" stroke-linecap="round"/>
-        <!-- Red zone  : 180°→120° (0–33%) -->
-        <path d="M 20,100 A 80,80 0 0,1 60,30.7"
-              fill="none" stroke="#e53e3e" stroke-width="20" stroke-linecap="round"/>
-        <!-- Orange zone: 120°→60° (33–67%) -->
-        <path d="M 60,30.7 A 80,80 0 0,1 140,30.7"
-              fill="none" stroke="#ed8936" stroke-width="20" stroke-linecap="butt"/>
-        <!-- Green zone : 60°→0°  (67–100%) -->
-        <path d="M 140,30.7 A 80,80 0 0,1 180,100"
-              fill="none" stroke="#48bb78" stroke-width="20" stroke-linecap="round"/>
-
-        <!-- Withdrawal pressure marker on arc -->
-        <circle :cx="100 + 80 * Math.cos(Math.PI * (1 - withdrawPct))"
-                :cy="100 - 80 * Math.sin(Math.PI * (1 - withdrawPct))"
-                r="6" fill="#1a1a1a" stroke="#e53e3e" stroke-width="2.5"/>
-
-        <!-- Needle -->
-        <line x1="100" y1="100" x2="173" y2="100"
-              :transform="`rotate(${needleAngle}, 100, 100)`"
-              stroke="#f0f0f0" stroke-width="3" stroke-linecap="round"/>
-        <!-- Needle hub -->
-        <circle cx="100" cy="100" r="7" fill="#666"/>
-
-        <!-- Value text -->
-        <text x="100" y="82" text-anchor="middle" fill="#f0f0f0"
-              font-size="28" font-weight="700" x-text="currentPress + ' bar'"></text>
-        <text x="100" y="96" text-anchor="middle" fill="#fef3c7" font-size="10" x-text="waiting ? 'wartend' : ''"></text>
-      </svg>
-      <div class="gauge-time" x-text="timeAgo"></div>
-      <div class="gauge-labels">
-        <span style="color:#e53e3e">{{ icon("chevron-down", size="sm") }} {{ withdraw_press | int }} bar</span>
-        <span>{{ max_press | int }} bar</span>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- ── Timer ── -->
-    {% if troop.entry_at %}
-    <div class="troop-timer-row">
-      <span x-text="timerDisplay" style="font-variant-numeric:tabular-nums;min-width:46px">00:00</span>
-      {% if planned_min > 0 %}
-      <div class="troop-timer-bar">
-        <div class="troop-timer-bar__fill" :style="`width:${Math.min(100,timerPct)}%;background:${timerBarColor}`"></div>
-      </div>
-      <span style="white-space:nowrap">/ {{ planned_min }} min</span>
-      {% else %}
-      <span style="white-space:nowrap">{{ troop.bottle_label }}</span>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    {% for kontrolle in (troop.active_kontrollen | reverse | list)[:3] %}
-    <div class="troop-card__meta">
-      {{ {'one_third':'Kontrolle 1/3', 'two_third':'Kontrolle 2/3', 'frei':'Kontrolle'}[kontrolle.stufe] }}{% if kontrolle.art == 'funk' %} (Funk): {{ kontrolle.niedrigster_druck | int }} bar{% else %}: kein Funkkontakt{% endif %}, {{ kontrolle.erledigt_at | local_time }}
-    </div>
-    {% endfor %}
-    {% if troop.status in ['erholt', 'zurueck'] and troop.back_at and asuew_settings.erholzeit_min > 0 %}
-    <div class="troop-card__meta" :style="recoverySeconds === 0 ? 'color:#48bb78' : ''"
-         x-text="recoveryDisplay">Erholzeit</div>
-    {% endif %}
-
-    <!-- ── Members with per-member Druck picker ── -->
-    <div class="troop-members" style="margin-top:6px">
-      {% for m in troop.active_members %}
-      {% set ns_m = namespace(warn_class='') %}
-      {% set member_press = m.current_press if m.current_press is not none else m.start_press %}
-      {% if member_press is not none and m.withdraw_press and member_press <= m.withdraw_press %}
-        {% set ns_m.warn_class = 'member-druck-press--danger' %}
-      {% elif member_press is not none and m.start_press and member_press <= m.start_press * asuew_settings.gelb_prozent / 100 %}
-        {% set ns_m.warn_class = 'member-druck-press--warn' %}
-      {% elif member_press is not none %}
-        {% set ns_m.warn_class = 'member-druck-press--ok' %}
-      {% endif %}
-
-      <div class="member-druck-row"
-           x-data="memberPressRow({{ m.id }}, {{ (member_press | float) if member_press is not none else 'null' }}, {{ (m.withdraw_press | float) if m.withdraw_press else 0 }}, {{ (m.start_press | float) if m.start_press else 0 }}, {{ asuew_settings.gelb_prozent }})"
-           x-init="init()">
-        <div class="member-druck-name">
-          <strong>{{ m.display_name }}</strong>
-          <span style="font-size:.7rem;color:var(--text-muted)">
-            {{ {'truppfuehrer':'TF','truppmann':'TM'}[m.role] }}
-          </span>
-          {% if m.member and m.member.is_agt %}<span class="badge badge--agt member-druck-badge">AGT</span>{% endif %}
-          <span class="member-druck-withdraw">
-            Rückzug: {{ m.withdraw_press | int if m.withdraw_press is not none else '–' }} bar
-            {% if m.objective_press_at %}(final){% else %}(vorläufig){% endif %}
-          </span>
-        </div>
-
-        <span class="member-druck-press"
-              :class="pressClass"
-              x-show="currentPress !== null"
-              x-text="currentPress !== null ? Math.floor(currentPress) + ' bar' + (waiting ? ' (wartend)' : '') : ''"></span>
-
-        {% if (can_edit is not defined or can_edit) and troop.status in ['im_einsatz','rueckzug'] %}
-        <div class="press-picker-wrap" @click.outside="open = false">
-          <button type="button" class="btn btn--ghost btn--sm press-trigger" @click="open = !open">Druck</button>
-          <div x-show="open" class="press-picker-popup">
-            <div class="press-picker-header">{{ m.display_name }}</div>
-            <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/druck" hx-swap="none"
-                  x-ref="druckForm"
-                  @htmx:after-request="if ($event.detail.successful) { currentPress = Number($refs.pressVal.value); window.dispatchEvent(new CustomEvent('breathing-pressure', {detail:{troopId:{{ troop.id }}, lowestPressure:currentPress, memberId:memberId, pressure:currentPress, local:true}})); open = false; } else { ECPBreathingNet.formFailed($event); }"
-                  @breathing-queued="open = false;">
-              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <input type="hidden" name="troop_member_id" value="{{ m.id }}">
-              <input type="hidden" name="pressure_bar" x-ref="pressVal">
-              <details class="pressure-correction">
-                <summary>Korrektur (Wert war falsch)</summary>
-                <label>Grund der Korrektur
-                  <input type="text" name="korrektur_grund" maxlength="250" placeholder="Mindestens 3 Zeichen">
-                </label>
-                <p data-correction-error role="alert" style="color:#b91c1c"></p>
-              </details>
-              <div class="press-grid">
-                {% for val in range(300, 0, -10) %}
-                <button type="button"
-                        class="press-btn {% if m.withdraw_press and val <= m.withdraw_press %}press-btn--danger{% elif m.start_press and val <= m.start_press * asuew_settings.gelb_prozent / 100 %}press-btn--warn{% else %}press-btn--high{% endif %}"
-                        :class="currentPress !== null && Math.floor(currentPress) == {{ val }} ? 'press-btn--selected' : ''"
-                        @click="$refs.pressVal.value = '{{ val }}'; $refs.druckForm.requestSubmit()">
-                  {{ val }}
-                </button>
-                {% endfor %}
-              </div>
-            </form>
-          </div>
-        </div>
-        {% endif %}
-        {% if (can_edit is not defined or can_edit) and troop.status in ['im_einsatz','rueckzug'] %}
-        <div class="press-picker-wrap" @click.outside="objectiveOpen = false" x-data="{objectiveOpen:false}">
-          <button type="button" class="btn btn--ghost btn--sm" @click="objectiveOpen = !objectiveOpen">Einsatzziel erreicht</button>
-          <div x-show="objectiveOpen" class="press-picker-popup">
-            <div class="press-picker-header">Einsatzziel: {{ m.display_name }}</div>
-            <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/einsatzziel" hx-swap="none"
-                  @htmx:after-request="if ($event.detail.successful) { objectiveOpen = false; } else { ECPBreathingNet.formFailed($event); }"
-                  @breathing-queued="objectiveOpen = false;">
-              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <input type="hidden" name="troop_member_id" value="{{ m.id }}">
-              <div class="press-grid">
-                {% for val in range(300, 0, -10) %}
-                <button type="submit" name="pressure_bar" value="{{ val }}" class="press-btn">{{ val }}</button>
-                {% endfor %}
-              </div>
-            </form>
-          </div>
-        </div>
-        {% endif %}
-        {% if (can_edit is not defined or can_edit) and troop.status in ['zurueck','erholt'] %}
-        <div class="press-picker-wrap" @click.outside="backOpen = false" x-data="{backOpen:false}">
-          <button type="button" class="btn btn--ghost btn--sm" @click="backOpen = !backOpen">
-            Enddruck{% if m.back_press is not none %}: {{ m.back_press | int }} bar{% endif %}
-          </button>
-          <div x-show="backOpen" class="press-picker-popup">
-            <div class="press-picker-header">Enddruck: {{ m.display_name }}</div>
-            <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/enddruck" hx-swap="none"
-                  @htmx:after-request="if ($event.detail.successful) { backOpen = false; } else { ECPBreathingNet.formFailed($event); }"
-                  @breathing-queued="backOpen = false;">
-              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <input type="hidden" name="troop_member_id" value="{{ m.id }}">
-              <div class="press-grid">
-                {% for val in range(300, 0, -10) %}
-                <button type="submit" name="pressure_bar" value="{{ val }}" class="press-btn">{{ val }}</button>
-                {% endfor %}
-              </div>
-            </form>
-          </div>
-        </div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-
-    <!-- ── Lagemeldung (Freitext) ── -->
-    {% if (can_edit is not defined or can_edit) and troop.status in ['bereit','im_einsatz','rueckzug'] %}
-    <div class="mini-popup-wrap" style="margin-top:6px" @click.outside="meldungOpen = false" x-data="{meldungOpen:false}">
-      <button type="button" class="btn btn--ghost btn--sm" @click="meldungOpen = !meldungOpen">{{ icon("speakerphone", size="xs") }} Lagemeldung</button>
-      <div x-show="meldungOpen" class="mini-popup">
-        <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/meldung" hx-swap="none"
-              @htmx:after-request="if ($event.detail.successful) { meldungOpen = false; } else { ECPBreathingNet.formFailed($event); }"
-              @breathing-queued="meldungOpen = false;">
-          <input type="text" name="text" class="form-input" placeholder="Lagetext (optional)" style="margin-bottom:6px">
-          <button type="submit" class="btn btn--primary btn--sm" style="width:100%">Meldung absetzen</button>
-        </form>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- ── Status actions ── -->
-    <div class="troop-card__actions">
-      {% if can_edit is not defined or can_edit %}
-      {% if troop.status == 'bereit' %}
-      <div id="readiness-start-{{ troop.id }}">
-        <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/starten"
-              hx-target="#readiness-start-{{ troop.id }}" hx-swap="outerHTML">
-          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button type="submit" class="btn btn--primary btn--sm">{{ icon("player-play", size="xs") }} Einsetzen</button>
-        </form>
-      </div>
-      {% elif troop.status == 'im_einsatz' %}
-      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
-            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <input type="hidden" name="status" value="rueckzug">
-        <button type="submit" class="btn btn--danger btn--sm">{{ icon("arrow-left", size="xs") }} Rückzug</button>
-      </form>
-      {% elif troop.status == 'rueckzug' %}
-      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
-            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <input type="hidden" name="status" value="zurueck">
-        <button type="submit" class="btn btn--warn btn--sm">{{ icon("check", size="xs") }} Zurück</button>
-      </form>
-      {% elif troop.status == 'zurueck' %}
-      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
-            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <input type="hidden" name="status" value="erholt">
-        <button type="submit" class="btn btn--success btn--sm">{{ icon("check", size="xs") }} Erholt</button>
-      </form>
-      {% endif %}
-
-      {% if troop.status == 'erholt' %}
-      <button type="button" class="btn btn--primary btn--sm"
-              data-ec-action="open-dialog" data-ec-dialog="redeployTroopModal-{{ troop.id }}">{{ icon("refresh", size="xs") }} Erneut einsetzen</button>
-      {% endif %}
-
-      {% endif %}
-      <button type="button" class="btn btn--ghost btn--sm" title="Trupp-Protokoll als PDF"
-         onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ troop.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf'})">{{ icon("file-text", size="xs") }} PDF</button>
-    </div>
-
-    {% if can_alarm and troop.status in ['im_einsatz', 'rueckzug'] %}
-    <div class="troop-control-actions">
-      {% if can_edit is not defined or can_edit %}{{ kontrolle_picker(troop, 'frei', 'Kontrolle (frei)') }}{% endif %}
-      {{ safety_form(troop, 'funkverlust', 'Funkkontakt verloren', 'aktiv', '1') }}
-      <div class="mini-popup-wrap" x-data="{open:false}" @click.outside="open = false">
-        <button type="button" class="btn btn--danger btn--sm" @click="open = !open">Atemschutznotfall</button>
-        <div x-show="open" x-cloak class="mini-popup">
-          <p>Atemschutznotfall wirklich melden?</p>
-          <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/notfall" hx-swap="none"
-                @htmx:after-request="if ($event.detail.successful) { open = false; } else { ECPBreathingNet.formFailed($event); }"
-                @breathing-queued="open = false;">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <input type="hidden" name="bestaetigt" value="1">
-            <div class="troop-control-actions">
-              <button type="submit" class="btn btn--danger btn--sm">Notfall melden</button>
-              <button type="button" class="btn btn--ghost btn--sm" @click="open = false">Abbrechen</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- ── Meldungen (pressure log history) ── -->
-    {% if troop.active_pressure_logs %}
-    <div class="troop-meldungen">
-      <div class="troop-meldungen__label">Meldungen</div>
-      {% set shown = namespace(count=0) %}
-      {% for log in troop.active_pressure_logs | list | reverse %}
-        {% if shown.count < 5 %}
-          {% set ns_l = namespace(name='') %}
-          {% for m in troop.active_members %}
-            {% if m.id == log.troop_member_id %}{% set ns_l.name = m.display_name %}{% endif %}
-          {% endfor %}
-          <div class="troop-meldung-entry">
-            {% if ns_l.name %}<strong>{{ ns_l.name }}:</strong> {% endif %}
-            <span class="troop-meldung-press">{{ log.pressure_bar | int }} bar</span>
-            {% if log.note %}<span style="font-size:.7rem;color:var(--text-muted)"> – {{ log.note }}</span>{% endif %}
-            <span style="color:var(--text-muted);font-size:.68rem">
-              — {{ log.ts | local_time }}
-            </span>
-          </div>
-          {% set shown.count = shown.count + 1 %}
-        {% endif %}
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if troop.deployments %}
-    <details style="margin-top:12px;">
-      <summary style="cursor:pointer;font-size:.85rem;font-weight:600;color:var(--text-muted);user-select:none;padding:4px 0;">
-        Frühere Einsätze ({{ troop.deployments | length }})
-      </summary>
-      <div style="margin-top:8px;overflow-x:auto;">
-        <table class="table-admin" style="font-size:.75rem;">
-          <thead><tr><th>Nr.</th><th>Eintritt</th><th>Zurück</th><th>Quittiert</th></tr></thead>
-          <tbody>
-          {% for deployment in troop.deployments %}
-          <tr>
-            <td>{{ deployment.lfd_nr }}</td>
-            <td>{{ deployment.entry_at | local_datetime if deployment.entry_at else '–' }}</td>
-            <td>{{ deployment.back_at | local_datetime if deployment.back_at else '–' }}</td>
-            <td>1/3 {{ icon("check", size="xs", label="Quittiert") if deployment.warn_one_third_acked_at else '–' }}, 2/3 {{ icon("check", size="xs", label="Quittiert") if deployment.warn_two_third_acked_at else '–' }}, Max {{ icon("check", size="xs", label="Quittiert") if deployment.warn_max_time_acked_at else '–' }}, Rückzug {{ icon("check", size="xs", label="Quittiert") if deployment.warn_withdraw_acked_at else '–' }}</td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </details>
-    {% endif %}
-
-  </div>
-  {% if (can_edit is not defined or can_edit) and troop.status == 'erholt' %}{% include "breathing/_redeploy_dialog.html" %}{% endif %}
+  {% include "breathing/_troop_card.html" %}
   {% else %}
   <p class="text-muted">Noch keine Trupps angelegt.</p>
   {% endfor %}
@@ -887,10 +380,18 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/server_clock.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/breathing_net.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/breathing_outbox.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/asuew_sitzung.js?v={{ ASSET_VERSION }}"></script>
 <script>
+function syncBreathingClock(element) {
+  if (element && element.dataset.serverNow) ECPServerClock.sync(element.dataset.serverNow, Date.now());
+}
+syncBreathingClock(document.getElementById('troopsGrid'));
+document.body.addEventListener('htmx:afterSwap', function (event) {
+  syncBreathingClock(event.detail.elt);
+});
 const ASUEW_READONLY = {{ asuew_readonly | default(false) | tojson }};
 if (window.ELNative && ELNative.isNative) {
   let firstSessionStarted = false;
@@ -979,6 +480,9 @@ if (window.ELNative && ELNative.isNative) {
   const session = ECPAsuewSitzung.start({
     incidentId: {{ incident.id }},
     onState: function (state) {
+      if (window.ECPServerClock && state.zustand === 'aktiv') {
+        ECPServerClock.setOffsetMs(ECPAsuewSitzung.getOffsetMs());
+      }
       lastSessionState = state;
       renderDeviceCheck();
       const el = document.getElementById('asuewSessionStatus');
@@ -1015,7 +519,7 @@ function breathingRoute(path) {
 function breathingEventFields(fields) {
   return Object.assign({}, fields, {
     client_event_id: ECPBreathingOutbox.zufallsUuid(),
-    erfasst_at: new Date(Date.now() + ECPAsuewSitzung.getOffsetMs()).toISOString()
+    erfasst_at: new Date(ECPServerClock.now()).toISOString()
   });
 }
 let breathingIDB;
@@ -1023,7 +527,7 @@ try { breathingIDB = window.indexedDB; } catch (_) {}
 const breathingOutbox = ECPBreathingOutbox.createOutbox({
   indexedDB: breathingIDB, fetch: window.fetch.bind(window), incidentId: {{ incident.id }},
   csrfToken: () => {{ request.state.csrf_token | tojson }},
-  offsetMs: () => ECPAsuewSitzung.getOffsetMs()
+  offsetMs: () => ECPServerClock.now() - Date.now()
 });
 let breathingSending = null, breathingPending = 0, breathingCount = 0, breathingLoaded = false;
 let breathingReloadPending = false;
@@ -1172,6 +676,78 @@ function doBreathingReload() {
   window.setTimeout(function () { _breathingReload = false; }, 500);
 }
 
+/* Gezielte Updates: pro Trupp entprellen und laufende Eingaben schuetzen. */
+const breathingCardUpdates = new Map();
+let breathingSummaryTimer = null;
+function breathingRefreshBlocked() {
+  return navigator.onLine === false || !breathingLoaded || breathingSending || breathingPending || breathingCount;
+}
+function breathingCardBusy(card) {
+  const focused = document.activeElement;
+  return (focused && card.contains(focused) && focused.matches('input, textarea, select, [contenteditable="true"]')) ||
+    Array.from(card.querySelectorAll('.press-picker-popup, .mini-popup, dialog[open]')).some(function (popup) {
+      return popup.getClientRects().length > 0 && getComputedStyle(popup).visibility !== 'hidden';
+    });
+}
+function refreshBreathingSummary() {
+  if (breathingSummaryTimer !== null) return;
+  breathingSummaryTimer = window.setTimeout(function () {
+    breathingSummaryTimer = null;
+    if (breathingRefreshBlocked()) { breathingReloadPending = true; return; }
+    htmx.ajax('GET', '/einsatz/{{ incident.id }}/atemschutz/uebersicht', {
+      target: '#breathingSummary', swap: 'outerHTML'
+    });
+  }, 300);
+}
+function refreshBreathingTroop(troopId) {
+  if (!troopId || !document.getElementById('troop-' + troopId)) { doBreathingReload(); return; }
+  if (breathingRefreshBlocked()) { breathingReloadPending = true; return; }
+  refreshBreathingSummary();
+  const existing = breathingCardUpdates.get(troopId);
+  if (existing) { if (existing.inFlight) existing.dirty = true; return; }
+  const update = { deadline: Date.now() + 20000, timer: null, inFlight: false, dirty: false };
+  breathingCardUpdates.set(troopId, update);
+  function fetchCard() {
+    update.timer = null;
+    if (breathingRefreshBlocked()) {
+      breathingCardUpdates.delete(troopId);
+      breathingReloadPending = true;
+      return;
+    }
+    const card = document.getElementById('troop-' + troopId);
+    if (!card) { breathingCardUpdates.delete(troopId); doBreathingReload(); return; }
+    if (breathingCardBusy(card) && Date.now() < update.deadline) {
+      update.timer = window.setTimeout(fetchCard, 100);
+      return;
+    }
+    update.inFlight = true;
+    update.dirty = false;
+    Promise.resolve(htmx.ajax('GET', '/einsatz/{{ incident.id }}/atemschutz/' + troopId + '/karte', {
+      target: '#troop-' + troopId, swap: 'outerHTML'
+    })).catch(function () { /* Der naechste Serverkontakt aktualisiert erneut. */ }).finally(function () {
+      update.inFlight = false;
+      if (update.timer !== null) return;
+      breathingCardUpdates.delete(troopId);
+      if (update.dirty) refreshBreathingTroop(troopId);
+    });
+  }
+  update.retry = function () { update.timer = window.setTimeout(fetchCard, 100); };
+  update.timer = window.setTimeout(fetchCard, 300);
+}
+document.body.addEventListener('htmx:beforeSwap', function (event) {
+  const card = event.detail.target;
+  if (!card || !card.matches('.troop-card')) return;
+  const troopId = Number(card.id.replace('troop-', ''));
+  const update = breathingCardUpdates.get(troopId);
+  if (breathingRefreshBlocked()) {
+    event.detail.shouldSwap = false;
+    breathingReloadPending = true;
+  } else if (update && breathingCardBusy(card) && Date.now() < update.deadline) {
+    event.detail.shouldSwap = false;
+    update.retry();
+  }
+});
+
 /* ── Warn-Quittierung: erst nach bestaetigtem POST Ton stoppen ── */
 {% if can_edit is not defined or can_edit %}
 async function ackWarning(btn, url, kind, badgeId) {
@@ -1284,7 +860,7 @@ function _stopLoopingWarning(kind, troopId) {
 window.addEventListener('breathing-warning', (e) => {
   const { troopId, kind } = e.detail;
   _playWarning(kind, troopId);
-  if (document.getElementById('troopsGrid')) doBreathingReload();
+  if (document.getElementById('troopsGrid')) refreshBreathingTroop(troopId);
 });
 
 window.addEventListener('breathing-warning-acked', (e) => {
@@ -1373,7 +949,7 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
       // time-ago updater
       const updateAgo = () => {
         if (!this.lastLog) { this.timeAgo = 'Kein Messwert'; return; }
-        const sec = Math.floor((new Date() - this.lastLog) / 1000);
+        const sec = Math.floor((ECPServerClock.now() - this.lastLog.getTime()) / 1000);
         if (sec < 60) {
           this.timeAgo = `vor ${sec} Sek.`;
         } else {
@@ -1385,11 +961,11 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
       // timer updater
       const updateTimer = () => {
         if (this.backAt && recoveryMin > 0) {
-          this.recoverySeconds = Math.max(0, Math.ceil((this.backAt.getTime() + recoveryMin * 60000 - Date.now()) / 1000));
+          this.recoverySeconds = Math.max(0, Math.ceil((this.backAt.getTime() + recoveryMin * 60000 - ECPServerClock.now()) / 1000));
         }
         if (!this.entryAt) return;
-        const now = this.backAt || new Date();
-        const sec = Math.max(0, Math.floor((now - this.entryAt) / 1000));
+        const now = this.backAt ? this.backAt.getTime() : ECPServerClock.now();
+        const sec = Math.max(0, Math.floor((now - this.entryAt.getTime()) / 1000));
         const m = Math.floor(sec / 60).toString().padStart(2, '0');
         const s = (sec % 60).toString().padStart(2, '0');
         this.timerDisplay = `${m}:${s}`;
@@ -1415,7 +991,7 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
             // WS-Event: Server liefert autoritativen Minimalwert
             this.currentPress = e.detail.lowestPressure;
           }
-          this.lastLog = new Date();
+          this.lastLog = new Date(ECPServerClock.now());
           updateAgo();
         }
       };
@@ -1611,13 +1187,14 @@ function newTroopForm(initialMembers, initialBottlePreset) {
       }
       if (ev.type === 'troop_notfall_cleared') _stopLoopingWarning('notfall', ev.troop_id);
       if (ev.type === 'troop_funk') _stopLoopingWarning('funk_verloren', ev.troop_id);
-      if (ev.reload_breathing || ev.type === 'troop_created' || ev.type === 'troop_started'
-          || ev.type === 'troop_status_changed' || ev.type === 'troop_meldung'
-          || ev.type === 'troop_standort' || ev.type === 'troop_objective_reached'
-          || ev.type === 'troop_back_pressure_reported' || ev.type === 'troop_redeployed'
-          || ev.type === 'troop_kontrolle' || ev.type === 'troop_notfall'
-          || ev.type === 'troop_notfall_cleared' || ev.type === 'troop_funk'
-          || ev.type === 'troop_details' || ev.type === 'troop_auftrag') {
+      if (ev.type === 'troop_created' || ev.type === 'troop_redeployed') {
+        doBreathingReload();
+      } else if (['pressure_logged', 'troop_status_changed', 'troop_meldung',
+          'troop_kontrolle', 'troop_funk', 'troop_notfall', 'troop_notfall_cleared',
+          'troop_details', 'troop_auftrag', 'troop_standort', 'troop_back_pressure_reported',
+          'troop_objective_reached', 'troop_started', 'troop_warning', 'troop_warning_acked'].includes(ev.type)) {
+        refreshBreathingTroop(ev.troop_id);
+      } else if (ev.reload_breathing) {
         doBreathingReload();
       }
     };

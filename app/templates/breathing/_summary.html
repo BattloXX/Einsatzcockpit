@@ -1,0 +1,17 @@
+{# Auch bei einem partiellen Grid-Reload Hinweise und Zaehler aktualisieren. #}
+<div id="breathingSummary" {% if summary_oob | default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% if kein_heartbeat or hinweise or incident.breathing_troops | selectattr('notfall_at') | list or incident.breathing_troops | selectattr('funk_verloren_at') | list %}
+  <section class="breathing-critical" aria-labelledby="breathingCriticalTitle">
+    <h3 id="breathingCriticalTitle">{{ icon("alert-triangle") }} Kritische Hinweise</h3>
+    {% if kein_heartbeat %}<p>Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden). Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen.</p>{% endif %}
+    {% if hinweise.assp %}<p>3 oder mehr Trupps gleichzeitig im Einsatz: Atemschutzsammelplatz (ASSP) über die Einsatzleitung alarmieren. Der ASSP übernimmt nur Logistik, die Überwachung bleibt beim Gruppenkommandanten.</p>{% endif %}
+    {% if hinweise.kein_sicherheitstrupp %}<p>Kein bereiter Sicherheitstrupp: Rettungstrupp ab Einsatzbeginn bereitstellen.</p>{% endif %}
+    {% for troop in incident.breathing_troops %}
+    {% if troop.notfall_at %}<p class="breathing-critical__notfall"><a href="#troop-{{ troop.id }}">ATEMSCHUTZNOTFALL: {{ troop.name }}</a></p>{% endif %}
+    {% if troop.funk_verloren_at %}<p><a href="#troop-{{ troop.id }}">Kein Funkkontakt: {{ troop.name }}</a></p>{% endif %}
+    {% endfor %}
+  </section>
+  {% endif %}
+  <p class="breathing-overview">Trupps: {{ trupp_uebersicht.im_einsatz + trupp_uebersicht.rueckzug }} im Einsatz, {{ trupp_uebersicht.bereit }} bereit (davon {{ trupp_uebersicht.sicherheitstrupp_bereit }} Sicherheitstrupp), {{ trupp_uebersicht.zurueck }} in Erholung</p>
+</div>
+

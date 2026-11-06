@@ -403,13 +403,13 @@ def test_overview_counts_all_statuses(client, breathing_routes):
     assert "Trupps: 2 im Einsatz, 2 bereit (davon 1 Sicherheitstrupp), 3 in Erholung" in _board_summary(response.text)
 
 
-def test_warning_event_reloads_board_for_all_kinds(client, breathing_routes):
+def test_warning_event_refreshes_card_for_all_kinds(client, breathing_routes):
     response = client.get(f"/einsatz/{breathing_routes.incident_id}/atemschutz")
 
     assert response.status_code == 200
     handler = response.text.split("window.addEventListener('breathing-warning',", 1)[1].split('});', 1)[0]
     assert "_playWarning(kind, troopId);" in handler
-    assert "if (document.getElementById('troopsGrid')) doBreathingReload();" in handler
+    assert "if (document.getElementById('troopsGrid')) refreshBreathingTroop(troopId);" in handler
     assert "if (!src) return;" in response.text
 
 

@@ -70,7 +70,7 @@ def breathing_routes(client, monkeypatch):
         yield SimpleNamespace(
             db=db, troop=troop, incident_id=incident_a.id, other_incident_id=incident_b.id,
             url=f"/einsatz/{incident_a.id}/atemschutz/{troop.id}",
-            post=post, broadcast=broadcast,
+            post=post, broadcast=broadcast, client=client,
         )
     finally:
         db.rollback()

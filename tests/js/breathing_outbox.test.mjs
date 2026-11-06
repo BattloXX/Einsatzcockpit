@@ -207,6 +207,9 @@ async function boardEnvironment({ online = false } = {}) {
     CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
     _stopLoopingWarning: (...args) => nativeCalls.push(args)
   });
+  vm.runInContext(readFileSync(new URL('../../app/static/js/server_clock.js', import.meta.url), 'utf8'), context);
+  context.ECPServerClock = window.ECPServerClock;
+  context.ECPServerClock.setOffsetMs(12000);
   vm.runInContext('/* Offline-Erfassung:' + boardCode, context);
   await vm.runInContext('sendBreathingOutbox()', context);
   return { ...e, context, elements, document, window, bodyHandlers, docHandlers, windowHandlers,
