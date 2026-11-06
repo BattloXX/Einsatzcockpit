@@ -8,6 +8,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from app.services.prozess_metriken import sammler
+
 
 class VerzugsWatchdog:
     def __init__(self, schwelle_ms: float, *, zeitquelle: Callable[[], float] = time.monotonic):
@@ -22,6 +24,8 @@ class VerzugsWatchdog:
         self.thread = threading.Thread(target=self._laufen, name="Loop-Verzugswatchdog", daemon=True)
 
     def puls(self) -> None:
+        if self.gemeldeter_puls == self.letzter_puls:
+            sammler.stillstand_melden((self.zeitquelle() - self.letzter_puls) * 1000, None, neu=False)
         self.letzter_puls = self.zeitquelle()
 
     def pruefe(self) -> None:
@@ -33,6 +37,15 @@ class VerzugsWatchdog:
             return
         self.gemeldeter_puls = puls
         frame = sys._current_frames().get(self.hauptthread_id)
+        app_frame = frame
+        ort = None
+        while app_frame is not None:
+            datei = Path(app_frame.f_code.co_filename)
+            if datei.is_relative_to(self.repo / "app"):
+                ort = f"{datei.relative_to(self.repo)}:{app_frame.f_lineno}"
+                break
+            app_frame = app_frame.f_back
+        sammler.stillstand_melden((self.zeitquelle() - puls) * 1000, ort)
         spitze: list[str] = []
         while frame is not None and len(spitze) < 6:
             datei = Path(frame.f_code.co_filename)

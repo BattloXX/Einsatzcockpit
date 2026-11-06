@@ -15,6 +15,9 @@ async def test_monitor_verzug_taskdump_gedrosselt(monkeypatch, caplog):
     uhr = [0.0]
     verzoegerungen = iter([0.1, 1.0, 1.6, 2.0, 61.0])
     pulse = []
+    messungen = []
+    monkeypatch.setattr("app.services.prozess_metriken.sammler.loop_verzug",
+                        lambda dauer, schwelle: messungen.append((dauer, schwelle)))
     aufgabe = SimpleNamespace(get_name=lambda: "Testaufgabe",
                              get_coro=lambda: SimpleNamespace(__qualname__="test_koroutine"))
 
@@ -38,6 +41,9 @@ async def test_monitor_verzug_taskdump_gedrosselt(monkeypatch, caplog):
     assert len(dumps) == 2
     assert all(dump.count("Testaufgabe test_koroutine") == 5 for dump in dumps)
     assert len(pulse) == 6
+    assert len(messungen) == 5
+    assert messungen[2][0] == pytest.approx(1500)
+    assert all(schwelle == 1000 for _, schwelle in messungen)
 
 
 async def test_zero_disables_monitor(monkeypatch):
@@ -60,6 +66,9 @@ def test_watchdog_einmal_je_vorfall_mit_stack(monkeypatch, caplog):
     from app.services import loop_lag_watchdog as modul
 
     uhr = [0.0]
+    messungen = []
+    monkeypatch.setattr(modul.sammler, "stillstand_melden",
+                        lambda dauer, ort, **kw: messungen.append((dauer, ort, kw)))
     watchdog = modul.VerzugsWatchdog(1000, zeitquelle=lambda: uhr[0])
     frame = None
     for nummer in range(8):
@@ -81,6 +90,9 @@ def test_watchdog_einmal_je_vorfall_mit_stack(monkeypatch, caplog):
         uhr[0] = 3.1
         watchdog.pruefe()
     assert len(caplog.records) == 2
+    assert messungen[0][0] == pytest.approx(1100)
+    assert messungen[0][1] == "app/main.py:107"
+    assert messungen[1] == (2000, None, {"neu": False})
     assert "app/main.py:107 funktion_7" in caplog.text
     assert "funktion_1" not in caplog.text
     assert caplog.records[0].message.count("app/main.py:") == 6

@@ -188,6 +188,9 @@ async def _loop_lag_monitor(watchdog: VerzugsWatchdog | None = None) -> None:
         await asyncio.sleep(0.1)
         jetzt = loop.time()
         lag_ms = (jetzt - expected) * 1000
+        from app.services.prozess_metriken import sammler
+
+        sammler.loop_verzug(max(0, lag_ms), settings.LOOP_LAG_WARN_MS)
         if lag_ms > settings.LOOP_LAG_WARN_MS:
             loop_lag_logger.warning("Event-Loop-Verzug: %.0f ms (PID %s, worker_id=%s)",
                                     lag_ms, os.getpid(), worker_id())

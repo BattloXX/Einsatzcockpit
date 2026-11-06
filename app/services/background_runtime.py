@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.models.worker_runtime import WorkerRuntime
 from app.services import gateway_presence, ws_bus
 from app.services.leader_lock import LeaderLock
+from app.services.prozess_metriken import heartbeat_metriken
 
 logger = logging.getLogger("einsatzleiter.background")
 HEARTBEAT_S = 5
@@ -156,6 +157,7 @@ class BackgroundRuntime:
             row.leader_error = self.leader_error
             row.redis = ws_bus.status()
             row.loops = {name: dict(values) for name, values in self.loops.items()}
+            row.metriken = heartbeat_metriken()
             db.commit()
 
     async def heartbeat(self, *, stopped: bool = False) -> None:

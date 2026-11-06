@@ -245,3 +245,33 @@ def test_cleanup_removes_only_expired_rows_beyond_retention(tmp_path, monkeypatc
         assert db.get(WorkerRuntime, "recent") is not None
         assert db.get(WorkerRuntime, "active") is not None
     engine.dispose()
+
+
+async def test_heartbeat_metriken_im_thread_und_sauberer_stop(tmp_path, monkeypatch):
+    from app.models.worker_runtime import WorkerRuntime
+    from app.services.sms_outbox import database
+
+    hauptthread = threading.get_ident()
+    aufrufe = []
+
+    def messen():
+        aufrufe.append(threading.get_ident())
+        return {"rss_mb": 512, "swap_mb": 0, "threads": 4}
+
+    monkeypatch.setattr(runtime, "heartbeat_metriken", messen)
+    worker = runtime.BackgroundRuntime(str(tmp_path / "leader"), lambda: [], worker_id="metriken-test")
+    try:
+        await worker.heartbeat()
+        with database() as db:
+            zeile = db.get(WorkerRuntime, "metriken-test")
+            assert zeile.metriken == {"rss_mb": 512, "swap_mb": 0, "threads": 4}
+            assert (zeile.expires_at - zeile.heartbeat_at).total_seconds() == runtime.WORKER_TTL_S
+        await worker.heartbeat(stopped=True)
+        with database() as db:
+            zeile = db.get(WorkerRuntime, "metriken-test")
+            assert zeile.expires_at == zeile.heartbeat_at
+        assert len(aufrufe) == 2 and all(ident != hauptthread for ident in aufrufe)
+    finally:
+        with database() as db:
+            db.query(WorkerRuntime).filter_by(worker_id="metriken-test").delete()
+            db.commit()

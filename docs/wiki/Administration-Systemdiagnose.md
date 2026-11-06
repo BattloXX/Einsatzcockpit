@@ -28,7 +28,7 @@ Verifikation; abgelaufene Sitzungen erfordern eine Anmeldung.
 | Bereich | Inhalt und Verwendung |
 | --- | --- |
 | Gesamtzustand | Ampel und Status der Teilkomponenten, Version, Deploy-Commit, Build-Zeitpunkt und GitHub-Zugangsstatus |
-| Worker / Leader | Aktive und abgelaufene Worker, Anzahl Leader, fehlerhafte oder überfällige Loops; Bestandteil der Gesamtzustandskarten |
+| Worker / Leader | Aktive/abgelaufene Worker, Leader/Loops, Prozessressourcen, Loop-Verzug, langsame Queries, unsaubere Neustarts und Host-Ressourcen; Bestandteil der Gesamtzustandskarten |
 | Redis | Konfigurations- und Verbindungszustand des angesprochenen Workers |
 | MariaDB | Verbindungsprüfung, Pool-Zähler, angewandte und erwartete Migrationen |
 | Gateway / Alarmierung | Presence-Zähler, offene und überfällige Jobs für SMS und Druck, gespeicherte W&T-Dienstzustände; keine Nachrichten oder Empfänger |
@@ -48,6 +48,44 @@ Zeitpunkte werden in der Anzeige über die Zeitzonenfilter formatiert, mit der
 Org-Zeitzone des angemeldeten Kontos und Europe/Vienna als Fallback. Die
 **Planungsuhrzeit** der Tagesdiagnose gilt hingegen immer in der Systemzeitzone
 Europe/Vienna und hängt nicht von einer Organisation ab.
+
+## Prozess- und Host-Ressourcen
+
+Migration **0352** ergaenzt das optionale JSON-Feld `worker_runtime.metriken`.
+Jeder Worker schreibt alle 5 Sekunden RSS und Prozess-Swap (MB), Threadzahl,
+Loop-Verzug (Maximum und Schwellwertueberschreitungen seit dem letzten Heartbeat
+sowie in 15 Minuten), langsame Queries (Anzahl/Maximum in 15 Minuten) und den
+letzten Watchdog-Stillstand (UTC-Zeit, Dauer, relativer App-Pfad mit Zeilennummer).
+Die Fenster werden im Prozess sekundengenau aggregiert und beginnen bei Neustart neu.
+Die Schwellen fuer die Erfassung folgen `LOOP_LAG_WARN_MS` und `SLOW_QUERY_LOG_MS`;
+0 deaktiviert die jeweilige Erfassung. Querytexte und Nutzdaten werden nicht gespeichert.
+
+`worker.zustand` bewertet aktive Worker und unsaubere Enden je Host.
+Ein abgelaufener TTL-Heartbeat ohne Stop gilt als unsauber; bei sauberem Stop sind
+Ablauf und Heartbeat gleich (Toleranz 3 Sekunden). Die Zaehler fuer 1 h/24 h bleiben
+auch nach einem erfolgreichen Ersatzstart sichtbar. Die Aufbewahrung bleibt bei
+24 Stunden nach Ablauf. Evidenz verwendet PID/Host-Index statt Hostnamen.
+
+`system.ressourcen` liest beim Check den lokalen Linux-Host aus `/proc`:
+MemTotal/MemAvailable und SwapTotal/SwapFree in MB, PSI cpu/memory/io jeweils
+some/full avg60/avg300, Load (1/5/15 Minuten) und CPU-Anzahl. Nicht verfuegbare
+Werte sind `null`; ausserhalb von Linux sind keine `/proc`-Messwerte verfuegbar.
+Bei mehreren Hosts beziehen sich diese Werte auf den angesprochenen Host.
+
+| Befund | warn | fail |
+| --- | --- | --- |
+| Unsaubere Enden pro Host in 24 h | >=3 | >=10 |
+| Loop-Verzug Maximum in 15 min | >=5000 ms | >=30000 ms |
+| RSS pro Worker | >=600 MB | - |
+| Langsame Queries pro Worker in 15 min | >=20 | - |
+| Host-Swap belegt | >=80 % | >=95 % |
+| MemAvailable | <300 MB | <150 MB |
+| PSI memory full avg300 | >=5 % | - |
+| PSI io full avg300 | >=10 % | - |
+
+Vollstaendige erfolgreiche Folgechecks schliessen abgeklungene Befunde automatisch.
+`admin_worker_pruefen` liefert die Prozesswerte und Host-Zusammenfassung lesend;
+`admin_system_uebersicht` uebernimmt den schwersten Ressourcenstatus in die Ampel.
 
 ## Befundsprache und Details
 
