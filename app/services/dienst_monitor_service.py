@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.models.dienst_monitor import DienstStatus
 
+# Wie lange ein Alarmierungsauftrag mit unklarem Zustellergebnis die Alarm-Outbox auf "teilweise" haelt.
+UNKLAR_FENSTER = timedelta(hours=2)
+
 
 def _naive_utc(value: datetime | None) -> datetime | None:
     if value is None:
@@ -253,21 +256,30 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         job for job, finished_at in failed_with_finished
         if finished_at is not None and finished_at >= jetzt - timedelta(hours=24)
     ]
-    unklar = [job for job in jobs if job.status == "uncertain"]
+    # Unklare Zustellungen sind terminal und werden nie "gesund": nur die juengsten zaehlen,
+    # sonst haelt ein einziger alter Auftrag den Dienst dauerhaft auf "teilweise" (Vorfall 2026-11-06).
+    unklar = [
+        job for job in jobs
+        if job.status == "uncertain"
+        and (_naive_utc(job.finished_at) or _naive_utc(job.created_at) or jetzt) >= jetzt - UNKLAR_FENSTER
+    ]
     if haengend or fehlgeschlagen or unklar:
-        oldest = min((created_at for _, created_at in open_with_created if created_at is not None), default=jetzt)
-        age = int((jetzt - oldest).total_seconds())
-        detail = f"{len(haengend)} Alarmierungsauftraege seit ueber 2 Minuten offen (aeltester {age} s)"
+        teile: list[str] = []
+        if haengend:
+            oldest = min(
+                (created_at for job, created_at in open_with_created if job in haengend and created_at is not None),
+                default=jetzt,
+            )
+            age = int((jetzt - oldest).total_seconds())
+            teile.append(f"{len(haengend)} Alarmierungsauftraege seit ueber 2 Minuten offen (aeltester {age} s)")
         if fehlgeschlagen:
             channels = ", ".join(sorted({job.channel for job in fehlgeschlagen}))
-            detail += f"; {len(fehlgeschlagen)} fehlgeschlagen in 24 h ({channels})."
-        else:
-            detail += "."
-        outbox_state = "down"
+            teile.append(f"{len(fehlgeschlagen)} fehlgeschlagen in 24 h ({channels})")
         if unklar:
-            detail += f" {len(unklar)} Alarmierungsauftraege mit unklarem Ergebnis (uncertain)."
-            if not haengend and not fehlgeschlagen:
-                outbox_state = "teilweise"
+            channels = ", ".join(sorted({job.channel for job in unklar}))
+            teile.append(f"{len(unklar)} Alarmierungsauftraege mit unklarem Ergebnis ({channels})")
+        detail = "; ".join(teile) + "."
+        outbox_state = "down" if haengend or fehlgeschlagen else "teilweise"
     else:
         outbox_state = "ok"
         detail = f"Keine haengenden Alarmierungsauftraege ({len(open_jobs)} offen)."
@@ -296,8 +308,11 @@ def entscheide(
         row.fail_cycles = (row.fail_cycles or 0) + 1
         row.ok_cycles = 0
         down_since = _naive_utc(row.down_since) or jetzt
+        # Teilstoerungen (z. B. ein unklarer SMS-Auftrag) einmal melden, nicht im Wiederholungstakt;
+        # nur ein Vollausfall ("down") wird periodisch erneut gemeldet.
         wiederholung_faellig = row.outage_notified_at is None or (
-            row.last_repeat_at is not None
+            check.state == "down"
+            and row.last_repeat_at is not None
             and jetzt - (_naive_utc(row.last_repeat_at) or jetzt) >= timedelta(minutes=wiederholung_min)
         )
         if jetzt - down_since >= timedelta(minutes=karenz_min) and row.fail_cycles >= 2 and wiederholung_faellig:
