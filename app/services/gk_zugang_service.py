@@ -1152,17 +1152,6 @@ def _gk_versand_aufraeum_loop_sync() -> None:
         db.close()
 
 
-def _gk_versand_aufraeum_loop_sync() -> None:
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        aufraeumen_haengende_versaende(db)
-    except Exception:
-        db.rollback()
-    finally:
-        db.close()
-
-
 async def gk_versand_aufraeum_loop() -> None:
     """Markiert nach Prozessabbrüchen liegen gebliebene Auto-Outbox-Einträge."""
     import asyncio

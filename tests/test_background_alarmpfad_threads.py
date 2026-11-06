@@ -852,3 +852,58 @@ async def test_dibos_enrich_worker_fehler_bleibt_false(monkeypatch, caplog):
     monkeypatch.setattr(dibos_enrich, "enrich_events_for_org", fehler)
     assert await dibos_enrich.enrich_and_broadcast(1, []) is False
     assert "DIBOS-Einsatzanreicherung fehlgeschlagen (Org 1)" in caplog.text
+
+
+def test_alarm_abschluss_wird_bei_parallelen_kanaelen_nur_einmal_geschrieben(monkeypatch, tmp_path):
+    """Zwei gleichzeitig fertige Kanaele duerfen incident.alarm_finished nicht doppelt schreiben."""
+    import threading
+    from datetime import UTC, datetime
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.core.tenant import set_tenant_context
+    from app.db import Base
+    from app.models.incident import Incident, IncidentAlarmJob
+    from app.models.master import FireDept
+    from app.models.user import AuditLog
+    from app.services import alarm_outbox
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'abschluss.db'}",
+                           connect_args={"check_same_thread": False, "timeout": 30})
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(alarm_outbox, "SessionLocal", factory)
+    with factory() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug="abschluss", name="Abschluss")
+        db.add(org)
+        db.flush()
+        incident = Incident(primary_org_id=org.id, alarm_type_code="B2", status="active",
+                            started_at=datetime(2026, 9, 4, 8, 0), address_city="Testort")
+        db.add(incident)
+        db.flush()
+        for kanal in ("sms", "push", "teams", "mail"):
+            db.add(IncidentAlarmJob(
+                incident_id=incident.id, org_id=org.id, channel=kanal, status="sent",
+                next_attempt_at=datetime.now(UTC).replace(tzinfo=None), context={},
+            ))
+        db.commit()
+        incident_id, org_id = incident.id, org.id
+
+    start = threading.Barrier(4)
+
+    def fertig():
+        with factory() as db:
+            set_tenant_context(db, None)
+            vorfall = db.get(Incident, incident_id)
+            start.wait()
+            alarm_outbox._finish_if_done(db, vorfall, org_id, None)
+
+    threads = [threading.Thread(target=fertig) for _ in range(4)]
+    [t.start() for t in threads]
+    [t.join(30) for t in threads]
+    with factory() as db:
+        set_tenant_context(db, None)
+        assert db.query(AuditLog).filter_by(action="incident.alarm_finished", incident_id=incident_id).count() == 1
+    engine.dispose()
