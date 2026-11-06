@@ -1,15 +1,13 @@
 {# Auch bei einem partiellen Grid-Reload Hinweise und Zaehler aktualisieren. #}
 <div id="breathingSummary" {% if summary_oob | default(false) %}hx-swap-oob="outerHTML"{% endif %}>
-  {% if kein_heartbeat or hinweise or incident.breathing_troops | selectattr('notfall_at') | list or incident.breathing_troops | selectattr('funk_verloren_at') | list %}
-  <section class="breathing-critical" aria-labelledby="breathingCriticalTitle">
-    <h3 id="breathingCriticalTitle">{{ icon("alert-triangle") }} Kritische Hinweise</h3>
-    {% if kein_heartbeat %}<p>Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden). Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen.</p>{% endif %}
-    {% if hinweise.assp %}<p>3 oder mehr Trupps gleichzeitig im Einsatz: Atemschutzsammelplatz (ASSP) über die Einsatzleitung alarmieren. Der ASSP übernimmt nur Logistik, die Überwachung bleibt beim Gruppenkommandanten.</p>{% endif %}
-    {% if hinweise.kein_sicherheitstrupp %}<p>Kein bereiter Sicherheitstrupp: Rettungstrupp ab Einsatzbeginn bereitstellen.</p>{% endif %}
-    {% for troop in incident.breathing_troops %}
-    {% if troop.notfall_at %}<p class="breathing-critical__notfall"><a href="#troop-{{ troop.id }}">ATEMSCHUTZNOTFALL: {{ troop.name }}</a></p>{% endif %}
-    {% if troop.funk_verloren_at %}<p><a href="#troop-{{ troop.id }}">Kein Funkkontakt: {{ troop.name }}</a></p>{% endif %}
-    {% endfor %}
+  {% if breathing_alerts %}
+  {% set first = breathing_alerts[0] %}
+  <section id="breathingAlertBar" class="breathing-alert breathing-alert--{{ first.color }}{% if first.emergency %} breathing-alert--emergency{% endif %}"
+           data-alerts='{{ breathing_alerts | tojson }}' aria-label="Aktive Warnungen">
+    <strong data-alert-text>{{ first.text }}</strong>
+    {% if breathing_alerts | length > 1 %}<span>+{{ breathing_alerts | length - 1 }} weitere</span>{% endif %}
+    <button type="button" class="btn" data-alert-jump aria-label="Zur Karte des angezeigten Trupps">Zur Karte</button>
+    {% if breathing_alerts | length > 1 %}<button type="button" class="btn" data-alert-next aria-label="Nächste Warnung anzeigen">Nächste</button>{% endif %}
   </section>
   {% endif %}
   <div class="breathing-overview" aria-label="Truppübersicht">

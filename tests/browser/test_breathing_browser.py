@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skipif(
 )
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ.get("ECP_SCREENSHOT_DIR", ROOT / "tests/browser/out"))
-VIEWPORTS = {"handy": (390, 844), "tablet_hoch": (800, 1280), "tablet_quer": (1280, 800), "desktop": (1600, 900)}
+VIEWPORTS = {"klein": (360, 800), "768": (768, 1024), "1024": (1024, 768), "handy": (390, 844), "tablet_hoch": (800, 1280), "tablet_quer": (1280, 800), "desktop": (1600, 900)}
 
 
 def _seed(ctx):
@@ -97,7 +97,27 @@ def test_board_screenshots_and_no_js_errors(breathing_routes, name):  # noqa: F8
             cards = page.locator(".troop-card")
             assert cards.count() == 3
             orders = [int(page.locator(".troop-card").nth(i).get_attribute("data-urgency")) for i in range(3)]
-            assert orders == sorted(orders) or True  # Reihenfolge visuell ueber CSS order
+            positions = [cards.nth(i).bounding_box() for i in range(3)]
+            visual_orders = [orders[i] for i in sorted(range(3), key=lambda i: (positions[i]["y"], positions[i]["x"]))]
+            assert visual_orders == sorted(orders)
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            page.locator('#breathingContrastToggle').click()
+            assert page.locator('#breathingBoard').evaluate("el => el.classList.contains('breathing-hc')")
+            page.screenshot(path=str(OUT / f"board_hc_{name}.png"), full_page=True)
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            bar = page.locator('#breathingAlertBar')
+            before = bar.locator('[data-alert-text]').inner_text()
+            bar.locator('[data-alert-next]').click()
+            assert bar.locator('[data-alert-text]').inner_text() != before
+            page.wait_for_timeout(600)
+            assert page.locator('.troop-card--highlight').count() == 1
+            assert bar.bounding_box()["y"] >= page.locator('#topnav').bounding_box()["height"] - 1
+            if name == "desktop":
+                page.locator('.btn--druck').first.click()
+                popup = page.locator('.press-picker-popup:visible').first
+                assert popup.is_visible()
+                assert popup.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(255, 255, 255)"
+                page.screenshot(path=str(OUT / "board_hc_druck.png"), full_page=True)
         finally:
             browser.close()
 

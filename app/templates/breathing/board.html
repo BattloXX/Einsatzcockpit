@@ -14,7 +14,9 @@
 </div>
 {% endif %}
 {% if incident.is_exercise %}<div class="exercise-topbar">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>{% endif %}
-<div class="breathing-board">
+<div class="breathing-board" id="breathingBoard" data-contrast-storage="ec-breathing-hc">
+<script src="/static/js/breathing_contrast.js?v={{ ASSET_VERSION }}"></script>
+<script>ECPBreathingContrast.restore(document.getElementById('breathingBoard'), function () { return window.localStorage; });</script>
 <div class="page-header">
   {% with active="atemschutz" %}{% include "incident/_subnav.html" %}{% endwith %}
   <span id="asuewSessionStatus" role="status"></span>
@@ -39,6 +41,7 @@
   </details>
   <h2>Atemschutzüberwachung – {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button type="button" class="btn btn--ghost" id="breathingContrastToggle" aria-label="Hochkontrast umschalten" aria-pressed="false">{{ icon("sun") }} Hochkontrast</button>
     {% if can_edit is not defined or can_edit %}
     <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newTroopModal">+ Trupp anlegen</button>
     {% endif %}
@@ -239,6 +242,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/breathing_alerts.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/server_clock.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/breathing_net.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/breathing_outbox.js?v={{ ASSET_VERSION }}"></script>
@@ -797,7 +801,7 @@ function troopCard(lastLogIso, entryIso, plannedMin, backIso, recoveryMin) {
 
       // time-ago updater
       const updateAgo = () => {
-        if (!this.lastLog) { this.timeAgo = 'Kein Messwert'; return; }
+        if (!this.lastLog) { this.timeAgo = 'Noch keine Druckmeldung'; return; }
         const sec = Math.floor((ECPServerClock.now() - this.lastLog.getTime()) / 1000);
         if (sec < 60) {
           this.timeAgo = `vor ${sec} Sek.`;

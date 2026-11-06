@@ -171,11 +171,14 @@
     {% endif %}
 
     <!-- ── Members with per-member Druck picker ── -->
-    <p class="troop-pressure-age">Druckmeldung: <span x-text="timeAgo">Kein Messwert</span></p>
+    {% if troop.status in ['im_einsatz', 'rueckzug'] %}<p class="troop-pressure-age" x-text="lastLog ? 'Letzte Druckmeldung ' + timeAgo : 'Noch keine Druckmeldung'">Noch keine Druckmeldung</p>{% endif %}
+    {% set pressures = namespace(values=[]) %}
+    {% for member in troop.active_members %}{% set pressures.values = pressures.values + [member.current_press if member.current_press is not none else member.start_press] %}{% endfor %}
+    {% set show_lowest = troop.status in ['im_einsatz', 'rueckzug'] and pressures.values | unique | list | length > 1 %}
     <div class="troop-members">
       {% for m in troop.active_members %}
       {% set member_press = m.current_press if m.current_press is not none else m.start_press %}
-      <div class="member-druck-row{% if member_press is not none and member_press == troop.lowest_current_pressure %} member-druck-row--lowest{% endif %}"
+      <div class="member-druck-row{% if show_lowest and member_press is not none and member_press == troop.lowest_current_pressure %} member-druck-row--lowest{% endif %}"
            x-data="memberPressRow({{ m.id }}, {{ (member_press | float) if member_press is not none else 'null' }}, {{ (m.withdraw_press | float) if m.withdraw_press else 0 }}, {{ (m.start_press | float) if m.start_press else 0 }}, {{ asuew_settings.gelb_prozent }})"
            x-init="init()">
         <div class="member-druck-name">
@@ -184,7 +187,7 @@
             {{ {'truppfuehrer':'TF','truppmann':'TM'}[m.role] }}
           </span>
           {% if m.member and m.member.is_agt %}<span class="badge badge--agt member-druck-badge">AGT</span>{% endif %}
-          {% if member_press is not none and member_press == troop.lowest_current_pressure %}<span class="member-lowest">niedrigster</span>{% endif %}
+          {% if show_lowest and member_press is not none and member_press == troop.lowest_current_pressure %}<span class="member-lowest">niedrigster</span>{% endif %}
 
         </div>
 
@@ -194,18 +197,18 @@
               x-text="currentPress !== null ? Math.floor(currentPress) + ' bar' + (waiting ? ' (wartend)' : '') : ''"></span>
 
         <div class="member-pressure" :class="pressClass">
-          <div class="member-pressure-track" role="img" aria-label="Druckbalken {{ m.display_name }}, Rückzug {{ m.withdraw_press | int if m.withdraw_press is not none else '-' }} bar, Anfang {{ m.start_press | int if m.start_press else '-' }} bar">
+          <div class="member-pressure-track" role="img" aria-label="Druckbalken {{ m.display_name }}{% if troop.status != 'bereit' %}, {% if m.withdraw_press is not none %}Rückzug {{ m.withdraw_press | int }} bar{% else %}Rückzug: noch offen{% endif %}{% endif %}, Anfang {{ m.start_press | int if m.start_press else '-' }} bar">
             <div class="member-pressure-fill" :style="`width:${startPressAvg ? Math.min(100, Math.max(0, (currentPress || 0) / startPressAvg * 100)) : 0}%`"></div>
-            {% if m.withdraw_press is not none and m.start_press %}<span class="member-withdraw-marker" style="left:{{ [100, [0, m.withdraw_press / m.start_press * 100] | max] | min }}%"></span>{% endif %}
+            {% if troop.status != 'bereit' and m.withdraw_press is not none and m.start_press %}<span class="member-withdraw-marker" style="left:{{ [100, [0, m.withdraw_press / m.start_press * 100] | max] | min }}%"></span>{% endif %}
           </div>
           <div class="member-pressure-scale"><span>0</span><span>{{ m.start_press | int if m.start_press else '-' }} bar</span></div>
-          <div class="member-druck-withdraw">Rückzug {{ m.withdraw_press | int if m.withdraw_press is not none else '-' }} bar
+          {% if troop.status != 'bereit' %}<div class="member-druck-withdraw">{% if m.withdraw_press is not none %}Rückzug {{ m.withdraw_press | int }} bar{% else %}Rückzug: noch offen{% endif %}
             ({{ 'final' if m.objective_press_at else 'vorläufig' }}) · Einsatzziel {{ 'gemeldet' if m.objective_press_at else 'offen' }}
-          </div>
+          </div>{% endif %}
         </div>
         {% if (can_edit is not defined or can_edit) and troop.status in ['im_einsatz','rueckzug'] %}
         <div class="press-picker-wrap" @click.outside="open = false">
-          <button type="button" class="btn btn--primary press-trigger" @click="open = !open">Druck</button>
+          <button type="button" class="btn btn--druck press-trigger" @click="open = !open">Druck</button>
           <div x-show="open" x-cloak class="press-picker-popup">
             <div class="press-picker-header">{{ m.display_name }}</div>
             <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/druck" hx-swap="none"

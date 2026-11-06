@@ -178,6 +178,44 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
             BreathingWarnung.erledigt_at.is_(None),
         ).order_by(BreathingWarnung.ausgeloest_at, BreathingWarnung.id).all():
             warnungen_by_troop.setdefault(warnung.troop_id, []).append(warnung)
+    hinweise = incident_hinweise(incident.breathing_troops)
+    kein_heartbeat = asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None))
+    alert_kinds = {
+        "notfall": (0, "red", "ATEMSCHUTZNOTFALL"),
+        "funk_verloren": (1, "orange", "Kein Funkkontakt"),
+        "withdraw": (2, "red", "Rückzugsdruck erreicht"),
+        "max_exceeded": (3, "orange", "Max-Zeit überschritten"),
+        "two_third_due": (4, "yellow", "Kontrolle fällig (2/3)"),
+        "one_third_due": (4, "yellow", "Kontrolle fällig (1/3)"),
+        "kein_heartbeat": (5, "yellow", "Kein Überwachungsgerät in der App aktiv "
+                           "(kein Heartbeat seit über 60 Sekunden). "
+                           "Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen."),
+        "kein_sicherheitstrupp": (6, "yellow", "Kein bereiter Sicherheitstrupp: "
+                                "Rettungstrupp ab Einsatzbeginn bereitstellen"),
+        "assp": (7, "yellow", "Atemschutzsammelplatz (ASSP) über die Einsatzleitung alarmieren; "
+                 "die Überwachung bleibt beim Gruppenkommandanten"),
+    }
+    alerts = []
+
+    def add_alert(troop, kind):
+        rank, color, message = alert_kinds[kind]
+        alerts.append({"troop_id": troop.id, "key": f"{troop.id}:{kind}",
+                       "rank": rank, "color": color, "emergency": kind == "notfall",
+                       "text": f"{troop.name}: {message}"})
+
+    for troop, _, _, _, active_warnings in troops_with_warnings:
+        for kind in active_warnings:
+            if kind in alert_kinds:
+                add_alert(troop, kind)
+        if troop.funk_verloren_at and "funk_verloren" not in active_warnings:
+            add_alert(troop, "funk_verloren")
+    for kind, troop in hinweise.items():
+        add_alert(troop, kind)
+    if kein_heartbeat and incident.breathing_troops:
+        anchor = next((t for t in incident.breathing_troops if t.status in ("im_einsatz", "rueckzug")),
+                      incident.breathing_troops[0])
+        add_alert(anchor, "kein_heartbeat")
+    alerts.sort(key=lambda alert: (alert["rank"], alert["troop_id"], alert["key"]))
     return {
         "asuew_app_pflicht": app_pflicht, "asuew_session_ok": session_ok,
         "asuew_readonly": readonly, "can_alarm": can_alarm,
@@ -191,8 +229,8 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
         "vehicles": vehicles, "bottle_presets": BOTTLE_PRESETS,
         "troop_status_labels": TROOP_STATUS_LABELS,
         "asuew_settings": asuew_settings, "current_user_label": _current_user_label(request),
-        "hinweise": incident_hinweise(incident.breathing_troops),
-        "kein_heartbeat": asuew_heartbeat_fehlt(db, incident, datetime.now(UTC).replace(tzinfo=None)),
+        "hinweise": hinweise, "breathing_alerts": alerts,
+        "kein_heartbeat": kein_heartbeat,
         "trupp_uebersicht": trupp_uebersicht, "warnungen_by_troop": warnungen_by_troop,
     }
 

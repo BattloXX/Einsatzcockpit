@@ -158,3 +158,40 @@
 .troop-warnings .warn-badge--yellow > .ecp-icon { width:24px; height:24px; }
 
 .troop-secondary-actions > * > .btn { padding:8px; font-size:.9rem; font-weight:700; overflow-wrap:normal; }
+
+/* Gemeinsame Raender, maximal drei Spalten und Sticky-Alarm unter der Topnav. */
+.breathing-board { --breathing-gutter:20px; --breathing-blue:#0755ad; --breathing-red:#b91c1c; --breathing-orange:#ffad42; --breathing-yellow:#ffda32; min-width:0; }
+#breathingSummary { display:contents; }
+.breathing-board .breathing-overview { margin:16px var(--breathing-gutter) 0; }
+.breathing-board #troopsGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); align-items:start; padding:20px var(--breathing-gutter); gap:20px; }
+.breathing-board .troop-card { max-width:none; min-width:0; }
+.breathing-alert { position:sticky; top:calc(var(--topnav-h, 64px) + env(safe-area-inset-top, 0px)); z-index:90; min-height:48px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 var(--breathing-gutter); padding:8px 12px; border:2px solid currentColor; border-radius:8px; }
+.breathing-alert strong { flex:1 1 240px; overflow-wrap:anywhere; }
+.breathing-alert--red { background:var(--breathing-red); color:#fff; }
+.breathing-alert--orange { background:var(--breathing-orange); color:#111; }
+.breathing-alert--yellow { background:var(--breathing-yellow); color:#111; }
+.breathing-alert--emergency { animation:breathing-emergency 1.2s infinite; }
+.breathing-alert .btn { min-height:48px; border:2px solid currentColor; background:transparent; color:inherit; }
+.troop-card--highlight { outline:4px solid #1678ff; outline-offset:3px; }
+.breathing-board .btn--druck { background:var(--breathing-blue); color:#fff; border:2px solid var(--breathing-blue); font-weight:800; }
+@media (min-width:1200px) { .breathing-board #troopsGrid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (min-width:800px) and (max-width:1199px) { .breathing-board #troopsGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:799px) {
+  .breathing-board { --breathing-gutter:12px; }
+  .breathing-board #troopsGrid { grid-template-columns:minmax(0,1fr); gap:12px; }
+}
+@media (prefers-reduced-motion:reduce) { .breathing-alert--emergency { animation:none; } }
+.breathing-hc { --surface:#fff; --surface-low:#fff; --surface-mid:#fff; --surface-high:#fff; --surface-highest:#fff; --on-surface:#000; --text-muted:#222; --breathing-muted:#222; --border:#111; --primary:#0755ad; background:var(--surface); color:var(--on-surface); }
+.breathing-hc .troop-card, .breathing-hc .member-druck-row, .breathing-hc .timeline-chip, .breathing-hc .breathing-overview > span, .breathing-hc .btn--ghost, .breathing-hc .press-picker-popup, .breathing-hc .mini-popup, .breathing-hc .press-btn { border:2px solid var(--border); }
+.breathing-hc .member-pressure-track { border:2px solid var(--border); }
+.breathing-hc .member-druck-press--ok { color:#12612d; }
+.breathing-hc .member-druck-press--warn { color:#794400; }
+.breathing-hc .member-druck-press--danger { color:#b91c1c; }
+.breathing-hc .troop-warnings .warn-badge--max-time, .breathing-hc .troop-safety-banner--funk { background:var(--breathing-orange); color:#111; border:2px solid #111; }
+.breathing-hc .troop-warnings .warn-badge--one-third, .breathing-hc .troop-warnings .warn-badge--yellow { background:var(--breathing-yellow); color:#111; border:2px solid #111; }
+.breathing-hc .emergency-trigger { color:#b91c1c; border-color:#b91c1c; }
+.breathing-hc .press-btn--high { background:#12612d; color:#fff; }
+.breathing-hc .press-btn--warn { background:var(--breathing-yellow); color:#111; }
+.breathing-hc .press-btn--danger { background:var(--breathing-red); color:#fff; }
+.breathing-hc .press-btn--selected { outline:3px solid #000; outline-offset:1px; }
+.breathing-hc .badge--unit, .breathing-hc .badge--agt { background:var(--breathing-blue); color:#fff; border:2px solid var(--border); }
