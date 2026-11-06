@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
@@ -98,6 +98,10 @@ class RoadClosure(TenantScoped, Base):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
+    sections: Mapped[list[RoadClosureSection]] = relationship(
+        order_by="RoadClosureSection.position", cascade="all, delete-orphan"
+    )
+
     @property
     def restriction_label(self) -> str:
         return RESTRICTION_TYPES.get(self.restriction_type, self.restriction_type)
@@ -109,6 +113,27 @@ class RoadClosure(TenantScoped, Base):
     @property
     def geometry_status_label(self) -> str:
         return GEOMETRY_STATUS.get(self.geometry_status, self.geometry_status)
+
+
+class RoadClosureSection(TenantScoped, Base):
+    __tablename__ = "road_closure_section"
+    __table_args__ = (Index("ix_road_closure_section_closure_position", "road_closure_id", "position"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    road_closure_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("road_closure.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    street: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    from_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    to_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    geometry_geojson: Mapped[str | None] = mapped_column(Text, nullable=True)
+    geometry_status: Mapped[str] = mapped_column(String(20), nullable=False, default="missing")
+    geometry_quality: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    geometry_meta_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
 
 class RoadClosureShare(Base):

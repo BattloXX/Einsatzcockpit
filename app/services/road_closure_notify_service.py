@@ -41,7 +41,7 @@ def ereignis_aus_changes(changes: list[dict], *, now: datetime) -> str | None:
             # Ende vorgezogen bzw. erstmals gesetzt: nur „vorzeitig beendet“, wenn es (fast) schon vorbei ist.
             result = "vorzeitig_beendet" if after <= now + timedelta(hours=1) else "geaendert"
     meaningful = {
-        "restriction_type", "street", "from_text", "to_text", "city", "direction", "geometry_geojson",
+        "restriction_type", "street", "from_text", "to_text", "city", "direction", "geometry_geojson", "sections",
         "valid_from", "max_weight_t", "max_height_m", "max_width_m", "max_length_m", "reason", "exceptions", "title",
     }
     if result is not None:

@@ -19,7 +19,7 @@ MIN_LINE_OVERLAP_M = 30
 DESTINATION_RADIUS_M = 150
 NEARBY_RADIUS_M = 500
 AVOID_BUFFER_M = 10
-_TYPES = {"Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon"}
+_TYPES = {"Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection"}
 
 
 def _coordinates(value: Any):
@@ -50,6 +50,13 @@ def validate_geometry(data: dict | str) -> dict:
         value = features[0].get("geometry") if isinstance(features[0], dict) else None
     if not isinstance(value, dict) or value.get("type") not in _TYPES:
         raise ValueError("Nicht unterstützter GeoJSON-Geometrietyp.")
+    if value["type"] == "GeometryCollection":
+        geometries = value.get("geometries")
+        if not isinstance(geometries, list) or not geometries:
+            raise ValueError("Die Geometriesammlung muss Geometrien enthalten.")
+        if any(not isinstance(item, dict) or item.get("type") not in _TYPES for item in geometries):
+            raise ValueError("Nicht unterstützter GeoJSON-Geometrietyp.")
+        return {"type": "GeometryCollection", "geometries": [validate_geometry(item) for item in geometries]}
     coords = value.get("coordinates")
     if not isinstance(coords, list):
         raise ValueError("Ungültige GeoJSON-Koordinaten.")
@@ -78,6 +85,21 @@ def validate_geometry(data: dict | str) -> dict:
     if geometry.is_empty or (typ in {"Polygon", "MultiPolygon"} and not geometry.is_valid):
         raise ValueError("Die Polygon-Geometrie ist ungültig.")
     return result
+
+
+def merge_geometries(geoms: list[dict]) -> dict | None:
+    """Fasst gleichartige Teile zusammen und erhaelt gemischte Geometrien."""
+    if not geoms:
+        return None
+    if len(geoms) == 1:
+        return geoms[0]
+    for single, multi in (("LineString", "MultiLineString"), ("Polygon", "MultiPolygon"), ("Point", "MultiPoint")):
+        if all(geom.get("type") in {single, multi} for geom in geoms):
+            coordinates: list = []
+            for geom in geoms:
+                coordinates.extend([geom["coordinates"]] if geom["type"] == single else geom["coordinates"])
+            return {"type": multi, "coordinates": coordinates}
+    return {"type": "GeometryCollection", "geometries": geoms}
 
 
 def bbox(geom: dict) -> tuple[float, float, float, float]:
@@ -136,7 +158,19 @@ def classify(
     corridor = route_metric.buffer(ROUTE_BUFFER_M) if route_metric else None
     result: list[ClosureRelevance] = []
     for closure_id, raw in closures:
-        geom = to_metric(validate_geometry(raw), transformer)
+        validated = validate_geometry(raw)
+        if validated["type"] == "GeometryCollection":
+            parts = classify(route, destination, [(closure_id, item) for item in validated["geometries"]])
+            if parts:
+                best = min(parts, key=lambda item: {"route": 0, "destination": 1, "nearby": 2}[item.relevance])
+                geom = to_metric(validated, transformer)
+                result.append(ClosureRelevance(
+                    closure_id, best.relevance,
+                    round(geom.distance(route_metric)) if route_metric is not None else None,
+                    round(geom.distance(destination_point)), best.overlap_m,
+                ))
+            continue
+        geom = to_metric(validated, transformer)
         d_route = geom.distance(route_metric) if route_metric else None
         d_dest = geom.distance(destination_point)
         overlap = None

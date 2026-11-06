@@ -112,26 +112,30 @@ def render_road_closure_map_png(geometry: dict, *, size: tuple[int, int] = (800,
     from staticmap import CircleMarker, Line, Polygon, StaticMap
     width, height = size
     m = StaticMap(width, height, url_template=OSM_TILE_URL, headers={"User-Agent": OSM_TILE_USER_AGENT})
-    typ = geometry.get("type")
-    coordinates: list = geometry.get("coordinates") or []
-    lines: list = []
-    if typ == "MultiLineString":
-        lines = coordinates
-    elif typ == "LineString":
-        lines = [coordinates]
-    for line in lines:
-        points = [(float(x), float(y)) for x, y in line]
-        m.add_line(Line(points, "#ffffff", 10))
-        m.add_line(Line(points, "#d32f2f", 6))
-    polygons: list = []
-    if typ == "Polygon":
-        polygons = coordinates
-    elif typ == "MultiPolygon":
-        polygons = [ring for polygon in coordinates for ring in polygon]
-    for ring in polygons:
-        m.add_polygon(Polygon([(float(x), float(y)) for x, y in ring], "#d32f2f55", "#d32f2f", 3))
-    if typ == "Point" and coordinates:
-        m.add_marker(CircleMarker((float(coordinates[0]), float(coordinates[1])), "#d32f2f", 14))
+    def draw_geometry(part: dict) -> None:
+        typ = part.get("type")
+        coordinates: list = part.get("coordinates") or []
+        if typ == "GeometryCollection":
+            for child in part.get("geometries", []):
+                draw_geometry(child)
+        elif typ == "MultiPoint":
+            for point in coordinates:
+                draw_geometry({"type": "Point", "coordinates": point})
+        elif typ in {"LineString", "MultiLineString"}:
+            for line in ([coordinates] if typ == "LineString" else coordinates):
+                points = [(float(x), float(y)) for x, y in line]
+                m.add_line(Line(points, "#ffffff", 10))
+                m.add_line(Line(points, "#d32f2f", 6))
+        elif typ in {"Polygon", "MultiPolygon"}:
+            rings = coordinates if typ == "Polygon" else [ring for polygon in coordinates for ring in polygon]
+            for ring in rings:
+                m.add_polygon(Polygon([(float(x), float(y)) for x, y in ring], "#d32f2f55", "#d32f2f", 3))
+        elif typ == "Point" and coordinates:
+            m.add_marker(CircleMarker((float(coordinates[0]), float(coordinates[1])), "#d32f2f", 14))
+
+    draw_geometry(geometry)
+    if geometry.get("type") == "Point":
+        coordinates = geometry["coordinates"]
         image = m.render(zoom=16, center=(float(coordinates[0]), float(coordinates[1])))
     else:
         image = m.render()
