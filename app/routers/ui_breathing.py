@@ -107,12 +107,23 @@ def require_breathing_enabled(request: Request) -> None:
         raise HTTPException(status_code=404, detail="Nicht gefunden")
 
 
-def _asuew_app_pflicht(db: Session, incident_id: int) -> bool:
+def _asuew_app_pflicht(db: Session, incident_id: int, request: Request) -> bool:
     incident = db.get(Incident, incident_id)
     org = db.query(OrgSettings).filter(
         OrgSettings.org_id == incident.primary_org_id,
     ).first() if incident else None
-    return bool(org and org.asuew_app_pflicht)
+    # iOS-/Web-Sitzungen bleiben auch beim noch ausgeschalteten Org-Schalter geschuetzt.
+    from app.models.breathing import BreathingGeraetSitzung
+
+    user = getattr(request.state, "user", None)
+    key = request.headers.get("X-ECP-ASUEW") or request.cookies.get("ec_asuew", "")
+    eingeschraenkt = db.query(BreathingGeraetSitzung.id).filter(
+        BreathingGeraetSitzung.session_key == key,
+        BreathingGeraetSitzung.incident_id == incident_id,
+        BreathingGeraetSitzung.user_id == user.id,
+        BreathingGeraetSitzung.platform.in_(("ios", "web")),
+    ).first() if user else None
+    return bool(eingeschraenkt or (org and org.asuew_app_pflicht))
 
 
 def _asuew_session_ok(request: Request, db: Session, incident_id: int) -> bool:
@@ -129,7 +140,7 @@ def require_asuew_session(
     Ein Notruf darf fuer berechtigte Rollen nie an einer fehlenden Sitzung
     scheitern. Funkkontakt-Wiederherstellung und Notfall-Aufheben sind Eingaben.
     """
-    if _asuew_app_pflicht(db, incident_id) and not _asuew_session_ok(request, db, incident_id):
+    if _asuew_app_pflicht(db, incident_id, request) and not _asuew_session_ok(request, db, incident_id):
         raise HTTPException(403, "Atemschutzüberwachung nur in der Einsatzcockpit-App.")
 
 
@@ -165,7 +176,7 @@ def _board_kontext(request: Request, db: Session, incident: Incident, user) -> d
     now = datetime.now(UTC).replace(tzinfo=None)
     vehicles = [v for v in incident.vehicles if not v.removed_at]
 
-    app_pflicht = _asuew_app_pflicht(db, incident_id)
+    app_pflicht = _asuew_app_pflicht(db, incident_id, request)
     session_ok = _asuew_session_ok(request, db, incident_id)
     readonly = app_pflicht and not session_ok
     can_alarm = has_role(user, "breathing_supervisor", "incident_leader", "admin", "recorder")

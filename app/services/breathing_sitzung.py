@@ -48,10 +48,63 @@ def _frisch(sitzung: BreathingGeraetSitzung, now: datetime) -> bool:
     )
 
 
+def client_platform(header: str | None, fallback: str | None = None) -> str:
+    """Fehlender Header bleibt mit registrierten Android-Geraeten kompatibel."""
+    value = header if header is not None else fallback
+    return value if value in ("android", "ios") else "web"
+
+
+def _selbsttest_gruen(sitzung: BreathingGeraetSitzung) -> bool:
+    test = json.loads(sitzung.selbsttest) if sitzung.selbsttest else None
+    return bool(test) and bewerte_selbsttest(test, sitzung.akku_prozent, sitzung.laedt)["ampel"] == "gruen"
+
+
+def monitoring_fehler(
+    db: Session, sitzung: BreathingGeraetSitzung, now: datetime | None = None,
+) -> SitzungFehler | None:
+    """iOS darf nur mit gruenem Selbsttest und frischem Android-Mitueberwacher schreiben."""
+    if sitzung.platform == "web":
+        return SitzungFehler("app_erforderlich", "Die Atemschutzüberwachung läuft nur in der Einsatzcockpit-App.", 403)
+    if sitzung.platform != "ios":
+        return None
+    if not _selbsttest_gruen(sitzung):
+        return SitzungFehler(
+            "ios_selbsttest", "iOS bleibt nur lesend: Selbsttest muss grün sein. "
+            "Bitte App-Gerätecheck durchführen.", 409,
+        )
+    now = now or _now()
+    android = db.query(BreathingGeraetSitzung).join(
+        Incident, Incident.id == BreathingGeraetSitzung.incident_id,
+    ).join(User, User.id == BreathingGeraetSitzung.user_id).filter(
+        BreathingGeraetSitzung.incident_id == sitzung.incident_id,
+        BreathingGeraetSitzung.platform == "android", Incident.primary_org_id == User.org_id,
+    ).all()
+    if not any(row.id != sitzung.id and _frisch(row, now) and _selbsttest_gruen(row) for row in android):
+        return SitzungFehler(
+            "ios_android_erforderlich", "iOS bleibt nur lesend: Ein Android-Gerät mit grünem Selbsttest "
+            "muss denselben Einsatz in der App mitüberwachen.", 409,
+        )
+    return None
+
+
+def geraete_check(db: Session, sitzung: BreathingGeraetSitzung, now: datetime) -> dict:
+    fehler = monitoring_fehler(db, sitzung, now)
+    test = json.loads(sitzung.selbsttest) if sitzung.selbsttest else None
+    return {
+        **bewerte_selbsttest(test, sitzung.akku_prozent, sitzung.laedt),
+        "platform": sitzung.platform, "monitoring_erlaubt": fehler is None,
+        "plattform_hinweis": ("iOS: Überwachung nur mit grünem Selbsttest und aktivem "
+                             "Android-Mitüberwacher mit grünem Selbsttest.")
+        if sitzung.platform == "ios" else "",
+        **({"error": fehler.code, "message": fehler.nachricht} if fehler else {}),
+    }
+
+
 def start_sitzung(
     db: Session, user: User, incident_id: int, fcm_token: str,
     app_version: str | None, selbsttest: dict | None, akku_prozent: int | None,
     laedt: bool | None, geraet_label: str | None, now: datetime | None = None,
+    platform: str | None = None,
 ) -> BreathingGeraetSitzung:
     now = now or _now()
     incident = db.query(Incident).filter(
@@ -82,7 +135,7 @@ def start_sitzung(
     sitzung = BreathingGeraetSitzung(
         incident_id=incident_id, user_id=user.id, fcm_token_id=token.id,
         session_key=secrets.token_urlsafe(32), app_version=app_version,
-        platform=token.platform[:10], geraet_label=geraet_label,
+        platform=client_platform(platform, token.platform), geraet_label=geraet_label,
         selbsttest=_selbsttest_json(selbsttest),
         akku_prozent=akku_prozent, laedt=laedt, gestartet_at=now, letzter_heartbeat_at=now,
     )
@@ -106,11 +159,14 @@ def _eigene_sitzung(db: Session, session_key: str, user: User) -> BreathingGerae
 def heartbeat(
     db: Session, session_key: str, user: User, akku_prozent: int | None,
     laedt: bool | None, selbsttest: dict | None, now: datetime | None = None,
+    platform: str | None = None,
 ) -> BreathingGeraetSitzung:
     now = now or _now()
     sitzung = _eigene_sitzung(db, session_key, user)
     if not _frisch(sitzung, now):
         raise SitzungFehler("sitzung_beendet", "Die Überwachungssitzung ist beendet oder abgelaufen.", 409)
+    if platform is not None:
+        sitzung.platform = client_platform(platform)
     sitzung.letzter_heartbeat_at = now
     if akku_prozent is not None:
         sitzung.akku_prozent = akku_prozent
@@ -139,19 +195,21 @@ def validiere_sitzung(
         BreathingGeraetSitzung.incident_id == incident_id, BreathingGeraetSitzung.user_id == user_id,
         Incident.primary_org_id == User.org_id,
     ).first()
-    return sitzung if sitzung is not None and _frisch(sitzung, now or _now()) else None
+    return sitzung if (sitzung is not None and _frisch(sitzung, now or _now())
+                       and monitoring_fehler(db, sitzung, now) is None) else None
 
 
 def hat_frischen_heartbeat(db: Session, incident_id: int, now: datetime | None = None) -> bool:
     now = now or _now()
-    return db.query(BreathingGeraetSitzung.id).join(
+    sitzungen = db.query(BreathingGeraetSitzung).join(
         Incident, Incident.id == BreathingGeraetSitzung.incident_id,
     ).join(User, User.id == BreathingGeraetSitzung.user_id).filter(
         Incident.primary_org_id == User.org_id,
         BreathingGeraetSitzung.incident_id == incident_id, BreathingGeraetSitzung.beendet_at.is_(None),
         BreathingGeraetSitzung.letzter_heartbeat_at >= now - timedelta(seconds=HEARTBEAT_MAX_AGE_S),
         BreathingGeraetSitzung.gestartet_at >= now - timedelta(hours=SITZUNG_MAX_STUNDEN),
-    ).first() is not None
+    ).all()
+    return any(monitoring_fehler(db, sitzung, now) is None for sitzung in sitzungen)
 
 
 def bewerte_selbsttest(selbsttest: dict | None, akku_prozent: int | None, laedt: bool | None) -> dict:

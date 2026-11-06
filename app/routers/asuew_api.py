@@ -1,5 +1,4 @@
 """JSON-API für die native Atemschutzüberwachung."""
-import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
@@ -9,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.tenant import set_tenant_context
 from app.db import get_db
-from app.models.breathing import BreathingGeraetSitzung, BreathingTroop
+from app.models.breathing import BreathingTroop
 from app.models.master import OrgSettings
 from app.models.user import User
 from app.routers.device_api import _resolve_user_via_bearer_token, _unauthorized
@@ -57,29 +56,25 @@ def _fehler(exc: svc.SitzungFehler) -> JSONResponse:
     return JSONResponse({"error": exc.code, "message": exc.nachricht}, status_code=exc.http_status)
 
 
-def _bewertung(sitzung: BreathingGeraetSitzung) -> dict:
-    return svc.bewerte_selbsttest(
-        json.loads(sitzung.selbsttest) if sitzung.selbsttest is not None else None,
-        sitzung.akku_prozent, sitzung.laedt,
-    )
-
-
 @router.post("/sitzung")
 def start(
     data: StartDaten, request: Request, user: User = Depends(_user), db: Session = Depends(get_db),
 ):
     now = datetime.now(UTC).replace(tzinfo=None)
     try:
-        sitzung = svc.start_sitzung(db, user, **data.model_dump(), now=now)
+        sitzung = svc.start_sitzung(db, user, **data.model_dump(), now=now,
+                                  platform=request.headers.get("X-ECP-Platform"))
         db.commit()
     except svc.SitzungFehler as exc:
         db.rollback()
         return _fehler(exc)
+    check = svc.geraete_check(db, sitzung, now)
+    fehler = svc.monitoring_fehler(db, sitzung, now)
     response = JSONResponse({
         "session_key": sitzung.session_key, "incident_id": sitzung.incident_id,
         "server_time": _iso(now), "heartbeat_interval_s": svc.HEARTBEAT_INTERVAL_S,
-        "heartbeat_max_age_s": svc.HEARTBEAT_MAX_AGE_S, **_bewertung(sitzung),
-    })
+        "heartbeat_max_age_s": svc.HEARTBEAT_MAX_AGE_S, **check,
+    }, status_code=fehler.http_status if fehler else 200)
     response.set_cookie(
         COOKIE, sitzung.session_key, httponly=True, samesite="lax", secure=request.url.scheme == "https",
         path="/", max_age=svc.SITZUNG_MAX_STUNDEN * 3600,
@@ -93,12 +88,16 @@ def heartbeat(
 ):
     now = datetime.now(UTC).replace(tzinfo=None)
     try:
-        sitzung = svc.heartbeat(db, _key(request), user, **data.model_dump(), now=now)
+        sitzung = svc.heartbeat(db, _key(request), user, **data.model_dump(), now=now,
+                                  platform=request.headers.get("X-ECP-Platform"))
         db.commit()
     except svc.SitzungFehler as exc:
         db.rollback()
         return _fehler(exc)
-    return {"ok": True, "server_time": _iso(now), **_bewertung(sitzung)}
+    fehler = svc.monitoring_fehler(db, sitzung, now)
+    return JSONResponse({"ok": fehler is None, "server_time": _iso(now),
+                         **svc.geraete_check(db, sitzung, now)},
+                        status_code=fehler.http_status if fehler else 200)
 
 
 @router.post("/sitzung/beenden")

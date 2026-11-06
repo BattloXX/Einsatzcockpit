@@ -13,12 +13,13 @@
     const schedule = opts.setTimeout || setTimeout;
     const cancel = opts.clearTimeout || clearTimeout;
     let state = { zustand: 'verbindet' };
-    let watcherStarted = false, pending = null;
+    let watcherStarted = false, monitoringActive = false, pending = null;
     let timer, key = null, interval = 15000, failures = 0;
     let lastRestart = -Infinity, restartNeeded = false, offset = null, stopped = false;
 
     function publish(zustand, data = {}) {
-      state = { zustand, ampel: data.ampel, probleme: data.probleme || [], message: data.message || '' };
+      state = { platform: data.platform, monitoring_erlaubt: data.monitoring_erlaubt,
+        plattform_hinweis: data.plattform_hinweis, zustand, ampel: data.ampel, probleme: data.probleme || [], message: data.message || '' };
       if (opts.onState) opts.onState(state);
     }
 
@@ -77,7 +78,8 @@
         if (response.ok) {
           if (result.server_time) offset = (Date.parse(result.server_time) - now()) / 1000;
           if (result.heartbeat_interval_s > 0) interval = result.heartbeat_interval_s * 1000;
-          const firstStart = !key;
+          const firstStart = !key || !monitoringActive;
+          monitoringActive = true;
           if (result.session_key) key = result.session_key;
           failures = 0;
           if (firstStart && !watcherStarted && native.asuew) {
@@ -88,6 +90,10 @@
           publish('aktiv', result);
           if (firstStart && opts.onStarted) opts.onStarted(result);
           delay = interval;
+        } else if (response.status === 409 && ['ios_selbsttest', 'ios_android_erforderlich'].includes(result.error)) {
+          if (result.session_key) key = result.session_key;
+          monitoringActive = false;
+          publish('fehler', result);
         } else if ((response.status === 403 && result.error === 'app_erforderlich') ||
                    (response.status === 426 && result.error === 'app_veraltet')) {
           retry = false;

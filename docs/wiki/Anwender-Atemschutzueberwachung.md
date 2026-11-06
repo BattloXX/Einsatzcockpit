@@ -6,7 +6,11 @@ Die Abläufe orientieren sich am FAZ-Falter und am Atemschutz-Lehrbehelf des
 LFV Vorarlberg: Kontrollen nach einem und zwei Dritteln der erwarteten Einsatzzeit,
 Rückzug nach dem doppelten Anmarschverbrauch und Überwachung des gesamten Trupps.
 
-> Die digitale Überwachung ergänzt Tafel und Formular, sie ersetzt sie nicht.
+> **Bis die Geräteabnahme (Phase 8) unterzeichnet ist, ergänzt die digitale
+> Atemschutzüberwachung die papierbasierte ASÜW und ersetzt sie NICHT.** Tafel/Formular
+> weiterführen. Die Abnahme-Checkliste (docs/plans/atemschutzueberwachung-abnahme.md)
+> dokumentiert Gerätetests und Freigabe. Android wird zuerst abgenommen; das Release
+> mit dem nativen Wächter ist noch nicht veröffentlicht.
 
 ---
 
@@ -52,11 +56,23 @@ Die Leitung erhält sofort einen Push-Alarm und nach weiteren 3 Minuten eine SMS
 Funkkontrolle der Trupps durchführen. Ein neuer Heartbeat beendet die Warnung und
 unterdrückt noch wartende Zustellungen.
 
-Der Organisationsschalter ist standardmäßig aus. Er darf erst aktiviert werden,
-wenn alle Überwachungsgeräte die aktuelle App mit der Fähigkeit `asuew` haben;
-diese kommt mit [Android-PR #96](https://github.com/BattloXX/Einsatzcockpit-Android/pull/96).
-Eine vom Betrieb gesetzte Mindestversion (`ASUEW_MIN_APP_VERSION`) kann beim
-Sitzungsstart ein App-Update verlangen.
+Der Organisationsschalter ist standardmäßig aus. Unter **Administration → Einstellungen**
+für die Organisation **Überwachung nur in der App erlauben** erst einschalten, wenn
+**alle Überwachungsgeräte die veröffentlichte App-Version mit nativem Wächter** installiert
+haben und die Geräteabnahme abgeschlossen ist. Die Fähigkeit `asuew` allein genügt dafür
+nicht. Android-PRs #96–#98 sind gemergt; ein installiertes App-Release ist zusätzlich nötig.
+Anschließend an jedem Gerät Sitzungsstart, Gerätecheck und Übergabe prüfen.
+
+Der Betrieb kann serverseitig `ASUEW_MIN_APP_VERSION` auf die tatsächlich freigegebene
+App-Version setzen (Kalenderversion, z. B. `2026.11.06`). Ältere oder nicht erkennbare
+Versionen erhalten beim Sitzungsstart **Bitte die App aktualisieren** (HTTP 426).
+Leer bedeutet keine Mindestversionsprüfung; die Einstellung installiert kein Update.
+
+Der Gerätecheck zeigt die Plattform. iOS ist vorbereitet, die iOS-App existiert noch nicht:
+Eine iOS-Sitzung darf nur bei grünem Selbsttest und gleichzeitigem Android-Mitüberwacher
+mit grünem Selbsttest und frischem Heartbeat im selben Einsatz überwachen. Sonst bleibt
+sie nur lesend mit App-Hinweis. Fällt der Android-Mitüberwacher aus, sperrt der Server
+Eingaben erneut; bei App-Pflicht greift die bestehende Heartbeat-Ausfallwarnung.
 
 ---
 

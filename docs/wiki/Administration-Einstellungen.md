@@ -110,18 +110,23 @@ Einsatzleitung an (nur Logistik, Überwachung bleibt beim Gruppenkommandanten).
 Ein Sicherheitstrupp zählt nur im Status **bereit**. Funkverlust und Notfall
 bleiben im Board sichtbar, bis sie aufgehoben werden.
 
-> Die digitale Überwachung ergänzt Tafel und Formular, sie ersetzt sie nicht.
+> **Bis zur unterzeichneten Geräteabnahme (Phase 8) ergänzt die digitale ASÜW
+> die papierbasierte Überwachung und ersetzt sie NICHT.** Tafel/Formular weiterführen;
+> siehe Abnahme-Checkliste (docs/plans/atemschutzueberwachung-abnahme.md).
 
-**Rollout Phase 3:** Den Schalter **Überwachung nur in der App erlauben** erst
-aktivieren, wenn alle Überwachungsgeräte die aktuelle App mit der Fähigkeit
-`asuew` besitzen (Android-PR BattloXX/Einsatzcockpit-Android#96). Standard ist aus.
+**Rollout:** Den Schalter **Überwachung nur in der App erlauben** unter
+**Einstellungen → Allgemein** erst aktivieren, wenn alle Überwachungsgeräte die
+App-Version **mit nativem Wächter** installiert haben und die Geräteabnahme
+abgeschlossen ist. Die Fähigkeit `asuew` allein genügt nicht. Android-PRs #96–#98
+sind gemergt, das dafür nötige Android-Release ist noch nicht veröffentlicht.
+Standard ist aus.
 Die App-Sitzung ist an Benutzer, Einsatz und Gerät gebunden. Heartbeats kommen
 alle 15 Sekunden und gelten 60 Sekunden; nach spätestens 24 Stunden oder bei
 beendetem Einsatz läuft die Sitzung ab. Beendete Sitzungen werden nach 30 Tagen
 in begrenzten Chargen gelöscht.
 
 Die Selbsttest-Ampel bewertet Benachrichtigungen, Verbindung, Uhr und Akku.
-Alarmton, exakte Wecker, Vollbild und Akku-Optimierung folgen als native
+Alarmton, exakte Wecker, Vollbild und Akku-Optimierung sind native
 Prüfpunkte; fehlende Angaben sind keine bestätigte Prüfung. Einzelheiten zu Grün,
 Gelb und Rot sowie zur Nur-Lese-Ansicht stehen in der Anwenderseite.
 
@@ -132,7 +137,7 @@ fehlende oder ungültige App-Versionen mit dem Hinweis zum Aktualisieren abgewie
 Die App ermittelt ihre Version über das offizielle Capacitor-App-Plugin.
 Die kommentierte Variablenreferenz steht in `.env.example`.
 
-Der native abgesicherte Alarmton folgt in Phase 4. Ablauf und Funkverlust-Checkliste:
+Gerätecheck, nativer Alarmton, Ablauf und Funkverlust-Checkliste:
 [Atemschutzüberwachung](Anwender-Atemschutzueberwachung).
 
 ## Auto-Schließen (Einsatz automatisch beenden)

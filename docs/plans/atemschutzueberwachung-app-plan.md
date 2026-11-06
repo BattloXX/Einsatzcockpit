@@ -1,6 +1,11 @@
 # Atemschutzüberwachung (ASÜW): Analyse und Verbesserungsplan mit App-Stabilisierung
 
-Stand: 2026-11-05 · Status: **Plan, Entscheidungen getroffen (Abschnitt 8), noch nicht umgesetzt**
+Stand: 2026-11-06 · Status: **Phasen 0–7 Backend abgeschlossen** (PR #887–#894).
+**Android-PRs #96–#98 sind gemergt; das Android-Release ist noch nicht veröffentlicht.**
+Offen: Android-Release auf allen Überwachungsgeräten installieren, Gerätetests und Freigabe
+(Phase 8, siehe [Abnahme-Checkliste](atemschutzueberwachung-abnahme.md)) sowie Phase 9 auf
+App-Seite (iOS-App existiert noch nicht). Die serverseitige iOS-Vorbereitung und der reine
+JS-Logikspiegel sind umgesetzt; Android wird zuerst abgenommen. Entscheidungen: Abschnitt 8.
 
 ## 1. Ziel
 
@@ -497,7 +502,7 @@ Gerätetest-Checkliste (Übungseinsatz, mindestens 2 Geräte):
 | 6 | Phase 8 | Abnahme vor Freigabe im Echteinsatz |
 | 7 | Phase 9 | iOS-Vorbereitung, nach Android-Abnahme und Apple-Account |
 
-Bis Phase 4 abgenommen ist, sollte das Wiki deutlich festhalten: **Die digitale ASÜW ergänzt
+Bis die Geräteabnahme (Phase 8) unterzeichnet ist, sollte das Wiki deutlich festhalten: **Die digitale ASÜW ergänzt
 die Überwachungstafel bzw. das Formular und ersetzt sie nicht.**
 
 ## 8. Entscheidungen (2026-11-05)
@@ -526,4 +531,33 @@ nachrüstbar machen:
   Live Activity für die Trupp-Uhren. Ein iOS-Gerät kann Fristen weniger zuverlässig im
   Hintergrund halten als Android; bis zur Abnahme ist die Überwachung auf iOS nur freigegeben,
   wenn die Selbsttest-Ampel grün ist und zusätzlich ein Android-Gerät mitüberwacht.
-- Bis dahin zeigt iOS die Nur-Lese-Ansicht mit App-Hinweis.
+- Ohne diese Voraussetzungen zeigt iOS die Nur-Lese-Ansicht mit App-Hinweis.
+
+
+Status Phase 9 (Backend):
+
+- Plattformklassifikation zentral über `X-ECP-Platform`: `android`, `ios`, sonst `web`.
+  Ohne Header wird beim Start die registrierte Tokenplattform verwendet; Heartbeats ohne
+  Header behalten die Sitzungsplattform. Bestehende Android-Clients bleiben kompatibel.
+- iOS-Sitzungen bleiben nur lesend, solange ihr Selbsttest nicht grün ist oder kein frisches
+  Android-Gerät mit grünem Selbsttest denselben Einsatz mitüberwacht. Gerätecheck und
+  Sitzungs-/Heartbeat-Antworten zeigen Plattform, Freigabe und deutschen Hinweis;
+  `ios_selbsttest` bzw. `ios_android_erforderlich` liefern HTTP 409. Die Nur-Lese-Sitzung
+  bleibt für weitere Gerätechecks bestehen. Bei jedem Schreibzugriff wird erneut geprüft;
+  die bestehenden Notruf-Ausnahmen bleiben bestehen. Fehlende Selbsttests bestätigen kein Grün.
+- Ein iOS-Heartbeat allein unterdrückt die bestehende Heartbeat-Ausfallwarnung nicht;
+  Push/SMS verwenden die vorhandene Outbox und Eskalationsregeln bei App-Pflicht.
+- Reine Fristen-/Ereignislogik: `app/static/js/asuew_logik.js` spiegelt `AsuewLogic`.
+  Gemeinsame Eingabe-/Ergebnisvektoren: `tests/data/asuew/logik_vektoren.json`
+  (`schema_version`, `description`, `cases`; je Fall `name`, `function`, `args`, `expected`).
+  Zustände und Ereignisse verwenden die camelCase-Felder der Kotlin-Datenklassen und
+  Server-Millisekunden. JS prüft Ergebnisse, Python das Austauschformat.
+- **Follow-up im Android-Repo:** Einen Test ergänzen, der genau diese JSON-Vektoren liest
+  und gegen Kotlin ausführt. Das Android-Repo wurde hier nur gelesen. Lokale Ereignisse
+  haben in Kotlin keine Version/optimistische Sperre: sie überlagern die Serverkopie,
+  Versionskonflikte entscheidet erst die Server-Outbox-Verarbeitung. Die Vektoren prüfen
+  auch, dass Versionsmetadaten lokal keine eigene Konfliktbehandlung erfinden.
+  Parser verwenden striktes JSON und JS-sichere Ganzzahlen; Kotlin-spezifische JSONTokener-
+  Erweiterungen und Long-Werte ausserhalb dieses Bereichs sind kein Austauschformat.
+  `AsuewAlarmTracker` ist eine separate zustandsbehaftete Klasse und kein Teil des reinen Spiegels.
+- Offen bleiben iOS-App, nativer Wächter, Apple-Berechtigungen und iOS-Geräteabnahme.
