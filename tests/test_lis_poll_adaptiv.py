@@ -176,9 +176,12 @@ def test_monitor_accepts_idle_jitter_and_detects_stale(config_id, monkeypatch):
             org_settings = OrgSettings(org_id=1)
             db.add(org_settings)
         org_settings.dienst_monitor_ausgeschaltet = ""
-        status = DienstStatus(org_id=1, key="alarm_lis", last_probe_at=now - timedelta(seconds=359),
-                              last_probe_ok=True)
-        db.add(status)
+        status = db.query(DienstStatus).filter_by(org_id=1, key="alarm_lis").first()
+        if status is None:
+            status = DienstStatus(org_id=1, key="alarm_lis")
+            db.add(status)
+        status.last_probe_at = now - timedelta(seconds=359)
+        status.last_probe_ok = True
         db.flush()
         try:
             assert next(c for c in pruefe_dienste(db, 1, now) if c.key == "alarm_lis").state == "ok"
