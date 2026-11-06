@@ -149,7 +149,7 @@ def test_ausschnitt_original_unverzerrt_privater_cache(client, einsatz_plan, rot
     _login(client, p)
     r = client.get(_ausschnitt(p))
     assert r.status_code == 200, r.text
-    assert r.headers["cache-control"] == "private, max-age=0, must-revalidate"
+    assert r.headers["cache-control"] == "private, no-cache"
     assert r.headers["content-type"] == "image/png"
     bild = original.convert("RGBA").rotate(-rotation, expand=True)
     erwartet = bild.crop((int(bild.width * 0.25), int(bild.height * 0.1),

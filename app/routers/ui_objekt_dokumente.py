@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
+from app.core.http_cache import datei_cache_header, unveraendert
 from app.core.permissions import EINSATZ_LESE_ROLLEN, is_objekt_verwalter, require_role, require_role_or_device
 from app.core.templating import templates
 from app.db import get_db
@@ -844,8 +845,11 @@ def seite_thumb(
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
     rotation = seite.rotation
-    headers = {"Cache-Control": "no-cache"} if annotierte_seiten(db, [seite.id]) else {}
+    annotationsversion = annotierte_seiten(db, [seite.id]).get(seite.id)
+    headers = datei_cache_header(pfad, ["thumb", original, rotation, annotationsversion])
     db.close()
+    if antwort := unveraendert(request, headers):
+        return antwort
     response = _bild_response(pfad, "image/jpeg", rotation)
     response.headers.update(headers)
     return response
@@ -867,8 +871,11 @@ def seite_bild(
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
     rotation = seite.rotation
-    headers = {"Cache-Control": "no-cache"} if annotierte_seiten(db, [seite.id]) else {}
+    annotationsversion = annotierte_seiten(db, [seite.id]).get(seite.id)
+    headers = datei_cache_header(pfad, ["bild", original, rotation, annotationsversion])
     db.close()
+    if antwort := unveraendert(request, headers):
+        return antwort
     response = _bild_response(pfad, "image/png", rotation)
     response.headers.update(headers)
     return response
@@ -890,8 +897,11 @@ def seite_pdf(
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
     dateiname = f"seite_{seite.seiten_nr:04d}.pdf"
-    headers = {"Cache-Control": "no-cache"} if annotierte_seiten(db, [seite.id]) else {}
+    annotationsversion = annotierte_seiten(db, [seite.id]).get(seite.id)
+    headers = datei_cache_header(pfad, ["pdf", original, seite.rotation, annotationsversion])
     db.close()
+    if antwort := unveraendert(request, headers):
+        return antwort
     return FileResponse(
         pfad, media_type="application/pdf",
         filename=dateiname, headers=headers,
@@ -908,10 +918,13 @@ def dokument_original(
     _guard: None = Depends(require_objekt_enabled),
 ):
     pfad, dateiname = dokument_original_datei(db, dokument_id, user)
+    headers = datei_cache_header(pfad, ["original", True])
     db.close()
+    if antwort := unveraendert(request, headers):
+        return antwort
     return FileResponse(
         pfad, media_type="application/pdf",
-        filename=dateiname,
+        filename=dateiname, headers=headers,
         content_disposition_type="attachment" if request.query_params.get("download") == "1" else "inline",
     )
 
@@ -958,11 +971,15 @@ def symbol_bild(
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
     media_type = bild_media_type(symbol.bild_pfad)
+    headers = datei_cache_header(pfad, ["symbol"])
+    headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
     db.close()
+    if antwort := unveraendert(request, headers):
+        return antwort
     return FileResponse(
         pfad,
         media_type=media_type,
-        headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"},
+        headers=headers,
     )
 
 

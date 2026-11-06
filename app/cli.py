@@ -630,9 +630,29 @@ def mfa_global_aus() -> None:
         db.commit()
 
 
+def logos_verkleinern() -> None:
+    """Bestehende Organisationslogos im Upload-Verzeichnis verkleinern."""
+    from app.routers.ui_settings import ALLOWED_LOGO_EXTS, UPLOAD_DIR
+    from app.services.logo_service import logo_verkleinern
+
+    for pfad in sorted(UPLOAD_DIR.glob("logo_org*")):
+        if not pfad.is_file() or pfad.suffix.lower() not in ALLOWED_LOGO_EXTS:
+            continue
+        vorher = pfad.read_bytes()
+        try:
+            nachher = logo_verkleinern(vorher, pfad.suffix)
+        except (OSError, ValueError) as exc:
+            print(f"{pfad.name}: Fehler beim Lesen ({exc})")
+            continue
+        if nachher != vorher:
+            pfad.write_bytes(nachher)
+        print(f"{pfad.name}: {len(vorher)} -> {len(nachher)} Bytes")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command")
+    sub.add_parser("logos-verkleinern", help="Bestehende Organisationslogos auf maximal 512 Pixel verkleinern")
     p_update = sub.add_parser("update-run", help="Lokalen Hintergrund-Updatejob ausführen")
     p_update.add_argument("job_id")
     p_mfa = sub.add_parser("mfa-reset", help="Lokaler Notfallreset eines Systemadministrators")
@@ -705,7 +725,9 @@ def main() -> None:
             if fehler:
                 sys.exit(1)
         return
-    if args.command == "mfa-reset":
+    if args.command == "logos-verkleinern":
+        logos_verkleinern()
+    elif args.command == "mfa-reset":
         mfa_reset(args.username)
     elif args.command == "mfa-global-aus":
         mfa_global_aus()
