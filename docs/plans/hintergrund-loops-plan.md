@@ -32,9 +32,60 @@ Bereits erledigt: #898 (Session-Middleware), #899 (MCP), #900 (Logging, Stackdum
 | Phase | Inhalt | Status |
 |---|---|---|
 | U1 | Ueberwachung: Prozess-/Host-Metriken im Worker-Heartbeat, unsaubere Worker-Neustarts, Loop-Verzug, Speicher/Swap/PSI in Systemdiagnose und `admin_worker_pruefen` | umgesetzt |
-| L1 | Waechter + Polling-Loops: `lis_loop`, `dibos_loop`, `incident_route_loop`, `abfluss_poll_loop`, `dienst_monitor_loop`, Atemschutz-Watchdog/-Notify | offen |
+| L1 | Waechter + Polling-Loops: `lis_loop`, `dibos_loop`, `incident_route_loop`, `abfluss_poll_loop`, `dienst_monitor_loop`, Atemschutz-Watchdog/-Notify | umgesetzt |
 | L2 | Outbox/Dispatch/Erinnerungen: `alarm_outbox`, `api_message_dispatch_loop`, `mailing_dispatch_loop`, `road_closure_notification_loop`, `task_reminder`, `probe_erinnerung`, `gk_zugang_service`, `resend_inbound_service`, Mail-Poller/-Zuordnung/-Weiterleitung | offen |
 | L3 | Ereignis-Tasks im Alarmpfad: `print_dispatcher.autoprint_*`, `dibos_enrich`, `incident_notify`, `alarm_apply_service`, `objekt_*`, `teams_alarm_service`, Rest der Baseline | offen |
 
 Infrastruktur (ausserhalb des Codes): VM mit 8 GB ohne Burst-Grenze (z. B. D2as_v5),
 `MALLOC_ARENA_MAX=2`, Prod 2 Worker, `vm.swappiness=10`, MaxScale stoppen.
+
+## L1 umgesetzt (2026-11-06)
+
+- Der AST-Waechter erfasst `SessionLocal(...)` als Name und Attribut und trennt
+  verschachtelte synchrone und asynchrone Funktionskoerper. Die sortierte Baseline
+  enthaelt nach L1 **53 Eintraege** (vorher bei korrekter Abgrenzung: 60). Neue sowie ohne Baseline-Anpassung entfernte
+  Eintraege lassen den Test fehlschlagen.
+- Org-Listen in LIS/DIBOS/Abfluss/Dienstmonitor und der Atemschutz-Watchdog waren
+  bereits ausgelagert. Neue Tests sichern auch diese bestehenden Thread-Grenzen.
+- LIS-Konfiguration und die gesamte Sync-Transaktion (inklusive DB-Anteilen in
+  `lis_sync.sync_organization`) laufen jetzt im DB-Thread. Routenberechnung und
+  Dienstmonitor halten ebenfalls ihre bisherige Session und Commit-Reihenfolge
+  innerhalb eines synchronen Thread-Aufrufs. Fuer diese verzahnten Bestandsablaeufe
+  fuehrt `loop_thread_io.thread_ablauf` die bestehende Coroutine auf einem
+  kurzlebigen Worker-Loop aus. `auf_event_loop` reicht ausschliesslich Async-I/O
+  mit Nutzdaten an den urspruenglichen Loop zurueck: LIS-HTTP, Routing-HTTP,
+  Broadcasts, Mail-Transport und SMS. Sessions und ORM-Objekte bleiben im DB-Thread.
+  Der LIS-Thread erhaelt nur IDs und einen Client-Schluessel; auch Client-Attribute
+  werden auf dem urspruenglichen Loop gelesen/geschrieben. Es werden keine
+  zusaetzlichen Konfigurations-Queries gegenueber dem bisherigen Ablauf benoetigt.
+  Bei Abbruch wird die Worker-Coroutine abgebrochen und das Session-Ende abgewartet.
+- DIBOS laedt die Konfiguration als einfache Werte im Thread; auch Probe-Schreibzugriffe
+  laufen dort. Fast Path, Reihenfolge, Fingerprints, Deduplizierung, Reclose-Marker und
+  Create-/Enrich-Aufrufe bleiben unveraendert.
+- Atemschutz-Notify trennt faellige IDs, Einzel-Claim/Pruefung und SMS-Ergebnisverbuchung
+  in Session-eigene Thread-Aufrufe. Push und sein Zustellungsstatus bleiben in derselben
+  Transaktion; SMS bleibt async, einschliesslich unveraenderter Lease-, Eskalations-
+  und Wiederholungsfristen. Die SMS-Konfiguration wird ebenfalls im Thread geladen.
+  Bei SMS-Fehlern geht nur der Klassenname in die DB-Verbuchung; das bestehende
+  Fehlerprotokoll verwendet die urspruengliche Exception auf dem aufrufenden Loop.
+
+Bewusst offen fuer L2/L3:
+
+- `dibos_enrich.enrich_and_broadcast` und seine verzahnten DB-/HTTP-/Alarm-/Geocoding-
+  Ablaeufe bleiben L3. Insbesondere sind die dortigen Incident-Lookups und Writes,
+  Deduplizierung und Reclose-Marker in L1 nicht umgebaut.
+- Diagnose-Capture-Starts (`lis_capture.start_capture_for_org`,
+  `dibos_capture.start_trace_for_org`), der manuelle LIS-Fahrzeugstatus-Push und
+  Ereignis-Tasks (Objekt-Matching, Alarm-Outbox/Versand, Autoprint) behalten ihre
+  eigenen Sessions und bleiben den Folgephasen zugeordnet. Solche Tasks werden
+  weiterhin auf dem urspruenglichen Loop gestartet; keine LIS-Session wird uebergeben.
+- Die uebrigen 53 Baseline-Eintraege werden in L2/L3 abgebaut. Der Waechter erkennt
+  Session-Erzeugung, keine indirekten Zugriffe mit bereits uebergebenen Sessions;
+  deshalb pruefen Laufzeittests zusaetzlich Thread und Loop der L1-Pfade.
+
+Pruefprotokoll mit Dateizusammenfassung, exakten Befehlen und Ergebnissen:
+[hintergrund-loops-l1-pruefung.md](hintergrund-loops-l1-pruefung.md).
+
+Nachtrag Review: `im_db_thread` laeuft in einem eigenen Pool (`hintergrund-db`, 4 Threads).
+Die Ablaeufe halten ihren Thread ueber HTTP-Wartezeiten; im asyncio-Standardpool
+(6 Threads auf 2 CPUs) haetten sie die Session-Pruefung jeder Anfrage (#898) ausgehungert.

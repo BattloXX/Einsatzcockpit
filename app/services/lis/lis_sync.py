@@ -33,6 +33,7 @@ from app.services.lis.lis_mapping import (
     unit_status_to_lis_prefix,
 )
 from app.services.lis.lis_matching import find_matching_incident
+from app.services.loop_thread_io import auf_event_loop
 from app.services.major_incident_service import incident_belongs_to_major_incident, incident_major_incident_id
 
 logger = logging.getLogger("einsatzleiter.lis.sync")
@@ -63,6 +64,10 @@ def _starte_autoprint(incident_id: int) -> None:
             logger.error("LIS-Auto-Druck fehlgeschlagen (Einsatz %s, error=%s)", incident_id, type(exc).__name__)
 
     task.add_done_callback(_fertig)
+
+
+async def _starte_autoprint_async(incident_id: int) -> None:
+    _starte_autoprint(incident_id)
 
 
 # ── Kleine Hilfsfunktionen ──────────────────────────────────────────────────
@@ -875,7 +880,7 @@ async def _close_incidents_missing_from_lis(
                 "LIS-Auto-Close: WordPress-Bericht fehlgeschlagen (Einsatz %s)", incident.id
             )
         try:
-            await manager.broadcast(incident.id, {"type": "incident_closed"})
+            await auf_event_loop(manager.broadcast, incident.id, {"type": "incident_closed"})
         except Exception:
             logger.exception("LIS-Auto-Close: Broadcast für Einsatz %s fehlgeschlagen", incident.id)
         from app.services.incident_live_notify import notify_incident_live
@@ -964,7 +969,7 @@ async def sync_operation(
         messages_changed or tasks_changed or responses_changed or vehicles_changed or documents_changed
     ):
         from app.services.broadcast import manager
-        await manager.broadcast(incident.id, {"type": "lis_sync"})
+        await auf_event_loop(manager.broadcast, incident.id, {"type": "lis_sync"})
 
     if created:
         if parsed.get("is_closed"):
@@ -1001,7 +1006,7 @@ async def sync_operation(
         if incident.lat is None and incident.lng is None and (parsed["street"] or parsed["city"]):
             try:
                 from app.services.geocoding import geocode_address
-                geo = await geocode_address(parsed["street"], parsed["house_no"], parsed["city"])
+                geo = await auf_event_loop(geocode_address, parsed["street"], parsed["house_no"], parsed["city"])
             except Exception:
                 geo = None
                 logger.exception("Adress-Geocoding nach LIS-Anlage fehlgeschlagen (Einsatz %s)", incident.id)
@@ -1016,13 +1021,13 @@ async def sync_operation(
         # Objekt-Matching fuer den frisch aus LIS angelegten Einsatz
         try:
             from app.services.objekt_matching_service import match_incident_background
-            await match_incident_background(incident.id)
+            await auf_event_loop(match_incident_background, incident.id)
         except Exception:
             logger.exception("Objekt-Matching nach LIS-Anlage fehlgeschlagen (Einsatz %s)", incident.id)
 
         from app.services.broadcast import broadcast_org
         from app.services.exercise_guard import darf_extern
-        await broadcast_org(org.id, {
+        await auf_event_loop(broadcast_org, org.id, {
             "type": "incident_created",
             "incident_id": incident.id,
             "alarm": incident.alarm_type_code,
@@ -1044,7 +1049,7 @@ async def sync_operation(
         if config.auto_capture_on_new_operation:
             from app.services.lis.lis_capture import start_capture_for_org
             try:
-                await start_capture_for_org(org.id, duration_minutes=120)
+                await auf_event_loop(start_capture_for_org, org.id, duration_minutes=120)
                 logger.info(
                     "LIS-Capture automatisch gestartet (120 min) nach Neuanlage von Einsatz %s (Org %s)",
                     incident.id, org.id,
@@ -1236,7 +1241,7 @@ async def _sync_organization_with_client(
             )
             db.commit()
             if neue_incident_id is not None:
-                _starte_autoprint(neue_incident_id)
+                await auf_event_loop(_starte_autoprint_async, neue_incident_id)
         except Exception:
             db.rollback()
             logger.exception(

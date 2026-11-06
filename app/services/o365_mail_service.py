@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from app.config import settings
+from app.services.loop_thread_io import auf_event_loop
 
 if TYPE_CHECKING:
     from app.models.org_mail import OrgO365MailConfig
@@ -149,6 +150,12 @@ async def send_via_graph(msg: EmailMessage, cfg: OrgO365MailConfig) -> None:
     except Exception as exc:
         raise O365MailError(f"client_secret konnte nicht entschlüsselt werden: {exc}") from exc
 
+    await auf_event_loop(_sende_graph_daten, msg, cfg.org_id, tenant_id, client_id, client_secret, sender_address)
+
+
+async def _sende_graph_daten(
+    msg: EmailMessage, org_id: int, tenant_id: str, client_id: str, client_secret: str, sender_address: str,
+) -> None:
     payload = _graph_payload(msg)
     send_url = f"{GRAPH_BASE_URL}/users/{sender_address}/sendMail"
 
@@ -159,13 +166,13 @@ async def send_via_graph(msg: EmailMessage, cfg: OrgO365MailConfig) -> None:
             )
 
     token = await _acquire_token(
-        org_id=cfg.org_id, tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
+        org_id=org_id, tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
     )
     resp = await _attempt(token)
     if resp.status_code in (401, 403):
         # Möglicherweise abgelaufener/rotierter Secret — einmal erzwungen neu holen und retry.
         token = await _acquire_token(
-            org_id=cfg.org_id, tenant_id=tenant_id, client_id=client_id,
+            org_id=org_id, tenant_id=tenant_id, client_id=client_id,
             client_secret=client_secret, force=True,
         )
         resp = await _attempt(token)
@@ -177,5 +184,5 @@ async def send_via_graph(msg: EmailMessage, cfg: OrgO365MailConfig) -> None:
         except Exception:
             err_desc = resp.text[:400]
         logger.error("O365-Mailversand fehlgeschlagen (Org %s): HTTP %s | %s",
-                     cfg.org_id, resp.status_code, err_desc)
+                     org_id, resp.status_code, err_desc)
         raise O365MailError(f"HTTP {resp.status_code}: {err_desc}")
