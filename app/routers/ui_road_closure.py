@@ -23,6 +23,7 @@ from app.models.road_closure import (
     CLOSURE_STATUS,
     DIRECTIONS,
     GEOMETRY_QUALITY,
+    GEOMETRY_STATUS,
     PRIORITIES,
     RESTRICTION_TYPES,
     RoadClosure,
@@ -36,7 +37,7 @@ from app.models.user import User
 from app.services import road_closure_service, road_closure_stats_service, road_closure_token_service
 from app.services.address_autocomplete import suggest_addresses
 from app.services.road_closure_document_service import absolute_path, delete_document, store_document
-from app.services.road_closure_public_service import public_closure_dict
+from app.services.road_closure_public_service import abschnitte, public_closure_dict
 from app.services.road_closure_section_service import resolve_section, validate_address
 
 router = APIRouter(prefix="/strassensperren", tags=["strassensperren"])
@@ -222,6 +223,7 @@ def _feature(closure, *, viewer_org_id: int | None = None, public: bool = False)
             "id": closure.id,
             "title": closure.title,
             "street": closure.street,
+            "abschnitte": abschnitte(closure),
             "from_text": closure.from_text,
             "to_text": closure.to_text,
             "restriction_type": closure.restriction_type,
@@ -844,6 +846,7 @@ def detail(
             "color": _color(closure),
             "directions": DIRECTIONS,
             "geometry_quality_labels": GEOMETRY_QUALITY,
+            "geometry_status_labels": GEOMETRY_STATUS,
             "can_edit": has_role(user, "objekt_verwalter"),
             "can_delete": has_role(user, "org_admin"),
             "owner_org_name": owner_org.name if owner_org is not None else None,

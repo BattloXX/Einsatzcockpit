@@ -57,7 +57,8 @@ def test_entwurf_aus_verordnungstext():
     assert draft["restriction_type"] == "closed"
     assert draft["exceptions"] == "Ausgenommen sind Anrainer und Einsatzfahrzeuge."
     assert draft["strassen"][:3] == ["Rebbergstraße", "L 190", "Kellaweg"]
-    assert draft["title_vorschlag"] == "Vollsperre Rebbergstraße"
+    assert draft["title_vorschlag"] == "Vollsperre Rebbergstraße, L 190 +1"
+    assert [item["street"] for item in draft["abschnitte"]][:3] == ["Rebbergstraße", "L 190", "Kellaweg"]
     assert draft["begruendung"]["valid_from"] == "06.10.2026, 07:00 Uhr"
 
 

@@ -103,8 +103,16 @@ def build_road_closure_card(data: dict, *, ereignis: str, detail_url: str | None
         "reaktiviert": "↩️ Straßensperre wieder aktiv", "manuell": "🚧 Straßensperre"}
     good = {"aufgehoben", "vorzeitig_beendet", "ersetzt"}
     color = "good" if ereignis in good else ("attention" if data.get("restriction_type") == "closed" else "warning")
+    location = data.get("abschnitt")
+    if len(data.get("abschnitte") or []) > 1:
+        location = "\n\n".join(
+            str(section.get("street") or "") + (
+                ": " + " – ".join(value for value in (section.get("from_text"), section.get("to_text")) if value)
+                if section.get("from_text") or section.get("to_text") else ""
+            ) for section in data["abschnitte"]
+        )
     facts = [("Art", ", ".join([data.get("restriction_label", "")] + data.get("einschraenkungen", []))),
-             ("Abschnitt", data.get("abschnitt")), ("Beginn", data.get("valid_from_local")),
+             ("Abschnitt", location), ("Beginn", data.get("valid_from_local")),
              ("Ende", data.get("valid_until_local") or "unbefristet"), ("Grund", data.get("reason")),
              ("Einsatzgebiet", data.get("einsatzgebiet")), ("Ausnahmen", data.get("exceptions")),
              ("Richtung", data.get("direction_label"))]

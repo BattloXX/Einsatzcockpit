@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.audit import write_audit
 from app.models.incident import Incident
@@ -712,6 +712,7 @@ def visible_closures_q(db: Session, org_id: int):
     shares = select(RoadClosureShare.road_closure_id).where(RoadClosureShare.org_id == org_id)
     return (
         db.query(RoadClosure)
+        .options(selectinload(RoadClosure.sections))
         .execution_options(include_all_tenants=True)
         .filter(or_(RoadClosure.org_id == org_id, RoadClosure.id.in_(shares)))
     )
@@ -844,6 +845,7 @@ def find_duplicates(
     valid_until: datetime | None,
     geometry: dict | None = None,
     exclude_id: int | None = None,
+    sections: list[dict] | None = None,
 ) -> list[RoadClosure]:
     return [
         related.closure
@@ -851,6 +853,7 @@ def find_duplicates(
             db,
             org_id,
             street=street,
+            sections=sections,
             reference_number=None,
             valid_from=valid_from,
             valid_until=valid_until,
@@ -879,16 +882,20 @@ def find_related(
     title: str | None = None,
     description: str | None = None,
     exclude_id: int | None = None,
+    sections: list[dict] | None = None,
 ) -> list[RelatedClosure]:
-    q = db.query(RoadClosure).execution_options(include_all_tenants=True).filter(
+    q = db.query(RoadClosure).options(selectinload(RoadClosure.sections)).execution_options(
+        include_all_tenants=True
+    ).filter(
         RoadClosure.org_id == org_id,
         RoadClosure.cancelled_at.is_(None),
     )
     if exclude_id:
         q = q.filter(RoadClosure.id != exclude_id)
-    new_street = _normal(street)
+    new_sections = sections if sections is not None else [
+        {"street": street, "from_text": from_text, "to_text": to_text}
+    ]
     new_reference = _normal(reference_number)
-    new_from, new_to = _normal(from_text), _normal(to_text)
     keyword_text = _normal(f"{title or ''} {description or ''}")
     amendment_words = r"verlaengerung|verlängerung|änderung|aenderung|abänderung|neufassung|ersetzt"
     has_keyword = bool(re.search(amendment_words, keyword_text))
@@ -897,9 +904,16 @@ def find_related(
         reasons: list[str] = []
         score = 0
         same_reference = bool(new_reference and new_reference == _normal(item.reference_number))
-        same_street = bool(new_street and new_street == _normal(item.street))
-        endpoints = (new_from == _normal(item.from_text) and new_to == _normal(item.to_text)) or (
-            not new_from and not new_to and not _normal(item.from_text) and not _normal(item.to_text)
+        old_sections = [_section_data(section) for section in item.sections] or [_section_data(item)]
+        matching = [
+            (new, old) for new in new_sections for old in old_sections
+            if _normal(new.get("street")) and _normal(new.get("street")) == _normal(old.get("street"))
+        ]
+        same_street = bool(matching)
+        endpoints = any(
+            _normal(new.get("from_text")) == _normal(old.get("from_text"))
+            and _normal(new.get("to_text")) == _normal(old.get("to_text"))
+            for new, old in matching
         )
         close = False
         if geometry is not None and item.geometry_geojson:
