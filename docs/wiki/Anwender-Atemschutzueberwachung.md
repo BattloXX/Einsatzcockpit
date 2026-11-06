@@ -41,8 +41,8 @@ Nicht erlaubte Benachrichtigungen, fehlende Verbindung, mehr als 30 Sekunden
 Uhrabweichung oder weniger als 10 % Akku ohne Ladegerät ergeben Rot; noch nicht
 erlaubte Benachrichtigungen, mehr als 5 Sekunden Uhrabweichung oder weniger als
 20 % Akku ergeben Gelb. Fehlende Geräteangaben sind keine bestätigte Prüfung.
-Alarmton-Test, exakte Wecker, Vollbildalarme und Ausnahme von der Akku-Optimierung
-werden später in der nativen App geprüft; Phase 3 bereitet diese Prüfpunkte vor.
+Alarmton-Test, exakte Wecker, Vollbildalarme, Alarmlautstärke und die Ausnahme von
+der Akku-Optimierung werden mit dem nativen Wächter in der App geprüft.
 
 Bei App-Pflicht und mindestens einem Trupp im Einsatz oder Rückzug erscheint ohne
 frischen Heartbeat **Kein Überwachungsgerät aktiv** unter **Kritische Hinweise**.
@@ -57,6 +57,52 @@ wenn alle Überwachungsgeräte die aktuelle App mit der Fähigkeit `asuew` haben
 diese kommt mit [Android-PR #96](https://github.com/BattloXX/Einsatzcockpit-Android/pull/96).
 Eine vom Betrieb gesetzte Mindestversion (`ASUEW_MIN_APP_VERSION`) kann beim
 Sitzungsstart ein App-Update verlangen.
+
+---
+
+## Nativer Wächter in der App
+
+Die App-Funktionen kommen mit [Android-PR #97](https://github.com/BattloXX/Einsatzcockpit-Android/pull/97)
+und benötigen ein entsprechendes **App-Release** auf dem Überwachungsgerät.
+Nach erfolgreichem Sitzungsstart läuft der Foreground-Dienst
+**Atemschutzüberwachung**. Seine Dauerbenachrichtigung zeigt die Trupp-Uhren;
+Antippen öffnet das Board. Solange das Board offen ist, bleibt der Bildschirm an,
+auch bei aktiviertem Energiesparmodus der App.
+
+Der Wächter gleicht den Zustand regelmäßig mit dem Server ab und überwacht
+bekannte lokale Fristen auch ohne Netz. Exakte Wecker lösen Kontrollen,
+Max-Einsatzzeit und das Ende einer zurückgestellten Warnung unabhängig von der
+Webansicht aus. Der Alarmton läuft auf dem Android-Alarm-Kanal mit Vibration und,
+bei erteilter Berechtigung, Vollbildanzeige. Offene Alarme wiederholen sich alle
+60 Sekunden, bei Notfall alle 30 Sekunden bis zur Quittierung.
+**Quittieren** in der Benachrichtigung bestätigt den Alarm; die erforderliche
+Funkkontrolle oder Rückzugsmaßnahme bleibt durchzuführen.
+
+Nach 20 Sekunden ohne erfolgreiche Serververbindung warnt das Gerät mit
+Vibration, nach 60 Sekunden mit Alarm. Bei weniger als 20 % Akku erscheint eine
+Warnung, unter 10 % eine kritische Akku-Warnung: Ladegerät anschließen oder die
+Überwachung übergeben. Der gespeicherte Überwachungszustand und die lokalen
+Wecker werden nach Geräteneustart und App-Update wiederhergestellt.
+Ohne Netz können nur bereits bekannte Fristen überwacht werden.
+
+Im Kopfzeilenstatus zeigt **Wächter** die native Verbindung und den Akkuzustand.
+Der aufklappbare **Geräte-Check** steht auch in der Nur-Lese-Ansicht der App zur
+Verfügung. Er zeigt die Ampel und die Probleme des letzten Sitzungsstatus.
+Geprüft werden:
+
+- Benachrichtigungen, Online-Verbindung und Uhrabweichung zum Server.
+- Bestätigter Alarmton-Test, exakte Wecker und Vollbildalarme.
+- Ausnahme von der Akku-Optimierung, Akkustand und Ladezustand.
+- Alarmlautstärke: 0 % ergibt Rot, 1 bis 29 % Gelb.
+
+Mit **Alarmton testen** den Ton anhören und **Ton gehört?** nur bei hörbarem Ton
+mit **Ja** bestätigen. Danach wird der Sitzungsstatus sofort aktualisiert.
+Bei fehlenden Freigaben öffnen **Akku-Optimierung**, **Exakte Wecker**,
+**Vollbild-Alarm** und **Benachrichtigungen** die passenden Android-Einstellungen.
+Die App von der Akku-Optimierung ausnehmen und exakte Wecker sowie Vollbildalarme
+erlauben; anschließend zum Board zurückkehren und den Geräte-Check erneut prüfen.
+Die verfügbaren Einstellungen hängen von der Android-Version ab.
+Ohne natives Plugin wird der Geräte-Check nicht angezeigt.
 
 ---
 
@@ -189,8 +235,8 @@ offene Warnungen Art, Auslösezeit, Stufe, Kanal, Empfänger, Zustellstatus und 
 Unterdrückte Zustellungen zeigen den Grund, fehlgeschlagene den Versandfehler.
 
 Push-Alarm und SMS-Eskalation sind Phase 2. Die optionale **Android-App-Pflicht**
-mit Überwachungssitzung und Heartbeat ist ab Phase 3 verfügbar; der native, abgesicherte **Alarmton** mit
-lokaler Überwachung folgt in Phase 4. Die vorhandene Browser-Akustik hängt von
+mit Überwachungssitzung und Heartbeat ist ab Phase 3 verfügbar; der native **Alarmton** mit
+lokaler Überwachung kommt in Phase 4 mit dem oben genannten App-Release. Die vorhandene Browser-Akustik hängt von
 Autoplay-Freigabe und offenem Board ab.
 
 ---

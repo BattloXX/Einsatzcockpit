@@ -13,6 +13,7 @@
     const schedule = opts.setTimeout || setTimeout;
     const cancel = opts.clearTimeout || clearTimeout;
     let state = { zustand: 'verbindet' };
+    let watcherStarted = false, pending = null;
     let timer, key = null, interval = 15000, failures = 0;
     let lastRestart = -Infinity, restartNeeded = false, offset = null, stopped = false;
 
@@ -22,9 +23,15 @@
     }
 
     async function payload() {
+      let nativeTest = null;
+      try { nativeTest = native.asuew && await native.asuew.getSelbsttest(); } catch (_) {}
       const selbsttest = { online: nav.onLine };
       if (notification) selbsttest.benachrichtigung = notification.permission;
       if (offset !== null) selbsttest.uhr_abweichung_s = offset;
+      for (const field of ['benachrichtigung', 'online', 'alarmton_getestet', 'exakte_wecker',
+        'vollbild', 'akku_optimierung_ausgenommen', 'alarm_lautstaerke_prozent']) {
+        if (nativeTest && Object.prototype.hasOwnProperty.call(nativeTest, field)) selbsttest[field] = nativeTest[field];
+      }
       const data = { selbsttest };
       if (nav.getBattery) {
         try {
@@ -37,6 +44,12 @@
     }
 
     async function tick() {
+      if (pending) return pending;
+      pending = runTick();
+      try { await pending; } finally { pending = null; }
+    }
+
+    async function runTick() {
       if (stopped) return;
       if (restartNeeded) {
         key = null;
@@ -67,6 +80,11 @@
           const firstStart = !key;
           if (result.session_key) key = result.session_key;
           failures = 0;
+          if (firstStart && !watcherStarted && native.asuew) {
+            watcherStarted = true;
+            try { await native.asuew.start(opts.incidentId); } catch (_) {}
+            try { await native.asuew.keepScreenOn(true); } catch (_) {}
+          }
           publish('aktiv', result);
           if (firstStart && opts.onStarted) opts.onStarted(result);
           delay = interval;
@@ -94,6 +112,7 @@
     if (current) current.stop();
     current = {
       getState() { return state; },
+      refresh() { cancel(timer); return tick(); },
       stop() { stopped = true; cancel(timer); }
     };
     publish('verbindet');

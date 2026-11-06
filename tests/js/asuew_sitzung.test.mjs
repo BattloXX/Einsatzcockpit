@@ -125,3 +125,148 @@ for (const getAppVersion of [async () => null, async () => { throw new Error('Pl
     assert.equal(e.api.getState().zustand, 'aktiv');
   });
 }
+
+test('native selftest overrides web fields while web clock offset stays authoritative', async () => {
+  const nativeTest = { online: false, benachrichtigung: 'denied', alarmton_getestet: true,
+    exakte_wecker: false, vollbild: false, akku_optimierung_ausgenommen: true,
+    alarm_lautstaerke_prozent: 29, uhr_abweichung_s: 999, unknown: 'ignored' };
+  const e = env([started(), { ampel: 'rot' }], { native: {
+    getFcmToken: async () => 'token', asuew: { getSelbsttest: async () => nativeTest }
+  } });
+  await e.controller.ready;
+  await e.next();
+  const { uhr_abweichung_s, unknown, ...expected } = nativeTest;
+  assert.deepEqual(e.calls[0].data.selbsttest, expected);
+  assert.deepEqual(e.calls[1].data.selbsttest, { ...expected, uhr_abweichung_s: 12 });
+});
+
+test('native watcher starts once after successful session, including session restart', async () => {
+  const calls = [];
+  const e = env([new Error(), started(), { ampel: 'gruen' },
+    { status: 409, error: 'sitzung_beendet' }, started()], { native: {
+    getFcmToken: async () => 'token', asuew: {
+      start: async id => calls.push(['start', id]), keepScreenOn: async on => calls.push(['screen', on])
+    }
+  } });
+  await e.controller.ready;
+  assert.deepEqual(calls, []);
+  await e.next(); await e.next(); await e.next(); await e.next();
+  assert.deepEqual(calls, [['start', 42], ['screen', true]]);
+});
+
+test('native plugin failures do not interrupt start or heartbeats', async () => {
+  let starts = 0, screens = 0;
+  const e = env([started(), { ampel: 'gruen' }], { native: {
+    getFcmToken: async () => 'token', asuew: {
+      getSelbsttest: async () => { throw Error('Selftest'); },
+      start: async () => { starts++; throw Error('Start'); },
+      keepScreenOn: async () => { screens++; throw Error('Screen'); }
+    }
+  } });
+  await e.controller.ready;
+  await e.next();
+  assert.equal(e.calls.length, 2);
+  assert.equal(e.controller.getState().zustand, 'aktiv');
+  assert.equal(e.calls[1].data.selbsttest.online, true);
+  assert.equal(starts, 1);
+  assert.equal(screens, 1);
+});
+
+test('immediate refresh coalesces in-flight requests and replaces scheduled heartbeat', async () => {
+  let release;
+  const waiting = new Promise(resolve => { release = resolve; });
+  let requests = 0;
+  const cancelled = [];
+  const e = env([], { clearTimeout: id => cancelled.push(id), fetchImpl: async () => {
+    requests++;
+    await waiting;
+    return { ok: true, json: async () => started() };
+  } });
+  const refresh = e.controller.refresh();
+  release();
+  await e.controller.ready; await refresh;
+  assert.equal(requests, 1);
+  assert.equal(e.timers.length, 1);
+  await e.controller.refresh();
+  assert.equal(requests, 2);
+  assert.equal(cancelled.at(-1), 1);
+});
+
+const boardSource = readFileSync(new URL('../../app/templates/breathing/board.html', import.meta.url), 'utf8')
+  .split('const ASUEW_READONLY = ')[1].split('{% if (can_edit')[0]
+  .replace('{{ asuew_readonly | default(false) | tojson }}', 'true')
+  .replaceAll('{{ incident.id }}', '42');
+function boardEnv({ isNative = true, available = true } = {}) {
+  const elements = new Map(), listeners = {}, intervals = [], calls = [];
+  function element(id) {
+    if (!elements.has(id)) elements.set(id, {
+      hidden: true, style: {}, dataset: {}, children: [],
+      addEventListener(type, fn) { this[type] = fn; },
+      replaceChildren() { this.children = []; },
+      appendChild(item) { this.children.push(item); }
+    });
+    return elements.get(id);
+  }
+  const buttons = ['batterie', 'wecker', 'vollbild', 'benachrichtigung'].map(type => {
+    const button = element(type);
+    button.dataset.asuewSetting = type;
+    return button;
+  });
+  const document = {
+    hidden: false, getElementById: element, createElement: () => ({}),
+    querySelector: selector => element(selector.match(/="(.*?)"/)[1]),
+    querySelectorAll: () => buttons,
+    addEventListener: (name, fn) => { listeners[name] = fn; }, removeEventListener() {}
+  };
+  const asuew = {
+    isAvailable: () => available,
+    getState: async () => { calls.push('getState'); return { connection: 'online', battery: 'ok' }; },
+    getSelbsttest: async () => ({ exakte_wecker: false }),
+    openSettings: async type => calls.push(type),
+    playTestAlarm: async () => { calls.push('play'); return true; },
+    confirmAlarmTest: async () => { calls.push('confirm'); return true; }
+  };
+  let opts;
+  const window = { ELNative: { isNative, asuew },
+    setInterval(fn, delay) { intervals.push({ fn, delay }); return 1; }, clearInterval() {}, addEventListener() {} };
+  vm.runInNewContext('const ASUEW_READONLY = ' + boardSource, {
+    window, ELNative: window.ELNative, document,
+    ECPAsuewSitzung: { start(options) { opts = options; return { refresh: async () => calls.push('refresh') }; } }
+  });
+  return { element, document, intervals, calls, listeners, state: data => opts.onState(data) };
+}
+
+test('board device check stays hidden outside app or without native plugin', () => {
+  for (const options of [{ isNative: false }, { available: false }]) {
+    const e = boardEnv(options);
+    assert.equal(e.element('asuewDeviceCheck').hidden, true);
+    assert.equal(e.intervals.length, 0);
+  }
+});
+
+test('readonly board shows problems, settings, alarm confirmation and visible-tab polling', async () => {
+  const e = boardEnv();
+  await new Promise(resolve => setImmediate(resolve));
+  e.state({ zustand: 'aktiv', ampel: 'rot', probleme: ['Benachrichtigungen sind nicht erlaubt.'] });
+  assert.equal(e.element('asuewDeviceCheck').hidden, false);
+  assert.equal(e.element('asuewDeviceLight').textContent, 'Selbsttest: rot');
+  assert.equal(e.element('asuewDeviceProblems').children[0].textContent, 'Benachrichtigungen sind nicht erlaubt.');
+  assert.equal(e.element('wecker').hidden, false);
+  assert.equal(e.element('benachrichtigung').hidden, false);
+  assert.equal(e.element('batterie').hidden, true);
+  assert.match(e.element('asuewNativeStatus').textContent, /online.*ok/);
+  await e.element('wecker').click();
+  await e.element('asuewTestAlarm').click();
+  assert.equal(e.element('asuewAlarmConfirmation').hidden, false);
+  await e.element('asuewConfirmAlarm').click();
+  assert.equal(e.element('asuewAlarmConfirmation').hidden, true);
+  assert.deepEqual(e.calls.slice(-4), ['wecker', 'play', 'confirm', 'refresh']);
+  assert.equal(e.intervals[0].delay, 10000);
+  const before = e.calls.length;
+  e.document.hidden = true;
+  await e.intervals[0].fn();
+  assert.equal(e.calls.length, before);
+  e.document.hidden = false;
+  await e.listeners.visibilitychange();
+  assert.equal(e.calls.at(-1), 'getState');
+});

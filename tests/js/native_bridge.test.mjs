@@ -520,3 +520,57 @@ test("App-Version ueber offizielles Capacitor-App-Plugin, Fehler liefern null", 
   window.Capacitor.Plugins.App.getInfo = async () => { throw new Error('nicht verfuegbar'); };
   assert.equal(await native.getAppVersion(), null);
 });
+
+test('ASUEW: fehlendes Plugin und Fehler bleiben optional', async () => {
+  const { native, window } = umgebung();
+  assert.equal(native.asuew.isAvailable(), false);
+  for (const method of ['start', 'stop', 'refresh', 'getState', 'keepScreenOn', 'getSelbsttest',
+    'playTestAlarm', 'confirmAlarmTest', 'openSettings']) {
+    assert.equal(await native.asuew[method](), null);
+    window.Capacitor = { Plugins: { Atemschutz: { [method]() { throw Error('Pluginfehler'); } } } };
+    assert.equal(await native.asuew[method](), null);
+    window.Capacitor.Plugins.Atemschutz[method] = async () => { throw Error('Abgelehnt'); };
+    assert.equal(await native.asuew[method](), null);
+    delete window.Capacitor;
+  }
+});
+
+test('ASUEW: Argumente und native Antworten werden durchgereicht', async () => {
+  const { native, window } = umgebung();
+  const calls = [];
+  const state = { active: true, connection: 'online', battery: 'ok' };
+  const plugin = {};
+  const methods = ['start', 'stop', 'refresh', 'getState', 'keepScreenOn', 'getSelbsttest',
+    'playTestAlarm', 'confirmAlarmTest', 'openSettings'];
+  for (const method of methods) plugin[method] = async (...args) => {
+    calls.push([method, JSON.parse(JSON.stringify(args))]);
+    if (method === 'getState') return state;
+    if (method === 'getSelbsttest') return { online: true };
+  };
+  window.Capacitor = { Plugins: { Atemschutz: plugin } };
+  assert.equal(native.asuew.isAvailable(), true);
+  for (const method of methods) {
+    const result = await native.asuew[method](method === 'start' ? 42 : method === 'keepScreenOn' ? true : 'wecker');
+    if (method === 'getState') assert.equal(result, state);
+    else if (method === 'getSelbsttest') assert.deepEqual(result, { online: true });
+    else assert.equal(result, true);
+  }
+  assert.deepEqual(calls, methods.map(method => [method, method === 'start' ? [{ incidentId: 42 }] :
+    method === 'keepScreenOn' ? [{ on: true }] : method === 'openSettings' ? [{ type: 'wecker' }] : []]));
+});
+
+test('ASUEW: Energiesparmodus und Tracking-Ende geben aktives Wachhalten nicht frei', async () => {
+  const { native, window } = umgebung();
+  let sleeps = 0;
+  window.Capacitor = { isNativePlatform: () => true, Plugins: {
+    Atemschutz: { keepScreenOn: async () => {} },
+    KeepAwake: { allowSleep() { sleeps++; } }
+  } };
+  await native.asuew.keepScreenOn(true);
+  native.setBatterySaver(true);
+  native.stopLocation();
+  assert.equal(sleeps, 0);
+  await native.asuew.keepScreenOn(false);
+  native.stopLocation();
+  assert.equal(sleeps, 1);
+});

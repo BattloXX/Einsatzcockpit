@@ -417,3 +417,17 @@ def test_selbsttest_json_ist_begrenzt():
     with pytest.raises(SitzungFehler) as excinfo:
         _selbsttest_json({"x": "a" * 5000})
     assert excinfo.value.code == "selbsttest_zu_gross" and excinfo.value.http_status == 422
+
+
+@pytest.mark.parametrize("value,ampel,message", [
+    (0, "rot", "Die Alarmlautstärke ist auf 0 gestellt."),
+    (1, "gelb", "Die Alarmlautstärke ist sehr niedrig."),
+    (29, "gelb", "Die Alarmlautstärke ist sehr niedrig."),
+    (30, "gruen", None),
+    (False, "gruen", None),
+    (True, "gruen", None),
+    ("0", "gruen", None),
+])
+def test_selbsttest_alarm_lautstaerke(value, ampel, message):
+    result = svc.bewerte_selbsttest({"alarm_lautstaerke_prozent": value}, None, None)
+    assert result == {"ampel": ampel, "probleme": [message] if message else []}
