@@ -16,6 +16,8 @@ from app.services.dienst_monitor_service import DienstCheck, dienst_zustand, ent
         ("pending", timedelta(minutes=5), None, "down", "aeltester"),
         ("failed", None, timedelta(hours=1), "down", "teams"),
         ("failed", None, timedelta(hours=30), "ok", "Keine haengenden"),
+        ("uncertain", timedelta(minutes=40), timedelta(minutes=30), "teilweise", "1 Alarmierungsauftraege mit unklarem"),
+        ("uncertain", timedelta(hours=3), timedelta(hours=3), "ok", "Keine haengenden"),
     ],
 )
 def test_alarm_outbox_monitor(status, created_delta, finished_delta, state, fragment):
@@ -392,3 +394,51 @@ def test_record_probe_reactivates_previously_unconfigured_service(monkeypatch):
                 db.delete(status)
             db.delete(db.get(FireDept, org_id))
             db.commit()
+
+
+def test_unklar_allein_ohne_irrefuehrenden_offen_text():
+    """Vorfall 2026-11-06: Meldung zeigte "0 ... seit ueber 2 Minuten offen (aeltester 0 s)"."""
+    from app.db import SessionLocal
+    from app.models.incident import Incident, IncidentAlarmJob
+    from app.services.dienst_monitor_service import pruefe_dienste
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        for job in db.query(IncidentAlarmJob).filter(IncidentAlarmJob.org_id == 1).all():
+            db.delete(job)
+        db.commit()
+        incident = Incident(alarm_type_code="T1", primary_org_id=1, status="active")
+        db.add(incident)
+        db.flush()
+        db.add(IncidentAlarmJob(org_id=1, incident_id=incident.id, channel="sms", status="uncertain",
+                                next_attempt_at=now, created_at=now - timedelta(minutes=5),
+                                finished_at=now - timedelta(minutes=3), context={}))
+        db.commit()
+        check = next(check for check in pruefe_dienste(db, 1, now) if check.key == "alarm_outbox")
+        assert check.state == "teilweise"
+        assert "offen" not in check.detail
+        assert check.detail == "1 Alarmierungsauftraege mit unklarem Ergebnis (sms)."
+    finally:
+        for job in db.query(IncidentAlarmJob).filter(IncidentAlarmJob.org_id == 1).all():
+            db.delete(job)
+        db.commit()
+        db.close()
+
+
+def test_teilstoerung_wird_nicht_wiederholt_vollausfall_schon():
+    now = datetime(2026, 1, 1, 12)
+    teil = row(key="alarm_outbox", down_since=now - timedelta(hours=3), fail_cycles=5,
+               outage_notified_at=now - timedelta(hours=2), last_repeat_at=now - timedelta(hours=2))
+    assert entscheide(DienstCheck("alarm_outbox", "teilweise", "unklar", True), teil, 5, 60, now).art is None
+
+    voll = row(key="alarm_outbox", down_since=now - timedelta(hours=3), fail_cycles=5,
+               outage_notified_at=now - timedelta(hours=2), last_repeat_at=now - timedelta(hours=2))
+    assert entscheide(DienstCheck("alarm_outbox", "down", "haengt", True), voll, 5, 60, now).art == "stoerung"
+
+
+def test_teilstoerung_erstmeldung_kommt_weiterhin():
+    now = datetime(2026, 1, 1, 12)
+    status = row(key="alarm_outbox", down_since=now - timedelta(minutes=10), fail_cycles=2)
+    assert entscheide(DienstCheck("alarm_outbox", "teilweise", "unklar", True), status, 5, 60, now).art == "stoerung"
