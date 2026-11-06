@@ -45,14 +45,12 @@ import logging
 from time import monotonic
 from typing import TYPE_CHECKING
 
-from app.services.loop_utils import iteration_watch
+from app.services.loop_utils import Backoff, iteration_watch, jittered
 
 if TYPE_CHECKING:
     from app.services.dibos.dibos_client import DibosClient
 
 logger = logging.getLogger("einsatzleiter.dibos.loop")
-
-_DEFAULT_INTERVAL_S = 20
 
 # Solange ein aktiver Einsatz in GetCurrentEvents fehlt (z.B. LIS-Einsatz ohne
 # DIBOS-Pendant, oder das Event ist aus den 15 neuesten GetPublicEvents
@@ -66,6 +64,29 @@ _org_clients: dict[int, tuple[str, DibosClient]] = {}
 _previous_event_numbers: dict[int, set[str]] = {}
 _last_public_events_at: dict[int, float] = {}
 _last_enrich_fingerprint: dict[int, str] = {}
+_next_poll_at: dict[int, float] = {}
+_last_activity_at: dict[int, float] = {}
+_startup_active_until: dict[int, float] = {}
+_backoffs: dict[int, Backoff] = {}
+_last_units_at: dict[int, float] = {}
+_last_events_fingerprint: dict[int, str] = {}
+_cached_units: dict[int, list[dict]] = {}
+
+
+def _schedule_success(org_id: int, has_events: bool, started_at: float | None = None) -> None:
+    from app.config import settings
+
+    now = monotonic()
+    _startup_active_until.setdefault(org_id, now + 60)
+    if has_events:
+        _last_activity_at[org_id] = now
+    active = now < _startup_active_until[org_id] or (
+        org_id in _last_activity_at
+        and now - _last_activity_at[org_id] < settings.DIBOS_ACTIVE_WINDOW_S
+    )
+    interval = settings.dibos_active_interval() if active else settings.DIBOS_POLL_IDLE_INTERVAL_S
+    _next_poll_at[org_id] = (now if started_at is None else started_at) + jittered(interval, settings.POLL_JITTER_PCT)
+
 
 
 def _fingerprint(value: object) -> str:
@@ -93,19 +114,23 @@ async def dibos_poll_loop() -> None:
         logger.info("dibos_poll_loop: deaktiviert (DIBOS_TRACE_ENABLED=False)")
         return
 
-    interval = getattr(settings, "DIBOS_POLL_INTERVAL_S", _DEFAULT_INTERVAL_S)
+    interval = settings.dibos_active_interval()
     logger.info("dibos_poll_loop gestartet (Intervall %ds)", interval)
     try:
         while True:
-            # Fester Takt (Start-zu-Start) statt "Arbeit + volles Intervall": die
-            # Arbeitszeit eines Zyklus verlängert sonst jedes Erkennungsfenster.
+            # Start-zu-Start; fällige Orgs dürfen nicht einen weiteren Tick warten.
             started = monotonic()
             try:
-                with iteration_watch(logger, "dibos_poll_loop", interval):
+                with iteration_watch(logger, "dibos_poll_loop", interval * (1 + settings.POLL_JITTER_PCT)):
                     await _run_all_orgs()
             except Exception:
                 logger.exception("dibos_poll_loop: Iteration fehlgeschlagen")
-            await asyncio.sleep(max(0.0, interval - (monotonic() - started)))
+            now = monotonic()
+            wake_at = started + jittered(interval, settings.POLL_JITTER_PCT)
+            future_polls = [due for due in _next_poll_at.values() if due > now]
+            if future_polls:
+                wake_at = min(wake_at, min(future_polls))
+            await asyncio.sleep(max(0.0, wake_at - now))
     except asyncio.CancelledError:
         logger.info("dibos_poll_loop beendet")
         raise
@@ -150,10 +175,19 @@ async def _run_all_orgs() -> None:
     pairs = await asyncio.to_thread(_lade_paare)
 
     # Clients von Orgs schließen, die nicht mehr pollen (deaktiviert/gelöscht)
-    for stale_org_id in set(_org_clients) - {org_id for org_id, _ in pairs}:
+    org_ids = {org_id for org_id, _ in pairs}
+    for stale_org_id in (set(_org_clients) | set(_next_poll_at)) - org_ids:
         await _close_org_client(stale_org_id)
+        for state in (
+            _next_poll_at, _last_activity_at, _startup_active_until, _backoffs,
+            _last_units_at, _last_events_fingerprint, _cached_units,
+            _previous_event_numbers, _last_public_events_at, _last_enrich_fingerprint,
+        ):
+            state.pop(stale_org_id, None)
 
     for org_id, config_id in pairs:
+        if monotonic() < _next_poll_at.get(org_id, 0.0):
+            continue
         try:
             await _check_org(org_id, config_id)
         except Exception:
@@ -249,6 +283,7 @@ def _lade_konfiguration_sync(config_id: int) -> tuple | None:
 
 
 async def _check_org(org_id: int, config_id: int) -> None:
+    from app.config import settings
     from app.services.dibos.dibos_capture import is_trace_running, start_trace_for_org
     from app.services.dibos.dibos_client import DibosClientError
 
@@ -259,7 +294,10 @@ async def _check_org(org_id: int, config_id: int) -> None:
     (values, auto_trace_on_event, enrich_incidents, create_incidents,
      wache_unid, auto_trace_duration_minutes) = konfiguration
 
+    started_at = monotonic()
+    _startup_active_until.setdefault(org_id, started_at + 60)
     client = await _get_client(org_id, values)
+    backoff = _backoffs.setdefault(org_id, Backoff(settings.POLL_BACKOFF_MAX_S))
     try:
         events = await client.get_current_events()
         from app.services.dienst_monitor_service import record_probe
@@ -268,7 +306,9 @@ async def _check_org(org_id: int, config_id: int) -> None:
         from app.services.dienst_monitor_service import record_probe
         await asyncio.to_thread(record_probe, org_id, "alarm_dibos", False, str(exc))
         logger.exception("dibos_poll_loop: GetCurrentEvents fehlgeschlagen (Org %s)", org_id)
-        # Session/Cookie evtl. ungültig — im nächsten Poll frisch aufbauen
+        backoff.failure()
+        _next_poll_at[org_id] = monotonic() + jittered(backoff.delay(), settings.POLL_JITTER_PCT)
+        # Session/Cookie evtl. ungültig — erst nach der Fehlerpause neu aufbauen
         await _close_org_client(org_id)
         return
 
@@ -284,6 +324,8 @@ async def _check_org(org_id: int, config_id: int) -> None:
         log_ignored_f30_probe_call(event.get("eventNumber"))
     ignored_numbers = {str(event["eventNumber"]) for event in ignored_events if event.get("eventNumber")}
     numbers = {str(e["eventNumber"]) for e in events if e.get("eventNumber")}
+    backoff.success()
+    _schedule_success(org_id, bool(events), started_at)
     previous_numbers = _previous_event_numbers.get(org_id, set())
     new_numbers = numbers - previous_numbers
     disappeared_numbers = previous_numbers - numbers
@@ -306,13 +348,22 @@ async def _check_org(org_id: int, config_id: int) -> None:
         bool(disappeared_numbers)
         or monotonic() - _last_public_events_at.get(org_id, 0.0) >= _PUBLIC_EVENTS_MIN_INTERVAL_S
     )
-    fetch_units = enrich_incidents and bool(events)
+    events_fingerprint = _fingerprint(events)
+    fetch_units = enrich_incidents and bool(events) and (
+        bool(new_numbers)
+        or events_fingerprint != _last_events_fingerprint.get(org_id)
+        or monotonic() - _last_units_at.get(org_id, float("-inf")) >= settings.DIBOS_UNITS_MIN_INTERVAL_S
+    )
+    _last_events_fingerprint[org_id] = events_fingerprint
 
     async def _units() -> list[dict] | None:
         if not fetch_units:
-            return None
+            return _cached_units.get(org_id) if enrich_incidents and events else None
         try:
-            return await client.get_current_units()
+            _last_units_at[org_id] = monotonic()
+            result = await client.get_current_units()
+            _cached_units[org_id] = result
+            return result
         except DibosClientError:
             logger.exception("dibos_poll_loop: GetCurrentUnits fehlgeschlagen (Org %s)", org_id)
             return None

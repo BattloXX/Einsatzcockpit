@@ -28,6 +28,12 @@ def _reset_loop_state():
         dibos_loop._previous_event_numbers.clear()
         dibos_loop._last_public_events_at.clear()
         dibos_loop._last_enrich_fingerprint.clear()
+        for state in (
+            dibos_loop._next_poll_at, dibos_loop._last_activity_at,
+            dibos_loop._startup_active_until, dibos_loop._backoffs,
+            dibos_loop._last_units_at, dibos_loop._last_events_fingerprint, dibos_loop._cached_units,
+        ):
+            state.clear()
 
     asyncio.run(_reset())
     yield

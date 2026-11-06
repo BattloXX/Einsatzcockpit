@@ -12,10 +12,35 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from collections.abc import Callable, Coroutine, Iterator
 from contextlib import contextmanager
 from typing import Any
+
+
+def jittered(seconds: float, pct: float, *, random_source: Callable[[], float] = random.random) -> float:
+    """Zufällige Abweichung um ±pct; mindestens eine halbe Sekunde."""
+    return max(0.5, seconds * (1 + (2 * random_source() - 1) * pct))
+
+
+class Backoff:
+    """Fehlerpausen je Poll-Quelle; erfolgreiche Abfragen setzen sie zurück."""
+
+    def __init__(self, max_seconds: float = 300) -> None:
+        self.max_seconds = max_seconds
+        self._failures = 0
+
+    def failure(self) -> None:
+        self._failures = min(self._failures + 1, 5)
+
+    def success(self) -> None:
+        self._failures = 0
+
+    def delay(self) -> float:
+        if not self._failures:
+            return 0.0
+        return min((10.0, 30.0, 60.0, 120.0, self.max_seconds)[self._failures - 1], self.max_seconds)
 
 
 def start_loop_task(

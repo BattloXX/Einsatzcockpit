@@ -90,8 +90,11 @@ class DibosClient:
         # Folge-Requests mit diesem Cookie -> 200. Anders als LisClient (Client pro
         # Request) muss dieser Client über die Laufzeit einer Polling-Session hinweg
         # wiederverwendet werden.
+        from app.config import settings
+
         self._client = httpx.AsyncClient(
             auth=(self.gateway_user, self.gateway_password), timeout=self.timeout,
+            headers={"User-Agent": settings.DIBOS_USER_AGENT},
         )
 
     async def aclose(self) -> None:

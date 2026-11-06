@@ -1132,9 +1132,10 @@ async def _maybe_backfill(db: Session, org: FireDept, config: OrgLisConfig, clie
 # ── Eine Organisation vollständig synchronisieren ────────────────────────────
 async def sync_organization(
     db: Session, org: FireDept, config: OrgLisConfig, client: LisClient | None = None,
-) -> None:
+) -> bool | None:
+    """True/False meldet gelieferte Einsätze; None einen abgebrochenen Poll."""
     if not config.enabled or not config.is_fully_configured:
-        return
+        return None
     # is_fully_configured garantiert bereits, dass diese Felder gesetzt sind - hier nur
     # fuer die Typpruefung explizit gemacht (config.* bleibt sonst "str | None").
     assert config.base_url and config.organization_id and config.username and config.password_enc
@@ -1148,7 +1149,7 @@ async def sync_organization(
         mark_lis_failed(org.id)
         from app.services.dienst_monitor_service import record_probe
         await asyncio.to_thread(record_probe, org.id, "alarm_lis", False, "LIS-Poll fehlgeschlagen.")
-        return
+        return None
 
     owns_client = client is None
     if client is None:
@@ -1158,7 +1159,7 @@ async def sync_organization(
             organization_id=config.organization_id,
         )
     try:
-        await _sync_organization_with_client(db, org, config, client)
+        return await _sync_organization_with_client(db, org, config, client)
     finally:
         # Persistente Clients (lis_loop.py) schließt der Loop selbst.
         if owns_client:
@@ -1195,7 +1196,7 @@ async def _load_root_org_map(org: FireDept, client: LisClient) -> dict[str, str]
 
 async def _sync_organization_with_client(
     db: Session, org: FireDept, config: OrgLisConfig, client: LisClient,
-) -> None:
+) -> bool | None:
     assert config.organization_id
     try:
         # Einmal pro LIS-Session (nicht pro Zyklus): muss vor GetTasks gelaufen sein,
@@ -1210,7 +1211,7 @@ async def _sync_organization_with_client(
         mark_lis_failed(org.id)
         from app.services.dienst_monitor_service import record_probe
         await asyncio.to_thread(record_probe, org.id, "alarm_lis", False, "LIS-Poll fehlgeschlagen.")
-        return
+        return None
 
     root_org_map = await _load_root_org_map(org, client)
 
@@ -1235,7 +1236,7 @@ async def _sync_organization_with_client(
         mark_lis_failed(org.id)
         from app.services.dienst_monitor_service import record_probe
         await asyncio.to_thread(record_probe, org.id, "alarm_lis", False, "LIS-Poll fehlgeschlagen.")
-        return
+        return None
 
     from app.services.lis.lis_health import mark_lis_ok
     mark_lis_ok(org.id)
@@ -1262,6 +1263,7 @@ async def _sync_organization_with_client(
     await _close_incidents_missing_from_lis(db, org, active_operation_ids)
 
     await _maybe_backfill(db, org, config, client)
+    return bool(operations)
 
 
 # ── Fahrzeugstatus vom Einsatzcockpit zurück ins LIS schreiben (opt-in) ──────

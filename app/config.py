@@ -539,10 +539,31 @@ class Settings(BaseSettings):
     LIS_ENABLED: bool = True  # globaler Kill-Switch
     LIS_POLL_INTERVAL_S: int = 30  # Kompatibilitätswert; LIS nutzt Intervall je Organisation
 
+    LIS_POLL_IDLE_INTERVAL_S: int = 60
+    LIS_ACTIVE_WINDOW_S: int = 1800
+    LIS_USER_AGENT: str = Field(
+        default_factory=lambda data: f"Einsatzcockpit/{data.get('APP_VERSION') or '1.0'} (+https://einsatzcockpit.com)"
+    )
+
     # DIBOS EventHub / Elvis-Anbindung (Landeswarnzentrale Vorarlberg) - reines
     # Tracing/Diagnose-Feature, siehe app/services/dibos/
     DIBOS_TRACE_ENABLED: bool = True  # globaler Kill-Switch für den Auto-Erkennungs-Loop
-    DIBOS_POLL_INTERVAL_S: int = 5  # Loop-Intervall (leichter Poll auf GetCurrentEvents)
+    DIBOS_POLL_INTERVAL_S: int = 5  # Legacy-Alias: abweichender Wert hat Vorrang vor ACTIVE
+    DIBOS_POLL_ACTIVE_INTERVAL_S: int = 5  # GetCurrentEvents bei aktiver Org
+    DIBOS_POLL_IDLE_INTERVAL_S: int = 15  # GetCurrentEvents im Leerlauf
+    DIBOS_ACTIVE_WINDOW_S: int = 1800  # Aktiv-Fenster nach dem letzten echten Event
+    POLL_JITTER_PCT: float = 0.2  # Zufällige Abweichung ±20 Prozent
+    POLL_BACKOFF_MAX_S: int = 300  # Maximale Fehlerpause vor Jitter
+    DIBOS_UNITS_MIN_INTERVAL_S: int = 20  # Units nur bei Änderung früher abfragen
+    DIBOS_USER_AGENT: str = Field(
+        default_factory=lambda data: f"Einsatzcockpit/{data.get('APP_VERSION') or '1.0'} (+https://einsatzcockpit.com)"
+    )  # Ehrlicher Default-Header; per Env überschreibbar
+
+    def dibos_active_interval(self) -> float:
+        """Ein vom Default abweichender Legacy-Wert behält seine Wirkung."""
+        if self.DIBOS_POLL_INTERVAL_S != 5:
+            return float(self.DIBOS_POLL_INTERVAL_S)
+        return float(self.DIBOS_POLL_ACTIVE_INTERVAL_S)
 
     # BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg) - siehe app/services/bma_import/.
     # Taeglicher Lauf (Europe/Vienna), Muster: NACHSCHLAGEWERK_SYNC_ENABLED/nachschlagewerk_sync.py.
