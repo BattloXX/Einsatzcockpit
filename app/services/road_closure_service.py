@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.audit import write_audit
 from app.models.incident import Incident
@@ -24,6 +24,7 @@ from app.models.road_closure import (
     IncidentRoute,
     RoadClosure,
     RoadClosureChange,
+    RoadClosureSection,
     RoadClosureShare,
 )
 from app.services import road_closure_geo_service as geo
@@ -319,6 +320,109 @@ def _audit(
     )
 
 
+_SECTION_FIELDS = (
+    "street", "from_text", "to_text", "direction", "geometry_geojson",
+    "geometry_status", "geometry_quality", "geometry_meta_json",
+)
+
+
+def _section_data(section: RoadClosureSection | RoadClosure) -> dict:
+    return {field: getattr(section, field) for field in _SECTION_FIELDS}
+
+
+def _validate_sections(sections: list[dict]) -> list[dict]:
+    if not isinstance(sections, list):
+        raise ValueError("Abschnitte müssen als Liste übergeben werden.")
+    result = []
+    for section in sections:
+        if not isinstance(section, dict) or set(section) - set(_SECTION_FIELDS) - {"position"}:
+            raise ValueError("Ungültige Abschnittsfelder.")
+        data = {field: section[field] for field in _SECTION_FIELDS if field in section}
+        for field in ("street", "from_text", "to_text"):
+            value = data.get(field)
+            if value is not None and (not isinstance(value, str) or len(value.strip()) > 200):
+                raise ValueError(f"Ungültiger Wert für {field}.")
+        values = validate_closure_data(
+            {"title": "Abschnitt", "valid_from": _now(), "restriction_type": "closed", **data},
+            partial=False,
+        )
+        result.append({field: values[field] for field in _SECTION_FIELDS})
+    return result
+
+
+def _aggregate_sections(closure: RoadClosure) -> None:
+    sections = sorted(closure.sections, key=lambda item: item.position)
+    streets = list(dict.fromkeys(section.street for section in sections if section.street))
+    street = ", ".join(streets)
+    if len(street) > 200:
+        first = streets[:2]
+        suffix = f" +{len(streets) - len(first)}"
+        # Auch zwei sehr lange Strassennamen muessen in die Aggregatspalte passen.
+        street = ", ".join(first)[:200 - len(suffix)] + suffix
+    closure.street = street or None
+    for field in ("from_text", "to_text", "direction", "geometry_meta_json"):
+        setattr(closure, field, getattr(sections[0], field) if len(sections) == 1 else None)
+    geoms = [json.loads(section.geometry_geojson) for section in sections if section.geometry_geojson]
+    merged = geo.merge_geometries(geoms)
+    closure.geometry_geojson = json.dumps(merged, ensure_ascii=False, separators=(",", ":")) if merged else None
+    if not geoms:
+        closure.geometry_status = "missing"
+    elif len(geoms) == len(sections) and all(section.geometry_status == "ok" for section in sections):
+        closure.geometry_status = "ok"
+    else:
+        closure.geometry_status = "needs_review"
+    qualities = [section.geometry_quality for section in sections if section.geometry_quality]
+    rank = {"niedrig": 0, "mittel": 1, "hoch": 2, "manuell": 2}
+    closure.geometry_quality = min(qualities, key=lambda value: rank[value]) if qualities else None
+    _set_bbox(closure)
+
+
+def _sync_single_section(closure: RoadClosure) -> None:
+    if not closure.sections and (closure.street or closure.geometry_geojson):
+        closure.sections.append(RoadClosureSection(org_id=closure.org_id, position=0, **_section_data(closure)))
+    elif len(closure.sections) == 1:
+        for field, value in _section_data(closure).items():
+            setattr(closure.sections[0], field, value)
+
+
+def _apply_sections(
+    db: Session, closure: RoadClosure, values: list[dict], user_id: int | None, source: str, mcp_tool: str | None,
+) -> list[dict]:
+    """Ersetzt die Abschnitte und berechnet das Aggregat – ohne Version/Audit/Benachrichtigung."""
+    before = [_section_data(section) for section in sorted(closure.sections, key=lambda item: item.position)]
+    if before == values:
+        return []
+    closure.sections = [
+        RoadClosureSection(org_id=closure.org_id, position=position, **value)
+        for position, value in enumerate(values)
+    ]
+    _aggregate_sections(closure)
+    _change(db, closure, "updated", user_id, source, mcp_tool, "sections", before, values)
+    return [{"feld": "sections", "vorher": before, "nachher": values}]
+
+
+def set_sections(
+    db: Session,
+    closure: RoadClosure,
+    sections: list[dict],
+    user_id: int | None,
+    *,
+    source: str = "ui",
+    mcp_tool: str | None = None,
+) -> list[dict]:
+    values = _validate_sections(sections)
+    changed = _apply_sections(db, closure, values, user_id, source, mcp_tool)
+    if not changed:
+        return []
+    closure.updated_by_user_id = user_id
+    closure.version += 1
+    _audit(db, "road_closure.updated", closure, user_id, felder=["sections"])
+    mark_routes_stale_for_closure(db, closure)
+    from app.services.road_closure_notify_service import enqueue
+    enqueue(db, closure, "geaendert", source="mcp" if source == "mcp" else "ui", user_id=user_id)
+    return changed
+
+
 def create_closure(
     db: Session,
     org_id: int,
@@ -328,6 +432,15 @@ def create_closure(
     source: str = "ui",
     mcp_tool: str | None = None,
 ) -> RoadClosure:
+    data = dict(data)
+    sections = data.pop("sections", None)
+    if sections is not None:
+        sections = _validate_sections(sections)
+        aggregate = RoadClosure(sections=[
+            RoadClosureSection(position=position, **value) for position, value in enumerate(sections)
+        ])
+        _aggregate_sections(aggregate)
+        data.update(_section_data(aggregate))
     if "teams_melden" not in data:
         from app.models.road_closure import RoadClosureTeamsConfig
         config = db.query(RoadClosureTeamsConfig).filter(RoadClosureTeamsConfig.org_id == org_id).first()
@@ -344,6 +457,15 @@ def create_closure(
     _set_bbox(closure)
     db.add(closure)
     db.flush()
+    if sections is not None:
+        # Direkt setzen: Anlage erzeugt genau ein "neu"-Ereignis, keine Folgeversion.
+        closure.sections = [
+            RoadClosureSection(org_id=closure.org_id, position=position, **value)
+            for position, value in enumerate(sections)
+        ]
+        _aggregate_sections(closure)
+    else:
+        _sync_single_section(closure)
     _change(
         db,
         closure,
@@ -373,6 +495,10 @@ def update_closure(
 ) -> list[dict]:
     if expected_version is not None and expected_version != closure.version:
         raise ValueError("Die Sperre wurde inzwischen geändert. Bitte laden Sie sie neu.")
+    changes = dict(changes)
+    sections = changes.pop("sections", None)
+    if sections is not None:
+        sections = _validate_sections(sections)
     values = validate_closure_data(changes, partial=True, existing=closure)
     changed: list[dict] = []
     for field, after in values.items():
@@ -381,6 +507,11 @@ def update_closure(
             setattr(closure, field, after)
             _change(db, closure, "updated", user_id, source, mcp_tool, field, before, after)
             changed.append({"feld": field, "vorher": _iso(before), "nachher": _iso(after)})
+    if sections is None and set(changes) & set(_SECTION_FIELDS):
+        _sync_single_section(closure)
+    if sections is not None:
+        # Abschnitte im selben Durchgang: eine Version, ein Audit, eine Benachrichtigung.
+        changed.extend(_apply_sections(db, closure, sections, user_id, source, mcp_tool))
     if changed:
         _set_bbox(closure)
         closure.updated_by_user_id = user_id
@@ -407,6 +538,8 @@ def confirm_geometry(
 ) -> None:
     if expected_version is not None and expected_version != closure.version:
         raise ValueError("Die Sperre wurde inzwischen geändert. Bitte laden Sie sie neu.")
+    if geometry is not None and len(closure.sections) > 1:
+        raise ValueError("Die Sperre hat mehrere Abschnitte – Geometrie bitte je Abschnitt bestätigen.")
     if geometry is not None:
         closure.geometry_geojson = json.dumps(
             geo.validate_geometry(geometry), ensure_ascii=False, separators=(",", ":")
@@ -419,6 +552,13 @@ def confirm_geometry(
         )
     before = {"geometry_status": closure.geometry_status, "geometry_quality": closure.geometry_quality}
     closure.geometry_status = "ok"
+    if len(closure.sections) == 1:
+        _sync_single_section(closure)
+    else:
+        # Gesamtbestätigung gilt für alle Abschnitte mit Geometrie (sonst kippt das Aggregat zurück).
+        for section in closure.sections:
+            if section.geometry_geojson:
+                section.geometry_status = "ok"
     closure.updated_by_user_id, closure.version = user_id, closure.version + 1
     _change(db, closure, "geometry_confirmed", user_id, source, mcp_tool, before=before,
             after={"geometry_status": "ok", "geometry_quality": closure.geometry_quality})
@@ -572,6 +712,7 @@ def visible_closures_q(db: Session, org_id: int):
     shares = select(RoadClosureShare.road_closure_id).where(RoadClosureShare.org_id == org_id)
     return (
         db.query(RoadClosure)
+        .options(selectinload(RoadClosure.sections))
         .execution_options(include_all_tenants=True)
         .filter(or_(RoadClosure.org_id == org_id, RoadClosure.id.in_(shares)))
     )
@@ -704,6 +845,7 @@ def find_duplicates(
     valid_until: datetime | None,
     geometry: dict | None = None,
     exclude_id: int | None = None,
+    sections: list[dict] | None = None,
 ) -> list[RoadClosure]:
     return [
         related.closure
@@ -711,6 +853,7 @@ def find_duplicates(
             db,
             org_id,
             street=street,
+            sections=sections,
             reference_number=None,
             valid_from=valid_from,
             valid_until=valid_until,
@@ -739,16 +882,20 @@ def find_related(
     title: str | None = None,
     description: str | None = None,
     exclude_id: int | None = None,
+    sections: list[dict] | None = None,
 ) -> list[RelatedClosure]:
-    q = db.query(RoadClosure).execution_options(include_all_tenants=True).filter(
+    q = db.query(RoadClosure).options(selectinload(RoadClosure.sections)).execution_options(
+        include_all_tenants=True
+    ).filter(
         RoadClosure.org_id == org_id,
         RoadClosure.cancelled_at.is_(None),
     )
     if exclude_id:
         q = q.filter(RoadClosure.id != exclude_id)
-    new_street = _normal(street)
+    new_sections = sections if sections is not None else [
+        {"street": street, "from_text": from_text, "to_text": to_text}
+    ]
     new_reference = _normal(reference_number)
-    new_from, new_to = _normal(from_text), _normal(to_text)
     keyword_text = _normal(f"{title or ''} {description or ''}")
     amendment_words = r"verlaengerung|verlängerung|änderung|aenderung|abänderung|neufassung|ersetzt"
     has_keyword = bool(re.search(amendment_words, keyword_text))
@@ -757,9 +904,16 @@ def find_related(
         reasons: list[str] = []
         score = 0
         same_reference = bool(new_reference and new_reference == _normal(item.reference_number))
-        same_street = bool(new_street and new_street == _normal(item.street))
-        endpoints = (new_from == _normal(item.from_text) and new_to == _normal(item.to_text)) or (
-            not new_from and not new_to and not _normal(item.from_text) and not _normal(item.to_text)
+        old_sections = [_section_data(section) for section in item.sections] or [_section_data(item)]
+        matching = [
+            (new, old) for new in new_sections for old in old_sections
+            if _normal(new.get("street")) and _normal(new.get("street")) == _normal(old.get("street"))
+        ]
+        same_street = bool(matching)
+        endpoints = any(
+            _normal(new.get("from_text")) == _normal(old.get("from_text"))
+            and _normal(new.get("to_text")) == _normal(old.get("to_text"))
+            for new, old in matching
         )
         close = False
         if geometry is not None and item.geometry_geojson:

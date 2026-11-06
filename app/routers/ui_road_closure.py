@@ -23,6 +23,7 @@ from app.models.road_closure import (
     CLOSURE_STATUS,
     DIRECTIONS,
     GEOMETRY_QUALITY,
+    GEOMETRY_STATUS,
     PRIORITIES,
     RESTRICTION_TYPES,
     RoadClosure,
@@ -36,7 +37,7 @@ from app.models.user import User
 from app.services import road_closure_service, road_closure_stats_service, road_closure_token_service
 from app.services.address_autocomplete import suggest_addresses
 from app.services.road_closure_document_service import absolute_path, delete_document, store_document
-from app.services.road_closure_public_service import public_closure_dict
+from app.services.road_closure_public_service import abschnitte, public_closure_dict
 from app.services.road_closure_section_service import resolve_section, validate_address
 
 router = APIRouter(prefix="/strassensperren", tags=["strassensperren"])
@@ -222,6 +223,7 @@ def _feature(closure, *, viewer_org_id: int | None = None, public: bool = False)
             "id": closure.id,
             "title": closure.title,
             "street": closure.street,
+            "abschnitte": abschnitte(closure),
             "from_text": closure.from_text,
             "to_text": closure.to_text,
             "restriction_type": closure.restriction_type,
@@ -283,6 +285,63 @@ def _form_data(**values):
     return {key: (value.strip() if isinstance(value, str) else value) for key, value in values.items()}
 
 
+def _parse_sections(raw: str) -> list[dict]:
+    try:
+        sections = json.loads(raw)
+        if not isinstance(sections, list) or any(not isinstance(item, dict) for item in sections):
+            raise ValueError
+        result = []
+        fields = ("street", "from_text", "to_text", "direction", "geometry_quality", "geometry_meta_json")
+        for item in sections:
+            geometry = item.get("geometry_geojson") or None
+            if isinstance(geometry, str):
+                geometry = json.loads(geometry)
+            if geometry is not None and not isinstance(geometry, dict):
+                raise ValueError
+            if not (item.get("street") or "").strip() and not geometry:
+                continue
+            section = {field: item.get(field) or None for field in fields}
+            if any(value is not None and not isinstance(value, str) for value in section.values()):
+                raise ValueError
+            section["geometry_geojson"] = geometry
+            section["geometry_status"] = (
+                "ok" if item.get("geometry_checked") else
+                (item.get("geometry_status") or ("needs_review" if geometry else "missing"))
+            )
+            result.append(section)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Ungültige Abschnittsliste.") from exc
+    if not result:
+        raise ValueError("Mindestens ein Abschnitt mit Straße oder Geometrie ist erforderlich.")
+    return result
+
+
+def _initial_sections(form_data, closure) -> list[dict]:
+    fields = ("street", "from_text", "to_text", "direction", "geometry_geojson",
+              "geometry_status", "geometry_quality", "geometry_meta_json")
+    if form_data is not None and form_data.get("sections_json") is not None:
+        try:
+            items = json.loads(form_data["sections_json"])
+        except (ValueError, TypeError):
+            items = []
+    elif form_data is not None and ("sections" in form_data or "abschnitte" in form_data):
+        items = form_data.get("sections", form_data.get("abschnitte"))
+    elif form_data is not None and "sections_json" in form_data:
+        items = [form_data]
+    elif closure is not None and closure.sections:
+        items = [{field: getattr(section, field) for field in fields} for section in closure.sections]
+    else:
+        items = [form_data or ({field: getattr(closure, field) for field in fields} if closure else {})]
+    result = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        section = {field: item.get(field) or "" for field in fields}
+        section["geometry_checked"] = item.get("geometry_checked", item.get("geometry_status") == "ok")
+        result.append(section)
+    return result or [{}]
+
+
 def _save_data(org, values: dict):
     def text(name):
         return values.get(name) or None
@@ -313,7 +372,7 @@ def _save_data(org, values: dict):
             json.loads(meta)
         except (ValueError, json.JSONDecodeError):
             meta = None
-    return {
+    data = {
         "title": values.get("title", ""),
         "description": text("description"),
         "reason": text("reason"),
@@ -344,6 +403,13 @@ def _save_data(org, values: dict):
         "teams_melden": bool(values.get("teams_melden")),
     }
 
+    if values.get("sections_json") is not None:
+        sections = _parse_sections(values["sections_json"])
+        # Der Service berechnet das Gesamtaggregat; für die Vorprüfung genügt Abschnitt 1.
+        data.update(sections[0])
+        data["sections"] = sections
+    return data
+
 
 def _edit_page(request, db, user, closure=None, form_data=None, error=None, status_code=200, related=None):
     teams_config = _teams_config(db, _org(user).id)
@@ -359,6 +425,7 @@ def _edit_page(request, db, user, closure=None, form_data=None, error=None, stat
             "user": user,
             "closure": closure,
             "form_data": form_data or {},
+            "initial_sections": _initial_sections(form_data, closure),
             "error": error,
             "restriction_types": RESTRICTION_TYPES,
             "directions": DIRECTIONS,
@@ -642,6 +709,7 @@ def neu_speichern(
     geometry_quality: str = Form(""),
     geometry_meta_json: str = Form(""),
     geometry_checked: str | None = Form(None),
+    sections_json: str | None = Form(None),
     teams_melden: str | None = Form(None),
     freigabe_org_ids: list[int] = Form([]),
     als_neu_bestaetigt: str | None = Form(None),
@@ -651,8 +719,15 @@ def neu_speichern(
     _guard: None = Depends(require_strassensperren_enabled),
 ):
     values = _form_data(**locals())
+    submitted = run_async(request.form)
+    if "sections_json" in submitted:
+        values["sections_json"] = str(submitted["sections_json"])
     try:
-        data = road_closure_service.validate_closure_data(_save_data(_org(user), values), partial=False)
+        data = _save_data(_org(user), values)
+        sections = data.pop("sections", None)
+        data = road_closure_service.validate_closure_data(data, partial=False)
+        if sections is not None:
+            data["sections"] = sections
         related = road_closure_service.find_related(
             db,
             _org(user).id,
@@ -665,6 +740,7 @@ def neu_speichern(
             to_text=data["to_text"],
             title=data["title"],
             description=data["description"],
+            sections=sections,
         )
         if related and not als_neu_bestaetigt and ersetzt_id is None:
             return _edit_page(request, db, user, form_data=values, status_code=409, related=related)
@@ -844,6 +920,7 @@ def detail(
             "color": _color(closure),
             "directions": DIRECTIONS,
             "geometry_quality_labels": GEOMETRY_QUALITY,
+            "geometry_status_labels": GEOMETRY_STATUS,
             "can_edit": has_role(user, "objekt_verwalter"),
             "can_delete": has_role(user, "org_admin"),
             "owner_org_name": owner_org.name if owner_org is not None else None,
@@ -1057,6 +1134,7 @@ def bearbeiten_speichern(
     geometry_quality: str = Form(""),
     geometry_meta_json: str = Form(""),
     geometry_checked: str | None = Form(None),
+    sections_json: str | None = Form(None),
     teams_melden: str | None = Form(None),
     freigabe_org_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
@@ -1065,6 +1143,9 @@ def bearbeiten_speichern(
 ):
     closure = _closure_or_404(db, user, closure_id, writable=True)
     values = _form_data(**locals())
+    submitted = run_async(request.form)
+    if "sections_json" in submitted:
+        values["sections_json"] = str(submitted["sections_json"])
     try:
         road_closure_service.update_closure(
             db, closure, user.id, _save_data(_org(user), values), expected_version=version

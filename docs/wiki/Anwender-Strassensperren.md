@@ -19,6 +19,27 @@ Der Status wird aus Zeitraum und Deaktivierung bestimmt: **geplant**, **aktiv**,
 
 Objektverwalter legen eine Sperre über **+ Sperre anlegen** an. Erfasse zumindest Straße oder eine Geometrie, optional Straße, Abschnitt *von/bis*, Fahrtrichtung, Zeitraum in der Ortszeit der Organisation, Einschränkungstyp, Priorität, Beschreibung, Quelle und Maße für Gewicht, Höhe, Breite oder Länge.
 
+### Mehrere Straßen in einer Verordnung
+
+Eine Verordnung mit mehreren Straßen wird als **eine Sperre mit mehreren Abschnitten** geführt.
+Jeder Abschnitt hat Straße, Von/Bis, Richtung und einen eigenen Geometriestatus. Die Detailseite zeigt
+mehrere Abschnitte nummeriert, auch am Handy. Suche und Dublettenerkennung berücksichtigen alle Abschnitte;
+öffentliche Ansichten und Teams nennen jeden Abschnitt.
+
+PDF-Entwürfe liefern für jede erkannte Straße einen Abschnittsvorschlag. Über MCP können
+`strassensperre_anlegen` und `strassensperre_aktualisieren` die Liste `abschnitte` erhalten
+(`street`, `von`, `bis`, `richtung`, optional `geometry_geojson`). Lesen und Listen liefern die Abschnitte
+mit Status und Qualität. Bei der Geometrieermittlung und -bestätigung wählt `abschnitt_index` den
+Abschnitt **nullbasiert** aus (0 = erster Abschnitt). Bei mehreren Abschnitten erfordert die
+Geometrieübernahme einen Index; sie verändert nur diesen Abschnitt. Ohne Index bestätigt die bisherige
+Gesamtbestätigung weiterhin alle vorhandenen Geometrien.
+
+Im Formular fügt **+ Weitere Straße** einen Abschnitt hinzu. Ort und die übrigen Angaben gelten für
+alle Abschnitte. Jeder Abschnitt bietet eigene Adressvorschläge, **Abschnitt aus Adresse ermitteln**
+und **Geometrie geprüft**. Mit **Auf Karte bearbeiten** wählst du den Abschnitt für Zeichnen,
+Bearbeiten oder Entfernen auf der Karte; die anderen bleiben in eigener Farbe und mit Nummer sichtbar.
+**Entfernen** löscht eine Abschnittskarte; mindestens ein Abschnitt bleibt stehen.
+
 ### Adressprüfung
 
 Straße sowie *Von* und *Bis* bieten Vorschläge aus Photon. Während der Eingabe prüft Einsatzcockpit die

@@ -1009,7 +1009,8 @@ async def strassensperren_kataloge(ctx: Context | None = None) -> dict[str, obje
     name="strassensperre_anlegen",
     description=(
         "Legt eine Sperre an (road_closures_create) oder schlägt bei Änderungen eine bestehende Sperre "
-        "zum Aktualisieren oder Ersetzen vor."
+        "zum Aktualisieren oder Ersetzen vor. "
+        "Eine Verordnung mit mehreren Strassen = EINE Sperre mit mehreren abschnitte, nicht mehrere Sperren."
     ),
 )
 async def strassensperre_anlegen(
@@ -1040,6 +1041,7 @@ async def strassensperre_anlegen(
     duplikat_bestaetigt: bool = False,
     als_neu_bestaetigt: bool = False,
     ersetzt_road_closure_id: int | None = None,
+    abschnitte: list[dict] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
@@ -1071,6 +1073,7 @@ async def strassensperre_anlegen(
         duplikat_bestaetigt=duplikat_bestaetigt,
         als_neu_bestaetigt=als_neu_bestaetigt,
         ersetzt_road_closure_id=ersetzt_road_closure_id,
+        abschnitte=abschnitte,
     )
 
 
@@ -1078,13 +1081,15 @@ async def strassensperre_anlegen(
     name="strassensperre_aktualisieren",
     description=(
         "Aktualisiert eine eigene Sperre (road_closures_update); geometry_geojson setzt geometry_status auf ok. "
-        "Kein MCP-Löschen."
+        "Kein MCP-Löschen. "
+        "Eine Verordnung mit mehreren Strassen = EINE Sperre mit mehreren abschnitte, nicht mehrere Sperren."
     ),
 )
 async def strassensperre_aktualisieren(
     road_closure_id: int,
     felder: dict,
     version: int | None = None,
+    abschnitte: list[dict] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
@@ -1092,21 +1097,22 @@ async def strassensperre_aktualisieren(
         road_closure_id=road_closure_id,
         felder=felder,
         version=version,
+        abschnitte=abschnitte,
     )
 
 
 @server.tool(
     name="strassensperre_geometrie_ermitteln", description="Ermittelt einen OSM-Abschnitt zur Prüfung und Übernahme."
 )
-async def strassensperre_geometrie_ermitteln(road_closure_id: int | None = None, street: str = "", von: str = "", bis: str = "", city: str = "", uebernehmen: bool = False, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
-    return await _call_registered_tool("strassensperre_geometrie_ermitteln", road_closure_id=road_closure_id, street=street, von=von, bis=bis, city=city, uebernehmen=uebernehmen)  # noqa: E501
+async def strassensperre_geometrie_ermitteln(road_closure_id: int | None = None, street: str = "", von: str = "", bis: str = "", city: str = "", uebernehmen: bool = False, abschnitt_index: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_geometrie_ermitteln", road_closure_id=road_closure_id, street=street, von=von, bis=bis, city=city, uebernehmen=uebernehmen, abschnitt_index=abschnitt_index)  # noqa: E501
 
 
 @server.tool(
     name="strassensperre_geometrie_bestaetigen", description="Bestätigt eine Geometrie für die Umfahrungsberechnung."
 )
-async def strassensperre_geometrie_bestaetigen(road_closure_id: int, geometry_geojson: dict | str | None = None, version: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
-    return await _call_registered_tool("strassensperre_geometrie_bestaetigen", road_closure_id=road_closure_id, geometry_geojson=geometry_geojson, version=version)  # noqa: E501
+async def strassensperre_geometrie_bestaetigen(road_closure_id: int, geometry_geojson: dict | str | None = None, version: int | None = None, abschnitt_index: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_geometrie_bestaetigen", road_closure_id=road_closure_id, geometry_geojson=geometry_geojson, version=version, abschnitt_index=abschnitt_index)  # noqa: E501
 
 
 @server.tool(

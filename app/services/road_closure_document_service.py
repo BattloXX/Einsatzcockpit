@@ -207,7 +207,10 @@ def entwurf_aus_text(text: str) -> dict[str, object]:
         if candidate.casefold() not in {item.casefold() for item in streets}:
             streets.append(candidate)
     result["strassen"] = streets[:10]
+    result["abschnitte"] = [{"street": street, "from_text": None, "to_text": None} for street in streets[:10]]
     if streets:
         label = RESTRICTION_TYPES.get(str(result["restriction_type"]), "Einschränkung")
-        result["title_vorschlag"] = f"{label} {streets[0]}"
+        result["title_vorschlag"] = f"{label} {', '.join(streets[:2])}"
+        if len(streets) > 2:
+            result["title_vorschlag"] = f"{result['title_vorschlag']} +{len(streets) - 2}"
     return result

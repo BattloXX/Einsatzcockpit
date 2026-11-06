@@ -65,6 +65,7 @@ def _related_dict(related, org: FireDept | None) -> dict[str, object]:
         "id": closure.id,
         "title": closure.title,
         "street": closure.street,
+        "abschnitte": _sections_dict(closure),
         "from_text": closure.from_text,
         "to_text": closure.to_text,
         "valid_from": _iso(closure.valid_from, org),
@@ -86,6 +87,7 @@ def _closure_dict(closure: RoadClosure, org_id: int, *, voll: bool = False, db: 
         "id": closure.id,
         "title": closure.title,
         "street": closure.street,
+        "abschnitte": _sections_dict(closure),
         "city": closure.city,
         "reference_number": closure.reference_number,
         "exceptions": closure.exceptions,
@@ -185,6 +187,38 @@ def _geometry(value: dict | str | None) -> dict | None:
     if not isinstance(value, dict):
         raise ValueError("geometry_geojson muss ein GeoJSON-Objekt oder JSON-String sein.")
     return value
+
+
+def _sections_input(abschnitte: list[dict]) -> list[dict]:
+    if not isinstance(abschnitte, list) or not all(isinstance(item, dict) for item in abschnitte):
+        raise ValueError("abschnitte muss eine Liste von Objekten sein.")
+    result = []
+    for item in abschnitte:
+        if set(item) - {"street", "von", "bis", "richtung", "geometry_geojson"}:
+            raise ValueError("Unbekannte Abschnittsfelder.")
+        geometry = _geometry(item.get("geometry_geojson"))
+        result.append({
+            "street": item.get("street"), "from_text": item.get("von"), "to_text": item.get("bis"),
+            "direction": road_closure_service.normalize_direction(item.get("richtung")),
+            "geometry_geojson": geometry, "geometry_status": "ok" if geometry is not None else "missing",
+            "geometry_quality": "manuell" if geometry is not None else None,
+        })
+    return result
+
+
+def _sections_dict(closure: RoadClosure) -> list[dict]:
+    return [{
+        "id": section.id, "position": section.position, "street": section.street,
+        "von": section.from_text, "bis": section.to_text, "richtung": section.direction,
+        "geometry_status": section.geometry_status, "geometry_quality": section.geometry_quality,
+        "hat_geometrie": bool(section.geometry_geojson),
+    } for section in closure.sections]
+
+
+def _indexed_sections(closure: RoadClosure | None, index: int) -> list[dict]:
+    if closure is None or index < 0 or index >= len(closure.sections):
+        raise ValueError("abschnitt_index muss einen vorhandenen Abschnitt bezeichnen (nullbasiert).")
+    return [road_closure_service._section_data(section) for section in closure.sections]
 
 
 def _writable_closure(context: MCPContext, road_closure_id: int) -> RoadClosure:
@@ -497,6 +531,7 @@ async def strassensperre_entwurf_aus_pdf(
                 context.db,
                 context.org_id,
                 street=streets[0],
+                sections=draft.get("abschnitte"),
                 reference_number=str(draft.get("reference_number") or ""),
                 from_text=None,
                 to_text=None,
@@ -508,6 +543,7 @@ async def strassensperre_entwurf_aus_pdf(
         except Exception:
             related = []
     return result | {
+        "abschnitte": draft.get("abschnitte", []),
         "geometrie_vorschlag": geometry,
         "verwandte_sperren": related,
         "hinweise": [draft.get("hinweis")],
@@ -553,7 +589,8 @@ async def strassensperren_kataloge(context: MCPContext) -> dict[str, object]:
     name="strassensperre_anlegen",
     description=(
         "Legt eine Straßensperre der eigenen Organisation an (road_closures_create). "
-        "Eine harte Löschung per MCP ist nicht möglich."
+        "Eine harte Löschung per MCP ist nicht möglich. "
+        "Eine Verordnung mit mehreren Strassen = EINE Sperre mit mehreren abschnitte, nicht mehrere Sperren."
     ),
     required_roles=("objekt_verwalter",),
     module_check=strassensperren_effective_enabled,
@@ -587,18 +624,21 @@ async def strassensperre_anlegen(
     duplikat_bestaetigt: bool = False,
     als_neu_bestaetigt: bool = False,
     ersetzt_road_closure_id: int | None = None,
+    abschnitte: list[dict] | None = None,
 ) -> dict[str, object]:
     try:
         org = _org(context)
         geometry = _geometry(geometry_geojson)
         starts = _datetime_input(valid_from, org, "valid_from")
         ends = _datetime_input(valid_until, org, "valid_until") if valid_until else None
-        if not street.strip() and geometry is None:
+        sections = _sections_input(abschnitte) if abschnitte is not None else None
+        if not street.strip() and geometry is None and not sections:
             raise ValueError("Mindestens Straße oder Geometrie ist erforderlich.")
         related = road_closure_service.find_related(
             context.db,
             context.org_id,
             street=street,
+            sections=sections,
             reference_number=reference_number,
             from_text=from_text,
             to_text=to_text,
@@ -629,7 +669,7 @@ async def strassensperre_anlegen(
         geometry_quality: str | None = "manuell" if geometry is not None else None
         geometry_meta: str | None = None
         section = None
-        if geometry is None and street.strip():
+        if sections is None and geometry is None and street.strip():
             section = await road_closure_section_service.resolve_section(
                 context.db, org, street, from_text, to_text, city.strip() or getattr(org, "city", None)
             )
@@ -663,6 +703,8 @@ async def strassensperre_anlegen(
             "geometry_quality": geometry_quality,
             "geometry_meta_json": geometry_meta,
         }
+        if sections is not None:
+            data["sections"] = sections
         if teams_melden is not None:
             data["teams_melden"] = teams_melden
         closure = road_closure_service.create_closure(
@@ -736,13 +778,15 @@ async def strassensperre_anlegen(
     name="strassensperre_aktualisieren",
     description=(
         "Aktualisiert angegebene Felder einer eigenen Straßensperre (road_closures_update). geometry_geojson setzt den "
-        "Geometriestatus bewusst auf ok. Eine harte Löschung per MCP ist nicht möglich."
+        "Geometriestatus bewusst auf ok. Eine harte Löschung per MCP ist nicht möglich. "
+        "Eine Verordnung mit mehreren Strassen = EINE Sperre mit mehreren abschnitte, nicht mehrere Sperren."
     ),
     required_roles=("objekt_verwalter",),
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperre_aktualisieren(
-    context: MCPContext, road_closure_id: int, felder: dict, version: int | None = None
+    context: MCPContext, road_closure_id: int, felder: dict, version: int | None = None,
+    abschnitte: list[dict] | None = None,
 ) -> dict[str, object]:
     try:
         allowed = road_closure_service.EDITABLE_FIELDS - {
@@ -758,6 +802,8 @@ async def strassensperre_aktualisieren(
             )
         org = _org(context)
         changes = dict(felder)
+        if abschnitte is not None:
+            changes["sections"] = _sections_input(abschnitte)
         shares = changes.pop("visible_for_org_ids", None)
         for field in ("valid_from", "valid_until"):
             if field in changes:
@@ -821,15 +867,19 @@ async def strassensperre_aktualisieren(
 )
 async def strassensperre_geometrie_ermitteln(
     context: MCPContext, road_closure_id: int | None = None, street: str = "", von: str = "", bis: str = "",
-    city: str = "", uebernehmen: bool = False,
+    city: str = "", uebernehmen: bool = False, abschnitt_index: int | None = None,
 ) -> dict[str, object]:
     try:
         closure = _writable_closure(context, road_closure_id) if road_closure_id is not None else None
         if uebernehmen and closure is None:
             raise ValueError("uebernehmen erfordert road_closure_id.")
-        street = street or (closure.street if closure else "") or ""
-        von = von or (closure.from_text if closure else "") or ""
-        bis = bis or (closure.to_text if closure else "") or ""
+        sections = _indexed_sections(closure, abschnitt_index) if abschnitt_index is not None else None
+        if uebernehmen and closure is not None and len(closure.sections) > 1 and abschnitt_index is None:
+            raise ValueError("Mehrere Abschnitte: Bitte abschnitt_index für die Übernahme angeben.")
+        selected = closure.sections[abschnitt_index] if closure is not None and abschnitt_index is not None else closure
+        street = street or (selected.street if selected else "") or ""
+        von = von or (selected.from_text if selected else "") or ""
+        bis = bis or (selected.to_text if selected else "") or ""
         city = city or (closure.city if closure else "") or ""
         if not street.strip():
             raise ValueError("street ist erforderlich.")
@@ -838,11 +888,18 @@ async def strassensperre_geometrie_ermitteln(
             assert closure is not None
             if result.geometry is None:
                 raise ValueError("Keine Geometrie ermittelt.")
-            road_closure_service.update_closure(context.db, closure, context.user.id, {
+            values = {
                 "geometry_geojson": result.geometry, "geometry_status": result.geometry_status,
                 "geometry_quality": result.quality,
                 "geometry_meta_json": road_closure_section_service.section_meta(result, "osm"),
-            }, source="mcp", mcp_tool="strassensperre_geometrie_ermitteln")
+            }
+            if sections is not None and abschnitt_index is not None:
+                sections[abschnitt_index] = {**sections[abschnitt_index], **values}
+                road_closure_service.set_sections(context.db, closure, sections, context.user.id,
+                    source="mcp", mcp_tool="strassensperre_geometrie_ermitteln")
+            else:
+                road_closure_service.update_closure(context.db, closure, context.user.id, values,
+                    source="mcp", mcp_tool="strassensperre_geometrie_ermitteln")
             context.db.commit()
         return {"geometry_geojson": result.geometry, "qualitaet": result.quality,
                 "geometry_status_vorschlag": result.geometry_status, "osm_strassenname": result.osm_name,
@@ -861,13 +918,28 @@ async def strassensperre_geometrie_ermitteln(
 )
 async def strassensperre_geometrie_bestaetigen(
     context: MCPContext, road_closure_id: int, geometry_geojson: dict | str | None = None, version: int | None = None,
+    abschnitt_index: int | None = None,
 ) -> dict[str, object]:
     try:
         closure = _writable_closure(context, road_closure_id)
-        road_closure_service.confirm_geometry(
-            context.db, closure, context.user.id, _geometry(geometry_geojson), version,
-            source="mcp", mcp_tool="strassensperre_geometrie_bestaetigen"
-        )
+        if abschnitt_index is None:
+            road_closure_service.confirm_geometry(
+                context.db, closure, context.user.id, _geometry(geometry_geojson), version,
+                source="mcp", mcp_tool="strassensperre_geometrie_bestaetigen"
+            )
+        else:
+            if version is not None and version != closure.version:
+                raise ValueError("Die Sperre wurde inzwischen geändert. Bitte laden Sie sie neu.")
+            sections = _indexed_sections(closure, abschnitt_index)
+            section = dict(sections[abschnitt_index])
+            if geometry_geojson is not None:
+                section.update(geometry_geojson=_geometry(geometry_geojson), geometry_quality="manuell")
+            if not section.get("geometry_geojson"):
+                raise ValueError("Keine Geometrie im Abschnitt vorhanden.")
+            section["geometry_status"] = "ok"
+            sections[abschnitt_index] = section
+            road_closure_service.set_sections(context.db, closure, sections, context.user.id,
+                source="mcp", mcp_tool="strassensperre_geometrie_bestaetigen")
         context.db.commit()
         return {"strassensperre": _closure_dict(closure, context.org_id, voll=True, db=context.db),
                 "zusammenfassung": "Geometrie bestätigt."}

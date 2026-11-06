@@ -3113,3 +3113,9 @@ button.htmx-request,
 
 /* Icon-Abstand im Probe-Appell und in der Gateway-Liste. */
 .appell-status, .appell-stats > span, .appell-actions button, .gwl-card__name { display: inline-flex; align-items: center; gap: .35em; }
+
+.sperren-abschnitte { padding-left: 1.5rem; overflow-wrap: anywhere; }
+.sperren-abschnitte li { margin-bottom: .8rem; }
+@media (max-width: 760px) {
+  .sperren-abschnitte li { padding: .5rem; border: 1px solid var(--border); border-radius: .4rem; }
+}
