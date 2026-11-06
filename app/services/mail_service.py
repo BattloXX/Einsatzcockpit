@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover
     aiosmtplib = None  # type: ignore
 
 from app.config import settings
+from app.services.loop_thread_io import auf_event_loop
 
 logger = logging.getLogger("einsatzleiter.mail")
 
@@ -278,7 +279,7 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
             from app.services.resend_mail_service import send_via_resend
 
             _set_resend_reply_to_if_enabled(db, org_id, msg)
-            await send_via_resend(msg, own_resend_cfg["api_key"], own_resend_cfg["from_addr"])
+            await auf_event_loop(send_via_resend, msg, own_resend_cfg["api_key"], own_resend_cfg["from_addr"])
             return
         except Exception as exc:
             logger.warning("Resend (Org) fehlgeschlagen (Org %s) — Fallback SMTP: %s", org_id, exc)
@@ -292,7 +293,7 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
                     db, org_id, global_resend_cfg["from_domain"],
                 )
                 _set_resend_reply_to_if_enabled(db, org_id, msg)
-                await send_via_resend(msg, global_resend_cfg["api_key"], from_addr)
+                await auf_event_loop(send_via_resend, msg, global_resend_cfg["api_key"], from_addr)
                 return
             except Exception as exc:
                 logger.warning(
@@ -302,7 +303,7 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
     cfg = smtp_cfg
     if cfg is None:
         cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
-    await _send(msg, cfg)
+    await auf_event_loop(_send, msg, cfg)
 
 
 async def _send(msg: EmailMessage, smtp_cfg: dict) -> None:

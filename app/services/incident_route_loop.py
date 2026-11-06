@@ -176,7 +176,7 @@ def _retry_after_error(route: IncidentRoute, now: datetime) -> None:
         route.next_attempt_at = None
 
 
-async def _mark_unexpected_error(route_id: int) -> None:
+def _mark_unexpected_error_sync(route_id: int) -> None:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -201,8 +201,10 @@ async def _mark_unexpected_error(route_id: int) -> None:
         db.close()
 
 
-async def process_route(route_id: int) -> None:
+def _process_route_sync(route_id: int) -> tuple[int, int] | None:
     """Berechnet eine reservierte Route und meldet tatsächliche Änderungen."""
+    from app.services.loop_thread_io import thread_ablauf
+
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -213,28 +215,43 @@ async def process_route(route_id: int) -> None:
             .first()
         )
         if route is None:
-            return
+            return None
         before = _route_changed(db, route)
-        await compute_incident_route(db, route)
+        thread_ablauf(compute_incident_route(db, route))
         if route.status == "error":
             _retry_after_error(route, _now())
         db.commit()
         changed = before != _route_changed(db, route)
         if changed and route.org_id is not None:
-            try:
-                await notify_route_updated(route.incident_id, route.org_id)
-            except Exception:
-                logger.exception("incident_route.failed")
+            return route.incident_id, route.org_id
+
     except Exception:
         logger.exception("incident_route.failed")
         db.rollback()
-        await _mark_unexpected_error(route_id)
+        _mark_unexpected_error_sync(route_id)
     finally:
         db.close()
 
+    return None
 
-async def run_incident_route_once(now: datetime | None = None) -> int:
-    """Fuehrt eine kurze Discover-/Claim-Iteration des Routen-Workers aus."""
+
+async def _mark_unexpected_error(route_id: int) -> None:
+    await asyncio.to_thread(_mark_unexpected_error_sync, route_id)
+
+
+async def process_route(route_id: int) -> None:
+    """DB-Transaktion im Thread, Routing-I/O und Benachrichtigung auf dem Loop."""
+    from app.services.loop_thread_io import im_db_thread
+
+    aenderung = await im_db_thread(_process_route_sync, route_id)
+    if aenderung is not None:
+        try:
+            await notify_route_updated(*aenderung)
+        except Exception:
+            logger.exception("incident_route.failed")
+
+
+def _claim_routes_sync(now: datetime | None) -> list[int]:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -242,6 +259,12 @@ async def run_incident_route_once(now: datetime | None = None) -> int:
         ids = claim_due_routes(db, now, limit=3)
     finally:
         db.close()
+    return ids
+
+
+async def run_incident_route_once(now: datetime | None = None) -> int:
+    """Fuehrt eine kurze Discover-/Claim-Iteration des Routen-Workers aus."""
+    ids = await asyncio.to_thread(_claim_routes_sync, now)
     await asyncio.gather(*(process_route(route_id) for route_id in ids))
     return len(ids)
 
