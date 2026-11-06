@@ -121,11 +121,11 @@ async def test_alarm_background_creates_one_rawtext_job(db, monkeypatch, dedup_a
 
     sent = []
 
-    async def fake_dispatch(_db, job):
-        sent.append(job.id)
+    async def fake_dispatch(job_id):
+        sent.append(job_id)
         return {"status": "sent"}
 
-    monkeypatch.setattr(dispatcher, "dispatch_job", fake_dispatch)
+    monkeypatch.setattr(dispatcher, "_dispatch_background_job", fake_dispatch)
     await dispatcher.autoprint_alarm_background(ingest_id)
 
     db.expire_all()

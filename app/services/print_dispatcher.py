@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, defer
+from sqlalchemy.orm import Session, defer, make_transient_to_detached
 
 from app.models.gateway import (
     JOB_DONE,
@@ -25,6 +25,7 @@ from app.models.gateway import (
     JOB_SOURCE_RULE,
     PrintJob,
 )
+from app.services.loop_thread_io import ALARM_POOL, im_db_thread
 
 if TYPE_CHECKING:
     from app.models.gateway import Gateway
@@ -219,20 +220,15 @@ def create_print_job(
 
 # ── Zustellung ─────────────────────────────────────────────────────────────────
 
-async def dispatch_job(db: Session, job: PrintJob) -> dict:
-    """Sendet einen Job ans Gateway (signierte PDF-URL + Druckoptionen).
-
-    Setzt job.status auf 'sent' bei erfolgreicher Übergabe. Der Endstatus
-    (printing/done/failed) kommt asynchron per job_status vom Gateway zurück.
-    """
-    from app.routers.ws import dispatch_print_job
+def _prepare_dispatch(db: Session, job: PrintJob) -> dict:
+    """DB-Anteil der Zustellung; nur Versanddaten verlassen die Session."""
     from app.services import print_agent_service
     from app.services.print_artifact_service import artifact_url, is_html_render
 
-    # Druckziele mit Windows-Druckagent-Routen: Lease-Zustellung statt Push. Der Job wartet
-    # als 'queued', bis ein bereiter Agent ihn atomar übernimmt (print_agent_service).
+    assert job.org_id is not None
     if print_agent_service.hat_agent_routen(db, job.printer_id):
-        return await _dispatch_job_to_agents(db, job)
+        gateway_ids = print_agent_service.enqueue_for_agents(db, job)
+        return {"org_id": job.org_id, "job_id": job.id, "gateway_ids": gateway_ids, "status": job.status}
 
     payload = {
         "job_id": job.id,
@@ -242,30 +238,60 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
         "options": ({k: v for k, v in (job.options or {}).items() if k in ("copies", "duplex", "color", "media")}
                     if job.document_type == "dokumentpaket" else job.options or {}),
     }
-    # Leaflet-Karten: artifact_url zeigt auf eine HTML-Seite; das Gateway rendert sie
-    # per Headless-Chromium (JS/Tiles) statt eine PDF herunterzuladen. Die Seitengröße
-    # (A4/A3, Hoch/Quer) bestimmt das @page-CSS der Druckseite (preferCSSPageSize).
     if is_html_render(job):
         payload["render_kind"] = "html"
-    # Der atomare Push-Claim und der Transport werden gemeinsam gespeichert.
-    # Wiederholte Dispatcher-Aufrufe erzeugen keinen zweiten physischen Auftrag.
+    # Claim und Transport werden vom Linux-Transport gemeinsam gespeichert.
     db.commit()
-    assert job.org_id is not None
-    result = await dispatch_print_job(job.org_id, job.id, payload)
-    db.refresh(job)
+    return {"org_id": job.org_id, "job_id": job.id, "payload": payload}
+
+
+async def _send_prepared_dispatch(versand: dict) -> dict:
+    from app.routers.ws import dispatch_print_job, notify_agents_job_available
+
+    if "gateway_ids" in versand:
+        await notify_agents_job_available(versand["org_id"], versand["gateway_ids"], [versand["job_id"]])
+        logger.info("Druckauftrag %s für Druckagents %s eingereiht", versand["job_id"], versand["gateway_ids"])
+        return {"job_id": versand["job_id"], "status": versand["status"], "error": None}
+    return await dispatch_print_job(versand["org_id"], versand["job_id"], versand["payload"])
+
+
+async def dispatch_job(db: Session, job: PrintJob) -> dict:
+    """Zustellung mit einer vom Aufrufer verwalteten Session."""
+    versand = _prepare_dispatch(db, job)
+    result = await _send_prepared_dispatch(versand)
+    if "payload" in versand:
+        db.refresh(job)
     return result
 
 
-async def _dispatch_job_to_agents(db: Session, job: PrintJob) -> dict:
-    """Reiht einen Job für Windows-Druckagents ein und weckt die zuständigen Agents."""
-    from app.routers.ws import notify_agents_job_available
-    from app.services import print_agent_service
+def _prepare_background_dispatch_sync(job_id: int) -> dict:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
 
-    assert job.org_id is not None  # create_print_job() setzt org_id immer
-    gateway_ids = print_agent_service.enqueue_for_agents(db, job)
-    await notify_agents_job_available(job.org_id, gateway_ids, [job.id])
-    logger.info("Druckauftrag %s für Druckagents %s eingereiht", job.id, gateway_ids)
-    return {"job_id": job.id, "status": job.status, "error": None}
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        job = db.query(PrintJob).filter(PrintJob.id == job_id).one()
+        set_tenant_context(db, job.org_id)
+        return _prepare_dispatch(db, job)
+
+
+def _load_print_job_sync(job_id: int) -> dict:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        job = db.query(PrintJob).filter(PrintJob.id == job_id).one()
+        return {spalte.key: getattr(job, spalte.key) for spalte in PrintJob.__table__.columns}
+
+
+async def _dispatch_background_job(job_id: int) -> dict:
+    """Session-eigene DB-Bloecke; der Alarm-Pool bleibt waehrend des Versands frei."""
+    versand = await im_db_thread(_prepare_background_dispatch_sync, job_id, pool=ALARM_POOL)
+    result = await _send_prepared_dispatch(versand)
+    if "payload" in versand:
+        await im_db_thread(_load_print_job_sync, job_id, pool=ALARM_POOL)
+    return result
 
 
 def mark_job_failed(db: Session, job: PrintJob, grund: str) -> bool:
@@ -308,6 +334,23 @@ def escalate_stale_job(db: Session, job_id: int, grund: str) -> bool:
 
 
 async def dispatch_fallback_for_failed_job(job_id: int) -> PrintJob | None:
+    """Legt nach einem Fehlschlag genau einen Ersatz-Job an und stellt ihn zu."""
+    try:
+        ersatz_id = await im_db_thread(_dispatch_fallback_for_failed_job_sync, job_id, pool=ALARM_POOL)
+        if ersatz_id is None:
+            return None
+        await _dispatch_background_job(ersatz_id)
+        werte = await im_db_thread(_load_print_job_sync, ersatz_id, pool=ALARM_POOL)
+        # Bestehende Rueckgabe bleibt abgeloest; nur Spaltenwerte verlassen den Thread.
+        ersatz = PrintJob(**werte)
+        make_transient_to_detached(ersatz)
+        return ersatz
+    except Exception as exc:  # pragma: no cover - best-effort Hintergrundpfad
+        logger.warning("Fallback fuer Druckauftrag %s fehlgeschlagen: %s", job_id, exc)
+        return None
+
+
+def _dispatch_fallback_for_failed_job_sync(job_id: int) -> int | None:
     """Legt nach einem gemeldeten Fehlschlag genau einen Ersatz-Job an und stellt ihn zu.
 
     Eigene Session, best-effort.
@@ -366,8 +409,7 @@ async def dispatch_fallback_for_failed_job(job_id: int) -> PrintJob | None:
             "Ersatz-Druckauftrag %s fuer fehlgeschlagenen Auftrag %s angelegt",
             ersatz.id, job.id,
         )
-        await dispatch_job(db, ersatz)
-        return ersatz
+        return ersatz.id
     except Exception as exc:  # pragma: no cover - best-effort Hintergrundpfad
         logger.warning("Fallback fuer Druckauftrag %s fehlgeschlagen: %s", job_id, exc)
         return None
@@ -702,6 +744,18 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
 async def autoprint_incident_background(incident_id: int, trigger: str | None = None) -> None:
     """Background-Hook fuer Einsatz-Aenderungen: wertet passende Druckregeln aus
     und stellt die Jobs zu. Best-effort – Fehler dürfen den Request nie beeinflussen."""
+    jobs = await im_db_thread(_autoprint_incident_background_sync, incident_id, trigger, pool=ALARM_POOL)
+
+    for job_id in jobs:
+        try:
+            await _dispatch_background_job(job_id)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Auto-Druck Job %s nicht zustellbar: %s", job_id, exc)
+
+
+def _autoprint_incident_background_sync(incident_id: int, trigger: str | None = None) -> list[int]:
+    """Background-Hook fuer Einsatz-Aenderungen: wertet passende Druckregeln aus
+    und stellt die Jobs zu. Best-effort – Fehler dürfen den Request nie beeinflussen."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.gateway import TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_CREATED_GSL
@@ -713,7 +767,7 @@ async def autoprint_incident_background(incident_id: int, trigger: str | None = 
     try:
         inc = db.get(Incident, incident_id)
         if inc is None or inc.primary_org_id is None:
-            return
+            return []
         org_id = inc.primary_org_id
         set_tenant_context(db, org_id)
         effektiver_trigger = trigger or TRIGGER_EINSATZ_CREATED
@@ -736,13 +790,10 @@ async def autoprint_incident_background(incident_id: int, trigger: str | None = 
                 context |= {"gsl_id": lage.id, "site_id": site.id}
         jobs = on_event(db, org_id, effektiver_trigger, context)
         db.commit()
-        for job in jobs:
-            try:
-                await dispatch_job(db, job)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        return [job.id for job in jobs]
     except Exception as exc:  # pragma: no cover
         logger.warning("Auto-Druck fehlgeschlagen (Einsatz %s): %s", incident_id, exc)
+        return []
     finally:
         db.close()
 
@@ -753,9 +804,20 @@ async def autoprint_incident_updated_background(incident_id: int) -> None:
     await autoprint_incident_background(incident_id, TRIGGER_EINSATZ_UPDATED)
 
 
-async def autoprint_gsl_background(
+async def autoprint_gsl_background(lage_id: int, org_id: int, trigger: str | None = None) -> None:
+    """Background-Hook fuer Anlage oder Aenderung einer Großschadenslage."""
+    jobs = await im_db_thread(_autoprint_gsl_background_sync, lage_id, org_id, trigger, pool=ALARM_POOL)
+
+    for job_id in jobs:
+        try:
+            await _dispatch_background_job(job_id)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("GSL-Auto-Druck Job %s nicht zustellbar: %s", job_id, exc)
+
+
+def _autoprint_gsl_background_sync(
     lage_id: int, org_id: int, trigger: str | None = None,
-) -> None:
+) -> list[int]:
     """Background-Hook fuer Anlage oder Aenderung einer Großschadenslage."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -771,17 +833,14 @@ async def autoprint_gsl_background(
             .first()
         )
         if lage is None or lage.org_id is None:
-            return
+            return []
         set_tenant_context(db, lage.org_id)
         jobs = on_event(db, lage.org_id, trigger or TRIGGER_GSL_CREATED, _gsl_context(lage))
         db.commit()
-        for job in jobs:
-            try:
-                await dispatch_job(db, job)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("GSL-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        return [job.id for job in jobs]
     except Exception as exc:  # pragma: no cover
         logger.warning("GSL-Auto-Druck fehlgeschlagen (Lage %s): %s", lage_id, exc)
+        return []
     finally:
         db.close()
 
@@ -794,6 +853,17 @@ async def autoprint_gsl_updated_background(lage_id: int, org_id: int) -> None:
 
 async def autoprint_alarm_background(alarm_ingest_id: int) -> None:
     """Wertet den Regel-Ausloeser fuer genau einen neuen seriellen Alarm aus."""
+    jobs = await im_db_thread(_autoprint_alarm_background_sync, alarm_ingest_id, pool=ALARM_POOL)
+
+    for job_id in jobs:
+        try:
+            await _dispatch_background_job(job_id)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Alarm-Auto-Druck Job %s nicht zustellbar: %s", job_id, exc)
+
+
+def _autoprint_alarm_background_sync(alarm_ingest_id: int) -> list[int]:
+    """Wertet den Regel-Ausloeser fuer genau einen neuen seriellen Alarm aus."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.gateway import TRIGGER_ALARM_SERIAL, AlarmIngest
@@ -803,25 +873,35 @@ async def autoprint_alarm_background(alarm_ingest_id: int) -> None:
     try:
         ingest = db.get(AlarmIngest, alarm_ingest_id)
         if ingest is None or ingest.org_id is None:
-            return
+            return []
         set_tenant_context(db, ingest.org_id)
         jobs = on_event(db, ingest.org_id, TRIGGER_ALARM_SERIAL, {
             "alarm_ingest_id": ingest.id,
             "incident_id": ingest.einsatz_id,
         })
         db.commit()
-        for job in jobs:
-            try:
-                await dispatch_job(db, job)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Alarm-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        return [job.id for job in jobs]
     except Exception as exc:  # pragma: no cover
         logger.warning("Auto-Druck fehlgeschlagen (Alarm %s): %s", alarm_ingest_id, exc)
+        return []
     finally:
         db.close()
 
 
 async def autoprint_verleih_background(ausleihe_id: int) -> None:
+    """Background-Hook nach Verleihschein-Anlage; ausschliesslich regelbasiert.
+
+    Best-effort: Fehler duerfen den Request nie beeinflussen."""
+    jobs = await im_db_thread(_autoprint_verleih_background_sync, ausleihe_id, pool=ALARM_POOL)
+
+    for job_id in jobs:
+        try:
+            await _dispatch_background_job(job_id)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Verleih-Auto-Druck Job %s nicht zustellbar: %s", job_id, exc)
+
+
+def _autoprint_verleih_background_sync(ausleihe_id: int) -> list[int]:
     """Background-Hook nach Verleihschein-Anlage; ausschliesslich regelbasiert.
 
     Best-effort: Fehler duerfen den Request nie beeinflussen.
@@ -838,12 +918,12 @@ async def autoprint_verleih_background(ausleihe_id: int) -> None:
     try:
         a = db.get(VerleihAusleihe, ausleihe_id)
         if a is None:
-            return
+            return []
         org_id = a.org_id
         assert org_id is not None  # jede Ausleihe gehoert immer einer Org
         set_tenant_context(db, org_id)
         if not gateway_effective_enabled(org_id, db):
-            return
+            return []
 
         lage = db.get(MajorIncident, a.lage_id) if a.lage_id else None
         context = {
@@ -855,18 +935,26 @@ async def autoprint_verleih_background(ausleihe_id: int) -> None:
         jobs = on_event(db, org_id, TRIGGER_VERLEIH_CREATED, context)
 
         db.commit()
-        for job in jobs:
-            try:
-                await dispatch_job(db, job)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Verleih-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        return [job.id for job in jobs]
     except Exception as exc:  # pragma: no cover
         logger.warning("Verleih-Auto-Druck fehlgeschlagen (Ausleihe %s): %s", ausleihe_id, exc)
+        return []
     finally:
         db.close()
 
 
 async def autoprint_gsl_einheit_background(einheit_id: int) -> None:
+    """Best-effort-Regeldruck nach Anlage einer GSL-Einheit."""
+    jobs = await im_db_thread(_autoprint_gsl_einheit_background_sync, einheit_id, pool=ALARM_POOL)
+
+    for job_id in jobs:
+        try:
+            await _dispatch_background_job(job_id)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("QR-Auto-Druck Job %s nicht zustellbar: %s", job_id, exc)
+
+
+def _autoprint_gsl_einheit_background_sync(einheit_id: int) -> list[int]:
     """Best-effort-Regeldruck nach Anlage einer GSL-Einheit."""
 
     from datetime import UTC, datetime
@@ -882,17 +970,17 @@ async def autoprint_gsl_einheit_background(einheit_id: int) -> None:
     try:
         einheit = db.get(LageEinheit, einheit_id)
         if einheit is None:
-            return
+            return []
         lage = db.get(MajorIncident, einheit.lage_id)
         if lage is None or lage.org_id is None:
-            return
+            return []
         set_tenant_context(db, lage.org_id)
         try:
             qr = gk_zugang_service.stelle_qr_zugang_aus(db, lage, einheit, user_id=None,
                                                          grund="autodruck", neu=False)
         except ValueError:
             logger.info("QR-Autodruck für Einheit %s übersprungen: QR-Zugang nicht aktiviert", einheit.id)
-            return
+            return []
         context = {"gsl_id": lage.id, "einheit_id": einheit.id, "qr_generation": qr.generation,
                    "is_exercise": lage.is_exercise, "planspiel_run_id": lage.planspiel_run_id}
         jobs = on_event(db, lage.org_id, TRIGGER_GSL_EINHEIT_ANGELEGT, context)
@@ -902,18 +990,26 @@ async def autoprint_gsl_einheit_background(einheit_id: int) -> None:
                 zugang.qr_druck_job_id = jobs[0].id
                 zugang.qr_druck_at = datetime.now(UTC).replace(tzinfo=None)
         db.commit()
-        for job in jobs:
-            try:
-                await dispatch_job(db, job)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("QR-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        return [job.id for job in jobs]
     except Exception as exc:  # pragma: no cover
         logger.warning("QR-Auto-Druck fehlgeschlagen (Einheit %s): %s", einheit_id, exc)
+        return []
     finally:
         db.close()
 
 
 async def autoprint_gsl_stelle_disponiert_background(dispatch_id: int) -> None:
+    """Best-effort-Regeldruck nach einer neuen Einsatzstellen-Disposition."""
+    jobs = await im_db_thread(_autoprint_gsl_stelle_disponiert_background_sync, dispatch_id, pool=ALARM_POOL)
+
+    for job_id in jobs:
+        try:
+            await _dispatch_background_job(job_id)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Einsatzstellen-Auto-Druck Job %s nicht zustellbar: %s", job_id, exc)
+
+
+def _autoprint_gsl_stelle_disponiert_background_sync(dispatch_id: int) -> list[int]:
     """Best-effort-Regeldruck nach einer neuen Einsatzstellen-Disposition."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -925,13 +1021,13 @@ async def autoprint_gsl_stelle_disponiert_background(dispatch_id: int) -> None:
     try:
         dispatch = db.get(EinheitSiteDispatch, dispatch_id)
         if dispatch is None:
-            return
+            return []
         site = db.get(IncidentSite, dispatch.site_id)
         if site is None:
-            return
+            return []
         lage = db.get(MajorIncident, site.major_incident_id)
         if lage is None or lage.org_id is None:
-            return
+            return []
         set_tenant_context(db, lage.org_id)
         erste_disposition = not db.query(EinheitSiteDispatch.id).filter(
             EinheitSiteDispatch.site_id == site.id,
@@ -948,18 +1044,26 @@ async def autoprint_gsl_stelle_disponiert_background(dispatch_id: int) -> None:
             "erste_disposition": erste_disposition,
         })
         db.commit()
-        for job in jobs:
-            try:
-                await dispatch_job(db, job)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Einsatzstellen-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        return [job.id for job in jobs]
     except Exception as exc:  # pragma: no cover
         logger.warning("Einsatzstellen-Auto-Druck fehlgeschlagen (Disposition %s): %s", dispatch_id, exc)
+        return []
     finally:
         db.close()
 
 
 async def autoprint_mail_eingang_background(eingang_id: int) -> None:
+    """Best-effort-Regeldruck einer angenommenen Eingangsmail, erst nach Commit."""
+    jobs = await im_db_thread(_autoprint_mail_eingang_background_sync, eingang_id, pool=ALARM_POOL)
+
+    for job_id in jobs:
+        try:
+            await _dispatch_background_job(job_id)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Mail-Auto-Druck Job %s nicht zustellbar: %s", job_id, exc)
+
+
+def _autoprint_mail_eingang_background_sync(eingang_id: int) -> list[int]:
     """Best-effort-Regeldruck einer angenommenen Eingangsmail, erst nach Commit."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -973,16 +1077,16 @@ async def autoprint_mail_eingang_background(eingang_id: int) -> None:
     try:
         row = db.get(OrgMailEingang, eingang_id)
         if row is None or row.org_id is None or row.zuordnung == "abgelehnt":
-            return
+            return []
         settings = db.query(OrgSettings).filter(OrgSettings.org_id == row.org_id).first()
         if settings is None or settings.mail_eingang_modus == "aus":
-            return
+            return []
         incident = None
         if row.incident_id:
             from app.models.incident import Incident
             incident = db.get(Incident, row.incident_id)
             if incident is None or incident.primary_org_id != row.org_id or incident.is_exercise:
-                return
+                return []
         approved, _ = _allowed(row, settings)
         set_tenant_context(db, row.org_id)
         jobs = on_event(db, row.org_id, TRIGGER_MAIL_EINGANG, {
@@ -999,13 +1103,10 @@ async def autoprint_mail_eingang_background(eingang_id: int) -> None:
                 db.commit()
             except Exception:
                 db.rollback()
-        for job in jobs:
-            try:
-                await dispatch_job(db, job)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Mail-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        return [job.id for job in jobs]
     except Exception as exc:  # pragma: no cover
         logger.warning("Mail-Auto-Druck fehlgeschlagen (Mail %s): %s", eingang_id, exc)
+        return []
     finally:
         db.close()
 

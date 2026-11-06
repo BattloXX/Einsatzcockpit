@@ -60,11 +60,11 @@ async def test_fallback_happy_path_exactly_once_and_media(monkeypatch):
     job_id, org, printer_id, gateway_id = _setup(options={"copies": 2, "media": "A3"})
     sent = []
 
-    async def fake_dispatch(db, job):
-        sent.append(job.id)
+    async def fake_dispatch(job_id):
+        sent.append(job_id)
         return {"status": "sent"}
 
-    monkeypatch.setattr(pd, "dispatch_job", fake_dispatch)
+    monkeypatch.setattr(pd, "_dispatch_background_job", fake_dispatch)
     ersatz = await pd.dispatch_fallback_for_failed_job(job_id)
     assert ersatz is not None
     assert ersatz.org_id == org
@@ -87,7 +87,7 @@ async def test_fallback_abbruchbedingungen(monkeypatch, kwargs):
     import app.services.print_dispatcher as pd
 
     job_id, *_ = _setup(**kwargs)
-    monkeypatch.setattr(pd, "dispatch_job", pytest.fail)
+    monkeypatch.setattr(pd, "_dispatch_background_job", pytest.fail)
     assert await pd.dispatch_fallback_for_failed_job(job_id) is None
 
 

@@ -19,14 +19,6 @@ app/services/objekt_kontakt_notify.py:dispatch_objekt_einsatzinfo
 app/services/objekt_matching_service.py:match_incident_background
 app/services/planspiel_engine.py:nach_ausfuehrung_benachrichtigen
 app/services/planspiel_engine.py:nach_generierung_benachrichtigen
-app/services/print_dispatcher.py:autoprint_alarm_background
-app/services/print_dispatcher.py:autoprint_gsl_background
-app/services/print_dispatcher.py:autoprint_gsl_einheit_background
-app/services/print_dispatcher.py:autoprint_gsl_stelle_disponiert_background
-app/services/print_dispatcher.py:autoprint_incident_background
-app/services/print_dispatcher.py:autoprint_mail_eingang_background
-app/services/print_dispatcher.py:autoprint_verleih_background
-app/services/print_dispatcher.py:dispatch_fallback_for_failed_job
 app/services/resend_inbound_service.py:fetch_inbound_background
 app/services/schaden_service.py:melde_schaden_background
 app/services/sms_inbox_service.py:process_inbound_sms
