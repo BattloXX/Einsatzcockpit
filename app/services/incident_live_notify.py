@@ -14,6 +14,7 @@ from sqlalchemy import and_, or_, update
 from sqlalchemy.orm import Session
 
 from app.models.incident import Incident, IncidentOrg
+from app.services.loop_thread_io import auf_event_loop
 
 logger = logging.getLogger("einsatzleiter.incident_live_notify")
 
@@ -178,7 +179,7 @@ async def notify_incident_live(
             Incident.status == "active",
             or_(Incident.primary_org_id == org_id, Incident.id.in_(collaborating)),
         ).count()
-        await broadcast_org(
+        await auf_event_loop(broadcast_org,
             org_id, {"type": "einsatz_live", **payload, "incident_count": incident_count}
         )
 

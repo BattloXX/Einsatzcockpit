@@ -64,10 +64,8 @@ async def _run_all_orgs() -> None:
     await asyncio.to_thread(zeitstempel)
 
 
-async def _process_org(org_id: int) -> None:
+async def _process_org_mit_db(db, org_id: int) -> None:
     from app.config import settings
-    from app.core.tenant import set_tenant_context
-    from app.db import SessionLocal
     from app.models.dienst_monitor import DienstStatus
     from app.models.master import FireDept, OrgSettings
     from app.services.dienst_monitor_dispatch import dispatch_meldung
@@ -78,55 +76,66 @@ async def _process_org(org_id: int) -> None:
         rollback_claim,
     )
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
-        org = db.get(FireDept, org_id)
-        if not org_settings or not org:
-            return
-        now = datetime.now(UTC).replace(tzinfo=None)
-        for check in pruefe_dienste(db, org_id, now):
-            row = (
-                db.query(DienstStatus)
-                .filter(DienstStatus.org_id == org_id, DienstStatus.key == check.key)
-                .execution_options(include_all_tenants=True)
-                .first()
-            )
-            if row is None:
-                row = DienstStatus(org_id=org_id, key=check.key, state="unknown", since=now)
-                db.add(row)
-                db.flush()
-            if row.state != check.state:
-                row.state = check.state
-                row.since = now
-            if check.state == "ok":
-                row.last_ok_at = now
-                row.last_error = None
-            elif check.state in ("down", "teilweise"):
-                row.last_error = check.detail[:500]
-            entscheidung = entscheide(
-                check, row, org_settings.dienst_monitor_karenz_min, org_settings.dienst_monitor_wiederholung_min, now
-            )
-            db.commit()
-            if not entscheidung.art:
-                continue
-            db.refresh(row)
-            vorher_outage, vorher_repeat = row.outage_notified_at, row.last_repeat_at
-            if not claim_meldung(db, row, org_id, entscheidung.art, now, org_settings.dienst_monitor_wiederholung_min):
-                continue
-            db.refresh(row)
-            ok = await dispatch_meldung(
-                db=db,
-                org_id=org_id,
-                org=org,
-                org_settings=org_settings,
-                row=row,
-                check=check,
-                art=entscheidung.art,
-                base_url=settings.PUBLIC_BASE_URL or settings.APP_BASE_URL,
-            )
-            if not ok and entscheidung.art != "entwarnung":
-                rollback_claim(db, row.id, org_id, entscheidung.art, now, vorher_outage, vorher_repeat)
-    finally:
-        db.close()
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    org = db.get(FireDept, org_id)
+    if not org_settings or not org:
+        return
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for check in pruefe_dienste(db, org_id, now):
+        row = (
+            db.query(DienstStatus)
+            .filter(DienstStatus.org_id == org_id, DienstStatus.key == check.key)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        if row is None:
+            row = DienstStatus(org_id=org_id, key=check.key, state="unknown", since=now)
+            db.add(row)
+            db.flush()
+        if row.state != check.state:
+            row.state = check.state
+            row.since = now
+        if check.state == "ok":
+            row.last_ok_at = now
+            row.last_error = None
+        elif check.state in ("down", "teilweise"):
+            row.last_error = check.detail[:500]
+        entscheidung = entscheide(
+            check, row, org_settings.dienst_monitor_karenz_min, org_settings.dienst_monitor_wiederholung_min, now
+        )
+        db.commit()
+        if not entscheidung.art:
+            continue
+        db.refresh(row)
+        vorher_outage, vorher_repeat = row.outage_notified_at, row.last_repeat_at
+        if not claim_meldung(db, row, org_id, entscheidung.art, now, org_settings.dienst_monitor_wiederholung_min):
+            continue
+        db.refresh(row)
+        ok = await dispatch_meldung(
+            db=db,
+            org_id=org_id,
+            org=org,
+            org_settings=org_settings,
+            row=row,
+            check=check,
+            art=entscheidung.art,
+            base_url=settings.PUBLIC_BASE_URL or settings.APP_BASE_URL,
+        )
+        if not ok and entscheidung.art != "entwarnung":
+            rollback_claim(db, row.id, org_id, entscheidung.art, now, vorher_outage, vorher_repeat)
+
+
+def _process_org_sync(org_id: int) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.services.loop_thread_io import thread_ablauf
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        thread_ablauf(_process_org_mit_db(db, org_id))
+
+
+async def _process_org(org_id: int) -> None:
+    from app.services.loop_thread_io import im_db_thread
+
+    await im_db_thread(_process_org_sync, org_id)

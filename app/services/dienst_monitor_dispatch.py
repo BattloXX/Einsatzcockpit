@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from app.core.timezones import format_local_datetime
 from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorLog
+from app.services.loop_thread_io import auf_event_loop
 
 
 async def dispatch_meldung(*, db, org_id: int, org, org_settings, row, check, art: str, base_url: str = "") -> bool:
@@ -64,7 +65,7 @@ async def dispatch_meldung(*, db, org_id: int, org, org_settings, row, check, ar
     if teams:
         from app.services.teams_service import post_teams_karte
 
-        ok = await post_teams_karte(teams, betreff, text, url)
+        ok = await auf_event_loop(post_teams_karte, teams, betreff, text, url)
         erfolge += int(ok)
         log("teams", teams, "gesendet" if ok else "fehler", None if ok else "Teams-Versand fehlgeschlagen")
     nummern = [n.strip() for n in (org_settings.dienst_monitor_sms or "").split(",") if n.strip()]
@@ -73,9 +74,10 @@ async def dispatch_meldung(*, db, org_id: int, org, org_settings, row, check, ar
             log("sms", nummer, "uebersprungen", "SMS-Gateway ist der betroffene Dienst")
             continue
         try:
-            from app.services.sms_service import send_sms
+            from app.services.sms_service import resolve_sms_config, send_sms
 
-            result = await send_sms(org_id, nummer, f"{betreff}\n{check.detail}")
+            kontext = resolve_sms_config(org_id, db)
+            result = await auf_event_loop(send_sms, org_id, nummer, f"{betreff}\n{check.detail}", ctx=kontext)
             erfolge += int(result.success)
             log(
                 "sms",

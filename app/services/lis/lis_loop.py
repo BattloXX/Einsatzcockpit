@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 from time import monotonic
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from app.services.loop_utils import iteration_watch
 
@@ -103,33 +103,55 @@ async def _run_all_orgs() -> None:
             logger.exception("lis_poll_loop: Org %s fehlgeschlagen", org_id)
 
 
-async def _sync_one_org(org_id: int, config_id: int) -> None:
+async def _bereite_poll_vor(org_id: int, schluessel: str, interval: int, values: tuple) -> bool:
     from app.core.crypto import decrypt_secret
+    from app.services.loop_thread_io import registriere_loop_client
+
+    now = monotonic()
+    if now - _last_started_at.get(org_id, float("-inf")) < interval:
+        return False
+    values = values[:3] + (decrypt_secret(values[3]),) + values[4:]
+    client = await _get_client(org_id, values)
+    _last_started_at[org_id] = now
+    registriere_loop_client(schluessel, client)
+    return True
+
+
+def _synchronisiere_org_sync(org_id: int, config_id: int, schluessel: str) -> None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.lis import OrgLisConfig
     from app.models.master import FireDept
     from app.services.lis.lis_sync import sync_organization
+    from app.services.loop_thread_io import LoopClientBruecke, auf_event_loop, thread_ablauf
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        org = db.get(FireDept, org_id)
-        config = db.get(OrgLisConfig, config_id)
-        if not org or not config or not config.enabled or not config.is_fully_configured:
-            await _close_org_client(org_id)
-            return
-        now = monotonic()
-        interval = max(10, config.poll_interval_seconds)
-        if now - _last_started_at.get(org_id, float("-inf")) < interval:
-            return
-        assert config.base_url and config.username and config.password_enc and config.organization_id
-        values = (
-            config.base_url, config.site, config.username, decrypt_secret(config.password_enc), config.password_enc,
-            config.project_id, config.password_is_hash, config.organization_id,
-        )
-        client = await _get_client(org_id, values)
-        _last_started_at[org_id] = now
-        await sync_organization(db, org, config, client=client)
-    finally:
-        db.close()
+    # Eine Session fuer den gesamten bisherigen Ablauf, auch ueber HTTP hinweg.
+    # Auf dem Hauptloop landen nur Konfigurationswerte und Client-Schluessel.
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+
+        async def synchronisieren() -> None:
+            org = db.get(FireDept, org_id)
+            config = db.get(OrgLisConfig, config_id)
+            if not org or not config or not config.enabled or not config.is_fully_configured:
+                await auf_event_loop(_close_org_client, org_id)
+                return
+            assert config.base_url and config.username and config.password_enc and config.organization_id
+            values = (
+                config.base_url, config.site, config.username, config.password_enc, config.password_enc,
+                config.project_id, config.password_is_hash, config.organization_id,
+            )
+            if not await auf_event_loop(
+                _bereite_poll_vor, org_id, schluessel, max(10, config.poll_interval_seconds), values,
+            ):
+                return
+            await sync_organization(db, org, config, client=cast("LisClient", LoopClientBruecke(schluessel)))
+
+        thread_ablauf(synchronisieren())
+
+
+async def _sync_one_org(org_id: int, config_id: int) -> None:
+    from app.services.loop_thread_io import im_db_thread, loop_client_schluessel
+
+    with loop_client_schluessel() as schluessel:
+        await im_db_thread(_synchronisiere_org_sync, org_id, config_id, schluessel)

@@ -19,6 +19,7 @@ from app.models.road_closure import RESTRICTION_TYPES, IncidentRoadClosure, Inci
 from app.services import einsatz_routing, road_closure_geo_service, road_closure_service
 from app.services.broadcast import broadcast_org, manager
 from app.services.einsatz_routing import RoutingError
+from app.services.loop_thread_io import auf_event_loop
 
 logger = logging.getLogger("einsatzleiter.einsatz_route")
 
@@ -131,7 +132,7 @@ async def _evaluate(
 ) -> _Evaluation:
     """Berechnet Relevanz und Umfahrung ohne Persistenz."""
     response = await asyncio.wait_for(
-        provider.calculate_route(start, dest, alternatives=False),
+        auf_event_loop(provider.calculate_route, start, dest, alternatives=False),
         timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
     )
     primary = response.primary
@@ -151,7 +152,7 @@ async def _evaluate(
         try:
             if provider.supports_avoid_polygons:
                 alternate = await asyncio.wait_for(
-                    provider.calculate_route(
+                    auf_event_loop(provider.calculate_route,
                         start,
                         dest,
                         avoid_polygons=[road_closure_geo_service.avoid_polygon(geometries[row.id]) for row in avoid],
@@ -161,7 +162,7 @@ async def _evaluate(
                 )
             else:
                 alternate = await asyncio.wait_for(
-                    provider.calculate_route(start, dest, alternatives=True),
+                    auf_event_loop(provider.calculate_route, start, dest, alternatives=True),
                     timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
                 )
             alternative = einsatz_routing.choose_alternative(alternate, [geometries[row.id] for row in avoid])
