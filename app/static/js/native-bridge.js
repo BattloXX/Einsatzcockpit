@@ -778,6 +778,7 @@
       _asuewKeepAwake = !!on;
       return _asuewCall('keepScreenOn', { on: !!on });
     },
+    noteLocalEvent(args) { return _asuewCall('noteLocalEvent', args); },
     getSelbsttest() { return _asuewCall('getSelbsttest'); },
     playTestAlarm() { return _asuewCall('playTestAlarm'); },
     confirmAlarmTest() { return _asuewCall('confirmAlarmTest'); },

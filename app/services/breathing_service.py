@@ -23,6 +23,7 @@ from app.models.breathing import (
     TroopMember,
 )
 from app.models.incident import Incident
+from app.services.breathing_events import cleanup_client_events, event_audit
 
 WARNEINRICHTUNG_BAR = 60.0
 MAX_PRESSURE_BAR = 330
@@ -38,6 +39,10 @@ _watchdog_last_sitzung_cleanup: datetime | None = None
 
 class InvalidTroopTransition(ValueError):
     """Der angeforderte Statusübergang ist nicht erlaubt."""
+
+
+class PressureIncreaseConflict(ValueError):
+    """Ein aktueller Druckanstieg benötigt einen gültigen Korrekturgrund."""
 
 
 def validate_pressure(value: float) -> float:
@@ -466,6 +471,8 @@ def update_troop_status(
     troop: BreathingTroop,
     new_status: str,
     user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> BreathingTroop:
     if new_status not in TROOP_STATUSES:
         raise ValueError(f"Unbekannter Truppstatus: {new_status}")
@@ -476,15 +483,15 @@ def update_troop_status(
     before = {"status": troop.status}
     troop.status = new_status
     if new_status == "rueckzug":
-        troop.withdraw_at = _now()
+        troop.withdraw_at = ts or _now()
     elif new_status == "zurueck":
-        troop.back_at = _now()
+        troop.back_at = ts or _now()
     if new_status not in ("im_einsatz", "rueckzug"):
         troop.escalated_at = None
     db.flush()
     write_incident_change(
         db, troop.incident_id, "troop.status_changed", "breathing_troop", troop.id,
-        before=before, after={"status": new_status},
+        before=before, after={"status": new_status, **event_audit(ts, nachgetragen)},
         user_id=user_id,
     )
     return troop
@@ -497,6 +504,10 @@ def log_pressure(
     pressure_bar: float,
     note: str | None = None,
     recorded_by_user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
+    korrektur_grund: str | None = None,
+    allow_increase: bool = False,
 ) -> PressureLog:
     pressure_bar = validate_pressure(pressure_bar)
     if troop.status not in ("im_einsatz", "rueckzug"):
@@ -504,7 +515,21 @@ def log_pressure(
     member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None:
         raise ValueError("Das Truppmitglied gehört nicht zu diesem Atemschutztrupp.")
-    now = _now()
+    now = ts or _now()
+    historical = any(
+        log.troop_member_id == member.id
+        and log.ts.replace(tzinfo=None) > now.replace(tzinfo=None)
+        for log in troop.active_pressure_logs
+    )
+    reason = (korrektur_grund or "").strip()
+    if reason and not 3 <= len(reason) <= 250:
+        raise PressureIncreaseConflict("Der Korrekturgrund muss 3 bis 250 Zeichen lang sein.")
+    if (not historical and not allow_increase and member.current_press is not None
+            and pressure_bar > member.current_press + 10 and not reason):
+        raise PressureIncreaseConflict("Der Druck kann nicht steigen. Bei einer Korrektur bitte einen Grund angeben.")
+    if reason:
+        correction = f"Korrektur: {reason}"
+        note = f"{correction}; {note}"[:300] if note else correction
     log = PressureLog(
         troop=troop,
         troop_id=troop.id,
@@ -514,15 +539,22 @@ def log_pressure(
         pressure_bar=pressure_bar,
         note=note or None,
         recorded_by_user_id=recorded_by_user_id,
-        ts=now,
+        ts=now, nachgetragen=nachgetragen,
     )
     db.add(log)
-    member.current_press = pressure_bar
-    # Jede Druckmeldung gilt als Lagemeldung (Leitfaden: "Lage- und Flaschendruck-meldung")
-    troop.last_meldung_at = now
-    if note:
-        troop.last_meldung_text = note
+    if not historical:
+        member.current_press = pressure_bar
+        # Jede Druckmeldung gilt als Lagemeldung (Leitfaden: "Lage- und Flaschendruck-meldung")
+        troop.last_meldung_at = now
+        if note:
+            troop.last_meldung_text = note
     db.flush()
+    if ts is not None or nachgetragen:
+        write_incident_change(
+            db, troop.incident_id, "troop.pressure_logged", "troop_member", member.id,
+            before=None, after={"pressure_bar": pressure_bar, "note": log.note, **event_audit(ts, nachgetragen)},
+            user_id=recorded_by_user_id,
+        )
     return log
 
 
@@ -535,6 +567,8 @@ def record_kontrolle(
     troop_member_id: int | None = None,
     note: str | None = None,
     user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> BreathingKontrolle:
     """Protokolliert eine Druckabfrage oder einen erfolglosen Funkkontakt."""
     if stufe not in ("one_third", "two_third", "frei"):
@@ -558,9 +592,9 @@ def record_kontrolle(
         log_pressure(
             db, troop, troop_member_id, pressure_bar,
             note=note or f"Kontrolle {label}: niedrigster Druck",
-            recorded_by_user_id=user_id,
+            recorded_by_user_id=user_id, ts=ts, nachgetragen=nachgetragen, allow_increase=True,
         )
-    now = _now()
+    now = ts or _now()
     due_seconds = {"one_third": troop.one_third_seconds, "two_third": troop.two_third_seconds}.get(stufe)
     faellig_at = (
         troop.entry_at + timedelta(seconds=due_seconds)
@@ -570,7 +604,7 @@ def record_kontrolle(
         troop.funk_verloren_at = now
     kontrolle = BreathingKontrolle(
         troop=troop, troop_id=troop.id, deployment_id=None,
-        stufe=stufe, art=art, faellig_at=faellig_at, erledigt_at=now,
+        stufe=stufe, art=art, faellig_at=faellig_at, erledigt_at=now, nachgetragen=nachgetragen,
         niedrigster_druck=pressure_bar if art == "funk" else None,
         troop_member_id=troop_member_id, note=note, user_id=user_id,
     )
@@ -578,7 +612,8 @@ def record_kontrolle(
     db.flush()
     write_incident_change(
         db, troop.incident_id, "troop.kontrolle", "breathing_troop", troop.id,
-        before=None, after={"stufe": stufe, "art": art, "pressure_bar": kontrolle.niedrigster_druck},
+        before=None, after={"stufe": stufe, "art": art, "pressure_bar": kontrolle.niedrigster_druck,
+                            **event_audit(ts, nachgetragen)},
         user_id=user_id,
     )
     return kontrolle
@@ -586,34 +621,38 @@ def record_kontrolle(
 
 def set_funk_verloren(
     db: Session, troop: BreathingTroop, active: bool, user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> BreathingTroop:
     """Markiert Funkverlust oder hebt ihn auch nach der Rückkehr auf."""
     if active and troop.status not in ("im_einsatz", "rueckzug"):
         raise ValueError("Funkverlust kann nur im Einsatz oder Rückzug gemeldet werden.")
     before = {"active": troop.funk_verloren_at is not None}
-    troop.funk_verloren_at = (troop.funk_verloren_at or _now()) if active else None
+    troop.funk_verloren_at = (troop.funk_verloren_at or ts or _now()) if active else None
     db.flush()
     write_incident_change(
         db, troop.incident_id, "troop.funk_verloren", "breathing_troop", troop.id,
-        before=before, after={"active": active}, user_id=user_id,
+        before=before, after={"active": active, **event_audit(ts, nachgetragen)}, user_id=user_id,
     )
     return troop
 
 
 def declare_notfall(
     db: Session, troop: BreathingTroop, user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> BreathingTroop:
     """Meldet einen Atemschutznotfall ohne Änderung des Einsatzstatus."""
     if troop.status not in ("im_einsatz", "rueckzug"):
         raise ValueError("Ein Notfall kann nur im Einsatz oder Rückzug gemeldet werden.")
     if troop.notfall_at is not None:
         return troop
-    troop.notfall_at = _now()
+    troop.notfall_at = ts or _now()
     troop.notfall_von_user_id = user_id
     db.flush()
     write_incident_change(
         db, troop.incident_id, "troop.notfall", "breathing_troop", troop.id,
-        before=None, after={"active": True}, user_id=user_id,
+        before=None, after={"active": True, **event_audit(ts, nachgetragen)}, user_id=user_id,
     )
     return troop
 
@@ -639,6 +678,8 @@ def report_objective_reached(
     troop_member_id: int,
     pressure_bar: float,
     recorded_by_user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> TroopMember:
     """Erfasst das Einsatzziel und berechnet den Rückzugsdruck nach FAZ-Lehrbehelf.
 
@@ -651,7 +692,7 @@ def report_objective_reached(
     member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None or member.start_press is None:
         raise ValueError("Das Truppmitglied oder sein Anfangsdruck fehlt.")
-    now = _now()
+    now = ts or _now()
     member.objective_press = pressure_bar
     member.objective_press_at = now
     member.current_press = pressure_bar
@@ -666,7 +707,7 @@ def report_objective_reached(
         pressure_bar=pressure_bar,
         note="Einsatzziel erreicht",
         recorded_by_user_id=recorded_by_user_id,
-        ts=now,
+        ts=now, nachgetragen=nachgetragen,
     ))
     troop.last_meldung_at = now
     troop.last_meldung_text = "Einsatzziel erreicht"
@@ -674,7 +715,7 @@ def report_objective_reached(
     write_incident_change(
         db, troop.incident_id, "troop.objective_reached", "troop_member", member.id,
         before=None,
-        after={"pressure_bar": pressure_bar, "withdraw_press": member.withdraw_press},
+        after={"pressure_bar": pressure_bar, "withdraw_press": member.withdraw_press, **event_audit(ts, nachgetragen)},
         user_id=recorded_by_user_id,
     )
     return member
@@ -686,6 +727,8 @@ def report_back_pressure(
     troop_member_id: int,
     pressure_bar: float,
     recorded_by_user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> TroopMember:
     """Erfasst den Enddruck eines Truppmitglieds nach der Rückkehr."""
     pressure_bar = validate_pressure(pressure_bar)
@@ -698,7 +741,7 @@ def report_back_pressure(
     db.flush()
     write_incident_change(
         db, troop.incident_id, "troop.back_pressure_reported", "troop_member", member.id,
-        before=None, after={"pressure_bar": pressure_bar},
+        before=None, after={"pressure_bar": pressure_bar, **event_audit(ts, nachgetragen)},
         user_id=recorded_by_user_id,
     )
     return member
@@ -709,14 +752,16 @@ def update_meldung(
     troop: BreathingTroop,
     text: str | None,
     user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> None:
     """Setzt letzte Lagemeldung (Zeitpunkt + Text) ohne Druckprotokoll."""
-    troop.last_meldung_at = _now()
+    troop.last_meldung_at = ts or _now()
     troop.last_meldung_text = text or None
     db.flush()
     write_incident_change(
         db, troop.incident_id, "troop.meldung", "breathing_troop", troop.id,
-        before=None, after={"text": text},
+        before=None, after={"text": text, **event_audit(ts, nachgetragen)},
         user_id=user_id,
     )
 
@@ -726,9 +771,11 @@ def ack_warning(
     troop: BreathingTroop,
     kind: str,
     user_id: int | None = None,
+    ts: datetime | None = None,
+    nachgetragen: bool = False,
 ) -> None:
     """Quittiert den aktuellen Warnzustand nach ASÜW-Leitfaden/FwDV 7."""
-    now = _now()
+    now = ts or _now()
     if kind in ("one_third", "two_third"):
         raise ValueError("Die Kontrolle erfolgt über Druckabfrage, nicht über Quittieren.")
     if kind == "max_time":
@@ -743,7 +790,7 @@ def ack_warning(
     db.flush()
     write_incident_change(
         db, troop.incident_id, f"troop.warn_acked.{kind}", "breathing_troop", troop.id,
-        before=None, after={"kind": kind},
+        before=None, after={"kind": kind, **event_audit(ts, nachgetragen)},
         user_id=user_id,
     )
 
@@ -873,7 +920,7 @@ def _cleanup_breathing_sitzungen(db: Session, now: datetime) -> bool:
     """Abgelaufene und alte beendete Sitzungen in begrenzten Chargen aufraeumen."""
     from app.services.breathing_sitzung import SITZUNG_MAX_STUNDEN
 
-    changed = False
+    changed = cleanup_client_events(db, now)
     for sitzung in db.query(BreathingGeraetSitzung).join(
         Incident, Incident.id == BreathingGeraetSitzung.incident_id,
     ).filter(

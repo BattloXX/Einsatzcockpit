@@ -58,6 +58,43 @@
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(200);
   }
 
+  function showInfo(text) {
+    const old = document.getElementById('breathing-info-banner');
+    if (old) old.remove();
+    const banner = document.createElement('div');
+    banner.id = 'breathing-info-banner';
+    banner.setAttribute('role', 'status');
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10001;background:#e2e8f0;color:#1a202c;padding:12px 16px;';
+    banner.textContent = text;
+    document.body.prepend(banner);
+    setTimeout(() => banner.remove(), 6000);
+  }
+
+  const reported = new WeakSet();
+  function formFailed(event) {
+    const detail = event.detail, xhr = detail.xhr;
+    if (reported.has(xhr)) return;
+    reported.add(xhr);
+    const form = detail.elt?.closest('form') || event.target?.closest('form');
+    const path = detail.requestConfig?.path || form?.getAttribute('hx-post') || '';
+    if (!xhr.status) {
+      if (/\/(starten|trupp|erneut-einsetzen|notfall\/aufheben)$/.test(path)) {
+        showError('Diese Aktion ist nur online möglich.');
+      } else if (form) {
+        form.dispatchEvent(new CustomEvent('breathing-queued', { bubbles: true }));
+      }
+      return;
+    }
+    const correction = form?.querySelector('[name="korrektur_grund"]');
+    if (correction && xhr.status === 409 && String(xhr.responseText).includes('Der Druck kann nicht steigen.')) {
+      correction.closest('details').open = true;
+      form.querySelector('[data-correction-error]').textContent = xhr.responseText;
+      correction.focus();
+      return;
+    }
+    showError(describeFailure(xhr.status, xhr.responseText));
+  }
+
   function createConnTracker(now = Date.now) {
     let lostAt = null;
     return {
@@ -67,7 +104,7 @@
     };
   }
 
-  const api = { backoffMs, send, describeFailure, showError, createConnTracker };
+  const api = { backoffMs, send, describeFailure, showError, showInfo, formFailed, createConnTracker };
   if (typeof window !== 'undefined') window.ECPBreathingNet = api;
   if (typeof module !== 'undefined') module.exports = api;
 })();

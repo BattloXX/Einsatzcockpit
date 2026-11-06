@@ -525,7 +525,7 @@ test('ASUEW: fehlendes Plugin und Fehler bleiben optional', async () => {
   const { native, window } = umgebung();
   assert.equal(native.asuew.isAvailable(), false);
   for (const method of ['start', 'stop', 'refresh', 'getState', 'keepScreenOn', 'getSelbsttest',
-    'playTestAlarm', 'confirmAlarmTest', 'openSettings']) {
+    'playTestAlarm', 'confirmAlarmTest', 'openSettings', 'noteLocalEvent']) {
     assert.equal(await native.asuew[method](), null);
     window.Capacitor = { Plugins: { Atemschutz: { [method]() { throw Error('Pluginfehler'); } } } };
     assert.equal(await native.asuew[method](), null);
@@ -573,4 +573,16 @@ test('ASUEW: Energiesparmodus und Tracking-Ende geben aktives Wachhalten nicht f
   await native.asuew.keepScreenOn(false);
   native.stopLocation();
   assert.equal(sleeps, 1);
+});
+
+
+test('ASUEW: noteLocalEvent forwards local deadlines unchanged', async () => {
+  const { native, window } = umgebung();
+  const args = { troopId: 7, kind: 'kontrolle', stufe: 'one_third', atMs: 1793966412000 };
+  let received;
+  window.Capacitor = { Plugins: { Atemschutz: { noteLocalEvent: async value => { received = value; } } } };
+  assert.equal(await native.asuew.noteLocalEvent(args), true);
+  assert.equal(received, args);
+  delete window.Capacitor;
+  assert.equal(await native.asuew.noteLocalEvent(args), null);
 });

@@ -666,7 +666,8 @@ def test_pressure_reports_check_status(monkeypatch, report, allowed_statuses, st
     audit = MagicMock()
     monkeypatch.setattr(svc, "write_incident_change", audit)
     if status in allowed_statuses:
-        report(db, troop, 1, pressure)
+        kwargs = {"korrektur_grund": "Ablesefehler"} if report is log_pressure and pressure == 330 else {}
+        report(db, troop, 1, pressure, **kwargs)
         if report is report_back_pressure:
             assert member.back_press == pressure
         else:

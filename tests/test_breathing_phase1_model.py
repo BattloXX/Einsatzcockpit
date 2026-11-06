@@ -136,7 +136,8 @@ def test_migration_model_consistency_and_downgrade(tmp_path):
                     if expected.server_default is not None:
                         assert column["default"].strip("'\"") == expected.server_default.arg
                 if model is BreathingKontrolle:
-                    assert {c["name"] for c in columns} == set(table.c.keys())
+                    # Migration 0347 predates the offline flag introduced in 0350.
+                    assert {c["name"] for c in columns} == set(table.c.keys()) - {"nachgetragen"}
                 actual_fks = sa.inspect(conn).get_foreign_keys(table.name)
                 for fk in actual_fks:
                     expected_fk = next(iter(table.c[fk["constrained_columns"][0]].foreign_keys))

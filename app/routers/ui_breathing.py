@@ -15,9 +15,11 @@ from app.db import get_db
 from app.models.breathing import BOTTLE_PRESETS, TROOP_STATUS_LABELS, BreathingTroop, BreathingWarnung
 from app.models.incident import Incident
 from app.models.master import Member, OrgSettings
+from app.services.breathing_events import claim_client_event, event_audit, parse_erfasst_at, valid_client_event_id
 from app.services.breathing_service import (
     AsuewSettings,
     InvalidTroopTransition,
+    PressureIncreaseConflict,
     ReadinessWarning,
     ack_warning,
     asuew_heartbeat_fehlt,
@@ -43,6 +45,19 @@ from app.services.breathing_sitzung import validiere_sitzung
 from app.services.broadcast import manager
 
 router = APIRouter()
+
+
+def _ereignis_vorbereiten(
+    db: Session, incident_id: int, user_id: int, route: str,
+    client_event_id: str | None, erfasst_at: str | None,
+) -> tuple[datetime, bool, bool]:
+    ts, nachgetragen = parse_erfasst_at(erfasst_at, datetime.now(UTC).replace(tzinfo=None))
+    claimed = True
+    if client_event_id is not None:
+        claimed = claim_client_event(
+            db, incident_id, user_id, valid_client_event_id(client_event_id), route, ts, nachgetragen,
+        )
+    return ts, nachgetragen, claimed
 
 
 def _incident_asuew_settings(db: Session, incident_id: int) -> AsuewSettings:
@@ -332,6 +347,8 @@ def back_pressure_view(
     incident_id: int, troop_id: int, request: Request,
     troop_member_id: int = Form(...),
     pressure_bar: float = Form(...),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -342,11 +359,20 @@ def back_pressure_view(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
-        member = report_back_pressure(
-            db, troop, troop_member_id, pressure_bar,
-            recorded_by_user_id=request.state.user.id,
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "enddruck", client_event_id, erfasst_at,
         )
     except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    try:
+        member = report_back_pressure(
+            db, troop, troop_member_id, pressure_bar,
+            recorded_by_user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen,
+        )
+    except ValueError as exc:
+        db.rollback()
         return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     run_async(manager.broadcast, incident_id, {
@@ -360,6 +386,8 @@ def back_pressure_view(
 def update_status(
     incident_id: int, troop_id: int, request: Request,
     status: str = Form(...),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -369,10 +397,20 @@ def update_status(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
-        update_troop_status(db, troop, status, user_id=request.state.user.id)
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "status", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
+    try:
+        update_troop_status(db, troop, status, user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen)
     except InvalidTroopTransition as exc:
+        db.rollback()
         return Response(str(exc), status_code=409)
     except ValueError as exc:
+        db.rollback()
         return Response(str(exc), status_code=400)
     db.commit()
     warning = get_warning_level(troop, _incident_asuew_settings(db, incident_id).gelb_prozent)
@@ -390,6 +428,9 @@ def log_pressure_view(
     troop_member_id: int = Form(...),
     pressure_bar: float = Form(...),
     note: str = Form(""),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
+    korrektur_grund: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -399,11 +440,22 @@ def log_pressure_view(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
-        log_pressure(db, troop, troop_member_id, pressure_bar,
-                 note=note.strip() or None,
-                 recorded_by_user_id=request.state.user.id)
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "druck", client_event_id, erfasst_at,
+        )
     except ValueError as exc:
         return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    try:
+        log_pressure(db, troop, troop_member_id, pressure_bar,
+                 note=note.strip() or None,
+                 recorded_by_user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen,
+                 korrektur_grund=korrektur_grund)
+    except ValueError as exc:
+        db.rollback()
+        code = 409 if isinstance(exc, PressureIncreaseConflict) else 400
+        return Response(str(exc), status_code=code, media_type="text/plain")
     db.commit()
     updated_troop = db.get(BreathingTroop, troop_id)
     assert updated_troop is not None
@@ -428,6 +480,8 @@ def objective_reached_view(
     incident_id: int, troop_id: int, request: Request,
     troop_member_id: int = Form(...),
     pressure_bar: float = Form(...),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -438,11 +492,20 @@ def objective_reached_view(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
-        member = report_objective_reached(
-            db, troop, troop_member_id, pressure_bar,
-            recorded_by_user_id=request.state.user.id,
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "einsatzziel", client_event_id, erfasst_at,
         )
     except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    try:
+        member = report_objective_reached(
+            db, troop, troop_member_id, pressure_bar,
+            recorded_by_user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen,
+        )
+    except ValueError as exc:
+        db.rollback()
         return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     warning = get_warning_level(troop, _incident_asuew_settings(db, incident_id).gelb_prozent)
@@ -481,6 +544,8 @@ def active_breathing_warnings(
 def troop_meldung(
     incident_id: int, troop_id: int, request: Request,
     text: str = Form(""),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -489,7 +554,15 @@ def troop_meldung(
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
-    update_meldung(db, troop, text.strip() or None, user_id=request.state.user.id)
+    try:
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "meldung", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    update_meldung(db, troop, text.strip() or None, user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen)
     db.commit()
     time_warn = get_time_warning(troop)
     run_async(manager.broadcast, incident_id, {
@@ -504,6 +577,8 @@ def troop_meldung(
 def troop_ack(
     incident_id: int, troop_id: int, request: Request,
     kind: str = Form(...),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -515,8 +590,17 @@ def troop_ack(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
-        ack_warning(db, troop, kind, user_id=request.state.user.id)
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "ack", client_event_id, erfasst_at,
+        )
     except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    try:
+        ack_warning(db, troop, kind, user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen)
+    except ValueError as exc:
+        db.rollback()
         return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     run_async(manager.broadcast, incident_id, {
@@ -533,6 +617,8 @@ def troop_kontrolle_view(
     pressure_bar: float | None = Form(None),
     troop_member_id: int | None = Form(None),
     note: str = Form(""),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -542,12 +628,21 @@ def troop_kontrolle_view(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "kontrolle", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    try:
         record_kontrolle(
             db, troop, stufe, art, pressure_bar=pressure_bar,
             troop_member_id=troop_member_id, note=note.strip() or None,
-            user_id=request.state.user.id,
+            user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen,
         )
     except ValueError as exc:
+        db.rollback()
         return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     run_async(manager.broadcast, incident_id, {
@@ -560,6 +655,8 @@ def troop_kontrolle_view(
 def troop_funk_view(
     incident_id: int, troop_id: int, request: Request,
     aktiv: str = Form(...),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -571,10 +668,19 @@ def troop_funk_view(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "funkverlust", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    try:
         if aktiv not in ("1", "0"):
             raise ValueError("Aktiv muss 1 oder 0 sein.")
-        set_funk_verloren(db, troop, aktiv == "1", user_id=request.state.user.id)
+        set_funk_verloren(db, troop, aktiv == "1", user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen)
     except ValueError as exc:
+        db.rollback()
         return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     run_async(manager.broadcast, incident_id, {
@@ -591,6 +697,8 @@ def troop_funk_view(
 def troop_notfall_view(
     incident_id: int, troop_id: int, request: Request,
     bestaetigt: str = Form(""),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -599,10 +707,19 @@ def troop_notfall_view(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     try:
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "notfall", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
+    try:
         if bestaetigt != "1":
             raise ValueError("Notfall muss ausdrücklich bestätigt werden.")
-        declare_notfall(db, troop, user_id=request.state.user.id)
+        declare_notfall(db, troop, user_id=request.state.user.id, ts=ts, nachgetragen=nachgetragen)
     except ValueError as exc:
+        db.rollback()
         return Response(str(exc), status_code=400, media_type="text/plain")
     db.commit()
     run_async(manager.broadcast, incident_id, {
@@ -643,6 +760,8 @@ def troop_details_view(
     funkkanal: str | None = Form(None),
     ueberwacher_name: str | None = Form(None),
     uebernehmen: str = Form(""),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -651,6 +770,14 @@ def troop_details_view(
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
+    try:
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "details", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
     form_data = run_async(request.form)
     # Leere, ausdrücklich gesendete Felder dürfen bestehende Angaben löschen.
     if angriffsweg is None and "angriffsweg" in form_data:
@@ -674,7 +801,7 @@ def troop_details_view(
             setattr(troop, field, value.strip()[:length] or None)
     write_incident_change(
         db, incident_id, "troop.details", "breathing_troop", troop_id,
-        before=before, after={field: getattr(troop, field) for field in fields},
+        before=before, after={**{field: getattr(troop, field) for field in fields}, **event_audit(ts, nachgetragen)},
         user_id=request.state.user.id,
     )
     db.commit()
@@ -688,6 +815,8 @@ def troop_details_view(
 def troop_standort(
     incident_id: int, troop_id: int, request: Request,
     location_text: str = Form(""),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -696,7 +825,20 @@ def troop_standort(
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
+    try:
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "standort", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
     troop.location_text = location_text.strip() or None
+    write_incident_change(
+        db, incident_id, "troop.standort", "breathing_troop", troop_id,
+        before=None, after={"location_text": troop.location_text, **event_audit(ts, nachgetragen)},
+        user_id=request.state.user.id,
+    )
     db.commit()
     run_async(manager.broadcast, incident_id, {
         "type": "troop_standort", "troop_id": troop_id,
@@ -709,6 +851,8 @@ def troop_standort(
 def troop_auftrag(
     incident_id: int, troop_id: int, request: Request,
     task_text: str = Form(""),
+    client_event_id: str | None = Form(None),
+    erfasst_at: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
     _guard: None = Depends(require_breathing_enabled),
@@ -717,7 +861,20 @@ def troop_auftrag(
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
+    try:
+        ts, nachgetragen, claimed = _ereignis_vorbereiten(
+            db, incident_id, request.state.user.id, "auftrag", client_event_id, erfasst_at,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400, media_type="text/plain")
+    if not claimed:
+        return Response(status_code=204)
     troop.task_text = task_text.strip() or None
+    write_incident_change(
+        db, incident_id, "troop.auftrag", "breathing_troop", troop_id,
+        before=None, after={"task_text": troop.task_text, **event_audit(ts, nachgetragen)},
+        user_id=request.state.user.id,
+    )
     db.commit()
     run_async(manager.broadcast, incident_id, {
         "type": "troop_auftrag", "troop_id": troop_id, "task_text": troop.task_text,

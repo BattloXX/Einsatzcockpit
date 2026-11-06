@@ -116,3 +116,73 @@ test('connection tracker preserves the first loss until the next open', () => {
   now += 1500;
   assert.equal(tracker.lostSeconds(), 1);
 });
+
+function bannerEnvironment() {
+  const elements = new Map(), timers = [], events = [];
+  const document = {
+    getElementById: id => elements.get(id),
+    createElement() { return {
+      style: {}, setAttribute(key, value) { this[key] = value; },
+      addEventListener() {}, append(...children) { this.children = children; },
+      remove() { elements.delete(this.id); }
+    }; },
+    body: { prepend(element) { elements.set(element.id, element); } }
+  };
+  const net = environment({ document,
+    setTimeout(fn, ms) { timers.push({ fn, ms }); },
+    CustomEvent: class { constructor(type, options) { this.type = type; this.bubbles = options.bubbles; } }
+  });
+  const form = { closest: () => form, getAttribute: () => '/einsatz/42/atemschutz/7/druck',
+    querySelector: () => null, dispatchEvent: event => events.push(event) };
+  return { net, elements, timers, events, form };
+}
+
+test('showInfo uses neutral status banner, replaces previous message and closes after six seconds', () => {
+  const e = bannerEnvironment();
+  e.net.showInfo('Offline vorgemerkt');
+  const first = e.elements.get('breathing-info-banner');
+  assert.equal(first.role, 'status');
+  assert.equal(first.textContent, 'Offline vorgemerkt');
+  assert.equal(e.elements.has('breathing-error-banner'), false);
+  e.net.showInfo('Noch eine Eingabe');
+  assert.notEqual(e.elements.get('breathing-info-banner'), first);
+  assert.equal(e.timers[1].ms, 6000);
+  e.timers[1].fn();
+  assert.equal(e.elements.size, 0);
+});
+
+test('formFailed status zero emits queued on form without error; HTTP failure shows error once', () => {
+  const e = bannerEnvironment();
+  e.net.formFailed({ detail: { xhr: { status: 0 } }, target: e.form });
+  assert.equal(e.events[0].type, 'breathing-queued');
+  assert.equal(e.events[0].bubbles, true);
+  assert.equal(e.elements.size, 0);
+  const event = { detail: { xhr: { status: 400, responseText: 'Ungültiger Druck' } }, target: e.form };
+  e.net.formFailed(event);
+  const banner = e.elements.get('breathing-error-banner');
+  assert.equal(banner.children[0].textContent, 'Nicht gespeichert: Ungültiger Druck');
+  e.net.formFailed(event);
+  assert.equal(e.elements.get('breathing-error-banner'), banner);
+});
+
+test('online-only network failure reports clear error without queued event', () => {
+  for (const route of ['starten', 'trupp', 'erneut-einsetzen', 'notfall/aufheben']) {
+    const e = bannerEnvironment();
+    e.net.formFailed({ detail: { xhr: { status: 0 }, requestConfig: { path: '/einsatz/42/atemschutz/7/' + route } }, target: e.form });
+    assert.equal(e.events.length, 0);
+    assert.equal(e.elements.get('breathing-error-banner').children[0].textContent, 'Diese Aktion ist nur online möglich.');
+  }
+});
+
+test('pressure increase conflict opens correction and displays error next to field', () => {
+  const e = bannerEnvironment(), details = {}, error = {};
+  let focused = false;
+  const field = { closest: () => details, focus() { focused = true; } };
+  e.form.querySelector = selector => selector === '[data-correction-error]' ? error : field;
+  const message = 'Der Druck kann nicht steigen. Bei einer Korrektur bitte einen Grund angeben.';
+  e.net.formFailed({ detail: { xhr: { status: 409, responseText: message } }, target: e.form });
+  assert.equal(details.open, true);
+  assert.equal(error.textContent, message);
+  assert.equal(focused, true);
+  assert.equal(e.elements.size, 0);
+});

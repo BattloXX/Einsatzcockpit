@@ -270,6 +270,7 @@ class BreathingKontrolle(Base):
     stufe: Mapped[str] = mapped_column(String(12), nullable=False)
     faellig_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     erledigt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    nachgetragen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     niedrigster_druck: Mapped[float | None] = mapped_column(Float, nullable=True)
     troop_member_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("troop_member.id", ondelete="SET NULL"), nullable=True
@@ -325,6 +326,7 @@ class PressureLog(Base):
     troop_member_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("troop_member.id", ondelete="CASCADE"), nullable=False
     )
+    nachgetragen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     pressure_bar: Mapped[float] = mapped_column(Float, nullable=False)
     recorded_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
@@ -407,3 +409,20 @@ class BreathingGeraetSitzung(Base):
     letzter_heartbeat_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     beendet_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ende_grund: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
+class BreathingClientEvent(Base):
+    __tablename__ = "breathing_client_event"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "client_event_id", name="uq_breathing_client_event_incident"),
+        Index("ix_breathing_client_event_empfangen_at", "empfangen_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    client_event_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    route: Mapped[str] = mapped_column(String(30), nullable=False)
+    erfasst_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    empfangen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    nachgetragen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")

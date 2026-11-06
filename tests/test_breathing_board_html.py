@@ -119,7 +119,7 @@ def test_due_control_requires_pressure_or_no_contact(client, breathing_routes, m
     for form in due_forms:
         assert 'name="_csrf"' in form
         assert 'hx-swap="none"' in form
-        assert "ECPBreathingNet.describeFailure" in form
+        assert "ECPBreathingNet.formFailed($event)" in form
     assert re.findall(r'name="pressure_bar" value="(\d+)"', due_forms[0]) == [str(v) for v in range(300, 0, -10)]
     assert not re.search(r"ackWarning\([^\n]*'(one_third|two_third)'", response.text)
     assert 'name="stufe" value="frei"' in response.text
@@ -472,3 +472,23 @@ def test_board_heartbeat_hint(client, breathing_routes, pflicht, age, status, ex
     assert ("Kein Überwachungsgerät in der App aktiv (kein Heartbeat seit über 60 Sekunden)." in page.text) is expected
     if expected:
         assert "Überwachung in der Einsatzcockpit-App öffnen oder Funkkontrolle der Trupps durchführen." in page.text
+
+
+def test_board_offline_outbox_and_pressure_correction(client, breathing_routes):
+    ctx = breathing_routes
+    ctx.troop.status = "im_einsatz"
+    ctx.db.commit()
+    response = client.get(f"/einsatz/{ctx.incident_id}/atemschutz")
+
+    assert response.status_code == 200
+    assert '<script src="/static/js/breathing_outbox.js?v=' in response.text
+    assert 'id="breathing-outbox" role="status"' in response.text
+    pressure_forms = re.findall(r'<form\b[^>]*hx-post="' + re.escape(ctx.url) + r'/druck".*?</form>', response.text, re.S)
+    assert pressure_forms
+    for form in pressure_forms:
+        assert 'name="korrektur_grund"' in form
+        assert "Korrektur (Wert war falsch)" in form
+        assert '@breathing-queued="open = false;' in form
+    for form in re.findall(r'<form\b.*?</form>', response.text, re.S):
+        assert "ECPBreathingNet.showError(" not in form
+    assert "ECPBreathingNet.formFailed($event)" in response.text
