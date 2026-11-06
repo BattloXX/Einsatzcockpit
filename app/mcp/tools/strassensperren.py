@@ -497,6 +497,7 @@ async def strassensperre_dokument_uebergeben(
     ),
     required_roles=("objekt_verwalter",),
     module_check=strassensperren_effective_enabled,
+    hauptloop=True,  # Abschnittsermittlung/Adresspruefung nutzt den globalen Geocoding-Lock.
 )
 async def strassensperre_entwurf_aus_pdf(
     context: MCPContext,
@@ -594,6 +595,7 @@ async def strassensperren_kataloge(context: MCPContext) -> dict[str, object]:
     ),
     required_roles=("objekt_verwalter",),
     module_check=strassensperren_effective_enabled,
+    hauptloop=True,  # Abschnittsermittlung/Adresspruefung nutzt den globalen Geocoding-Lock.
 )
 async def strassensperre_anlegen(
     context: MCPContext,
@@ -783,6 +785,7 @@ async def strassensperre_anlegen(
     ),
     required_roles=("objekt_verwalter",),
     module_check=strassensperren_effective_enabled,
+    hauptloop=True,  # Abschnittsermittlung/Adresspruefung nutzt den globalen Geocoding-Lock.
 )
 async def strassensperre_aktualisieren(
     context: MCPContext, road_closure_id: int, felder: dict, version: int | None = None,
@@ -864,6 +867,7 @@ async def strassensperre_aktualisieren(
     name="strassensperre_geometrie_ermitteln",
     description="Ermittelt einen OSM-Straßenabschnitt; hoch kann anschließend bestätigt werden.",
     required_roles=("objekt_verwalter",), module_check=strassensperren_effective_enabled,
+    hauptloop=True,  # Abschnittsermittlung/Adresspruefung nutzt den globalen Geocoding-Lock.
 )
 async def strassensperre_geometrie_ermitteln(
     context: MCPContext, road_closure_id: int | None = None, street: str = "", von: str = "", bis: str = "",

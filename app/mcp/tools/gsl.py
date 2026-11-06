@@ -350,6 +350,7 @@ async def gsl_ressource_fuehrer_setzen(
     description="Rotiert und versendet einen Zugang ausschließlich per SMS; nie als Link in der Antwort.",
     required_roles=READ,
     module_check=_module_check,
+    hauptloop=True,
 )
 async def gsl_ressource_zugang_senden(
     context: MCPContext, lage_id: int, einheit_id: int, bestaetigt: bool = False
@@ -529,6 +530,7 @@ async def gsl_ressource_ausstattung(
     name="gsl_ressource_anlegen",
     description="Legt eine GSL-Ressource über denselben Service wie die Weboberfläche an.",
     required_roles=READ, module_check=_module_check,
+    hauptloop=True,
 )
 async def gsl_ressource_anlegen(
     context: MCPContext, lage_id: int, resource_type: str, label: str, vehicle_id: int | None = None,
@@ -570,7 +572,7 @@ async def gsl_ressource_anlegen(
     "Disponiert eine Einheit zu einer Einsatzstelle; auftragsart ist erkundung oder abarbeitung. "
     "Ohne auftragsart: erkundung, solange die Stelle in Eingegangen/Erkundung steht, sonst abarbeitung."
 ),
-               required_roles=READ, module_check=_module_check)
+               required_roles=READ, module_check=_module_check, hauptloop=True)
 async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id: int, site_id: int,
                                   auftrag: str | None = None, reihenfolge: int | None = None,
                                   auftragsart: str | None = None) -> dict[str, object]:
@@ -610,7 +612,7 @@ async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id:
 
 
 @register_tool(name="gsl_auftrag_aendern", description="Ändert einen GSL-Auftrag.", required_roles=READ,
-               module_check=_module_check)
+               module_check=_module_check, hauptloop=True)
 async def gsl_auftrag_aendern(context: MCPContext, lage_id: int, dispatch_id: int, auftrag: str | None = None,
                               reihenfolge: int | None = None) -> dict[str, object]:
     try:
@@ -641,7 +643,7 @@ async def gsl_auftrag_aendern(context: MCPContext, lage_id: int, dispatch_id: in
 @register_tool(name="gsl_auftrag_zurueckziehen", description=(
     "Zieht aktive Aufträge mit Benachrichtigung der Einheit zurück; fertige Aufträge werden nur ohne SMS abgezogen."
 ),
-               required_roles=READ, module_check=_module_check)
+               required_roles=READ, module_check=_module_check, hauptloop=True)
 async def gsl_auftrag_zurueckziehen(context: MCPContext, lage_id: int, einheit_id: int, site_id: int,
                                     grund: str | None = None) -> dict[str, object]:
     try:
@@ -686,7 +688,7 @@ async def gsl_auftrag_zurueckziehen(context: MCPContext, lage_id: int, einheit_i
 
 @register_tool(name="gsl_einsatz_abschliessen", description=(
     "Schließt eine Einsatzstelle ab; aktive_zurueckziehen zieht aktive Aufträge zuvor zurück."
-), required_roles=MANAGE, module_check=_module_check)
+), required_roles=MANAGE, module_check=_module_check, hauptloop=True)
 async def gsl_einsatz_abschliessen(
     context: MCPContext, lage_id: int, site_id: int, aktive_zurueckziehen: bool = False,
 ) -> dict[str, object]:
@@ -718,7 +720,7 @@ async def gsl_einsatz_abschliessen(
 
 
 @register_tool(name="gsl_einsatz_wiedereroeffnen", description="Öffnet eine abgeschlossene Einsatzstelle wieder.",
-               required_roles=MANAGE, module_check=_module_check)
+               required_roles=MANAGE, module_check=_module_check, hauptloop=True)
 async def gsl_einsatz_wiedereroeffnen(context: MCPContext, lage_id: int, site_id: int) -> dict[str, object]:
     try:
         lage = _lage(context, lage_id)

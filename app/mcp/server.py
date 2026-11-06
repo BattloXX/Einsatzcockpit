@@ -1,6 +1,7 @@
 """DB-gestuetzter OAuth-Provider und Streamable-HTTP-MCP-Server."""
 # ruff: noqa: E501
 
+import asyncio
 import json
 import logging
 import secrets
@@ -24,11 +25,12 @@ from pydantic import AnyHttpUrl, AnyUrl, BaseModel
 
 from app.config import settings
 from app.core.fehlerlog import neue_korrelations_id
+from app.core.permissions import has_role
 from app.core.security import hash_api_key
 from app.db import SessionLocal
-from app.mcp.context import MCPPermissionError, load_live_context
+from app.mcp.context import MCPContext, MCPPermissionError, load_live_context
 from app.mcp.fehler import ExternerDienstFehler
-from app.mcp.registry import TOOLS
+from app.mcp.registry import TOOLS, ToolDefinition
 from app.mcp.tools import alarm_parser as _alarm_parser  # noqa: F401 - registriert Alarmdiagnose
 from app.mcp.tools import benutzer as _benutzer  # noqa: F401 - registriert Benutzer-Lesetools
 from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsatz-Lesetools
@@ -276,10 +278,7 @@ logger = logging.getLogger(__name__)
 provider = EinsatzcockpitOAuthProvider()
 
 
-def _live_context_for_tool(tool_name: str):
-    from mcp.server.auth.middleware.auth_context import get_access_token
-
-    token = get_access_token()
+def _live_context_for_tool(tool_name: str, token: AccessToken | None):
     if not token or not token.subject or not token.claims:
         raise MCPPermissionError("Nicht angemeldet.")
     definition = TOOLS[tool_name]
@@ -295,15 +294,44 @@ def _live_context_for_tool(tool_name: str):
         raise
 
 
+def _handler_im_thread(definition: ToolDefinition, context: MCPContext, arguments: dict) -> dict[str, object]:
+    try:
+        return asyncio.run(definition.handler(context, **arguments))
+    finally:
+        # Auch bei Abbruch des wartenden Requests erst nach dem Handler schliessen.
+        context.db.close()
+
+
 async def _call_registered_tool(tool_name: str, **arguments) -> dict[str, object]:
+    from mcp.server.auth.middleware.auth_context import get_access_token
     from mcp.server.mcpserver.exceptions import ToolError
 
+    token = get_access_token()
+    laden = asyncio.create_task(asyncio.to_thread(_live_context_for_tool, tool_name, token))
     try:
-        definition, context = _live_context_for_tool(tool_name)
+        definition, context = await asyncio.shield(laden)
+    except asyncio.CancelledError as abbruch:
+        # to_thread laeuft nach Request-Abbruch weiter. Seine Session darf weder
+        # verloren gehen noch parallel zum noch laufenden Worker geschlossen werden.
+        try:
+            _, context = await laden
+            await asyncio.to_thread(context.db.close)
+        finally:
+            raise abbruch
     except MCPPermissionError as exc:
         raise ToolError(str(exc)) from exc
     try:
-        return await definition.handler(context, **arguments)
+        if definition.hauptloop:
+            return await definition.handler(context, **arguments)
+        worker = asyncio.create_task(asyncio.to_thread(_handler_im_thread, definition, context, arguments))
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError as abbruch:
+            # Auch ein noch im Executor wartender Handler muss sein finally erreichen.
+            try:
+                await worker
+            finally:
+                raise abbruch
     except ExternerDienstFehler as exc:
         correlation_id = neue_korrelations_id()
         logger.warning("Externer MCP-Fehler: code=%s tool=%s correlation_id=%s", exc.code, tool_name, correlation_id)
@@ -320,7 +348,36 @@ async def _call_registered_tool(tool_name: str, **arguments) -> dict[str, object
         logger.exception("MCP-Tool %s ist fehlgeschlagen", tool_name)
         raise
     finally:
-        context.db.close()
+        if definition.hauptloop:
+            await asyncio.to_thread(context.db.close)
+
+
+def _sichtbare_tools(user_id: int, org_id: int) -> set[str]:
+    """Live-Rechte einmal laden; Modulpruefungen je Funktionsobjekt wiederverwenden."""
+    db = SessionLocal()
+    try:
+        try:
+            context = load_live_context(db, user_id, org_id, ())
+        except MCPPermissionError:
+            return set()
+        sichtbar = set()
+        module = {}
+        for name, definition in TOOLS.items():
+            if definition.required_roles and not has_role(context.user, *definition.required_roles):
+                continue
+            check = definition.module_check
+            if check is not None:
+                if check not in module:
+                    try:
+                        module[check] = check(context.org_id, db)
+                    except MCPPermissionError:
+                        module[check] = False
+                if not module[check]:
+                    continue
+            sichtbar.add(name)
+        return sichtbar
+    finally:
+        db.close()
 
 
 class EinsatzcockpitMCPServer(MCPServer):
@@ -332,21 +389,8 @@ class EinsatzcockpitMCPServer(MCPServer):
         token = get_access_token()
         if not token or not token.subject or not token.claims:
             return []
-        db = SessionLocal()
-        try:
-            visible = set()
-            for name, definition in TOOLS.items():
-                try:
-                    context = load_live_context(
-                        db, int(token.subject), int(token.claims["org_id"]), definition.required_roles
-                    )
-                    if not definition.module_check or definition.module_check(context.org_id, db):
-                        visible.add(name)
-                except MCPPermissionError:
-                    continue
-            return [tool for tool in tools if tool.name in visible]
-        finally:
-            db.close()
+        visible = await asyncio.to_thread(_sichtbare_tools, int(token.subject), int(token.claims["org_id"]))
+        return [tool for tool in tools if tool.name in visible]
 
 
 _base = settings.effective_public_base_url.rstrip("/")

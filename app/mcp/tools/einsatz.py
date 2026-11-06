@@ -511,6 +511,7 @@ def _einheit(context: MCPContext, incident: Incident, einheit_id: int | None) ->
     name="einsatz_auftrag_anlegen",
     description="Legt einen Auftrag im sichtbaren, offenen Einsatzboard an.",
     required_roles=EINSATZ_SCHREIB_ROLLEN,
+    hauptloop=True,
 )
 async def einsatz_auftrag_anlegen(
     context: MCPContext,
@@ -568,6 +569,7 @@ async def einsatz_auftrag_anlegen(
     name="einsatz_meldung_anlegen",
     description="Legt eine Meldung im sichtbaren, offenen Einsatzboard an.",
     required_roles=EINSATZ_SCHREIB_ROLLEN,
+    hauptloop=True,
 )
 async def einsatz_meldung_anlegen(
     context: MCPContext,

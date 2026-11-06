@@ -300,6 +300,7 @@ async def objekt_karte_referenzpunkte(
                  "Alternativen: Orthofoto-Klick oder dokumentierte Koordinate."),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_modul_aktiv,
+    hauptloop=True,  # Redis-Clients der Geodienste nicht an kurzlebige Worker-Loops binden.
 )
 async def objekt_karte_gebaeude_umrisse(context: MCPContext, objekt_id: int, radius_m: int = 150) -> dict:
     from app.mcp.context import MCPPermissionError
@@ -339,6 +340,7 @@ def _overpass_freigabe_pruefen(context: MCPContext, objekt: Objekt) -> tuple[flo
     ),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_modul_aktiv,
+    hauptloop=True,  # Redis-Clients der Geodienste nicht an kurzlebige Worker-Loops binden.
 )
 async def objekt_karte_georef_zuordnen(
     context: MCPContext, objekt_id: int, dokument_id: int, seite: int, bild_ecken: list[dict],

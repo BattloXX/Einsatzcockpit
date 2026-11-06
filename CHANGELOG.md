@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **MCP blockiert den Server nicht mehr:** Synchrone Datenbankabfragen bei Werkzeuglisten und normalen Werkzeugaufrufen laufen in Worker-Threads. Damit blockieren sie den Event-Loop nicht mehr und verursachen keine gleichzeitigen Geraete-Timeouts. Broadcast-Werkzeuge bleiben auf dem Haupt-Loop.
+
 - **Strassensperren mit mehreren Strassen:** Eine Verordnung kann mehrere Straßenabschnitte enthalten. Suche, Dublettenerkennung, Detailansicht, öffentliche Daten und Teams berücksichtigen alle Abschnitte. Das Formular ergänzt Straßen über „+ Weitere Straße“ und bietet Adressprüfung, Geometrieermittlung und Kartenbearbeitung je Abschnitt. PDF-Entwürfe belegen die Abschnittsliste vor; MCP unterstützt Anlage und gezielte Geometrieprüfung je Abschnitt. Migration 0351.
 
 - **Dienstüberwachung: keine Dauer-Störungs-SMS mehr bei unklarer Alarm-Zustellung:** Ein Alarmierungsauftrag mit unklarem Ergebnis (`uncertain`) hält die Alarm-Outbox nur noch 2 Stunden auf „teilweise“ statt dauerhaft. Teilstörungen werden einmal gemeldet und nicht mehr im Wiederholungstakt; nur ein Vollausfall wird weiterhin periodisch erinnert. Die Meldung nennt nur noch die tatsächlich betroffenen Punkte (kein „0 … seit über 2 Minuten offen“ mehr) und den Kanal. Keine Migration.
