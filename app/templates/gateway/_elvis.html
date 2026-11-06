@@ -1,0 +1,22 @@
+<div class="sys-card" id="elvis-panel">
+  <div class="sys-card__head"><div class="gwx-panel__t">{{ icon("settings", size="md") }} ELVis-Einsatzmeldungen</div></div>
+  <div class="gwx-panel__bd">
+    <p class="sys-small sys-muted">In ELVis (LWZ Vorarlberg) den Batch-Aufruf des Windows-Agents einrichten.
+      Der Agent leitet die Einsatzfelder mit einer stabilen Event-ID weiter. Zuerst im Modus
+      Protokollieren die Felder und die Leitstellennummer mit echten LWZ-Beispielen prüfen.
+      Nur Alarmquelle darf Einsätze und Alarmierungen auslösen. Test- und Dummy-Aufrufe werden immer nur protokolliert.</p>
+    <form method="post" action="/gateway/{{ gw.id }}/elvis" hx-post="/gateway/{{ gw.id }}/elvis"
+          hx-target="#elvis-panel" hx-swap="outerHTML" class="sys-row sys-wrap sys-mt-2">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label for="elvis-mode" class="form-label">ELVis-Modus</label>
+      <select id="elvis-mode" name="mode">
+        {% for value, label in [('aus', 'Aus'), ('protokollieren', 'Protokollieren'), ('alarmquelle', 'Alarmquelle')] %}
+        <option value="{{ value }}" {{ 'selected' if elvis_mode == value }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+      {% if elvis_saved %}<span role="status">Gespeichert</span>{% endif %}
+    </form>
+    {% include "gateway/_elvis_events.html" %}
+  </div>
+</div>

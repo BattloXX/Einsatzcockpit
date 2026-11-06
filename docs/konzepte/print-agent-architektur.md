@@ -350,3 +350,55 @@ Deployment: Zuerst Migration 0306 ausfuehren, dann alle Cloud-Worker neu starten
 Sockets muessen neu verbinden). Danach einen neuen Windows-Agent-Release mit Protokoll-,
 Reconnect- und Tray-Korrektur installieren. Token und Dienstkonto LocalSystem beibehalten.
 KDOF1 muss danach per aktueller Diagnose und Testdruck vor Ort abgenommen werden.
+
+## ELVis-Einsatz-Events (Cloud, Phase 1)
+
+Der Windows-Agent kann ELVis-Batch-Aufrufe der LWZ als
+`{type:"elvis_event", id:"<Outbox-ID>", payload:{event_id, received_at, args}}`
+weiterleiten. `event_id` (1–128 Zeichen) bleibt bei allen Wiederholungen unverändert.
+Die Cloud antwortet nach persistierter Annahme mit `ack {id}`; ungültige Events erhalten
+`error {id,error}`. HTTP-Fallback: `POST /api/v1/gateway/elvis-events`, Bearer-Device-Token
+und JSON `{event_id, received_at, args}`. Nur `kind=windows_agent` ist erlaubt.
+HTTP liefert `ingest_id`, `duplicate`, `einsatz_id`, `modus`, `test`, `parse_status`,
+`process_status`; bei Aus ist `ingest_id=null`. Maximal 32 KiB pro Nachricht/Body,
+HTTP zusätzlich 120 Aufrufe pro Minute/IP über den bestehenden Rate-Limiter.
+`received_at` wird als Gateway-Empfangszeit gespeichert; Cloud-Zeit bleibt serverseitig.
+
+Org-Admins wählen auf der Agent-Detailseite (mit CSRF und HTMX) den Modus:
+
+- `aus`: quittieren und verwerfen.
+- `protokollieren` (Default): `AlarmIngest(source="elvis", process_status="logged")`,
+  ohne Einsatzverarbeitung oder Alarmierung.
+- `alarmquelle`: strukturierte Felder auf das Parser-/Apply-Schema abbilden,
+  `process_ingest` und bestehenden Alarm-/Drucknachlauf verwenden.
+
+Die Cloud speichert den Modus migrationsfrei in `Gateway.wut_config.elvis.mode`,
+unter Erhalt anderer Konfigurationswerte. `agent_info` ist ungeeignet, weil der Agent
+sein Inventar überschreibt. `config_sync` enthält zusätzlich `elvis:{mode}`;
+ältere Agents können das Feld ignorieren. Die Detailseite zeigt die letzten 20 Events.
+Nur bekannte Batch-Felder werden gespeichert, Steuerzeichen entfernt und Werte auf
+500 Zeichen (Kommentar 2000) gekürzt. Organisation/Org-IDs aus dem Payload steuern
+niemals die Zuordnung. Test-/Dummy-Marker in Nr/ESW/Einsatz/Kommentar, leere/0-Nr,
+F30-Proberufe oder `test:true` erzwingen Protokollierung, auch im Alarmquellenmodus und bei Recovery.
+
+**Dedup-Annahme:** `Nr` entspricht der lesbaren DIBOS-/LIS-Leitstellennummer
+(Buchstabe plus acht Ziffern, z. B. `f12345678`). Nur dieses Format wird als
+`lis_operation_number` verwendet. `ID` gilt vorläufig als interne ELVis-ID;
+sie wird weder als Leitstellennummer noch als `external_key` verwendet.
+Vor Produktivaktivierung müssen echte LWZ-Aufrufe diese Annahme bestätigen.
+ESW wird über das bestehende LIS-Stichwortmapping, Einsatz als Meldebild,
+UESW/Objekt/Kommentar als Zusatzinfo sowie Straße/Hausnummer/Ort als Adresse übernommen.
+Zeit wird als ISO-Zeit oder `DD.MM.YYYY HH:MM:SS` gelesen (ohne Offset in Org-Zeitzone)
+und als UTC-Alarmzeit übernommen. Fehlt Straße, dient Adresse als Straßen-Fallback.
+Koordinaten werden ohne gesichertes Koordinatensystem nur protokolliert.
+
+Die negative SHA-256-abgeleitete 63-Bit-Sequenz nutzt den bestehenden Unique-Index
+`(gateway_id,sequence)` für Event-ID-Retries; die volle ID bleibt in
+`parsed.elvis_event_id`, Kollisionen werden abgelehnt. Jede neue Event-ID erhält einen
+eigenen dauerhaften Datensatz, damit auch Wiederholungen inhaltlicher Duplikate
+nachvollziehbar bleiben. Deterministische Schlüssel/Wert-Zeilen ohne `Zeit`, Event-ID
+oder Empfangszeit bilden den Inhalts-Hash. Identische Inhalte werden innerhalb der
+Org/Quelle zehn Minuten lang unterdrückt; bei zugeordneten Einsätzen zusätzlich über
+den bestehenden Inhaltsdedup ohne Zeitfenster. Geänderte Folgenachrichten mergen über
+`lis_operation_number`, auch zu bereits vorhandenen DIBOS-/LIS-Einsätzen.
+Agent-seitige Batch-Anbindung und Abnahme vor Ort folgen separat.
