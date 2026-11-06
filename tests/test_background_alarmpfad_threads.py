@@ -313,3 +313,114 @@ async def test_wartende_druckauftraege_belegen_keine_alarm_threads(monkeypatch):
     with alarm_db_threads(monkeypatch):
         await asyncio.wait_for(asyncio.gather(*(service._dispatch_background_job(jid) for jid in ids)), timeout=10)
     assert gestartet == len(ids)
+
+
+@pytest.mark.parametrize("nur_geo", [False, True])
+async def test_objekt_matching_db_im_alarm_pool_broadcast_nach_commit(monkeypatch, nur_geo):
+    from app.models.master import FireDept
+    from app.models.objekt import Objekt, ObjektBMA, ObjektEinsatz
+    from app.services import broadcast, objekt_kontakt_notify, objekt_matching_service, objekt_service
+
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug=uuid4().hex, name="Matching-Thread")
+        db.add(org)
+        db.flush()
+        obj = Objekt(org_id=org.id, nummer=1, name="Werk", status="freigegeben", lat=47.4, lng=9.7)
+        inc = Incident(primary_org_id=org.id, alarm_type_code="B2", report_text="BMA 1044",
+                       lat=47.4, lng=9.7)
+        db.add_all([obj, inc])
+        db.flush()
+        db.add(ObjektBMA(org_id=org.id, objekt_id=obj.id, bma_nummer="1044"))
+        db.commit()
+        org_id, objekt_id, incident_id = org.id, obj.id, inc.id
+    monkeypatch.setattr(objekt_service, "objekt_effective_enabled", lambda *args: True)
+    loop, reihenfolge = asyncio.get_running_loop(), []
+
+    async def org_broadcast(org_id_arg, payload):
+        assert asyncio.get_running_loop() is loop and not offen
+        assert org_id_arg == org_id
+        assert payload == {"type": "objekt_match", "incident_id": incident_id, "matches": [
+            {"objekt_id": objekt_id, "name": "Werk", "quelle": "geo" if nur_geo else "bma",
+             "status": "vorschlag" if nur_geo else "bestaetigt"},
+        ]}
+        with TestingSession() as db:
+            set_tenant_context(db, None)
+            assert db.query(ObjektEinsatz).filter_by(incident_id=incident_id).count() == 1
+        reihenfolge.append("org")
+
+    async def board_broadcast(iid, payload):
+        assert asyncio.get_running_loop() is loop and not offen
+        assert iid == incident_id and payload == {"type": "objektgefahren"}
+        reihenfolge.append("board")
+
+    async def kontakt(iid):
+        assert asyncio.get_running_loop() is loop and not offen and iid == incident_id
+        reihenfolge.append("kontakt")
+
+    monkeypatch.setattr(broadcast, "broadcast_org", org_broadcast)
+    monkeypatch.setattr(broadcast.manager, "broadcast", board_broadcast)
+    monkeypatch.setattr(objekt_kontakt_notify, "dispatch_objekt_einsatzinfo", kontakt)
+    with alarm_db_threads(monkeypatch) as offen:
+        await objekt_matching_service.match_incident_background(incident_id, nur_geo=nur_geo)
+        await objekt_matching_service.match_incident_background(incident_id, nur_geo=nur_geo)
+    assert reihenfolge == ["org", "board", "kontakt", "kontakt"]
+
+
+async def test_objekt_matching_fehlender_einsatz_im_thread(monkeypatch):
+    from app.services.objekt_matching_service import match_incident_background
+
+    with alarm_db_threads(monkeypatch):
+        assert await match_incident_background(-1) is None
+
+
+@pytest.mark.parametrize("adresse", [("Testgasse", "7a", "Wolfurt"), (None, None, "Wolfurt"),
+                                    (None, None, None), "fehlend"])
+async def test_adressaenderung_db_im_alarm_pool_geocoding_auf_loop(monkeypatch, adresse):
+    from app.routers import api_v1
+    from app.services.alarm_apply_service import _geocode_adressaenderung
+
+    incident_id = -1
+    if adresse != "fehlend":
+        with TestingSession() as db:
+            set_tenant_context(db, None)
+            inc = Incident(alarm_type_code="B2", address_street=adresse[0],
+                           address_no=adresse[1], address_city=adresse[2])
+            db.add(inc)
+            db.commit()
+            incident_id = inc.id
+    loop, aufrufe = asyncio.get_running_loop(), []
+
+    async def geocode(*args):
+        assert asyncio.get_running_loop() is loop and not offen
+        aufrufe.append(args)
+
+    monkeypatch.setattr(api_v1, "_geocode_incident", geocode)
+    with alarm_db_threads(monkeypatch) as offen:
+        assert await _geocode_adressaenderung(incident_id) is None
+    assert aufrufe == ([(incident_id, *adresse)] if adresse != "fehlend" and any(adresse) else [])
+
+
+async def test_objekt_matching_rollback_und_fehlerprotokoll_im_thread(monkeypatch, caplog):
+    from app.services import objekt_matching_service, objekt_service
+
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        inc = Incident(alarm_type_code="B2", reason="unveraendert")
+        db.add(inc)
+        db.commit()
+        incident_id = inc.id
+    monkeypatch.setattr(objekt_service, "objekt_effective_enabled", lambda *args: True)
+
+    def fehler(db, incident, *, nur_geo):
+        incident.reason = "darf nicht gespeichert werden"
+        db.flush()
+        raise RuntimeError("Matching-Testfehler")
+
+    monkeypatch.setattr(objekt_matching_service, "match_incident", fehler)
+    with alarm_db_threads(monkeypatch):
+        assert await objekt_matching_service.match_incident_background(incident_id) is None
+    assert f"Objekt-Matching fehlgeschlagen (Einsatz {incident_id})" in caplog.text
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        assert db.get(Incident, incident_id).reason == "unveraendert"

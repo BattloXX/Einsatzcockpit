@@ -1,4 +1,3 @@
-app/services/alarm_apply_service.py:_geocode_adressaenderung
 app/services/dibos/dibos_capture.py:start_trace_for_org
 app/services/dibos/dibos_enrich.py:enrich_and_broadcast
 app/services/dibos/dibos_enrich.py:_geocode_and_match_dibos_incident
@@ -8,4 +7,3 @@ app/services/einsatzinfo_mail_service.py:dispatch_einsatzinfo_mail
 app/services/lis/lis_capture.py:start_capture_for_org
 app/services/lis/lis_sync.py:push_vehicle_status_to_lis
 app/services/objekt_kontakt_notify.py:dispatch_objekt_einsatzinfo
-app/services/objekt_matching_service.py:match_incident_background
