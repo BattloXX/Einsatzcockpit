@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+  {% if xhtml2pdf %}
+  @page {
+    size: A4 portrait;
+    margin: 20mm 15mm 18mm 15mm;
+    @frame footer_frame {
+      -pdf-frame-content: asuew-footer;
+      left: 15mm; bottom: 8mm; width: 180mm; height: 8mm;
+    }
+  }
+  {% else %}
+  @page {
+    size: A4 portrait;
+    margin: 20mm 15mm 18mm 15mm;
+    @bottom-left { content: "Erstellt: {{ now|local_datetime }} - Einsatzcockpit"; font-family: Helvetica, Arial, sans-serif; font-size: 7pt; }
+    @bottom-right { content: "Seite " counter(page) " / " counter(pages); font-family: Helvetica, Arial, sans-serif; font-size: 7pt; }
+  }
+  {% endif %}
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #000; }
+  h1 { font-size: 18pt; margin: 0 0 4mm; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid #000; padding: 4pt; vertical-align: top; overflow-wrap: anywhere; }
+  th { background: #d9d9d9; text-align: center; font-size: 11pt; }
+  .separator td { background: #d9d9d9; height: 7pt; padding: 0; }
+  .value td { height: 18pt; }
+  .goal td { height: 33pt; }
+  .time td { height: 14pt; }
+  .remark td { height: 16pt; padding: 3pt 4pt; }
+  .remarks-title td { border-bottom: 0; font-weight: bold; }
+  .brand { text-align: right; font-size: 10pt; margin-bottom: 3mm; }
+  .brand img { max-width: 35mm; height: 10mm; vertical-align: middle; }
+  .page-heading > td { border: 0; padding: 0; }
+  .filled .remark td { height: auto; padding: 2pt 4pt; font-size: 8pt; }
+  .metadata > td { border: 0; padding: 5mm 0 0; }
+  .meta { margin: 0; }
+  .meta td { border: 0; padding: 3pt 0; }
+  .small { font-size: 8pt; font-weight: normal; }
+  tr { page-break-inside: avoid; }
+  {% if xhtml2pdf %}
+  .label { width: 28%; }
+  .column { width: 24%; }
+  .value td, .time td, .goal td { height: auto; padding: 5pt 4pt; }
+  {% endif %}
+</style>
+</head>
+<body>
+{% if xhtml2pdf %}<div id="asuew-footer" style="font-size: 7pt">Erstellt: {{ now|local_datetime }} - Einsatzcockpit</div>{% endif %}
+{% for page in seiten %}
+{% if xhtml2pdf and not loop.first %}<pdf:nextpage />{% endif %}
+<section class="sheet{% if not leer %} filled{% endif %}"{% if not xhtml2pdf and not loop.first %} style="page-break-before: always"{% endif %}>
+  <table{% if xhtml2pdf %} repeat="2"{% endif %}>
+    <colgroup><col style="width: 28%"><col style="width: 24%"><col style="width: 24%"><col style="width: 24%"></colgroup>
+    <thead><tr class="page-heading"><td colspan="4">
+  <div class="brand">{% if logo_url %}<img src="{{ logo_url }}" alt="{{ org.name if org else '' }}"> {% endif %}{{ org.name if org else '' }}</div>
+  <h1>Atemschutzüberwachung</h1>
+  {% if not leer and incident.is_exercise %}<p><strong>ÜBUNG / SIMULATION</strong></p>{% endif %}
+    </td></tr>
+<tr><th class="label"></th>{% for column in page %}<th class="column">{{ loop.index }}. Trupp{% if column.einsatz_nr %}<br><span class="small">Einsatz Nr. {{ column.einsatz_nr }}</span>{% endif %}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      <tr class="value"><td>Funkrufname</td>{% for column in page %}<td>{{ column.funkrufname }}</td>{% endfor %}</tr>
+      <tr class="value"><td>Name Truppführer</td>{% for column in page %}<td>{{ column.tf }}</td>{% endfor %}</tr>
+      {% for index in range(page[0].namen|length) %}<tr class="value"><td>Name</td>{% for column in page %}<td>{{ column.namen[index] }}</td>{% endfor %}</tr>{% endfor %}
+      <tr class="separator"><td colspan="4"></td></tr>
+      <tr class="value"><td>Flaschendruck bei Einsatzbeginn</td>{% for column in page %}<td>{{ column.startdruck }}</td>{% endfor %}</tr>
+      <tr class="time"><td></td>{% for column in page %}<td>Uhrzeit {% if column.entry_at %}{{ column.entry_at|local_time }}{% else %}&nbsp; :{% endif %}</td>{% endfor %}</tr>
+      <tr class="goal"><td><strong>Einsatzziel und Angriffsweg</strong></td>{% for column in page %}<td>{{ column.ziel }}</td>{% endfor %}</tr>
+      {% for index, title in [(0, '1. Kontrolle nach 1/3 der Einsatzzeit'), (1, '2. Kontrolle nach 2/3 der Einsatzzeit')] %}
+      <tr class="separator"><td colspan="4"></td></tr>
+      <tr class="value"><td>{{ title }}</td>{% for column in page %}<td>{% if column.kontrollen %}{% for control in column.kontrollen[index] %}{{ control.text }}{% if control.nachgetragen %} (nachgetragen){% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}{% endif %}</td>{% endfor %}</tr>
+      <tr class="time"><td>Nach {{ '%g'|format(page[0].minuten[index]) }} Minuten</td>{% for column in page %}<td>Uhrzeit {% if column.kontrollen and column.kontrollen[index] %}{% for control in column.kontrollen[index] %}{{ control.ts|local_time }}{% if not loop.last %} / {% endif %}{% endfor %}{% else %}&nbsp; :{% endif %}</td>{% endfor %}</tr>
+      {% endfor %}
+      <tr class="separator"><td colspan="4"></td></tr>
+      <tr class="remarks-title"><td colspan="4">Bemerkungen:</td></tr>
+      {% set ns = namespace(count=0) %}
+      {% for column in page %}{% set troop_number = loop.index %}{% for remark in column.bemerkungen %}
+      <tr class="remark"><td colspan="4">{{ troop_number }}. Trupp: {{ remark.ts|local_time }} {{ remark.text }}{% if remark.nachgetragen %} (nachgetragen){% endif %}</td></tr>
+      {% set ns.count = ns.count + 1 %}
+      {% endfor %}{% endfor %}
+      {% for unused in range([0, 7 - ns.count]|max) %}<tr class="remark"><td colspan="4">&nbsp;</td></tr>{% endfor %}
+    </tbody>
+    <tfoot><tr class="metadata"><td colspan="4">
+  <table class="meta"><tr><td style="width: 50%">Einsatzort: {{ einsatzort }}</td><td style="width: 20%">Datum: {{ einsatzdatum }}</td><td style="width: 30%">Überwacher: {{ ueberwacher }}</td></tr></table>
+    </td></tr></tfoot>
+
+  </table>
+</section>
+{% endfor %}
+</body>
+</html>

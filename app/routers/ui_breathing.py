@@ -381,6 +381,49 @@ def breathing_summary(
     )
 
 
+def _formular_pdf(incident_id: int, request: Request, db: Session, leer: bool) -> Response:
+    from urllib.parse import quote
+
+    from app.models.master import FireDept
+    from app.services.breathing_service import load_asuew_formular_troops
+    from app.services.pdf_service import render_asuew_formular_pdf
+
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    if not incident or incident.primary_org_id != user.org_id:
+        raise HTTPException(404)
+    org = db.get(FireDept, user.org_id)
+    troops = [] if leer else load_asuew_formular_troops(db, incident_id)
+    settings = get_asuew_settings(db, user.org_id)
+    content = render_asuew_formular_pdf(troops, incident, org, settings, leer=leer,
+                                       base_url=str(request.base_url).rstrip("/"))
+    name = "Leer" if leer else str(incident.lis_operation_number or incident.nummer or incident.id)
+    name = name.replace("/", "-").replace('"', "").replace("\\", "-").replace("\r", "").replace("\n", "")
+    filename = f"AS-Ueberwachung_{name}.pdf"
+    fallback = filename.encode("ascii", "ignore").decode("ascii")
+    return Response(content=content, media_type="application/pdf", headers={
+        "Content-Disposition": f"inline; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}",
+    })
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/formular.pdf")
+def asuew_formular_pdf(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    return _formular_pdf(incident_id, request, db, leer=False)
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/formular-leer.pdf")
+def asuew_formular_leer_pdf(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
+    return _formular_pdf(incident_id, request, db, leer=True)
+
+
 @router.get("/einsatz/{incident_id}/atemschutz/{troop_id}/karte", response_class=HTMLResponse)
 def breathing_troop_card(
     incident_id: int, troop_id: int, request: Request, db: Session = Depends(get_db),

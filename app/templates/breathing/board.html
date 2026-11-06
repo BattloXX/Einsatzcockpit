@@ -46,6 +46,8 @@
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <button type="button" class="btn btn--ghost" id="breathingContrastToggle" aria-label="Hochkontrast umschalten" aria-pressed="false">{{ icon("sun") }} Hochkontrast</button>
     <a class="btn btn--ghost" href="/einsatz/{{ incident.id }}/atemschutz/assp">ASSP</a>
+    <button type="button" class="btn btn--ghost" onclick="ecpgPrint({document_type:'asuew_formular', incident_id:{{ incident.id }}, title:'Überwachungsformular drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/formular.pdf'})">Formular (PDF)</button>
+    <button type="button" class="btn btn--ghost" onclick="ecpgPrint({document_type:'asuew_formular_leer', incident_id:{{ incident.id }}, title:'Leeres Überwachungsformular drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/formular-leer.pdf'})">Leeres Formular</button>
     {% if can_edit is not defined or can_edit %}
     <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newTroopModal">+ Trupp anlegen</button>
     {% endif %}

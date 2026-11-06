@@ -456,6 +456,45 @@ def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
         return buf.getvalue()
 
 
+def render_asuew_formular_pdf(
+    troops, incident: Incident, org, settings, leer: bool = False, base_url: str = "",
+) -> bytes:
+    """Drei aktuelle Trupps pro Formularseite oder eine leere Rückfallebene."""
+    from app.core.timezones import format_local_datetime
+    from app.services.breathing_service import asuew_formular_seiten
+
+    seiten = asuew_formular_seiten(troops, settings, leer)
+    logo = getattr(org, "logo_path", None) or "/static/img/logo_einsatzcockpit.png"
+    logo_url = base_url.rstrip("/") + logo if logo.startswith("/") else logo
+    address = " ".join(filter(None, [incident.address_street, incident.address_no]))
+    if incident.address_city:
+        address += (", " if address else "") + incident.address_city
+    names = dict.fromkeys(column["ueberwacher"] for page in seiten for column in page if column["ueberwacher"])
+    template = templates.env.get_template("pdf/asuew_formular.html")
+    context = dict(
+        seiten=seiten, incident=incident, org=org, user=SimpleNamespace(org=org),
+        now=datetime.now(UTC), logo_url=logo_url, leer=leer,
+        einsatzort="" if leer else address,
+        einsatzdatum="" if leer else format_local_datetime(incident.started_at, org).split(" ")[0],
+        ueberwacher="" if leer else ", ".join(names),
+    )
+    html_str = template.render(**context)
+    try:
+        from weasyprint import HTML
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except Exception as exc:
+        logger.warning("WeasyPrint fehlgeschlagen (ASÜW-Formular), Fallback auf xhtml2pdf: %s", exc)
+        from xhtml2pdf import pisa
+        buf = io.BytesIO()
+        fallback_html = template.render(**context, xhtml2pdf=True)
+        result = pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(fallback_html)), dest=buf)
+        if result.err:
+            raise RuntimeError("ASÜW-Formular konnte nicht gerendert werden") from exc
+        return buf.getvalue()
+
+
 def render_as_pruefung_pdf(pruefungen: list, user=None, base_url: str = "") -> bytes:
     """Atemschutzgeräteprüfung(en) als A4-PDF – ein Protokoll oder mehrere (Sammel-PDF).
 

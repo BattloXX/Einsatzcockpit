@@ -69,6 +69,8 @@ DOC_OBJEKTBLATT = "objektblatt"
 DOC_OBJEKT_DOKUMENT = "objekt_dokument"
 DOC_BSP_OVERLAY = "bsp_overlay"
 DOC_AS_PRUEFUNG = "as_pruefung"          # Atemschutzgeräteprüfung (artifact_ref = kommagetrennte IDs)
+DOC_ASUEW_FORMULAR = "asuew_formular"  # Aktuelle Trupps eines Einsatzes (incident_id)
+DOC_ASUEW_FORMULAR_LEER = "asuew_formular_leer"  # Leere Rückfallebene (incident_id)
 DOC_TROOP_PROTOKOLL = "troop_protokoll"  # Atemschutztrupp (incident_id + artifact_ref = troop_id)
 DOC_TEILNAHME = "teilnahme"              # Teilnehmerliste (artifact_ref = "<bezug_typ>:<bezug_id>[:<sort>]")
 DOC_OBJEKT_SAMMEL = "objekt_sammel"      # Objekt-Dokumente Sammelmappe (objekt_id, artifact_ref = art-Filter)
@@ -107,6 +109,8 @@ DOCUMENT_TYPE_LABELS = {
     DOC_BSP_OVERLAY: "BSP-Ausschnitt",
     DOC_AS_PRUEFUNG: "Atemschutzprüfung",
     DOC_TROOP_PROTOKOLL: "Atemschutz-Protokoll",
+    DOC_ASUEW_FORMULAR: "Atemschutz-Überwachungsformular",
+    DOC_ASUEW_FORMULAR_LEER: "Atemschutz-Überwachungsformular (leer)",
     DOC_TEILNAHME: "Teilnehmerliste",
     DOC_OBJEKT_SAMMEL: "Objekt-Sammelmappe",
     DOC_UAS: "Drohnen-Dokument",

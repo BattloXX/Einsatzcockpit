@@ -13,6 +13,8 @@ from app.core.security import sign_artifact_token, unsign_artifact_token
 from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
     DOC_AS_PRUEFUNG,
+    DOC_ASUEW_FORMULAR,
+    DOC_ASUEW_FORMULAR_LEER,
     DOC_BSP_OVERLAY,
     DOC_CROSS_KARTE,
     DOC_DOKUMENTPAKET,
@@ -101,6 +103,8 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_alarm_rohtext(db, job)
     if job.document_type == DOC_AS_PRUEFUNG:
         return _render_as_pruefung(db, job, base_url)
+    if job.document_type in (DOC_ASUEW_FORMULAR, DOC_ASUEW_FORMULAR_LEER):
+        return _render_asuew_formular(db, job, base_url)
     if job.document_type == DOC_TROOP_PROTOKOLL:
         return _render_troop(db, job, base_url)
     if job.document_type == DOC_TEILNAHME:
@@ -420,6 +424,29 @@ def _render_maschinisten_matrix(db, job: PrintJob, base_url: str) -> bytes:
     return render_maschinisten_matrix_pdf(
         matrix, user=SimpleNamespace(org=org), base_url=base_url,
     )
+
+
+def _render_asuew_formular(db, job: PrintJob, base_url: str) -> bytes:
+    from app.models.incident import Incident
+    from app.models.master import FireDept
+    from app.services.breathing_service import (
+        breathing_effective_enabled,
+        get_asuew_settings,
+        load_asuew_formular_troops,
+    )
+    from app.services.pdf_service import render_asuew_formular_pdf
+
+    incident = db.get(Incident, job.incident_id) if job.incident_id else None
+    if incident is None or incident.primary_org_id != job.org_id:
+        raise ArtifactError("Einsatz nicht gefunden")
+    if not breathing_effective_enabled(job.org_id, db):
+        raise ArtifactError("Atemschutzüberwachung nicht verfügbar")
+    assert job.org_id is not None
+    org = db.get(FireDept, job.org_id)
+    leer = job.document_type == DOC_ASUEW_FORMULAR_LEER
+    troops = [] if leer else load_asuew_formular_troops(db, incident.id)
+    return render_asuew_formular_pdf(troops, incident, org, get_asuew_settings(db, job.org_id),
+                                     leer=leer, base_url=base_url)
 
 
 def _render_troop(db, job: PrintJob, base_url: str) -> bytes:

@@ -145,6 +145,7 @@
   {% if incident.breathing_troops %}
   <div class="detail-box detail-box--full" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
     <h3>{{ modul_icon("atemschutz", size="md") }} Atemschutz</h3>
+    <a class="btn btn--ghost" href="/einsatz/{{ incident.id }}/atemschutz/formular.pdf" target="_blank" rel="noopener">Überwachungsformular (PDF)</a>
     <table class="table">
       <thead><tr><th>Trupp</th><th>Auftrag</th><th>Standort</th><th>Status</th><th>Einsatzbeginn</th><th>Rückzug</th><th>Zurück</th><th>PDF</th></tr></thead>
       <tbody>
