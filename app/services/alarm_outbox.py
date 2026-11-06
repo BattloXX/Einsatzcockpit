@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 from threading import Lock
@@ -20,6 +21,7 @@ from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
 from app.services.alarm_link import alarm_link
 from app.services.background_runtime import create_leader_task
 from app.services.db_transactions import commit_db_operation, retry_claim
+from app.services.loop_thread_io import ALARM_POOL, auf_event_loop, im_db_thread, thread_ablauf
 from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger("einsatzleiter.alarm_outbox")
@@ -274,7 +276,7 @@ async def _send_sms(db: Session, incident: Incident, job: IncidentAlarmJob) -> t
         return "suppressed", "Uebung unterdrueckt"
     address = _address(incident)
     info_link = alarm_link(incident)
-    result = await dispatch_einsatzinfo(
+    result = await auf_event_loop(dispatch_einsatzinfo,
         org_id, incident.alarm_type_code, address, incident.address_city, incident.report_text,
         incident.reason, incident.is_exercise, job.context.get("triggered_by_user_id"), info_link,
         incident.lis_operation_number, incident.id,
@@ -307,7 +309,7 @@ async def _send_push(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
         planspiel_run_id=incident.planspiel_run_id,
     ):
         if incident.is_exercise:
-            await _send_incident_wake_only(incident.id, org_id, title, body, url, user_id)
+            await auf_event_loop(_send_incident_wake_only,incident.id, org_id, title, body, url, user_id)
         return "suppressed", "Uebung unterdrueckt"
     live_extra = None
     try:
@@ -326,7 +328,7 @@ async def _send_push(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
             await asyncio.to_thread(start_live_activity_once, incident.id, org_id)
         except Exception:
             logger.exception("ActivityKit-Start fehlgeschlagen (Einsatz %s)", incident.id)
-    await _send_incident_push(
+    await auf_event_loop(_send_incident_push,
         incident.id, org_id, title, body, url, live_extra, user_id,
         fcm_data={"incident_id": str(incident.id), "is_exercise": "1" if incident.is_exercise else "0"},
     )
@@ -365,7 +367,7 @@ async def _send_mail(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
 
     if not job.org_id:
         return "suppressed", "keine Organisation zugeordnet"
-    result = await dispatch_einsatzinfo_mail(
+    result = await auf_event_loop(dispatch_einsatzinfo_mail,
         job.org_id, incident.id, job.context.get("triggered_by_user_id"),
         **({"variant": job.variant, "text_prefix": nachalarm_praefix(job)} if job.variant else {}),
     )
@@ -383,8 +385,19 @@ def _retry_at(channel: str, attempt: int, now: datetime) -> datetime | None:
 
 
 async def _run_claimed(job_id: int, generation: int) -> None:
+    await im_db_thread(_run_claimed_sync, job_id, generation, pool=ALARM_POOL)
+
+
+def _run_claimed_sync(job_id: int, generation: int) -> None:
     db = SessionLocal()
     set_tenant_context(db, None)
+    try:
+        thread_ablauf(_run_claimed_ablauf(db, job_id, generation))
+    finally:
+        db.close()
+
+
+async def _run_claimed_ablauf(db: Session, job_id: int, generation: int) -> None:
     try:
         job = db.get(IncidentAlarmJob, job_id)
         if job is None or job.status != "sending" or job.attempt_count != generation:
@@ -467,8 +480,9 @@ async def _run_claimed(job_id: int, generation: int) -> None:
     except Exception as exc:
         db.rollback()
         log_fehler(logger, "Alarm-Outbox fehlgeschlagen", exc, level=logging.ERROR, job_id=job_id)
-    finally:
-        db.close()
+
+
+_ABSCHLUSS_SPERRE = threading.Lock()
 
 
 def _finish_if_done(db: Session, incident: Incident, org_id: int | None, user_id: int | None) -> None:
@@ -477,53 +491,76 @@ def _finish_if_done(db: Session, incident: Incident, org_id: int | None, user_id
         return
     from app.core.audit import write_audit
     from app.models.user import AuditLog
-    finished = db.query(AuditLog.id).filter(
-        AuditLog.action == "incident.alarm_finished", AuditLog.incident_id == incident.id,
-    ).first()
-    if finished:
-        return
+    incident_id = incident.id
     payload = {job.channel: {"status": job.status, "reason": job.last_error} for job in jobs}
-    write_audit(db, "incident.alarm_finished", org_id=org_id, user_id=user_id, incident_id=incident.id, payload=payload)
-    # Bereits beim Anlegen unterdrueckte Alarme haben ihren gemeinsamen Logeintrag.
-    if not all(job.status == "suppressed" and job.context.get("suppressed_reason") for job in jobs):
-        db.add(IncidentLog(
-            incident_id=incident.id, author_name="System", level="info", text="Alarmierung abgeschlossen",
-        ))
-    db.commit()
-    logger.info("Alarmierung abgeschlossen (Einsatz %s, Kanaele=%s)", incident.id, len(jobs))
+    unterdrueckt = all(job.status == "suppressed" and job.context.get("suppressed_reason") for job in jobs)
+    anzahl = len(jobs)
+    # Die Kanaele laufen in parallelen Threads (Alarm-Pool): Zwei gleichzeitig fertige Kanaele
+    # duerfen den Abschluss nicht doppelt schreiben. Pruefen und Schreiben bilden einen Block;
+    # die Pruefung nutzt eine frische Session, damit sie unter REPEATABLE READ den Commit
+    # des anderen Threads sieht.
+    with _ABSCHLUSS_SPERRE:
+        with SessionLocal() as pruef_db:
+            set_tenant_context(pruef_db, None)
+            finished = pruef_db.query(AuditLog.id).filter(
+                AuditLog.action == "incident.alarm_finished", AuditLog.incident_id == incident_id,
+            ).first()
+        if finished:
+            return
+        write_audit(db, "incident.alarm_finished", org_id=org_id, user_id=user_id, incident_id=incident_id,
+                    payload=payload)
+        # Bereits beim Anlegen unterdrueckte Alarme haben ihren gemeinsamen Logeintrag.
+        if not unterdrueckt:
+            db.add(IncidentLog(
+                incident_id=incident_id, author_name="System", level="info", text="Alarmierung abgeschlossen",
+            ))
+        db.commit()
+    logger.info("Alarmierung abgeschlossen (Einsatz %s, Kanaele=%s)", incident_id, anzahl)
 
 
-async def process_incident_alarm(incident_id: int) -> None:
+def _claim_incident_sync(incident_id: int) -> list[tuple[int, int]]:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         now = _now()
         jobs = db.query(IncidentAlarmJob).filter(IncidentAlarmJob.incident_id == incident_id).all()
         claimed = [(job.id, job.attempt_count) for job in jobs if _claim(db, job, now)]
+        return claimed
     finally:
         db.close()
+
+
+def _finish_incident_sync(incident_id: int) -> None:
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        incident = db.get(Incident, incident_id)
+        if incident is not None:
+            _finish_if_done(db, incident, incident.primary_org_id, None)
+
+
+async def process_incident_alarm(incident_id: int) -> None:
+    claimed = await im_db_thread(_claim_incident_sync, incident_id, pool=ALARM_POOL)
     await asyncio.gather(*(_run_claimed(job_id, generation) for job_id, generation in claimed))
-    # Eine reine Recovery zu uncertain startet keinen Sender, muss den Alarm aber
-    # ebenfalls abschliessen koennen.
+    # Recovery zu uncertain muss auch ohne gestarteten Sender abschliessen.
     if not claimed:
-        with SessionLocal() as db:
-            set_tenant_context(db, None)
-            incident = db.get(Incident, incident_id)
-            if incident is not None:
-                _finish_if_done(db, incident, incident.primary_org_id, None)
+        await im_db_thread(_finish_incident_sync, incident_id, pool=ALARM_POOL)
 
 
-async def run_alarm_outbox_once() -> list[asyncio.Task]:
+def _due_incident_ids_sync() -> list[int]:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         now = _now()
-        ids = [row[0] for row in db.query(IncidentAlarmJob.incident_id).filter(or_(
+        return [row[0] for row in db.query(IncidentAlarmJob.incident_id).filter(or_(
             and_(IncidentAlarmJob.status.in_(("pending", "retry")), IncidentAlarmJob.next_attempt_at <= now),
             and_(IncidentAlarmJob.status == "sending", IncidentAlarmJob.lease_until < now),
         )).distinct().all()]
     finally:
         db.close()
+
+
+async def run_alarm_outbox_once() -> list[asyncio.Task]:
+    ids = await im_db_thread(_due_incident_ids_sync, pool=ALARM_POOL)
     running_ids = {task.get_name() for task in _running_incident_tasks}
     started = []
     for incident_id in ids:

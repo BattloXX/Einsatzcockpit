@@ -78,6 +78,7 @@ def test_gsl_hat_vorrang_vor_einsatz(db_org):
     daten = infoscreen_daten("mon-token", request=None, db=db)  # type: ignore[arg-type]
     assert daten["modus"] == "gsl"
     assert daten["gsl"]["name"] == "Hochwasser Nord"
+    assert daten["gsl"]["ende"] is None
 
 
 def test_gsl_infoscreen_payload_reich(db_org):
@@ -148,3 +149,44 @@ def test_token_enc_roundtrip():
     enc = encrypt_secret(token)
     assert enc != token
     assert decrypt_secret(enc) == token
+
+
+def test_infoscreen_rendert_blaue_hydrantenlegende(db_org):
+    from starlette.requests import Request
+
+    from app.routers.ui_infoscreen_alarm import infoscreen_seite
+
+    db, org = db_org
+    _token(db, org)
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    html = infoscreen_seite("mon-token", request=request, db=db).body.decode()
+    assert 'id="is-karte" class="hydranten-blau"' in html
+    assert 'background:#2563eb;"></span>Überflurhydrant' in html
+    assert 'background:#1e3a8a;border-radius:2px;"></span>Unterflur' in html
+    assert 'background:#dc2626;"></span>Überflurhydrant' not in html
+
+
+@pytest.mark.parametrize("ende", [None, datetime(2026, 11, 6, 9, 15, 30)])
+def test_infoscreen_json_enthaelt_ende_als_utc(db_org, ende):
+    db, org = db_org
+    _token(db, org)
+    db.add(Incident(primary_org_id=org.id, alarm_type_code="T1", status="active",
+                    started_at=datetime(2026, 11, 6, 8), closed_at=ende))
+    db.commit()
+    daten = infoscreen_daten("mon-token", request=None, db=db)
+    assert daten["incident"]["beginn"] == "2026-11-06T08:00:00Z"
+    assert daten["incident"]["ende"] == ("2026-11-06T09:15:30Z" if ende else None)
+
+
+def test_gsl_payload_enthaelt_ende_als_utc(db_org):
+    from app.routers.ui_infoscreen_alarm import _gsl_infoscreen_daten
+    from app.services.gsl_live_service import build_gsl_live_payload
+
+    db, org = db_org
+    lage = MajorIncident(org_id=org.id, name="Abgeschlossene Lage",
+                         status=MajorIncidentStatus.closed, started_at=datetime(2026, 11, 6, 8),
+                         ended_at=datetime(2026, 11, 6, 9, 15, 30))
+    db.add(lage)
+    db.commit()
+    assert _gsl_infoscreen_daten(db, lage)["ende"] == "2026-11-06T09:15:30Z"
+    assert build_gsl_live_payload(db, lage)["ended_at"] == "2026-11-06T09:15:30Z"

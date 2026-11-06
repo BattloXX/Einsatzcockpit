@@ -12,7 +12,6 @@ from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 from pypdf import PdfReader, PdfWriter, Transformation
 from sqlalchemy.orm import Session
-from weasyprint import HTML
 
 from app.config import settings
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
@@ -82,6 +81,8 @@ def _pdf(seite: ObjektDokumentSeite, bild: Image.Image, overlay: Image.Image | N
     original = absolute_pfad(seite.einzel_pdf_pfad)
     if not original.is_file():
         return None
+    from weasyprint import HTML  # noqa: PLC0415
+
     page = PdfReader(str(original)).pages[0]
     box = page.mediabox
     breite, hoehe = float(box.width), float(box.height)

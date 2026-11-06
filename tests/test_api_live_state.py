@@ -94,6 +94,7 @@ def test_browser_user_ohne_device_token_erhaelt_aktiven_einsatz(client, setup_db
         "meldung": None,
         "objekt": None,
         "started_at": "2026-08-03T11:02:00Z",
+        "closed_at": None,
         "is_exercise": False,
         "phase": "einsatzstelle",
         "phase_index": 2,

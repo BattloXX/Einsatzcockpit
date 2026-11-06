@@ -221,11 +221,11 @@ def test_watchdog_active_assp_prevents_and_closes_warning(ctx, initially_active)
 
 
 def test_assp_migration_roundtrip(tmp_path):
-    path = Path(__file__).resolve().parents[1] / 'alembic/versions/0351_asuew_phase7.py'
-    spec = importlib.util.spec_from_file_location('migration_0351', path)
+    path = Path(__file__).resolve().parents[1] / 'alembic/versions/0354_asuew_phase7.py'
+    spec = importlib.util.spec_from_file_location('migration_0354', path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert (migration.revision, migration.down_revision) == ('0351', '0350')
+    assert (migration.revision, migration.down_revision) == ('0354', '0353')
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'assp.db'}")
     with engine.begin() as conn:
         conn.exec_driver_sql('PRAGMA foreign_keys=ON')

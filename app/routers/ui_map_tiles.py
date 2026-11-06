@@ -23,7 +23,8 @@ logger = logging.getLogger("einsatzleiter.osm_tiles")
 
 router = APIRouter()
 
-_CACHE_MAXSIZE = 2000
+# Pro Worker begrenzt; Browser und Proxy cachen die Kacheln ohnehin.
+_CACHE_MAXSIZE = 300
 _FETCH_TIMEOUT_SECONDS = 10.0
 
 

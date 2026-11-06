@@ -11,6 +11,7 @@ from app.models.incident import Incident
 from app.models.major_incident import IncidentSite, MajorIncident
 from app.models.master import AlarmType, FireDept
 from app.models.wordpress_report import WordPressReportConfig
+from app.services.loop_thread_io import auf_event_loop
 
 logger = logging.getLogger("einsatzleiter.wordpress_report")
 
@@ -170,12 +171,9 @@ async def post_incident_report(db: Session, incident: Incident) -> WordPressRepo
     webhook_url = cfg.webhook_url.strip()
     webhook_token = cfg.webhook_token.strip()
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(f"{webhook_url}?token={webhook_token}", json=payload)
-        response.raise_for_status()
-        data = response.json()
+        data = await auf_event_loop(_sende_webhook, webhook_url, webhook_token, payload)
         post_id = data.get("post_id") if isinstance(data, dict) else None
-        if not isinstance(post_id, int):
+        if not isinstance(data, dict) or not isinstance(post_id, int):
             raise ValueError("Antwort enthält keine gültige post_id")
         edit_url = data.get("edit_url")
         if not isinstance(edit_url, str) or not edit_url.strip():
@@ -203,3 +201,10 @@ async def post_incident_report(db: Session, incident: Incident) -> WordPressRepo
         error=None,
         already_existed=False,
     )
+
+
+async def _sende_webhook(webhook_url: str, webhook_token: str, payload: dict) -> object:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(f"{webhook_url}?token={webhook_token}", json=payload)
+    response.raise_for_status()
+    return response.json()

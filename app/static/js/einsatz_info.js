@@ -118,7 +118,7 @@
 
   /* ── Einsatzort-Marker ── */
   if (hatEinsatzKoords) {
-    var einsatzIcon = ecpMarkerIcon("urgent", {color: '#d42225', size: 26, border: '2px solid #fff'});
+    var einsatzIcon = ecpMarkerIcon("urgent", {color: '#d42225', size: 32, border: '3px solid #fff'});
     L.marker([incLat, incLng], {
       icon: einsatzIcon,
       zIndexOffset: 1000

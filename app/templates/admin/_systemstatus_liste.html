@@ -7,12 +7,13 @@
   {% set zustand = dienst_zustaende.get(check.key, 'ok') %}
   {% set farbe = 'fail' if zustand == 'down' else ('warn' if zustand == 'teilweise' else ('neutral' if zustand == 'nicht_konfiguriert' else ('neutral' if zustand == 'unknown' else 'ok'))) %}
   {% set bezeichnung = {'down': 'Ausfall', 'teilweise': 'Teilstörung', 'nicht_konfiguriert': 'Nicht eingerichtet', 'unknown': 'Unbekannt'}.get(zustand, 'OK') %}
+  {% if check.key in ausgeschaltet %}{% set bezeichnung = 'Ueberwachung ausgeschaltet' %}{% endif %}
   <article class="sys-card sys-service sys-service--{{ farbe }}">
     <header class="sys-card__head">
       <h3>{{ icon({'mail': 'mail', 'sms_gateway': 'device-mobile-message', 'print_gateway': 'printer', 'redis_bus': 'topology-star-3', 'sms_jobs': 'message', 'print_jobs': 'printer', 'alarm_seriell': 'plug', 'alarm_dibos': 'bell', 'alarm_outbox': 'inbox'}.get(check.key, 'server')) }} {{ labels.get(check.key, check.key) }}</h3>
       <span class="sys-pill sys-status--{{ farbe }}">{{ status_dot({'ok': 'gruen', 'warn': 'orange', 'fail': 'rot', 'neutral': 'grau'}[farbe], bezeichnung) }} {{ bezeichnung }}</span>
     </header>
-    {% if zustand == 'nicht_konfiguriert' and check.key == 'print_gateway' %}<p class="sys-muted">Keine überwachten Gateways</p>{% endif %}
+    {% if zustand == 'nicht_konfiguriert' and check.key == 'print_gateway' and check.key not in ausgeschaltet %}<p class="sys-muted">Keine überwachten Gateways</p>{% endif %}
     {% if zustand in ('down', 'teilweise') %}
       {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
       {% if not row.outage_notified_at %}<p class="sys-muted sys-small">Keine Benachrichtigung verschickt{% if org_settings and not org_settings.dienst_monitor_enabled %} – Überwachung ist deaktiviert.{% endif %}</p>{% endif %}

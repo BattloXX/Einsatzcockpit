@@ -8,6 +8,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
+from app.services.loop_thread_io import im_db_thread, thread_ablauf
 from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger("einsatzleiter.weather_alert_loop")
@@ -44,7 +45,7 @@ async def _run_all_orgs() -> None:
         try:
             # Alle Orgs mit Wetter-Integration aktiv (NULL = global True)
             return [
-                o for o in db.query(OrgSettings).all()
+                o.org_id for o in db.query(OrgSettings).all()
                 if o.weather_enabled is not False
                 and settings.WEATHER_ENABLED
             ]
@@ -54,16 +55,30 @@ async def _run_all_orgs() -> None:
     orgs = await asyncio.to_thread(_lade_orgs)
 
     base_url = (settings.PUBLIC_BASE_URL or settings.APP_BASE_URL or "").rstrip("/")
-    for org_settings in orgs:
+    for org_id in orgs:
         try:
-            await _process_org(org_settings, base_url)
+            await _process_org(org_id, base_url)
         except Exception:
-            logger.exception("weather_alert_loop: Org %s fehlgeschlagen", org_settings.org_id)
+            logger.exception("weather_alert_loop: Org %s fehlgeschlagen", org_id)
 
 
-async def _process_org(org_settings, base_url: str) -> None:
+async def _process_org(org_id: int, base_url: str) -> None:
+    await im_db_thread(_process_org_sync, org_id, base_url)
+
+
+def _process_org_sync(org_id: int, base_url: str) -> None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
+    from app.models.master import OrgSettings
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        if org_settings is not None:
+            thread_ablauf(_process_org_ablauf(db, org_settings, base_url))
+
+
+async def _process_org_ablauf(db, org_settings, base_url: str) -> None:
     from app.models.master import FireDept
     from app.models.weather_alert import WeatherAlertRule, WeatherAlertState
     from app.services.weather_alert_dispatch import dispatch_alert
@@ -74,81 +89,76 @@ async def _process_org(org_settings, base_url: str) -> None:
         evaluate_rule,
     )
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
     org_id = org_settings.org_id
-    try:
-        # Default-Regeln anlegen (idempotent, nur wenn noch nicht vorhanden)
-        ensure_rules(org_id, db)
+    # Default-Regeln anlegen (idempotent, nur wenn noch nicht vorhanden)
+    ensure_rules(org_id, db)
 
-        rules = (
-            db.query(WeatherAlertRule)
-            .filter(WeatherAlertRule.org_id == org_id, WeatherAlertRule.enabled == True)  # noqa: E712
-            .execution_options(include_all_tenants=True)
-            .all()
-        )
-        if not rules:
-            return
+    rules = (
+        db.query(WeatherAlertRule)
+        .filter(WeatherAlertRule.org_id == org_id, WeatherAlertRule.enabled == True)  # noqa: E712
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    if not rules:
+        return
 
-        pic = await build_weather_picture(org_settings, db)
+    pic = await build_weather_picture(org_settings, db)
 
-        org = db.query(FireDept).filter(FireDept.id == org_id).first()
-        org_name = org.name if org else f"Org {org_id}"
+    org = db.query(FireDept).filter(FireDept.id == org_id).first()
+    org_name = org.name if org else f"Org {org_id}"
 
-        for rule in rules:
-            try:
-                result = evaluate_rule(rule, pic)
+    for rule in rules:
+        try:
+            result = evaluate_rule(rule, pic)
 
-                state_row = (
-                    db.query(WeatherAlertState)
-                    .filter(
-                        WeatherAlertState.org_id == org_id,
-                        WeatherAlertState.key == rule.key,
-                    )
-                    .execution_options(include_all_tenants=True)
-                    .first()
+            state_row = (
+                db.query(WeatherAlertState)
+                .filter(
+                    WeatherAlertState.org_id == org_id,
+                    WeatherAlertState.key == rule.key,
                 )
-                if state_row is None:
-                    state_row = WeatherAlertState(
-                        org_id=org_id, key=rule.key, state="none"
+                .execution_options(include_all_tenants=True)
+                .first()
+            )
+            if state_row is None:
+                state_row = WeatherAlertState(
+                    org_id=org_id, key=rule.key, state="none"
+                )
+                db.add(state_row)
+
+            decision = apply_state_machine(rule, result, state_row)
+
+            # Zustand aktualisieren
+            if state_row.state != decision.new_state:
+                state_row.since = datetime.now(UTC)
+            state_row.state = decision.new_state
+            if result.payload_hash:
+                state_row.last_payload_hash = result.payload_hash
+            if result.values:
+                try:
+                    first_val = next(
+                        v for v in result.values.values()
+                        if isinstance(v, (int, float))
                     )
-                    db.add(state_row)
+                    state_row.last_value = float(first_val)
+                except StopIteration:
+                    pass
 
-                decision = apply_state_machine(rule, result, state_row)
+            db.commit()
 
-                # Zustand aktualisieren
-                if state_row.state != decision.new_state:
-                    state_row.since = datetime.now(UTC)
-                state_row.state = decision.new_state
-                if result.payload_hash:
-                    state_row.last_payload_hash = result.payload_hash
-                if result.values:
-                    try:
-                        first_val = next(
-                            v for v in result.values.values()
-                            if isinstance(v, (int, float))
-                        )
-                        state_row.last_value = float(first_val)
-                    except StopIteration:
-                        pass
-
+            if decision.notify:
+                state_row.last_notified_at = datetime.now(UTC)
+                state_row.last_payload_hash = decision.payload_hash
                 db.commit()
-
-                if decision.notify:
-                    state_row.last_notified_at = datetime.now(UTC)
-                    state_row.last_payload_hash = decision.payload_hash
-                    db.commit()
-                    await dispatch_alert(
-                        rule=rule,
-                        result=result,
-                        decision=decision,
-                        org_settings=org_settings,
-                        org_name=org_name,
-                        db=db,
-                        base_url=base_url,
-                    )
-            except Exception:
-                logger.exception("weather_alert_loop: Regel %s Org %s fehlgeschlagen",
-                                 rule.key, org_id)
-    finally:
-        db.close()
+                await dispatch_alert(
+                    rule=rule,
+                    result=result,
+                    decision=decision,
+                    org_settings=org_settings,
+                    org_name=org_name,
+                    db=db,
+                    base_url=base_url,
+                )
+        except Exception:
+            logger.exception("weather_alert_loop: Regel %s Org %s fehlgeschlagen",
+                             rule.key, org_id)

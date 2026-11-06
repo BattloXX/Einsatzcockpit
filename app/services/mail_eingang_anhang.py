@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.org_mail import OrgMailEingang
+from app.services.loop_thread_io import auf_event_loop
 from app.services.mail_eingang_service import ereignis
 from app.services.resend_inbound_service import (
     MAX_ATTACHMENT_BYTES,
@@ -96,7 +97,11 @@ async def lade_anhang(db: Session, row: OrgMailEingang, anhang_id: str) -> tuple
     api_key = resend_api_key_fuer_org(db, row.org_id)
     if not api_key:
         return None
-    attachment = await get_resend_attachment(api_key, row.extern_id, anhang_id[:200])
+    return await auf_event_loop(_lade_resend_anhang, api_key, row.extern_id, anhang_id)
+
+
+async def _lade_resend_anhang(api_key: str, extern_id: str, anhang_id: str) -> tuple[bytes, str, str] | None:
+    attachment = await get_resend_attachment(api_key, extern_id, anhang_id[:200])
     if not attachment:
         return None
     url = attachment.get("download_url")

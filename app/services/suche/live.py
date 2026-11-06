@@ -6,7 +6,7 @@ from math import cos, radians
 from typing import cast
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, can_access_incident, has_role
 from app.core.queries import visible_incidents_q
@@ -22,7 +22,7 @@ from app.models.major_incident import (
     SiteLogEntry,
     SitePhase,
 )
-from app.models.road_closure import CLOSURE_STATUS
+from app.models.road_closure import CLOSURE_STATUS, RoadClosure
 from app.models.user import User
 from app.models.wasserstelle import Wasserstelle
 from app.services.hydrant_service import _haversine_m
@@ -228,10 +228,12 @@ def suche_sperren(db: Session, user: User, anfrage: SuchAnfrage, woerter: list[s
         dx = dy / max(abs(cos(radians(lat))), 0.01)
         nah = {s.id for s in active_closures_in_bbox(db, user.org_id, lat - dy, lng - dx, lat + dy, lng + dx)}
     treffer = []
-    for s in visible_closures_q(db, user.org_id).all():
+    for s in visible_closures_q(db, user.org_id).options(selectinload(RoadClosure.sections)).all():
         status = compute_status(s)
         aktuell = status == "active"
-        text = _text(s.title, s.street, s.from_text, s.to_text, s.reason, s.city, s.description)
+        text = _text(s.title, s.street, s.from_text, s.to_text, s.reason, s.city, s.description,
+                     *[value for section in s.sections
+                       for value in (section.street, section.from_text, section.to_text)])
         if (aktuell or anfrage.inkl_erledigt) and (_passt(text, woerter) or s.id in nah):
             treffer.append(Treffer(
                 quelle="strassensperre", quell_id=str(s.id), titel=s.title, auszug=_auszug(text, woerter),

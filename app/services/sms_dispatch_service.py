@@ -25,6 +25,7 @@ from app.db import SessionLocal
 from app.models.master import AlarmType, FireDept, OrgSettings
 from app.models.sms import SmsEinsatzinfoRecipient, SmsLog, SmsLogRecipient
 from app.services.db_transactions import current_read_session
+from app.services.loop_thread_io import _auf_event_loop_sync, auf_event_loop
 
 # app.routers.ws muss lazy importiert bleiben (Kreisabhaengigkeit)
 
@@ -214,7 +215,7 @@ async def send_bulk_detailed(
     ctx = ctx or resolve_sms_config(org_id)
     from app.routers.ws import connected_gateway_token_ids_ordered
 
-    gateway_ids = connected_gateway_token_ids_ordered(org_id) if "gateway" in ctx.chain else []
+    gateway_ids = _auf_event_loop_sync(connected_gateway_token_ids_ordered, org_id) if "gateway" in ctx.chain else []
     gateway_labels: dict[int, str] = {}
     if gateway_ids:
         from app.models.user import SmsGatewayToken
@@ -253,14 +254,14 @@ async def send_bulk_detailed(
                         kwargs["job_id"] = job_id
                     if len(job) > 3:
                         kwargs["recipient_id"] = job[3]
-                    delivery = await send_sms(org_id, to, text, **kwargs)
+                    delivery = await auf_event_loop(send_sms, org_id, to, text, **kwargs)
                 else:
                     kwargs = {"ctx": ctx, "preferred_gateway_token_id": gateway_id}
                     if job_id is not None:
                         kwargs["job_id"] = job_id
                     if len(job) > 3:
                         kwargs["recipient_id"] = job[3]
-                    delivery = await send_sms(org_id, to, text, **kwargs)
+                    delivery = await auf_event_loop(send_sms, org_id, to, text, **kwargs)
             except Exception as exc:
                 logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
             gateway_token_id = getattr(delivery, "gateway_token_id", None)

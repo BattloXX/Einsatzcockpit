@@ -7,21 +7,30 @@ import logging
 from app.config import settings
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.services.loop_thread_io import im_db_thread, thread_ablauf
 from app.services.mail_weiterleitung_service import bereinige_logs, verarbeite_faellige
 
 logger = logging.getLogger("einsatzleiter.mail_weiterleitung_loop")
 
 
 async def run_mail_weiterleitung_once(log_id: int | None = None) -> int:
+    return await im_db_thread(_run_mail_weiterleitung_sync, log_id)
+
+
+def _run_mail_weiterleitung_sync(log_id: int | None = None) -> int:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        n = await verarbeite_faellige(db, log_id)
-        if log_id is None:
-            bereinige_logs(db)
-        return n
+        return thread_ablauf(_run_mail_weiterleitung_ablauf(db, log_id))
     finally:
         db.close()
+
+
+async def _run_mail_weiterleitung_ablauf(db, log_id: int | None = None) -> int:
+    n = await verarbeite_faellige(db, log_id)
+    if log_id is None:
+        bereinige_logs(db)
+    return n
 
 
 async def mail_weiterleitung_loop() -> None:

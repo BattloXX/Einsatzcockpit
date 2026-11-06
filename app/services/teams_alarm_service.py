@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import partial
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +25,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings
 from app.models.teams_bot import TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
+from app.services.loop_thread_io import ALARM_POOL, auf_event_loop, im_db_thread
 from app.services.sms_dispatch_service import _DEFAULT_GSL_ALARM_TEXT
 from app.services.teams_card import build_gsl_alarm_card, build_incident_message_card
 
@@ -113,7 +115,7 @@ async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlar
         body.insert(1 if incident.is_exercise else 0, {
             "type": "TextBlock", "text": text_prefix, "weight": "Bolder", "wrap": True,
         })
-    return await _post_payload(webhook_url, payload, log_label=f"Einsatz {incident.id}")
+    return await auf_event_loop(_post_payload, webhook_url, payload, log_label=f"Einsatz {incident.id}")
 
 
 async def post_incident_card(
@@ -311,28 +313,41 @@ async def post_gsl_alarm_card(
     Immer über den einfachen Webhook (kein Bot-Versand) — der Sonderalarm braucht keine
     Zusage/Absage-Buttons.
     """
+    vorbereitet = await im_db_thread(partial(
+        _gsl_alarm_payload_sync, org_id, lage_id, lage_name, is_exercise,
+        base_url=base_url, planspiel_run_id=planspiel_run_id,
+    ), pool=ALARM_POOL)
+    if vorbereitet is not None:
+        webhook_url, payload = vorbereitet
+        await _post_payload(webhook_url, payload, log_label=f"Lage {lage_id}")
+
+
+def _gsl_alarm_payload_sync(
+    org_id: int, lage_id: int, lage_name: str, is_exercise: bool, *, base_url: str,
+    planspiel_run_id: int | None = None,
+) -> tuple[str, dict] | None:
     db = SessionLocal()
     try:
         cfg = db.query(TeamsAlarmConfig).filter(TeamsAlarmConfig.org_id == org_id).first()
         if not cfg or not cfg.enabled:
-            return
+            return None
         from app.services.exercise_guard import darf_extern
         if not darf_extern(
             "teams", is_exercise=is_exercise, org_id=org_id, db=db,
             planspiel_run_id=planspiel_run_id,
         ):
-            return
+            return None
 
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
         if org_settings and not org_settings.gsl_alarm_enabled:
-            return
+            return None
 
         webhook_url = cfg.webhook_url_uebung if is_exercise else cfg.webhook_url_alarm
         if not webhook_url:
             logger.debug(
                 "GSL-Alarm: kein Webhook konfiguriert (Org %s) — übersprungen", org_id,
             )
-            return
+            return None
 
         exercise_prefix = "[UEBUNG] " if is_exercise else ""
         text = exercise_prefix + (
@@ -342,6 +357,6 @@ async def post_gsl_alarm_card(
         payload = build_gsl_alarm_card(
             lage_id, lage_name, text, is_exercise=is_exercise, base_url=base_url,
         )
-        await _post_payload(webhook_url, payload, log_label=f"Lage {lage_id}")
+        return webhook_url, payload
     finally:
         db.close()

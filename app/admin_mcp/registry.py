@@ -28,7 +28,9 @@ ADMIN_TOOLS = {
     "admin_backup_pruefen": AdminTool("Backup-Alter, Restore-Probe, Off-Site und Speicher lesend pruefen.", "backup"),
     "admin_system_uebersicht": AdminTool("Version, Build und Gesamtstatus der Teilchecks lesen.", "system"),
     "admin_dienste_pruefen": AdminTool("Gespeicherte Dienstzustaende organisationsuebergreifend zaehlen.", "dienste"),
-    "admin_worker_pruefen": AdminTool("Worker-, Leader- und Loop-Zustaende zaehlen.", "worker"),
+    "admin_worker_pruefen": AdminTool(
+        "Worker, Leader, Loop-Verzug, Prozessressourcen, unsaubere Neustarts und Host-Speicher/Swap/PSI pruefen.",
+        "worker"),
     "admin_redis_pruefen": AdminTool("Lokalen Redis-Verbindungszustand lesen.", "redis"),
     "admin_datenbank_pruefen": AdminTool("DB-Verbindung, Pool und Migrationsstand lesen.", "datenbank"),
     "admin_gateway_pruefen": AdminTool("Presence und offene/ueberfaellige Druck-/SMS-Jobs zaehlen.", "gateway"),
@@ -110,8 +112,42 @@ def collect(db, name: str, **arguments) -> dict:
         return diagnose.db_status(db)
     if name == "admin_worker_pruefen":
         result = diagnose.worker_status(db)
+        from sqlalchemy import select
+
+        from app.models.admin_security import utcnow
+        from app.models.worker_runtime import WorkerRuntime
+        from app.services.diagnose.registry import Budget
+        from app.services.diagnose.worker import host_befunde, ressourcen_befunde
+        from app.services.prozess_metriken import host_indizes, host_lesen, sicherer_ort, unsaubere_enden
+
+        budget = Budget()
+        zeilen = budget.rows(db, select(WorkerRuntime.__table__).order_by(WorkerRuntime.worker_id))
+        jetzt = utcnow()
+        host = host_lesen()
+        befunde = ressourcen_befunde(zeilen, jetzt) + host_befunde(host)
+        status = next((s for s in ("fail", "warn", "unbekannt")
+                       if s == result["status"] or any(b.schweregrad == s for b in befunde)
+                       or (s == "unbekannt" and not budget.complete)), "ok")
+        worker = []
+        indizes = host_indizes(zeilen)
+        for zeile in zeilen:
+            if zeile.expires_at <= jetzt:
+                continue
+            metriken = zeile.metriken or {}
+            verzug = metriken.get("loop_verzug") or {}
+            stillstand = metriken.get("letzter_stillstand") or {}
+            worker.append({"host_index": indizes[zeile.hostname], "pid": zeile.pid,
+                "rss_mb": metriken.get("rss_mb"),
+                "swap_mb": metriken.get("swap_mb"), "threads": metriken.get("threads"),
+                "loop_verzug": {k: verzug.get(k) for k in ("max_ms_15min", "anzahl_15min")},
+                "langsame_queries": {k: (metriken.get("langsame_queries") or {}).get(k)
+                                     for k in ("anzahl_15min", "max_ms_15min")},
+                "letzter_stillstand": {"ort": sicherer_ort(stillstand.get("ort")),
+                                       "dauer_ms": stillstand.get("dauer_ms")}})
         evidence = result["evidence"]
-        return {"status": result["status"], "evidence": {
+        return {"status": status, "evidence": {
+            "worker": worker, "unsaubere_enden": unsaubere_enden(zeilen, jetzt),
+            "host": host, "vollstaendig": budget.complete,
             "aktive_worker": evidence["worker_count"], "abgelaufene_worker": len(evidence["expired_workers"]),
             "leader": len(evidence["leader_workers"]),
             "fehlerhafte_loops": sum(loop["state"] == "failed" or loop["overdue"]

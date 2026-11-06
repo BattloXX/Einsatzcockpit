@@ -29,7 +29,7 @@ from app.services.breathing_service import get_eskalation_empfaenger_ids
 from app.services.db_transactions import retry_claim
 from app.services.loop_utils import iteration_watch
 from app.services.push_service import notify_user
-from app.services.sms_service import send_sms
+from app.services.sms_service import resolve_sms_config, send_sms
 
 logger = logging.getLogger("einsatzleiter.breathing_notify")
 # None als Verzoegerung bedeutet die org-spezifische escalation_grace_min.
@@ -199,7 +199,8 @@ def _push(db: Session, user_id: int, titel: str, text: str, url: str, alarm: boo
 
 
 async def _sms(org_id: int, phone: str, text: str, job_id: str) -> bool:
-    return bool(await send_sms(org_id, phone, text, job_id=job_id))
+    kontext = await asyncio.to_thread(resolve_sms_config, org_id)
+    return bool(await send_sms(org_id, phone, text, job_id=job_id, ctx=kontext))
 
 
 def _faellig(now: datetime) -> ColumnElement[bool]:
@@ -225,7 +226,32 @@ async def liefere_faellige(
     now = now if now is not None else datetime.now(UTC).replace(tzinfo=None)
     push_sender = push_sender or _push
     sms_sender = sms_sender or _sms
+    ids = await asyncio.to_thread(_lade_faellige_sync, now, batch)
     gesendet = 0
+    for zeile_id in ids:
+        auftrag = await asyncio.to_thread(_bereite_zustellung_sync, zeile_id, now, push_sender)
+        if auftrag is None:
+            continue
+        erfolge, sms_daten = auftrag
+        gesendet += erfolge
+        if sms_daten is not None:
+            fehler: Exception | None = None
+            try:
+                if not await sms_sender(*sms_daten):
+                    fehler = RuntimeError("Versand fehlgeschlagen")
+            except Exception as exc:
+                fehler = exc
+            erfolge, incident_id = await asyncio.to_thread(
+                _beende_zustellung_sync, zeile_id, now, type(fehler).__name__ if fehler is not None else None,
+            )
+            gesendet += erfolge
+            if incident_id is not None:
+                assert fehler is not None
+                _log_zustellungsfehler(fehler, zeile_id, incident_id)
+    return gesendet
+
+
+def _lade_faellige_sync(now: datetime, batch: int) -> list[int]:
     with SessionLocal() as db:
         set_tenant_context(db, None)
         ids = [row[0] for row in db.query(BreathingZustellung.id).filter(
@@ -233,73 +259,117 @@ async def liefere_faellige(
         ).order_by(BreathingZustellung.naechster_versuch_at, BreathingZustellung.id).limit(max(0, batch)).all()]
         # Lesetransaktion vor den konkurrierenden Einzel-Claims beenden.
         db.commit()
-        for zeile_id in ids:
-            if not retry_claim(db, partial(_claim_once, db, zeile_id, now)):
-                continue
-            zeile = db.get(BreathingZustellung, zeile_id)
-            assert zeile is not None
-            warnung = db.get(BreathingWarnung, zeile.warnung_id)
-            incident = db.get(Incident, warnung.incident_id) if warnung is not None else None
-            troop = db.get(BreathingTroop, warnung.troop_id) if warnung is not None else None
-            user = db.get(User, zeile.user_id) if zeile.user_id is not None else None
-            grund = None
-            if warnung is None or warnung.erledigt_at is not None:
-                grund = "erledigt"
-            elif incident is None or incident.status != "active":
-                grund = "Einsatz nicht aktiv"
-            elif incident.primary_org_id is None:
-                grund = "keine Organisation zugeordnet"
-            elif user is None or not user.active or user.org_id != incident.primary_org_id or troop is None:
-                grund = "Empfaenger nicht aktiv oder fremde Organisation"
-            elif zeile.kanal == "sms":
-                if incident.is_exercise:
-                    grund = "Übung"
-                elif not get_eskalation_empfaenger_ids(db, incident.primary_org_id)[1]:
-                    grund = "SMS deaktiviert"
-                elif not user.phone:
-                    grund = "keine Telefonnummer"
-            if grund:
-                zeile.status, zeile.fehler, zeile.lease_bis = "suppressed", grund, None
-                db.commit()
-                continue
-            assert warnung is not None and incident is not None and troop is not None and user is not None
-            titel, text = _texte(incident, troop, warnung.kind, zeile.kanal == "sms")
-            alarm = any(s == zeile.stufe and a for s, _d, _g, _k, a in ESKALATIONSPLAN[warnung.kind])
-            extra = {"incident_id": str(incident.id), "asuew": "1", "kind": warnung.kind}
+        return ids
+
+
+def _bereite_zustellung_sync(zeile_id: int, now: datetime, push_sender: PushSender) -> tuple | None:
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        if not retry_claim(db, partial(_claim_once, db, zeile_id, now)):
+            return None
+        zeile = db.get(BreathingZustellung, zeile_id)
+        assert zeile is not None
+        warnung = db.get(BreathingWarnung, zeile.warnung_id)
+        incident = db.get(Incident, warnung.incident_id) if warnung is not None else None
+        troop = db.get(BreathingTroop, warnung.troop_id) if warnung is not None else None
+        user = db.get(User, zeile.user_id) if zeile.user_id is not None else None
+        grund = None
+        if warnung is None or warnung.erledigt_at is not None:
+            grund = "erledigt"
+        elif incident is None or incident.status != "active":
+            grund = "Einsatz nicht aktiv"
+        elif incident.primary_org_id is None:
+            grund = "keine Organisation zugeordnet"
+        elif user is None or not user.active or user.org_id != incident.primary_org_id or troop is None:
+            grund = "Empfaenger nicht aktiv oder fremde Organisation"
+        elif zeile.kanal == "sms":
             if incident.is_exercise:
-                extra["is_exercise"] = "1"
-            fehler: Exception | None = None
-            try:
-                if zeile.kanal == "push":
-                    ok = push_sender(db, user.id, titel, text, f"/einsatz/{incident.id}/atemschutz", alarm, extra)
-                else:
-                    assert incident.primary_org_id is not None and user.phone is not None
-                    ok = await sms_sender(incident.primary_org_id, user.phone, text, f"asuew-{zeile.id}")
-                if not ok:
-                    fehler = RuntimeError("Versand fehlgeschlagen")
-            except Exception as exc:
-                fehler = exc
-            zeile.lease_bis = None
-            if fehler is None:
-                zeile.status, zeile.gesendet_at, zeile.fehler = "sent", now, None
-                write_incident_change(
-                    db, incident.id, "troop.warnung_zugestellt", "breathing_troop", troop.id,
-                    before=None, after={"kind": warnung.kind, "stufe": zeile.stufe, "kanal": zeile.kanal},
-                    user_id=None, ts=now,
-                )
-                gesendet += 1
-            else:
-                zeile.versuche += 1
-                zeile.fehler = type(fehler).__name__ + ": Versand fehlgeschlagen"
-                if zeile.versuche < 4:
-                    zeile.status = "pending"
-                    zeile.naechster_versuch_at = now + timedelta(seconds=30 * 2 ** (zeile.versuche - 1))
-                else:
-                    zeile.status = "failed"
-                    log_fehler(logger, "ASUEW-Zustellung fehlgeschlagen", fehler,
-                               level=logging.ERROR, zustellung_id=zeile.id, incident_id=incident.id)
+                grund = "Übung"
+            elif not get_eskalation_empfaenger_ids(db, incident.primary_org_id)[1]:
+                grund = "SMS deaktiviert"
+            elif not user.phone:
+                grund = "keine Telefonnummer"
+        if grund:
+            zeile.status, zeile.fehler, zeile.lease_bis = "suppressed", grund, None
             db.commit()
-    return gesendet
+            return None
+        assert warnung is not None and incident is not None and troop is not None and user is not None
+        titel, text = _texte(incident, troop, warnung.kind, zeile.kanal == "sms")
+        alarm = any(s == zeile.stufe and a for s, _d, _g, _k, a in ESKALATIONSPLAN[warnung.kind])
+        extra = {"incident_id": str(incident.id), "asuew": "1", "kind": warnung.kind}
+        if incident.is_exercise:
+            extra["is_exercise"] = "1"
+        fehler: Exception | None = None
+        sms_daten = None
+        try:
+            if zeile.kanal == "push":
+                if not push_sender(db, user.id, titel, text, f"/einsatz/{incident.id}/atemschutz", alarm, extra):
+                    fehler = RuntimeError("Versand fehlgeschlagen")
+            else:
+                sms_daten = (incident.primary_org_id, user.phone, text, f"asuew-{zeile.id}")
+        except Exception as exc:
+            fehler = exc
+        if sms_daten is not None:
+            return 0, sms_daten
+        # Push und Zustellungsstatus bleiben wie bisher in derselben Transaktion.
+        erfolge, endgueltig = _beende_zustellung_db(
+            db, zeile, warnung, incident, troop, now, type(fehler).__name__ if fehler is not None else None,
+        )
+        if endgueltig:
+            assert fehler is not None
+            _log_zustellungsfehler(fehler, zeile.id, incident.id)
+        db.commit()
+        return erfolge, None
+
+
+def _beende_zustellung_sync(
+    zeile_id: int, now: datetime, fehlerklasse: str | None,
+) -> tuple[int, int | None]:
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        zeile = db.get(BreathingZustellung, zeile_id)
+        assert zeile is not None
+        warnung = db.get(BreathingWarnung, zeile.warnung_id)
+        assert warnung is not None
+        incident = db.get(Incident, warnung.incident_id)
+        troop = db.get(BreathingTroop, warnung.troop_id)
+        assert incident is not None and troop is not None
+        erfolge, endgueltig = _beende_zustellung_db(db, zeile, warnung, incident, troop, now, fehlerklasse)
+        incident_id = incident.id if endgueltig else None
+        db.commit()
+        return erfolge, incident_id
+
+
+def _beende_zustellung_db(
+    db: Session, zeile: BreathingZustellung, warnung: BreathingWarnung,
+    incident: Incident, troop: BreathingTroop, now: datetime, fehlerklasse: str | None,
+) -> tuple[int, bool]:
+    erfolgreich = False
+    endgueltig = False
+    zeile.lease_bis = None
+    if fehlerklasse is None:
+        zeile.status, zeile.gesendet_at, zeile.fehler = "sent", now, None
+        write_incident_change(
+            db, incident.id, "troop.warnung_zugestellt", "breathing_troop", troop.id,
+            before=None, after={"kind": warnung.kind, "stufe": zeile.stufe, "kanal": zeile.kanal},
+            user_id=None, ts=now,
+        )
+        erfolgreich = True
+    else:
+        zeile.versuche += 1
+        zeile.fehler = fehlerklasse + ": Versand fehlgeschlagen"
+        if zeile.versuche < 4:
+            zeile.status = "pending"
+            zeile.naechster_versuch_at = now + timedelta(seconds=30 * 2 ** (zeile.versuche - 1))
+        else:
+            zeile.status = "failed"
+            endgueltig = True
+    return int(erfolgreich), endgueltig
+
+
+def _log_zustellungsfehler(fehler: Exception, zeile_id: int, incident_id: int) -> None:
+    log_fehler(logger, "ASUEW-Zustellung fehlgeschlagen", fehler,
+               level=logging.ERROR, zustellung_id=zeile_id, incident_id=incident_id)
 
 
 async def breathing_notify_loop() -> None:

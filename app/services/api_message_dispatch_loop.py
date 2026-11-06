@@ -13,6 +13,7 @@ from app.db import SessionLocal
 from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.sms import SmsLog, SmsLogRecipient
 from app.services import mail_service
+from app.services.loop_thread_io import im_db_thread, thread_ablauf
 from app.services.sms_dispatch_service import SmsSendResult, _send_bulk_with_progress
 from app.services.sms_service import resolve_sms_config
 
@@ -173,67 +174,74 @@ async def send_message_now(db, message: ApiMessage) -> None:
 
 
 async def dispatch_once(db=None, *, batch_size: int = BATCH_SIZE) -> int:
-    owns = db is None
-    if owns:
-        db = SessionLocal()
-        set_tenant_context(db, None)
-    processed = 0
+    if db is not None:
+        return await _dispatch_ablauf(db, batch_size=batch_size)
+    return await im_db_thread(_dispatch_sync, batch_size)
+
+
+def _dispatch_sync(batch_size: int) -> int:
+    db = SessionLocal()
+    set_tenant_context(db, None)
     try:
-        for _ in range(batch_size):
-            now = _now()
-            message = (
-                db.query(ApiMessage)
-                .filter(
-                    ApiMessage.status == "queued",
-                    ApiMessage.recipients.any(
-                        (ApiMessageRecipient.status == "queued")
-                        & or_(
-                            ApiMessageRecipient.next_attempt_at.is_(None),
-                            ApiMessageRecipient.next_attempt_at <= now,
-                        )
-                    ),
-                )
-                .execution_options(include_all_tenants=True)
-                .order_by(ApiMessage.id)
-                .with_for_update(skip_locked=True)
-                .first()
-            )
-            if message is None:
-                break
-            processed += 1
-            message.status = "sending"
-            message.started_at = message.started_at or now
-            recipients = (
-                db.query(ApiMessageRecipient)
-                .filter(
-                    ApiMessageRecipient.message_id == message.id,
-                    ApiMessageRecipient.status == "queued",
-                    or_(
+        return thread_ablauf(_dispatch_ablauf(db, batch_size=batch_size))
+    finally:
+        db.close()
+
+
+async def _dispatch_ablauf(db, *, batch_size: int) -> int:
+    processed = 0
+    for _ in range(batch_size):
+        now = _now()
+        message = (
+            db.query(ApiMessage)
+            .filter(
+                ApiMessage.status == "queued",
+                ApiMessage.recipients.any(
+                    (ApiMessageRecipient.status == "queued")
+                    & or_(
                         ApiMessageRecipient.next_attempt_at.is_(None),
                         ApiMessageRecipient.next_attempt_at <= now,
-                    ),
-                )
-                .execution_options(include_all_tenants=True)
-                .all()
+                    )
+                ),
             )
+            .execution_options(include_all_tenants=True)
+            .order_by(ApiMessage.id)
+            .with_for_update(skip_locked=True)
+            .first()
+        )
+        if message is None:
+            break
+        processed += 1
+        message.status = "sending"
+        message.started_at = message.started_at or now
+        recipients = (
+            db.query(ApiMessageRecipient)
+            .filter(
+                ApiMessageRecipient.message_id == message.id,
+                ApiMessageRecipient.status == "queued",
+                or_(
+                    ApiMessageRecipient.next_attempt_at.is_(None),
+                    ApiMessageRecipient.next_attempt_at <= now,
+                ),
+            )
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+        for recipient in recipients:
+            recipient.status = "sending"
+        if message.kanal == "sms":
+            queue_sms(db, message, recipients)
+        db.commit()
+        if message.kanal == "sms":
             for recipient in recipients:
-                recipient.status = "sending"
-            if message.kanal == "sms":
-                queue_sms(db, message, recipients)
+                recipient.attempt_count += 1
             db.commit()
-            if message.kanal == "sms":
-                for recipient in recipients:
-                    recipient.attempt_count += 1
-                db.commit()
-                await _dispatch_sms(db, message, recipients)
-            else:
-                await _dispatch_mail(db, message, recipients)
-            _finish(db, message)
-            db.commit()
-        return processed
-    finally:
-        if owns:
-            db.close()
+            await _dispatch_sms(db, message, recipients)
+        else:
+            await _dispatch_mail(db, message, recipients)
+        _finish(db, message)
+        db.commit()
+    return processed
 
 
 async def api_message_dispatch_loop() -> None:

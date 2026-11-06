@@ -2143,6 +2143,11 @@ button.htmx-request,
 .hydrant-icon--ueberflur, .hydrant-icon--hydrant { background: #dc2626; }
 .hydrant-icon--unterflur { background: #2563eb; border-radius: 4px; }
 .hydrant-icon--loeschwasser { background: #0d9488; }
+.hydranten-blau .hydrant-icon--ueberflur,
+.hydranten-blau .hydrant-icon--hydrant { background: #2563eb; }
+.hydranten-blau .hydrant-icon--unterflur { background: #1e3a8a; }
+.hydranten-blau .hydrant-icon { opacity: .9; }
+.einsatzdauer-abgeschlossen { opacity: .6; }
 .hydrant-liste { display: flex; flex-direction: column; gap: 4px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
 .hydrant-liste__mehr { font-size: .72rem; margin-top: 6px; text-align: center; }
 .hydrant-liste__row {
@@ -3108,3 +3113,9 @@ button.htmx-request,
 
 /* Icon-Abstand im Probe-Appell und in der Gateway-Liste. */
 .appell-status, .appell-stats > span, .appell-actions button, .gwl-card__name { display: inline-flex; align-items: center; gap: .35em; }
+
+.sperren-abschnitte { padding-left: 1.5rem; overflow-wrap: anywhere; }
+.sperren-abschnitte li { margin-bottom: .8rem; }
+@media (max-width: 760px) {
+  .sperren-abschnitte li { padding: .5rem; border: 1px solid var(--border); border-radius: .4rem; }
+}

@@ -292,6 +292,7 @@
   var letzterModus = null;
   var letzteIncidentId = null;
   var rotTimer = null;
+  var alarmEnde = null;
   var alarmBeginn = null;   // ms-Zeitstempel des Alarmbeginns (Einsatzzeit-Timer)
 
   function stopRotation() {
@@ -321,10 +322,12 @@
     if (idleUhr) { idleUhr.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
     var timer = document.getElementById("is-einsatzzeit");
     if (timer && alarmBeginn) {
-      var sek = Math.max(0, Math.floor((Date.now() - alarmBeginn) / 1000));
+      var sek = Math.max(0, Math.floor(((alarmEnde || Date.now()) - alarmBeginn) / 1000));
       var h = Math.floor(sek / 3600), m = Math.floor((sek % 3600) / 60), s = sek % 60;
+      timer.classList.toggle("einsatzdauer-abgeschlossen", !!alarmEnde);
+      timer.title = alarmEnde ? "Einsatzdauer (abgeschlossen)" : "Einsatzdauer";
       timer.textContent = (h > 0 ? String(h).padStart(2, "0") + ":" : "") +
-        String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+        String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + (alarmEnde ? " (Abgeschlossen)" : "");
     }
   }, 1000);
 
@@ -476,6 +479,7 @@
     if (gslMap) { gslMap.remove(); }
     karte = null; gslMap = null; gslMarkerLayer = null;
     var g = daten.gsl || {};
+    alarmEnde = g.ende ? new Date(g.ende).getTime() : null;
     alarmBeginn = g.beginn ? new Date(g.beginn).getTime() : null;
 
     var html =
@@ -516,6 +520,7 @@
   // ohne die Karte neu aufzubauen (kein Neuladen der Kacheln, kein Zoom-Sprung).
   function aktualisiereGsl(daten) {
     var g = daten.gsl || {};
+    alarmEnde = g.ende ? new Date(g.ende).getTime() : null;
     alarmBeginn = g.beginn ? new Date(g.beginn).getTime() : alarmBeginn;
     var kpi = document.getElementById("gsl-kpi");
     if (kpi) { kpi.innerHTML = gslKpiHtml(g.kpi); }
@@ -531,7 +536,7 @@
   function renderRotation(urls) {
     stopRotation();
     if (karte) { karte.remove(); }
-    karte = null; alarmBeginn = null;
+    karte = null; alarmBeginn = null; alarmEnde = null;
     var i = 0;
     function zeige() {
       var eintrag = urls[i % urls.length];
@@ -547,7 +552,7 @@
   function renderIdle(daten) {
     stopRotation();
     if (karte) { karte.remove(); }
-    karte = null; alarmBeginn = null;
+    karte = null; alarmBeginn = null; alarmEnde = null;
     var leitstelle = document.getElementById("is-leitstelle");
     if (leitstelle) { leitstelle.style.display = "none"; }
     // Frei konfigurierte URL-Rotation hat Vorrang vor den festen Ruhemodi
@@ -674,6 +679,7 @@
       leitstelle.textContent = inc.leitstelle_nr ? "Leitstelle " + inc.leitstelle_nr : "";
       leitstelle.style.display = inc.leitstelle_nr ? "flex" : "none";
     }
+    alarmEnde = inc.ende ? new Date(inc.ende).getTime() : null;
     alarmBeginn = inc.beginn ? new Date(inc.beginn).getTime() : null;
 
     // ── Alarm-Kopf (rot): Badge + Einsatzmeldung als Kopfzeile, Adresse, RSVP, Einsatzzeit ──
@@ -737,11 +743,11 @@
 
     // ── Mitte: Lagekarte ──
     html += '<div class="is-col"><div class="is-panel is-panel--grow"><h2>' + ecpIcon("map", {size: "lg"}) + ' Lage &amp; Löschwasser</h2>' +
-      '<div id="is-karte"></div>' +
+      '<div id="is-karte" class="hydranten-blau"></div>' +
       '<div class="is-karte-legende">' +
       '<span><span class="is-punkt" style="background:#d42225;"></span>Einsatzort</span>' +
-      '<span><span class="is-punkt" style="background:#dc2626;"></span>Überflurhydrant</span>' +
-      '<span><span class="is-punkt" style="background:#2563eb;"></span>Unterflur</span>' +
+      '<span><span class="is-punkt" style="background:#2563eb;"></span>Überflurhydrant</span>' +
+      '<span><span class="is-punkt" style="background:#1e3a8a;border-radius:2px;"></span>Unterflur</span>' +
       '<span><span class="is-punkt" style="background:#0d9488;"></span>Löschwasser</span>' +
       '</div><div id="is-wasser-status" class="is-wasser-status"></div></div></div>';
 
@@ -814,7 +820,7 @@
     var anker = null;
     if (lat != null && lng != null) {
       karte.setView([lat, lng], 18);
-      L.circleMarker([lat, lng], { radius: 11, color: "#fff", weight: 2, fillColor: "#d42225", fillOpacity: .85 }).addTo(karte);
+      L.marker([lat, lng], { icon: ecpMarkerIcon("urgent", {color: "#d42225", size: 32, border: "3px solid #fff"}), zIndexOffset: 1000 }).addTo(karte);
       anker = [lat, lng];
     } else {
       karte.setView([47.4652, 9.7503], 14);

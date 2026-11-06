@@ -195,3 +195,68 @@ def test_geraete_catalog_details_and_audit(client, admin_env, monkeypatch):
         data = json.loads(audit.payload_json)
         assert data["tool"] == "admin_geraet_details" and data["korrelations_id"] == answer["korrelations_id"]
         assert data["argumente"] == {"geraet_id": "[MASKIERT]"}
+
+
+def test_worker_ressourcen_evidenz_und_gesamtstatus(monkeypatch):
+    from datetime import timedelta
+
+    from app.admin_mcp import registry
+    from app.models.admin_security import utcnow
+    from app.models.worker_runtime import WorkerRuntime
+
+    jetzt = utcnow()
+    monkeypatch.setattr("app.services.prozess_metriken.host_lesen", lambda: {
+        "MemTotal": 4096, "MemAvailable": 100, "SwapTotal": 1024, "SwapFree": 0,
+        "psi": {"memory": {"full": {"avg300": 6}}}})
+    with SessionLocal() as db:
+        db.query(WorkerRuntime).delete()
+        db.add(WorkerRuntime(worker_id="GEHEIMER-HOST-WORKER", hostname="GEHEIMER-HOST", pid=42,
+            started_at=jetzt, heartbeat_at=jetzt, expires_at=jetzt + timedelta(seconds=20),
+            is_leader=True, redis={}, loops={}, metriken={"rss_mb": 650, "swap_mb": 12, "threads": 7,
+                "loop_verzug": {"max_ms_15min": 60000, "anzahl_15min": 2},
+                "langsame_queries": {"anzahl_15min": 20, "max_ms_15min": 2000},
+                "letzter_stillstand": {"ort": "app/services/test.py:42", "dauer_ms": 60000}}))
+        for i in range(3):
+            db.add(WorkerRuntime(worker_id=f"alt-{i}", hostname="GEHEIMER-HOST", pid=i,
+                started_at=jetzt - timedelta(minutes=10), heartbeat_at=jetzt - timedelta(seconds=30),
+                expires_at=jetzt - timedelta(seconds=10), is_leader=False, redis={}, loops={}))
+        db.commit()
+        ergebnis = registry.collect(db, "admin_worker_pruefen")
+        assert ergebnis["status"] == "fail"
+        evidenz = ergebnis["evidence"]
+        assert evidenz["worker"] == [{"host_index": 1, "pid": 42, "rss_mb": 650, "swap_mb": 12, "threads": 7,
+            "loop_verzug": {"max_ms_15min": 60000, "anzahl_15min": 2},
+            "langsame_queries": {"anzahl_15min": 20, "max_ms_15min": 2000},
+            "letzter_stillstand": {"ort": "app/services/test.py:42", "dauer_ms": 60000}}]
+        assert evidenz["unsaubere_enden"] == [{"host_index": 1, "anzahl_1h": 3, "anzahl_24h": 3}]
+        assert evidenz["host"]["MemAvailable"] == 100
+        assert "GEHEIMER" not in json.dumps(evidenz)
+        assert registry.collect(db, "admin_system_uebersicht")["evidence"]["teilchecks"]["admin_worker_pruefen"] == "fail"
+        db.query(WorkerRuntime).delete()
+        db.commit()
+
+
+def test_admin_dienste_pruefen_zaehlt_ausgeschaltet_ohne_alten_fehler(client, admin_env):
+    from app.models.master import OrgSettings
+
+    with SessionLocal() as db:
+        org = FireDept(slug=uuid4().hex, name="GEHEIME-ORG")
+        db.add(org)
+        db.flush()
+        org_id = org.id
+        db.add(OrgSettings(org_id=org_id, dienst_monitor_ausgeschaltet="alarm_lis,alarm_dibos"))
+        db.add(DienstStatus(org_id=org_id, key="alarm_lis", state="down", last_error="GEHEIMER-FEHLER"))
+        db.commit()
+    try:
+        values = tokens(client, admin_env)
+        answer = call(client, values["access_token"], "admin_dienste_pruefen")
+        assert answer["evidenz"]["dienste"]["alarm_lis"]["ausgeschaltet"] >= 1
+        assert answer["evidenz"]["dienste"]["alarm_lis"]["down"] == 0
+        assert "GEHEIM" not in json.dumps(answer)
+    finally:
+        with SessionLocal() as db:
+            for model in (DienstStatus, OrgSettings):
+                for row in db.query(model).filter_by(org_id=org_id).all():
+                    db.delete(row)
+            db.delete(db.get(FireDept, org_id))
+            db.commit()

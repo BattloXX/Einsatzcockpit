@@ -6,12 +6,12 @@ import hashlib
 import json
 from datetime import UTC, datetime
 
-from sqlalchemy import case, or_
-from sqlalchemy.orm import Session
+from sqlalchemy import case, inspect, or_
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.timezones import format_local_datetime
 from app.models.master import FireDept
-from app.models.road_closure import CLOSURE_STATUS, DIRECTIONS, RESTRICTION_TYPES, RoadClosure
+from app.models.road_closure import CLOSURE_STATUS, DIRECTIONS, RESTRICTION_TYPES, RoadClosure, RoadClosureSection
 from app.services.road_closure_service import compute_status
 
 
@@ -34,6 +34,7 @@ def public_closures_q(db: Session, org_id: int, *, now: datetime | None = None, 
     now = now or _now()
     query = (
         db.query(RoadClosure)
+        .options(selectinload(RoadClosure.sections))
         .execution_options(include_all_tenants=True)
         .filter(
             RoadClosure.org_id == org_id,
@@ -50,15 +51,31 @@ def einsatzgebiet(org: FireDept, closure: RoadClosure) -> str:
     return f"{org.name} – {closure.city}" if closure.city and closure.city not in org.name else org.name
 
 
+def _geladene_abschnitte(closure: RoadClosure) -> list[RoadClosureSection]:
+    """Abschnitte, ohne bei losgeloesten Objekten nachzuladen (Fallback: Aggregatfelder)."""
+    state = inspect(closure, raiseerr=False)
+    if state is not None and "sections" in state.unloaded and state.session is None:
+        return []
+    return list(closure.sections)
+
+
 def abschnitt(closure: RoadClosure) -> str | None:
     """Straße mit Von/Bis, ohne Platzhalter für fehlende Endpunkte."""
-    if not closure.street:
-        return None
-    if closure.from_text and closure.to_text:
-        return f"{closure.street}: {closure.from_text} – {closure.to_text}"
-    if closure.from_text or closure.to_text:
-        return f"{closure.street}: {closure.from_text or closure.to_text}"
-    return closure.street
+    texts = []
+    sections: list[RoadClosureSection | RoadClosure] = list(_geladene_abschnitte(closure)) or [closure]
+    for section in sections:
+        if not section.street:
+            continue
+        endpoints = " – ".join(value for value in (section.from_text, section.to_text) if value)
+        texts.append(f"{section.street}: {endpoints}" if endpoints else section.street)
+    return "; ".join(texts) or None
+
+
+def abschnitte(closure: RoadClosure) -> list[dict]:
+    return [
+        {field: getattr(section, field) for field in ("street", "from_text", "to_text", "direction")}
+        for section in _geladene_abschnitte(closure)
+    ]
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -90,6 +107,7 @@ def public_closure_dict(closure: RoadClosure, org: FireDept, *, now: datetime | 
         "from_text": closure.from_text,
         "to_text": closure.to_text,
         "abschnitt": abschnitt(closure),
+        "abschnitte": abschnitte(closure),
         "direction": closure.direction,
         "direction_label": DIRECTIONS.get(closure.direction or "", closure.direction),
         "restriction_type": closure.restriction_type,

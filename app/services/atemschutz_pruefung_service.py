@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.atemschutz_pruefung import AtemschutzPruefBenachrichtigung, AtemschutzPruefung
 from app.models.master import OrgSettings
+from app.services.loop_thread_io import auf_event_loop, im_db_thread, thread_ablauf
 
 logger = logging.getLogger("einsatzleiter.atemschutz_pruefung")
 
@@ -23,11 +24,19 @@ async def melde_defekt_background(pruefung_id: int, base_url: str = "") -> None:
     committet selbst. Fehler werden geloggt, aber nie propagiert — ein
     Mail-/Teams-Ausfall darf das Prüfprotokoll nicht beeinträchtigen.
     """
+    await im_db_thread(_melde_defekt_background_sync, pruefung_id, base_url)
+
+
+def _melde_defekt_background_sync(pruefung_id: int, base_url: str) -> None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
 
     db = SessionLocal()
     set_tenant_context(db, None)
+    return thread_ablauf(_melde_defekt_background_ablauf(db, pruefung_id, base_url))
+
+
+async def _melde_defekt_background_ablauf(db: Session, pruefung_id: int, base_url: str) -> None:
     try:
         pruefung = db.get(AtemschutzPruefung, pruefung_id)
         if not pruefung:
@@ -93,7 +102,7 @@ async def melde_defekt(pruefung: AtemschutzPruefung, db: Session, base_url: str 
     # Teams
     if teams_url:
         from app.services.teams_service import post_teams_karte
-        ok = await post_teams_karte(teams_url, betreff, body_text, url=detail_url or None)
+        ok = await auf_event_loop(post_teams_karte, teams_url, betreff, body_text, url=detail_url or None)
         db.add(AtemschutzPruefBenachrichtigung(
             pruefung_id=pruefung.id,
             org_id=pruefung.org_id,

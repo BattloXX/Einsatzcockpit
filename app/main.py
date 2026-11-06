@@ -1,11 +1,17 @@
 """FastAPI application – Einsatzcockpit (Multi-Org) v2.0.0."""
 
+# ruff: noqa: E402 -- Logging muss vor allen MCP-Imports eingerichtet sein.
+from app.logging_setup import einrichten, rich_handler_entfernen
+
+einrichten()
+
 import asyncio
 import logging
 import os
 import re
 import secrets as _secrets
 from contextlib import AsyncExitStack, asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
@@ -30,7 +36,8 @@ from app.admin_mcp.server import server as admin_mcp_server
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
 from app.core.fehlerlog import korrelation_setzen, korrelations_id
-from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
+from app.core.http_cache import CacheStaticFiles
+from app.core.multi_account import ACCOUNTS_COOKIE, AccountEntry, add_account, load_accounts, set_accounts_cookie
 from app.core.security import (
     pruefe_geraete_session,
     session_login_method,
@@ -160,6 +167,8 @@ from app.services.gateway_presence import worker_id
 from app.services.loop_lag_watchdog import VerzugsWatchdog
 from app.services.suche.outbox import registriere_listener
 
+rich_handler_entfernen()
+
 registriere_listener()
 
 logger = logging.getLogger("einsatzleiter")
@@ -180,6 +189,9 @@ async def _loop_lag_monitor(watchdog: VerzugsWatchdog | None = None) -> None:
         await asyncio.sleep(0.1)
         jetzt = loop.time()
         lag_ms = (jetzt - expected) * 1000
+        from app.services.prozess_metriken import sammler
+
+        sammler.loop_verzug(max(0, lag_ms), settings.LOOP_LAG_WARN_MS)
         if lag_ms > settings.LOOP_LAG_WARN_MS:
             loop_lag_logger.warning("Event-Loop-Verzug: %.0f ms (PID %s, worker_id=%s)",
                                     lag_ms, os.getpid(), worker_id())
@@ -537,7 +549,7 @@ app.add_middleware(
 )
 
 # Static files
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", CacheStaticFiles(directory="app/static"), name="static")
 # MCP registriert die OAuth-Metadaten vor dem Static-Mount fuer /.well-known.
 _mcp_routes = mcp_application().routes
 for _mcp_route in _mcp_routes:
@@ -597,14 +609,226 @@ _SESSION_SKIP_PREFIXES = ("/static/", "/.well-known/")
 _SESSION_SKIP_PATHS = ("/sw.js", "/favicon.ico")
 
 
-def _melde_widerrufene_session(request: Request, db, device_token_id: int | None) -> None:
+@dataclass
+class SessionErgebnis:
+    """Request-Werte und wie bisher detached User mit eager geladenen Rollen/Org.
+
+    Keine offene Session verlaesst den Worker; User.member bleibt wie bisher lazy.
+    """
+
+    user: User | None = None
+    display_name: str | None = None
+    qr_incident_id: int | None = None
+    qr_lage_id: int | None = None
+    is_device: bool = False
+    device_token_id: int | None = None
+    refresh_user_id: int | None = None
+    refresh_remember: bool = False
+    auth_error: str | None = None
+
+
+def _melde_widerrufene_session(
+    request: Request, db, device_token_id: int | None, ergebnis: SessionErgebnis,
+) -> None:
     """SEC-01: Geräte-Session mit widerrufenem Token aggregiert protokollieren."""
     from app.models.user import DeviceToken
     from app.services import device_auth_failure_service as dat
 
     token = db.get(DeviceToken, device_token_id) if device_token_id else None
-    request.state.auth_error = dat.CLIENT_CODE[dat.REASON_SESSION_REVOKED]
+    ergebnis.auth_error = dat.CLIENT_CODE[dat.REASON_SESSION_REVOKED]
     dat.record_failure(request, dat.REASON_SESSION_REVOKED, "session", device_token=token)
+
+
+def _session_aus_db(
+    request: Request, token: str,
+    session_data: tuple[int, bool, int | None, bool, str | None, int | None, bool, int | None],
+    session_epoch: int,
+) -> SessionErgebnis:
+    """Session samt QR-/Geraetepruefung und FCM-Schreiben komplett im Worker."""
+    ergebnis = SessionErgebnis()
+    (user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id, is_remember, device_token_id) = (
+        session_data
+    )
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
+        if user and not is_qr and not is_device and user.session_epoch != session_epoch:
+            user = None
+        if user and is_qr:
+            if qr_lage_id is not None:
+                # Lage QR session: valid while Lage is active and token not revoked.
+                db_token = (
+                    db.query(LageToken)
+                    .filter(
+                        LageToken.lage_id == qr_lage_id,
+                        LageToken.issued_by_user_id == user_id,
+                        LageToken.revoked_at.is_(None),
+                    )
+                    .first()
+                )
+                lage = db.get(MajorIncident, qr_lage_id) if db_token else None
+                if not db_token or not lage or lage.status != MajorIncidentStatus.active:
+                    user = None
+                else:
+                    recorder = db.query(Role).filter(Role.code == "recorder").first()
+                    user = _QrUser(user, recorder)  # type: ignore[assignment]
+            elif qr_incident_id is not None:
+                # Incident QR session: valid while incident is open and token not revoked.
+                db_token = (
+                    db.query(IncidentToken)
+                    .filter(  # type: ignore[assignment]
+                        IncidentToken.incident_id == qr_incident_id,
+                        IncidentToken.issued_by_user_id == user_id,
+                        IncidentToken.revoked_at.is_(None),
+                    )
+                    .first()
+                )
+                inc = db.get(Incident, qr_incident_id) if db_token else None
+                from app.core.security import session_alarm_token_id
+                from app.models.teams_bot import AlarmToken
+
+                alarm_id = session_alarm_token_id(token)
+                alarm_valid = True
+                if alarm_id is not None:
+                    alarm = db.get(AlarmToken, alarm_id)
+                    jetzt = datetime.now(UTC).replace(tzinfo=None)
+                    alarm_valid = bool(
+                        alarm and alarm.incident_id == qr_incident_id
+                        and alarm.gueltig(jetzt=jetzt)
+                        and alarm.created_at + timedelta(days=settings.ALARM_LINK_TTL_DAYS) >= jetzt
+                        and inc and inc.access_pin_hash
+                    )
+                if not db_token or not inc or inc.status != "active" or not alarm_valid:
+                    user = None  # Incident closed or token revoked → logged out
+                else:
+                    # Nur der neue Principal erhaelt readonly; alte Gast-Sessions
+                    # mit dem Druck-Principal behalten ihre recorder-Berechtigung.
+                    role_code = (
+                        "readonly" if user.username == f"alarmlink-gast@org{user.org_id}" else "recorder"
+                    )
+                    qr_role = db.query(Role).filter(Role.code == role_code).first()
+                    user = _QrUser(user, qr_role, qr_incident_id)  # type: ignore[assignment]
+            else:
+                user = None  # QR session without incident_id or lage_id → force re-login
+        elif user and is_device:
+            # SEC-5 + Audit A4: Device-Session-Widerruf. Neue Cookies
+            # tragen die device_token_id ("t") — der Widerruf GENAU
+            # dieses Geraets beendet die Session sofort, auch wenn der
+            # User weitere aktive Geraete hat. Bestandscookies ohne
+            # Token-Bezug (vor PR 6 ausgestellt) fallen auf die
+            # grobkoernige Pruefung "hat noch irgendein aktives
+            # Geraet" zurueck.
+            if not pruefe_geraete_session(db, user_id, is_device, device_token_id):
+                user = None
+                _melde_widerrufene_session(request, db, device_token_id, ergebnis)
+            else:
+                ergebnis.device_token_id = device_token_id
+        elif user and not is_device:
+            # Regular session: refresh token to slide the inactivity window.
+            ergebnis.refresh_user_id = user_id
+            ergebnis.refresh_remember = is_remember
+        ergebnis.user = user
+        ergebnis.display_name = display_name
+        ergebnis.qr_incident_id = qr_incident_id
+        ergebnis.qr_lage_id = qr_lage_id
+        ergebnis.is_device = is_device
+        fcm_token = request.query_params.get("fcm_token")
+        if user is not None and fcm_token:
+            from app.services.push_service import upsert_fcm_token
+
+            fcm_platform = (request.query_params.get("fcm_platform") or "").strip().lower()
+            upsert_fcm_token(
+                db,
+                user_id=user.id,
+                token=fcm_token,
+                platform=fcm_platform if fcm_platform in {"android", "ios"} else None,
+                device_token_id=device_token_id if is_device else None,
+            )
+            # ergebnis.user bleibt nach db.close() in den Routen
+            # in Gebrauch; der Commit darf dessen geladene Rollen nicht
+            # ablaufen lassen.
+            db.expire_on_commit = False
+            db.commit()
+    except Exception:
+        # Transienter DB-Fehler darf anonyme Routen nicht blockieren.
+        logger.exception("session_middleware: User-Lookup fehlgeschlagen")
+    finally:
+        db.close()
+
+    return ergebnis
+
+
+def _native_link_user_aus_db(user_id: int) -> User | None:
+    user = None
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = (
+            db.query(User)
+            .filter(
+                User.id == user_id,
+                User.active == True,  # noqa: E712
+            )
+            .first()
+        )
+    except Exception:
+        logger.exception("session_middleware: nt-Token User-Lookup fehlgeschlagen")
+    finally:
+        db.close()
+
+    return user
+
+
+def _mfa_pflicht_aus_db(user: User) -> bool:
+    from app.services import mfa_service
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        return mfa_service.required_for(db, user)
+
+
+def _accounts_aus_db(
+    cookie_accounts: list[AccountEntry], active_user_id: int,
+) -> tuple[list[AccountEntry], list[dict]]:
+    """Konten validieren und reine Anzeigewerte statt ORM-Objekten liefern."""
+    account_ids = [account["u"] for account in cookie_accounts]
+    accounts: list[dict] = []
+    _bereinigte_accounts: list[AccountEntry] = []
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        users = db.query(User).filter(User.id.in_(account_ids), User.active == True).all()  # noqa: E712
+        users_by_id = {user.id: user for user in users}
+        now = datetime.now(UTC)
+        for account in cookie_accounts:
+            account_user = users_by_id.get(account["u"])
+            if (
+                not account_user or account_user.is_device
+                or account_user.session_epoch != account.get("e", 0)
+            ):
+                continue
+            locked_until = account_user.locked_until
+            if locked_until and locked_until.tzinfo is None:
+                locked_until = locked_until.replace(tzinfo=UTC)
+            if locked_until and locked_until > now:
+                continue
+            _bereinigte_accounts.append(account)
+            accounts.append(
+                {
+                    "user_id": account_user.id,
+                    "display_name": account_user.display_name,
+                    "org_name": account_user.org.name if account_user.org else "Keine Organisation",
+                    "is_active_account": account_user.id == active_user_id,
+                }
+            )
+    except Exception:
+        logger.exception("session_middleware: Kontoliste konnte nicht validiert werden")
+        accounts = []
+        _bereinigte_accounts = []
+    finally:
+        db.close()
+    return _bereinigte_accounts, accounts
 
 
 # Session middleware – inject request.state.user + sliding-window token refresh
@@ -657,115 +881,17 @@ async def _session_mit_kontext(request: Request, call_next):
     if token:
         session_data = unsign_session(token)
         if session_data:
-            (user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id, is_remember, device_token_id) = (
-                session_data
-            )
-            db = SessionLocal()
-            set_tenant_context(db, None)
-            try:
-                user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
-                if user and not is_qr and not is_device and user.session_epoch != _session_epoch:
-                    user = None
-                if user and is_qr:
-                    if qr_lage_id is not None:
-                        # Lage QR session: valid while Lage is active and token not revoked.
-                        db_token = (
-                            db.query(LageToken)
-                            .filter(
-                                LageToken.lage_id == qr_lage_id,
-                                LageToken.issued_by_user_id == user_id,
-                                LageToken.revoked_at.is_(None),
-                            )
-                            .first()
-                        )
-                        lage = db.get(MajorIncident, qr_lage_id) if db_token else None
-                        if not db_token or not lage or lage.status != MajorIncidentStatus.active:
-                            user = None
-                        else:
-                            recorder = db.query(Role).filter(Role.code == "recorder").first()
-                            user = _QrUser(user, recorder)  # type: ignore[assignment]
-                    elif qr_incident_id is not None:
-                        # Incident QR session: valid while incident is open and token not revoked.
-                        db_token = (
-                            db.query(IncidentToken)
-                            .filter(  # type: ignore[assignment]
-                                IncidentToken.incident_id == qr_incident_id,
-                                IncidentToken.issued_by_user_id == user_id,
-                                IncidentToken.revoked_at.is_(None),
-                            )
-                            .first()
-                        )
-                        inc = db.get(Incident, qr_incident_id) if db_token else None
-                        from app.core.security import session_alarm_token_id
-                        from app.models.teams_bot import AlarmToken
-
-                        alarm_id = session_alarm_token_id(token)
-                        alarm_valid = True
-                        if alarm_id is not None:
-                            alarm = db.get(AlarmToken, alarm_id)
-                            jetzt = datetime.now(UTC).replace(tzinfo=None)
-                            alarm_valid = bool(
-                                alarm and alarm.incident_id == qr_incident_id
-                                and alarm.gueltig(jetzt=jetzt)
-                                and alarm.created_at + timedelta(days=settings.ALARM_LINK_TTL_DAYS) >= jetzt
-                                and inc and inc.access_pin_hash
-                            )
-                        if not db_token or not inc or inc.status != "active" or not alarm_valid:
-                            user = None  # Incident closed or token revoked → logged out
-                        else:
-                            # Nur der neue Principal erhaelt readonly; alte Gast-Sessions
-                            # mit dem Druck-Principal behalten ihre recorder-Berechtigung.
-                            role_code = (
-                                "readonly" if user.username == f"alarmlink-gast@org{user.org_id}" else "recorder"
-                            )
-                            qr_role = db.query(Role).filter(Role.code == role_code).first()
-                            user = _QrUser(user, qr_role, qr_incident_id)  # type: ignore[assignment]
-                    else:
-                        user = None  # QR session without incident_id or lage_id → force re-login
-                elif user and is_device:
-                    # SEC-5 + Audit A4: Device-Session-Widerruf. Neue Cookies
-                    # tragen die device_token_id ("t") — der Widerruf GENAU
-                    # dieses Geraets beendet die Session sofort, auch wenn der
-                    # User weitere aktive Geraete hat. Bestandscookies ohne
-                    # Token-Bezug (vor PR 6 ausgestellt) fallen auf die
-                    # grobkoernige Pruefung "hat noch irgendein aktives
-                    # Geraet" zurueck.
-                    if not pruefe_geraete_session(db, user_id, is_device, device_token_id):
-                        user = None
-                        _melde_widerrufene_session(request, db, device_token_id)
-                    else:
-                        request.state.device_token_id = device_token_id
-                elif user and not is_device:
-                    # Regular session: refresh token to slide the inactivity window.
-                    _refresh_user_id = user_id
-                    _refresh_remember = is_remember
-                request.state.user = user
-                request.state.display_name = display_name
-                request.state.qr_incident_id = qr_incident_id
-                request.state.qr_lage_id = qr_lage_id
-                request.state.is_device = is_device
-                fcm_token = request.query_params.get("fcm_token")
-                if user is not None and fcm_token:
-                    from app.services.push_service import upsert_fcm_token
-
-                    fcm_platform = (request.query_params.get("fcm_platform") or "").strip().lower()
-                    upsert_fcm_token(
-                        db,
-                        user_id=user.id,
-                        token=fcm_token,
-                        platform=fcm_platform if fcm_platform in {"android", "ios"} else None,
-                        device_token_id=device_token_id if is_device else None,
-                    )
-                    # request.state.user bleibt nach db.close() in den Routen
-                    # in Gebrauch; der Commit darf dessen geladene Rollen nicht
-                    # ablaufen lassen.
-                    db.expire_on_commit = False
-                    db.commit()
-            except Exception:
-                # Transienter DB-Fehler darf anonyme Routen nicht blockieren.
-                logger.exception("session_middleware: User-Lookup fehlgeschlagen")
-            finally:
-                db.close()
+            ergebnis = await asyncio.to_thread(_session_aus_db, request, token, session_data, _session_epoch)
+            request.state.user = ergebnis.user
+            request.state.display_name = ergebnis.display_name
+            request.state.qr_incident_id = ergebnis.qr_incident_id
+            request.state.qr_lage_id = ergebnis.qr_lage_id
+            request.state.is_device = ergebnis.is_device
+            request.state.device_token_id = ergebnis.device_token_id
+            if ergebnis.auth_error is not None:
+                request.state.auth_error = ergebnis.auth_error
+            _refresh_user_id = ergebnis.refresh_user_id
+            _refresh_remember = ergebnis.refresh_remember
 
     # Native-App-Datei-Handoff: kein Cookie-Zugriff im Custom Tab moeglich, daher
     # Fallback auf ein kurzlebiges, exakt pfadgebundenes ?nt=-Token (siehe
@@ -779,21 +905,7 @@ async def _session_mit_kontext(request: Request, call_next):
         if nt:
             nt_result = unsign_native_link_token(nt)
             if nt_result and nt_result[0] == request.url.path:
-                db = SessionLocal()
-                set_tenant_context(db, None)
-                try:
-                    request.state.user = (
-                        db.query(User)
-                        .filter(
-                            User.id == nt_result[1],
-                            User.active == True,  # noqa: E712
-                        )
-                        .first()
-                    )
-                except Exception:
-                    logger.exception("session_middleware: nt-Token User-Lookup fehlgeschlagen")
-                finally:
-                    db.close()
+                request.state.user = await asyncio.to_thread(_native_link_user_aus_db, nt_result[1])
 
     # Einsatzlink-Gaeste duerfen auch ueber alte readonly-Ausnahmen (Notizen,
     # Uploads, Funkjournal) und Routen ohne Rollen-Dependency nichts schreiben.
@@ -830,8 +942,7 @@ async def _session_mit_kontext(request: Request, call_next):
         if not _mfa_exempt and request.state.mfa_at is None:
             _policy = mfa_service.required_for_cached(_gate_user)
             if _policy is None:
-                with SessionLocal() as _mfa_db:
-                    _policy = mfa_service.required_for(_mfa_db, _gate_user)
+                _policy = await asyncio.to_thread(_mfa_pflicht_aus_db, _gate_user)
             _requires_mfa = _policy
         if _requires_mfa and not _mfa_exempt:
             reset_request_client_id(client_token)
@@ -852,7 +963,7 @@ async def _session_mit_kontext(request: Request, call_next):
                 _target += "?next=" + quote(_next, safe="")
             return RedirectResponse(_target, status_code=303)
 
-    _bereinigte_accounts = []
+    _bereinigte_accounts: list[AccountEntry] = []
     if (
         request.state.user is not None
         and not request.state.is_device
@@ -862,39 +973,9 @@ async def _session_mit_kontext(request: Request, call_next):
         cookie_accounts = load_accounts(request.cookies.get(ACCOUNTS_COOKIE))
         account_ids = [account["u"] for account in cookie_accounts]
         if account_ids:
-            db = SessionLocal()
-            set_tenant_context(db, None)
-            try:
-                users = db.query(User).filter(User.id.in_(account_ids), User.active == True).all()  # noqa: E712
-                users_by_id = {user.id: user for user in users}
-                now = datetime.now(UTC)
-                for account in cookie_accounts:
-                    account_user = users_by_id.get(account["u"])
-                    if (
-                        not account_user or account_user.is_device
-                        or account_user.session_epoch != account.get("e", 0)
-                    ):
-                        continue
-                    locked_until = account_user.locked_until
-                    if locked_until and locked_until.tzinfo is None:
-                        locked_until = locked_until.replace(tzinfo=UTC)
-                    if locked_until and locked_until > now:
-                        continue
-                    _bereinigte_accounts.append(account)
-                    request.state.accounts.append(
-                        {
-                            "user_id": account_user.id,
-                            "display_name": account_user.display_name,
-                            "org_name": account_user.org.name if account_user.org else "Keine Organisation",
-                            "is_active_account": account_user.id == request.state.user.id,
-                        }
-                    )
-            except Exception:
-                logger.exception("session_middleware: Kontoliste konnte nicht validiert werden")
-                request.state.accounts = []
-                _bereinigte_accounts = []
-            finally:
-                db.close()
+            _bereinigte_accounts, request.state.accounts = await asyncio.to_thread(
+                _accounts_aus_db, cookie_accounts, request.state.user.id,
+            )
         if _refresh_user_id is not None:
             _bereinigte_accounts = add_account(
                 _bereinigte_accounts,

@@ -54,7 +54,7 @@ def test_medien_einzeichnung_und_original(env, client, format, helfer):
     response = client.get(url)
     assert response.status_code == 200
     assert response.content == erwartet
-    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["cache-control"] == "private, no-cache"
     response = client.get(url + "?original=1")
     assert response.status_code == 200
     assert response.content == original

@@ -18,6 +18,7 @@ from app.models.gateway import Gateway, GatewayMessage, PrintJob
 from app.services import gateway_presence as presence
 from app.services import gateway_routing as routing
 from app.services import ws_bus
+from app.services.loop_thread_io import ALARM_POOL, im_db_thread
 from app.services.loop_utils import start_loop_task, stop_loop_task
 
 logger = logging.getLogger("einsatzleiter.linux_print")
@@ -94,27 +95,31 @@ def prepare(org, jid, payload=None):
         return job.push_route_id, connection
 
 
+def _mark_transport_uncertain(org, jid, item):
+    with database() as db:
+        db.query(PrintJob).filter(
+            PrintJob.org_id == org,
+            PrintJob.id == jid,
+            PrintJob.push_route_id == item,
+            PrintJob.status.in_(("sent", "printing")),
+        ).update(
+            {"status": "uncertain", "error": "Socket-Send mit unklarem Ausgang"}, synchronize_session=False
+        )
+        db.commit()
+
+
 async def dispatch(org, jid, payload=None, *, wait_seconds=20):
-    result = await asyncio.to_thread(prepare, org, jid, payload)
+    result = await im_db_thread(prepare, org, jid, payload, pool=ALARM_POOL)
     if result:
         item, connection = result
         await routing.deliver(item)
         await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, item))
-        transport, _ = await asyncio.to_thread(routing._result, item, org)
+        transport, _ = await im_db_thread(routing._result, item, org, pool=ALARM_POOL)
         if transport == "failed":
-            with database() as db:
-                db.query(PrintJob).filter(
-                    PrintJob.org_id == org,
-                    PrintJob.id == jid,
-                    PrintJob.push_route_id == item,
-                    PrintJob.status.in_(("sent", "printing")),
-                ).update(
-                    {"status": "uncertain", "error": "Socket-Send mit unklarem Ausgang"}, synchronize_session=False
-                )
-                db.commit()
+            await im_db_thread(_mark_transport_uncertain, org, jid, item, pool=ALARM_POOL)
     deadline = asyncio.get_running_loop().time() + wait_seconds
     while True:
-        state = await asyncio.to_thread(snapshot, org, jid)
+        state = await im_db_thread(snapshot, org, jid, pool=ALARM_POOL)
         if state["status"] != "sent" or asyncio.get_running_loop().time() >= deadline:
             if state["status"] == "failed":
                 from app.services.print_dispatcher import dispatch_fallback_for_failed_job

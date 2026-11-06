@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.incident import Incident
 from app.models.master import OrgSettings
+from app.services.loop_thread_io import auf_event_loop
 
 logger = logging.getLogger("einsatzleiter.incident_notify")
 NIE_ALARMIEREN_STICHWORTE = frozenset({"F30"})
@@ -207,4 +208,4 @@ async def notify_incident_created(
     if background_tasks is not None:
         background_tasks.add_task(process_incident_alarm, incident.id)
     else:
-        await process_incident_alarm(incident.id)
+        await auf_event_loop(process_incident_alarm, incident.id)

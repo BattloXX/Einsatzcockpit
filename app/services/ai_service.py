@@ -14,10 +14,12 @@ import json as _json
 import logging
 import re as _re
 import time
+from functools import partial
 from typing import Any
 
 from app.config import settings
 from app.services.katplan_typen import ELEMENT_TYPEN
+from app.services.loop_thread_io import im_db_thread
 
 logger = logging.getLogger("einsatzleiter.ai")
 
@@ -99,7 +101,7 @@ def _get_org_ai_cfg(org_id: int) -> dict | None:
         return None
 
 
-async def _record_token_usage(org_id: int, total_tokens: int, model: str) -> None:
+def _record_token_usage_sync(org_id: int, total_tokens: int, model: str) -> None:
     """Fire-and-forget: update monthly token counter + write audit entry."""
     from datetime import UTC, datetime
 
@@ -127,7 +129,7 @@ async def _record_token_usage(org_id: int, total_tokens: int, model: str) -> Non
         pass
 
 
-async def _record_ai_request(
+def _record_ai_request_sync(
     *, feature: str, model: str, org_id: int | None, started_at: float,
     success: bool, input_tokens: int = 0, output_tokens: int = 0,
     error_message: str | None = None,
@@ -153,6 +155,22 @@ async def _record_ai_request(
             db.close()
     except Exception:
         logger.exception("KI-Anfragen-Log konnte nicht geschrieben werden")
+
+
+async def _record_token_usage(org_id: int, total_tokens: int, model: str) -> None:
+    await im_db_thread(_record_token_usage_sync, org_id, total_tokens, model)
+
+
+async def _record_ai_request(
+    *, feature: str, model: str, org_id: int | None, started_at: float,
+    success: bool, input_tokens: int = 0, output_tokens: int = 0,
+    error_message: str | None = None,
+) -> None:
+    await im_db_thread(partial(
+        _record_ai_request_sync, feature=feature, model=model, org_id=org_id,
+        started_at=started_at, success=success, input_tokens=input_tokens,
+        output_tokens=output_tokens, error_message=error_message,
+    ))
 
 
 _PERSON_KEYS: frozenset[str] = frozenset({
@@ -215,7 +233,7 @@ async def _complete(
     the org's monthly token quota. Token usage is written to the audit log.
     Raises AIServiceError on any provider failure, timeout, or quota exceeded.
     """
-    platform_cfg = _get_ai_cfg()
+    platform_cfg = await im_db_thread(_get_ai_cfg)
     model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
     if metrics is not None:
         metrics["model"] = model
@@ -226,7 +244,7 @@ async def _complete(
     quota_exceeded = False
 
     if org_id is not None:
-        org_cfg = _get_org_ai_cfg(org_id)
+        org_cfg = await im_db_thread(_get_org_ai_cfg, org_id)
         if org_cfg:
             if org_cfg["ai_mode"] == "byok" and org_cfg["ai_api_key_enc"]:
                 try:
@@ -321,7 +339,7 @@ async def _complete_vision(
     """
     import base64 as _base64
 
-    platform_cfg = _get_ai_cfg()
+    platform_cfg = await im_db_thread(_get_ai_cfg)
     model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
     if metrics is not None:
         metrics["model"] = model
@@ -332,7 +350,7 @@ async def _complete_vision(
     quota_exceeded = False
 
     if org_id is not None:
-        org_cfg = _get_org_ai_cfg(org_id)
+        org_cfg = await im_db_thread(_get_org_ai_cfg, org_id)
         if org_cfg:
             if org_cfg["ai_mode"] == "byok" and org_cfg["ai_api_key_enc"]:
                 try:

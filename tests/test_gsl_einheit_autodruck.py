@@ -62,10 +62,10 @@ def _aufbau(org_id, *, regel=True, qr=True, filters=None, uebung=False, lage_id=
 def kein_versand(monkeypatch):
     gesendet = []
 
-    async def dispatch(db, job):
-        gesendet.append(job.id)
+    async def dispatch(job_id):
+        gesendet.append(job_id)
 
-    monkeypatch.setattr(print_dispatcher, "dispatch_job", dispatch)
+    monkeypatch.setattr(print_dispatcher, "_dispatch_background_job", dispatch)
     return gesendet
 
 
@@ -134,10 +134,10 @@ def test_echt_uebungsfilter(client, setup_db, kein_versand, filter_, uebung, erw
 
 
 def test_druckfehler_rollt_einheit_nicht_zurueck(client, setup_db, monkeypatch):
-    async def kaputt(db, job):
+    async def kaputt(job_id):
         raise RuntimeError("Gateway weg")
 
-    monkeypatch.setattr(print_dispatcher, "dispatch_job", kaputt)
+    monkeypatch.setattr(print_dispatcher, "_dispatch_background_job", kaputt)
     username, lage_id, _, org_id = _daten()
     _aufbau(org_id)
     _login(client, username)

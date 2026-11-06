@@ -73,6 +73,9 @@ def register_slow_query_logging(target_engine, threshold_ms: int) -> None:
             return
         elapsed_ms = (time.monotonic() - starts.pop()) * 1000
         if elapsed_ms >= threshold_ms:
+            from app.services.prozess_metriken import sammler
+
+            sammler.langsame_query(elapsed_ms)
             aufrufer = ""
             app_pfad = Path(__file__).resolve().parent
             for frame in reversed(traceback.extract_stack()):

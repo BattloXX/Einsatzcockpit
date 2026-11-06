@@ -23,6 +23,7 @@ from app.models.einsatzinfo_mail import (
 )
 from app.models.incident import Incident
 from app.models.master import AlarmType, FireDept, OrgSettings
+from app.services.loop_thread_io import ALARM_POOL, im_db_thread
 from app.services.sms_dispatch_service import render_template
 
 logger = logging.getLogger("einsatzleiter.einsatzinfo_mail")
@@ -331,6 +332,30 @@ async def dispatch_einsatzinfo_mail(
 ) -> EinsatzinfoMailResult:
     """Versendet Einsatzinfo-Mails und protokolliert jeden Bcc-Block persistent."""
     from app.services import mail_service
+
+    vorbereitet = await im_db_thread(
+        _prepare_einsatzinfo_mail_sync, org_id, incident_id, triggered_by_user_id, variant, text_prefix,
+        pool=ALARM_POOL,
+    )
+    if isinstance(vorbereitet, EinsatzinfoMailResult):
+        return vorbereitet
+    log_id, chunks = vorbereitet
+    for recipient_ids, msg, config in chunks:
+        try:
+            await mail_service.deliver(config, org_id, msg, config.smtp)
+        except Exception as exc:
+            await im_db_thread(_finish_einsatzinfo_mail_sync, log_id, [], str(exc)[:2000], False, pool=ALARM_POOL)
+            raise
+        await im_db_thread(
+            _finish_einsatzinfo_mail_sync, log_id, recipient_ids, None, False, pool=ALARM_POOL,
+        )
+    count = await im_db_thread(_finish_einsatzinfo_mail_sync, log_id, [], None, True, pool=ALARM_POOL)
+    return EinsatzinfoMailResult(True, recipient_count=count)
+
+
+def _prepare_einsatzinfo_mail_sync(org_id: int, incident_id: int, triggered_by_user_id: int | None,
+                                  variant: str, text_prefix: str) -> EinsatzinfoMailResult | tuple[int, list]:
+    from app.services import mail_service
     from app.services.exercise_guard import darf_extern
 
     db = SessionLocal()
@@ -432,6 +457,7 @@ async def dispatch_einsatzinfo_mail(
         chunks: dict[int, list[MailEinsatzinfoLogRecipient]] = {}
         for recipient in pending:
             chunks.setdefault(recipient.chunk_no, []).append(recipient)
+        versand = []
         for chunk in chunks.values():
             emails = [recipient.email for recipient in chunk]
             to = sender or emails[0]
@@ -442,20 +468,28 @@ async def dispatch_einsatzinfo_mail(
             )
             if bcc:
                 msg["Bcc"] = ", ".join(bcc)
-            try:
-                await mail_service.deliver(db, org_id, msg, smtp_cfg)
-            except Exception as exc:
-                log_entry.error = str(exc)[:2000]
-                db.commit()
-                raise
-            sent_at = datetime.now(UTC).replace(tzinfo=None)
-            for recipient in chunk:
-                recipient.success = True
-                recipient.sent_at = sent_at
-            log_entry.success_count += len(chunk)
-            db.commit()
-        log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
-        db.commit()
-        return EinsatzinfoMailResult(True, recipient_count=log_entry.success_count)
+            config = mail_service.prepare_delivery(db, org_id, msg, smtp_cfg)
+            versand.append(([recipient.id for recipient in chunk], msg, config))
+        return log_entry.id, versand
     finally:
         db.close()
+
+
+def _finish_einsatzinfo_mail_sync(log_id: int, recipient_ids: list[int], error: str | None, completed: bool) -> int:
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        log_entry = db.get(MailEinsatzinfoLog, log_id)
+        assert log_entry is not None
+        if error is not None:
+            log_entry.error = error
+        sent_at = datetime.now(UTC).replace(tzinfo=None)
+        for recipient_id in recipient_ids:
+            recipient = db.get(MailEinsatzinfoLogRecipient, recipient_id)
+            assert recipient is not None
+            recipient.success = True
+            recipient.sent_at = sent_at
+        log_entry.success_count += len(recipient_ids)
+        if completed:
+            log_entry.completed_at = sent_at
+        db.commit()
+        return log_entry.success_count

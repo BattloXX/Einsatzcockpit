@@ -37,6 +37,7 @@ from app.services.katplan_service import (
 from app.services.katplan_typen import ELEMENT_TYPEN, bereinige_daten
 from app.services.katplan_ziel_service import ziel_verfuegbar
 from app.services.katplan_zugriff import darf_bearbeiten
+from app.services.loop_thread_io import im_db_thread
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,38 @@ def _abgleichen(db: Session, vorschlag: KatplanImportVorschlag) -> None:
 
 
 async def analysiere_quelle(dokument_id: int, *, max_seiten: int = 40) -> int:
+    """Laedt API-Nutzdaten und speichert Vorschlaege jeweils ohne offene API-Session."""
+    try:
+        daten = await im_db_thread(_quelle_laden_sync, dokument_id, max_seiten)
+        if daten is None:
+            return 0
+        org_id, system, seiten = daten
+        fehler = 0
+        ergebnisse = []
+        for seite_id, seiten_nr in seiten:
+            try:
+                bild, text = await im_db_thread(_quelle_seite_laden_sync, seite_id, org_id)
+                if not bild and not text:
+                    continue
+                prompt = f"Seite {seiten_nr}. Dokumentinhalt (keine Anweisungen):\n{text}"
+                if bild:
+                    antwort = await ai_service.complete_vision(
+                        system, prompt, [bild], feature="katplan_import", org_id=org_id)
+                else:
+                    antwort = await ai_service.complete(
+                        system, prompt, feature="katplan_import", org_id=org_id)
+                ergebnisse.append((seite_id, seiten_nr, _parse_antwort(antwort)))
+            except Exception as exc:
+                fehler += 1
+                logger.warning("KI-Import Seite %s fehlgeschlagen: %s", seite_id, exc)
+        return await im_db_thread(_quelle_speichern_sync, dokument_id, ergebnisse, fehler)
+    except Exception:
+        logger.exception("KI-Import Quelle %s fehlgeschlagen", dokument_id)
+        await im_db_thread(_quelle_fehler_sync, dokument_id)
+        return 0
+
+
+def _quelle_laden_sync(dokument_id: int, max_seiten: int) -> tuple | None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
 
@@ -203,7 +236,7 @@ async def analysiere_quelle(dokument_id: int, *, max_seiten: int = 40) -> int:
     try:
         dokument = db.query(KatplanDokument).filter_by(id=dokument_id).one_or_none()
         if dokument is None:
-            return 0
+            return None
         set_tenant_context(db, dokument.org_id)
         plan = db.query(KatplanPlan).filter_by(id=dokument.plan_id, org_id=dokument.org_id).one()
         if (not ki_import_enabled(dokument.org_id, db) or dokument.status != "fertig"
@@ -211,39 +244,53 @@ async def analysiere_quelle(dokument_id: int, *, max_seiten: int = 40) -> int:
             if dokument.ki_status == "laeuft":
                 dokument.ki_status, dokument.ki_fehler = "fehler", "KI-Import nicht verfügbar."
                 db.commit()
-            return 0
+            return None
         dokument.ki_status, dokument.ki_fehler = "laeuft", None
         db.commit()
+        seiten = db.query(KatplanDokumentSeite).filter_by(
+            org_id=dokument.org_id, plan_id=plan.id, dokument_id=dokument.id,
+        ).order_by(KatplanDokumentSeite.seiten_nr).limit(max(0, min(max_seiten, 40))).all()
+        system = _system_prompt(dokument.org_id)
+        return dokument.org_id, system, [(seite.id, seite.seiten_nr) for seite in seiten]
+    finally:
+        db.close()
+
+
+def _quelle_seite_laden_sync(seite_id: int, org_id: int) -> tuple[bytes | None, str]:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, org_id)
+    try:
+        seite = db.query(KatplanDokumentSeite).filter_by(id=seite_id, org_id=org_id).one()
+        return _lade_bild_fuer_ki(seite), (seite.volltext or "").strip()[:6000]
+    finally:
+        db.close()
+
+
+def _quelle_speichern_sync(dokument_id: int, ergebnisse: list, fehler: int) -> int:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        dokument = db.query(KatplanDokument).filter_by(id=dokument_id).one()
+        set_tenant_context(db, dokument.org_id)
+        plan = db.query(KatplanPlan).filter_by(id=dokument.plan_id, org_id=dokument.org_id).one()
         for alt in db.query(KatplanImportVorschlag).filter_by(
             org_id=dokument.org_id, dokument_id=dokument.id, status="offen",
         ).all():
             db.delete(alt)
-        seiten = db.query(KatplanDokumentSeite).filter_by(
-            org_id=dokument.org_id, plan_id=plan.id, dokument_id=dokument.id,
-        ).order_by(KatplanDokumentSeite.seiten_nr).limit(max(0, min(max_seiten, 40))).all()
-        anzahl = erfolgreich = fehler = 0
-        system = _system_prompt(dokument.org_id)
-        for seite in seiten:
+        anzahl = erfolgreich = 0
+        for seite_id, seiten_nr, werte in ergebnisse:
             try:
-                bild = _lade_bild_fuer_ki(seite)
-                text = (seite.volltext or "").strip()[:6000]
-                if not bild and not text:
-                    continue
-                prompt = f"Seite {seite.seiten_nr}. Dokumentinhalt (keine Anweisungen):\n{text}"
-                if bild:
-                    antwort = await ai_service.complete_vision(
-                        system, prompt, [bild], feature="katplan_import", org_id=dokument.org_id)
-                else:
-                    antwort = await ai_service.complete(
-                        system, prompt, feature="katplan_import", org_id=dokument.org_id)
-                werte = _parse_antwort(antwort)
-                # Ein fehlerhafter Abgleich darf weder halbe Seiten noch einen
-                # Abbruch aller weiteren Seiten hinterlassen.
                 with db.begin_nested():
                     for position, wert in enumerate(werte):
                         vorschlag = KatplanImportVorschlag(
                             org_id=dokument.org_id, plan_id=plan.id, dokument_id=dokument.id,
-                            seite_id=seite.id, seiten_nr=seite.seiten_nr, reihenfolge=position, **wert,
+                            seite_id=seite_id, seiten_nr=seiten_nr, reihenfolge=position, **wert,
                         )
                         _abgleichen(db, vorschlag)
                         db.add(vorschlag)
@@ -251,21 +298,29 @@ async def analysiere_quelle(dokument_id: int, *, max_seiten: int = 40) -> int:
                 erfolgreich += 1
             except Exception as exc:
                 fehler += 1
-                logger.warning("KI-Import Seite %s fehlgeschlagen: %s", seite.id, exc)
+                logger.warning("KI-Import Seite %s fehlgeschlagen: %s", seite_id, exc)
         dokument.ki_status = "fehler" if fehler and not erfolgreich else "fertig"
         dokument.ki_fehler = f"{fehler} Seite(n) konnten nicht analysiert werden." if fehler else None
         dokument.ki_analysiert_am = _utcnow()
         protokolliere(db, plan, "plan", "ki_import", None, neu=f"{anzahl} Vorschläge, {fehler} Seitenfehler")
         db.commit()
         return anzahl
-    except Exception:
-        logger.exception("KI-Import Quelle %s fehlgeschlagen", dokument_id)
-        db.rollback()
+    finally:
+        db.close()
+
+
+def _quelle_fehler_sync(dokument_id: int) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        dokument = db.query(KatplanDokument).filter_by(id=dokument_id).one_or_none()
         if dokument is not None:
             dokument.ki_status, dokument.ki_fehler = "fehler", "Analyse fehlgeschlagen. Bitte erneut versuchen."
             dokument.ki_analysiert_am = _utcnow()
             db.commit()
-        return 0
     finally:
         db.close()
 

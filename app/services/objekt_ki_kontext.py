@@ -173,7 +173,7 @@ def gefahren_auftraege(kontext: ObjektKontext) -> list[dict]:
     return auftraege
 
 
-async def lade_objekt_kontext(incident_id: int) -> ObjektKontext:
+def _lade_objekt_kontext_sync(incident_id: int) -> ObjektKontext:
     """Objektkontext in eigener Session (fuer Hintergrundaufgaben); Fehler blockieren die KI nie."""
     import logging
 
@@ -189,3 +189,10 @@ async def lade_objekt_kontext(incident_id: int) -> ObjektKontext:
         return ObjektKontext()
     finally:
         db.close()
+
+
+async def lade_objekt_kontext(incident_id: int) -> ObjektKontext:
+    """Laedt ausschliesslich Nutzdaten in einer thread-eigenen Session."""
+    from app.services.loop_thread_io import im_db_thread
+
+    return await im_db_thread(_lade_objekt_kontext_sync, incident_id)

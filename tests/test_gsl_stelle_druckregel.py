@@ -105,10 +105,10 @@ def test_filters_and_test_context(setup_db):
 
 
 def test_background_creates_job(setup_db, monkeypatch):
-    async def no_dispatch(db, job):
+    async def no_dispatch(job_id):
         return None
 
-    monkeypatch.setattr(print_dispatcher, "dispatch_job", no_dispatch)
+    monkeypatch.setattr(print_dispatcher, "_dispatch_background_job", no_dispatch)
     db = _db()
     try:
         _, _, site, a, _, _, _ = _aufbau(db)
@@ -210,10 +210,10 @@ def test_regeleditor_speichert_stellen_filter(setup_db):
 
 
 def test_gsl_einsatzdruck_nutzt_eigenen_trigger_und_site_karte(setup_db, monkeypatch):
-    async def no_dispatch(db, job):
+    async def no_dispatch(job_id):
         return None
 
-    monkeypatch.setattr(print_dispatcher, "dispatch_job", no_dispatch)
+    monkeypatch.setattr(print_dispatcher, "_dispatch_background_job", no_dispatch)
     db = _db()
     try:
         org, lage, site, _, _, gateway, _ = _aufbau(db)
@@ -238,10 +238,10 @@ def test_gsl_einsatzdruck_nutzt_eigenen_trigger_und_site_karte(setup_db, monkeyp
 
 
 def test_normaler_einsatzdruck_bei_fremder_oder_beendeter_lage(setup_db, monkeypatch):
-    async def no_dispatch(db, job):
+    async def no_dispatch(job_id):
         return None
 
-    monkeypatch.setattr(print_dispatcher, "dispatch_job", no_dispatch)
+    monkeypatch.setattr(print_dispatcher, "_dispatch_background_job", no_dispatch)
     db = _db()
     try:
         org, lage, site, _, _, gateway, _ = _aufbau(db)

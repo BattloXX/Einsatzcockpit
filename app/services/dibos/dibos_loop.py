@@ -212,14 +212,11 @@ async def _get_client(org_id: int, values: tuple) -> DibosClient:
     return client
 
 
-async def _check_org(org_id: int, config_id: int) -> None:
+def _lade_konfiguration_sync(config_id: int) -> tuple | None:
     from app.core.crypto import decrypt_secret
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.dibos import OrgDibosConfig
-    from app.services.dibos.dibos_capture import is_trace_running, start_trace_for_org
-    from app.services.dibos.dibos_client import DibosClientError
-
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -244,20 +241,32 @@ async def _check_org(org_id: int, config_id: int) -> None:
                 config.service_user, decrypt_secret(config.service_password_enc),
             )
             auto_trace_duration_minutes = config.auto_trace_duration_minutes
+            return (values, auto_trace_on_event, enrich_incidents, create_incidents,
+                    wache_unid, auto_trace_duration_minutes)
     finally:
         db.close()
-    if config is None:
+    return None
+
+
+async def _check_org(org_id: int, config_id: int) -> None:
+    from app.services.dibos.dibos_capture import is_trace_running, start_trace_for_org
+    from app.services.dibos.dibos_client import DibosClientError
+
+    konfiguration = await asyncio.to_thread(_lade_konfiguration_sync, config_id)
+    if konfiguration is None:
         await _close_org_client(org_id)
         return
+    (values, auto_trace_on_event, enrich_incidents, create_incidents,
+     wache_unid, auto_trace_duration_minutes) = konfiguration
 
     client = await _get_client(org_id, values)
     try:
         events = await client.get_current_events()
         from app.services.dienst_monitor_service import record_probe
-        record_probe(org_id, "alarm_dibos", True)
+        await asyncio.to_thread(record_probe, org_id, "alarm_dibos", True)
     except DibosClientError as exc:
         from app.services.dienst_monitor_service import record_probe
-        record_probe(org_id, "alarm_dibos", False, str(exc))
+        await asyncio.to_thread(record_probe, org_id, "alarm_dibos", False, str(exc))
         logger.exception("dibos_poll_loop: GetCurrentEvents fehlgeschlagen (Org %s)", org_id)
         # Session/Cookie evtl. ungültig — im nächsten Poll frisch aufbauen
         await _close_org_client(org_id)

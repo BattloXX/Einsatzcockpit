@@ -11,11 +11,12 @@ from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 from app.core.tenant import set_tenant_context
-from app.models.breathing import BreathingTroop, BreathingWarnung, BreathingZustellung, TroopMember, WARNUNG_KINDS
+from app.models.breathing import WARNUNG_KINDS, BreathingTroop, BreathingWarnung, BreathingZustellung, TroopMember
 from app.models.incident import Incident, IncidentChange
 from app.models.master import FireDept, OrgSettings
 from app.models.user import Role, User, UserRole
-from app.services import breathing_notify as bn, push_service
+from app.services import breathing_notify as bn
+from app.services import push_service
 from tests.conftest import TestingSession
 
 
@@ -188,7 +189,9 @@ def ids(c, group):
 
 def test_recipients_configured_and_fallback(ctx):
     c = ctx
-    c.settings.asuew_eskalation_user_ids = f"{c.escalation.id},{c.leader.id},{c.foreign.id},{c.inactive.id},{c.escalation.id}"
+    c.settings.asuew_eskalation_user_ids = (
+        f"{c.escalation.id},{c.leader.id},{c.foreign.id},{c.inactive.id},{c.escalation.id}"
+    )
     c.db.commit()
     assert ids(c, "leitung") == {c.leader.id, c.escalation.id}
     assert ids(c, "ueberwacher") == {c.supervisor.id}
@@ -408,7 +411,10 @@ async def test_real_sms_adapter(ctx, monkeypatch):
     send = AsyncMock(return_value=True)
     monkeypatch.setattr(bn, "send_sms", send)
     assert await bn._sms(ctx.org.id, "+43664", "Text", "asuew-123")
-    send.assert_awaited_once_with(ctx.org.id, "+43664", "Text", job_id="asuew-123")
+    send.assert_awaited_once()
+    assert send.await_args.args == (ctx.org.id, "+43664", "Text")
+    assert send.await_args.kwargs["job_id"] == "asuew-123"
+    assert send.await_args.kwargs["ctx"].org_id == ctx.org.id
 
 
 @pytest.fixture
@@ -635,3 +641,36 @@ async def test_heartbeat_delivery_alarm_and_sms_after_180_seconds(ctx):
     assert c.sms.call_count == 0
     assert await deliver(c, c.now + timedelta(seconds=180)) == 2
     assert {call.args[1] for call in c.sms.call_args_list} == {c.leader.phone, c.escalation.phone}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raises", [False, True])
+async def test_sms_fehler_behalten_backoff_status_und_log(ctx, monkeypatch, raises):
+    c = ctx
+    sync(c, ["withdraw"])
+    zustellungen = rows(c)
+    sms = next(zeile for zeile in zustellungen if zeile.kanal == "sms")
+    for zeile in zustellungen:
+        if zeile.id != sms.id:
+            zeile.status = "suppressed"
+    c.db.commit()
+    logged = Mock()
+    monkeypatch.setattr(bn, "log_fehler", logged)
+
+    async def fehlerhafter_versand(*args):
+        if raises:
+            raise ValueError("Nicht ins Protokoll uebernehmen")
+        return False
+
+    jetzt = sms.naechster_versuch_at
+    for versuch, wartezeit in enumerate([30, 60, 120, None], start=1):
+        assert await deliver(c, jetzt, sms_sender=fehlerhafter_versand) == 0
+        c.db.refresh(sms)
+        assert sms.versuche == versuch and sms.lease_bis is None
+        assert sms.status == ("pending" if wartezeit else "failed")
+        assert sms.fehler == ("ValueError" if raises else "RuntimeError") + ": Versand fehlgeschlagen"
+        if wartezeit:
+            assert sms.naechster_versuch_at == jetzt + timedelta(seconds=wartezeit)
+            jetzt = sms.naechster_versuch_at
+    logged.assert_called_once()
+    assert isinstance(logged.call_args.args[2], ValueError if raises else RuntimeError)

@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.models.master import FireDept
 from app.models.road_closure import RoadClosure, RoadClosureNotification, RoadClosureTeamsConfig
 from app.services import road_closure_notify_service
+from app.services.loop_thread_io import im_db_thread
 from app.services.road_closure_public_service import fingerprint, public_closure_dict
 from app.services.road_closure_token_service import get_or_create_detail_token, public_url
 
@@ -37,14 +38,14 @@ def _claim(db, row: RoadClosureNotification, now: datetime) -> bool:
     return bool(result.rowcount == 1)
 
 
-async def _process(row_id: int, now: datetime) -> None:
+def _prepare_notification_sync(row_id: int):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         row = db.query(RoadClosureNotification).execution_options(include_all_tenants=True).filter(
             RoadClosureNotification.id == row_id).first()
         if not row or row.status != "sending":
-            return
+            return None
         closure = db.query(RoadClosure).execution_options(include_all_tenants=True).filter(
             RoadClosure.id == row.road_closure_id, RoadClosure.org_id == row.org_id).first()
         config = db.query(RoadClosureTeamsConfig).execution_options(include_all_tenants=True).filter(
@@ -53,17 +54,17 @@ async def _process(row_id: int, now: datetime) -> None:
         if not closure:
             row.status, row.last_error, row.lease_until = "suppressed", "Sperre nicht gefunden", None
             db.commit()
-            return
+            return None
         if not config or not config.enabled or not config.webhook_url_enc or not org:
             row.status, row.last_error, row.lease_until = "suppressed", "Teams deaktiviert", None
             db.commit()
-            return
+            return None
         try:
             webhook = decrypt_secret(config.webhook_url_enc)
         except Exception:
             row.status, row.last_error, row.lease_until = "failed", "Webhook nicht lesbar", None
             db.commit()
-            return
+            return None
         data = public_closure_dict(closure, org)
         detail_url = map_url = None
         if closure.cancelled_at is None:
@@ -77,7 +78,20 @@ async def _process(row_id: int, now: datetime) -> None:
             intern_url=settings.effective_public_base_url.rstrip("/") + f"/strassensperren/{closure.id}",
             map_url=map_url,
         )
-        sent, retryable, reason = await road_closure_notify_service.send_payload(webhook, payload)
+        return webhook, payload, data, closure.id
+    except Exception:
+        db.rollback()
+        logger.warning("Road closure Teams notification failed", exc_info=True)
+        return None
+    finally:
+        db.close()
+
+
+def _finish_notification_sync(row_id: int, now: datetime, data: dict, closure_id: int,
+                              sent: bool, retryable: bool, reason: str | None) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
         row = db.get(RoadClosureNotification, row_id)
         if row is None:
             return
@@ -86,7 +100,7 @@ async def _process(row_id: int, now: datetime) -> None:
             row.status, row.sent_at, row.last_error = "sent", now, None
             row.payload_fingerprint = fingerprint(data)
             write_audit(db, "road_closure.teams_sent", org_id=row.org_id, entity_type="road_closure",
-                        entity_id=closure.id, payload={"ereignis": row.ereignis, "notification_id": row.id})
+                        entity_id=closure_id, payload={"ereignis": row.ereignis, "notification_id": row.id})
         elif retryable and row.attempt_count < 5:
             delays = [30, 120, 600, 1800, 3600]
             row.status, row.last_error = "retry", reason
@@ -95,7 +109,7 @@ async def _process(row_id: int, now: datetime) -> None:
             row.status, row.last_error = "failed", reason
             write_audit(
                 db, "road_closure.teams_failed", org_id=row.org_id, entity_type="road_closure",
-                entity_id=closure.id,
+                entity_id=closure_id,
                 payload={"ereignis": row.ereignis, "notification_id": row.id, "reason": reason},
             )
         db.commit()
@@ -106,8 +120,20 @@ async def _process(row_id: int, now: datetime) -> None:
         db.close()
 
 
-async def process_due(now: datetime | None = None) -> int:
-    now = now or _now()
+async def _process(row_id: int, now: datetime) -> None:
+    prepared = await im_db_thread(_prepare_notification_sync, row_id)
+    if prepared is None:
+        return
+    webhook, payload, data, closure_id = prepared
+    try:
+        sent, retryable, reason = await road_closure_notify_service.send_payload(webhook, payload)
+    except Exception:
+        logger.warning("Road closure Teams notification failed", exc_info=True)
+        return
+    await im_db_thread(_finish_notification_sync, row_id, now, data, closure_id, sent, retryable, reason)
+
+
+def _claim_due_sync(now: datetime) -> list[int]:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -116,9 +142,14 @@ async def process_due(now: datetime | None = None) -> int:
                  RoadClosureNotification.next_attempt_at <= now),
             and_(RoadClosureNotification.status == "sending", RoadClosureNotification.lease_until < now),
         )).limit(20).all()
-        ids = [row.id for row in rows if _claim(db, row, now)]
+        return [row.id for row in rows if _claim(db, row, now)]
     finally:
         db.close()
+
+
+async def process_due(now: datetime | None = None) -> int:
+    now = now or _now()
+    ids = await im_db_thread(_claim_due_sync, now)
     for row_id in ids:
         await _process(row_id, now)
     return len(ids)

@@ -203,7 +203,7 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
     <div class="ei-map-wrap">
       <div id="anfahrt-hinweis" class="anfahrt-hinweis" hidden></div>
       <div class="card" style="padding:0;overflow:hidden;">
-        <div id="einsatz-info-karte"
+        <div id="einsatz-info-karte" class="hydranten-blau"
              data-bsp-url="{% if objekt_enabled %}/einsatz/{{ incident.id }}/info/bsp-overlays.json{% endif %}"
              data-incident-id="{{ incident.id }}"
              data-lat="{% if incident.lat is not none %}{{ incident.lat }}{% endif %}"
@@ -220,7 +220,7 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
       <!-- Nächste Hydranten -->
       <div class="card" id="hydranten-card" style="padding:14px;">
         <h3 style="margin:0 0 10px;">{{ icon("fire-hydrant", size="md") }} Nächste Hydranten</h3>
-        <div id="hydranten-liste"><span class="text-muted">Lade Löschwasser …</span></div>
+        <div id="hydranten-liste" class="hydranten-blau"><span class="text-muted">Lade Löschwasser …</span></div>
       </div>
 
       <!-- Ausrückordnung (Status farbig, aktualisiert sich selbst) -->

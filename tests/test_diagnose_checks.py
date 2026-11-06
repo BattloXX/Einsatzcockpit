@@ -132,6 +132,8 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
                heartbeat_at=utcnow(), expires_at=utcnow() + timedelta(seconds=20), is_leader=True,
                redis=redis, loops={})
         org = insert(db, "fire_dept", name="PRIVATE-NAME", slug="test")
+    if check_id == "system.ressourcen":
+        monkeypatch.setattr("app.services.prozess_metriken.host_lesen", lambda: {})
     if check_id == "backup":
         from app.services.backup_status import schreibe_status
         monkeypatch.setattr(settings, "BACKUP_DIR", str(tmp_path))
@@ -164,6 +166,8 @@ def test_each_check_consistent_and_inconsistent_readonly(diag_engine, factory, m
         elif check_id == "db.zustand":
             db.execute(text("UPDATE alembic_version SET version_num = 'alt'"))
             db.commit()
+        elif check_id == "system.ressourcen":
+            monkeypatch.setattr("app.services.prozess_metriken.host_lesen", lambda: {"MemAvailable": 100})
         elif check_id == "worker.zustand":
             insert(db, "worker_runtime", worker_id="w2", hostname="host", pid=2, started_at=utcnow(),
                    heartbeat_at=utcnow(), expires_at=utcnow() + timedelta(seconds=20), is_leader=True,
@@ -601,3 +605,83 @@ def test_gateway_praesenz_respektiert_offline_alarme(diag_engine, factory, kind)
     overdue = next(f for f in result.findings if f.kern == ["print_job", "ueberfaellig"])
     assert overdue.schweregrad == "warn"
     assert overdue.betroffene_ids == {"print_job": [job]}
+
+
+@pytest.mark.parametrize("name,wert,grad", [
+    ("rss_mb", 599, None), ("rss_mb", 600, "warn"),
+    ("loop_verzug", 4999, None), ("loop_verzug", 5000, "warn"),
+    ("loop_verzug", 29999, "warn"), ("loop_verzug", 30000, "fail"),
+    ("langsame_queries", 19, None), ("langsame_queries", 20, "warn"),
+])
+def test_worker_ressourcen_schwellen(name, wert, grad):
+    from app.services.diagnose.worker import ressourcen_befunde
+
+    metriken = {name: wert if name == "rss_mb" else {
+        "max_ms_15min" if name == "loop_verzug" else "anzahl_15min": wert}}
+    jetzt = utcnow()
+    zeile = SimpleNamespace(hostname="GEHEIM", pid=42, expires_at=jetzt + timedelta(seconds=20),
+                            heartbeat_at=jetzt, metriken=metriken)
+    befunde = ressourcen_befunde([zeile], jetzt)
+    assert [b.schweregrad for b in befunde] == ([grad] if grad else [])
+    assert "GEHEIM" not in json.dumps([b.evidenz for b in befunde])
+    zeile.expires_at = jetzt
+    assert ressourcen_befunde([zeile], jetzt) == []
+
+
+@pytest.mark.parametrize("anzahl,grad", [(2, None), (3, "warn"), (9, "warn"), (10, "fail")])
+def test_worker_unsaubere_schwellen(anzahl, grad):
+    from app.services.diagnose.worker import ressourcen_befunde
+
+    jetzt = utcnow()
+    zeile = SimpleNamespace(hostname="GEHEIM", expires_at=jetzt, heartbeat_at=jetzt - timedelta(seconds=20))
+    befunde = ressourcen_befunde([zeile] * anzahl, jetzt)
+    assert [b.schweregrad for b in befunde] == ([grad] if grad else [])
+
+
+@pytest.mark.parametrize("metriken,grad", [
+    ({"MemAvailable": 300}, None), ({"MemAvailable": 299}, "warn"),
+    ({"MemAvailable": 150}, "warn"), ({"MemAvailable": 149}, "fail"),
+    ({"SwapTotal": 100, "SwapFree": 21}, None), ({"SwapTotal": 100, "SwapFree": 20}, "warn"),
+    ({"SwapTotal": 100, "SwapFree": 5}, "fail"), ({"SwapTotal": 0, "SwapFree": 0}, None),
+    ({"psi": {"memory": {"full": {"avg300": 4.99}}}}, None),
+    ({"psi": {"memory": {"full": {"avg300": 5}}}}, "warn"),
+    ({"psi": {"io": {"full": {"avg300": 9.99}}}}, None),
+    ({"psi": {"io": {"full": {"avg300": 10}}}}, "warn"),
+    ({"MemAvailable": None, "SwapTotal": None}, None),
+])
+def test_host_ressourcen_schwellen(metriken, grad):
+    from app.services.diagnose.worker import host_befunde
+
+    assert [b.schweregrad for b in host_befunde(metriken)] == ([grad] if grad else [])
+
+
+def test_ressourcen_befunde_schliessen_automatisch(diag_engine, factory, monkeypatch):
+    from app.models.diagnose import DiagFinding, DiagRun
+    from app.services.diagnose.runner import persist_result
+
+    monkeypatch.setattr("app.services.prozess_metriken.host_lesen", lambda: {"MemAvailable": 100})
+    with factory() as db:
+        lauf = DiagRun(checks=["system.ressourcen"], umfang={"typ": "voll"}, quelle="manual",
+                       korrelations_id="ressourcen-test", active_slot=1, status="running")
+        db.add(lauf)
+        db.commit()
+        resultat = registry.execute_check(diag_engine, registry.CHECKS["system.ressourcen"])
+        persist_result(db, lauf.id, "system.ressourcen", resultat, success=True)
+        db.commit()
+        assert db.query(DiagFinding).one().status == "offen"
+        monkeypatch.setattr("app.services.prozess_metriken.host_lesen", lambda: {"MemAvailable": 1000})
+        resultat = registry.execute_check(diag_engine, registry.CHECKS["system.ressourcen"])
+        persist_result(db, lauf.id, "system.ressourcen", resultat, success=True)
+        db.commit()
+        db.expire_all()
+        assert db.query(DiagFinding).one().status == "behoben"
+
+
+def test_ressourcen_gleiche_pid_auf_verschiedenen_hosts():
+    from app.services.diagnose.worker import ressourcen_befunde
+
+    jetzt = utcnow()
+    zeilen = [SimpleNamespace(hostname=host, pid=42, heartbeat_at=jetzt,
+        expires_at=jetzt + timedelta(seconds=20), metriken={"rss_mb": 700}) for host in ("a", "b")]
+    befunde = ressourcen_befunde(zeilen, jetzt)
+    assert len({b.key("worker.zustand") for b in befunde}) == 2

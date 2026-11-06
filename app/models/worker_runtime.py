@@ -22,4 +22,5 @@ class WorkerRuntime(Base):
     leader_error: Mapped[str | None] = mapped_column(String(40))
     redis: Mapped[dict] = mapped_column(JSON, nullable=False)
     loops: Mapped[dict] = mapped_column(JSON, nullable=False)
+    metriken: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     __table_args__ = (Index("ix_worker_runtime_expiry", "expires_at"),)

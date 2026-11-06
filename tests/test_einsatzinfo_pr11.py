@@ -86,6 +86,9 @@ def test_einsatzinfo_zeigt_google_maps_link_wenn_koordinaten_vorhanden():
     assert r.status_code == 200, r.text[:300]
     assert "maps.google.com/?q=47.4652,9.7503" in r.text
     assert "Google Maps" in r.text
+    assert 'id="einsatz-info-karte" class="hydranten-blau"' in r.text
+    assert 'id="hydranten-liste" class="hydranten-blau"' in r.text
+    _assert_blaue_listenfarben()
 
 
 def test_einsatzinfo_ohne_koordinaten_kein_google_maps_link():
@@ -126,6 +129,9 @@ def test_alarm_link_anonym_zeigt_weiterhin_oeffentliche_seite():
     r = client.get(f"/alarm/{token}", follow_redirects=False)
     assert r.status_code == 200
     assert f"/einsatz/{incident_id}" in r.text  # Board-Link auf der oeffentlichen Seite selbst
+    assert 'id="alarm-karte" class="hydranten-blau"' in r.text
+    assert 'id="alarm-hydranten" class="hydranten-blau"' in r.text
+    _assert_blaue_listenfarben()
 
 
 # ── Objekt-Vorschlaege: Entfernung statt Objekt-Nr./ID ───────────────────────
@@ -167,3 +173,13 @@ def test_objekt_kandidaten_nach_entfernung_sortiert_nicht_nach_id():
     pos_fern = body.index(f"id: {fern_id},")
     # Entfernungs-Reihenfolge (nah -> mittel -> fern), NICHT die Objekt-Nr.-Reihenfolge.
     assert pos_nah < pos_mittel < pos_fern
+
+
+def _assert_blaue_listenfarben():
+    from pathlib import Path
+
+    css = Path("app/static/css/tailwind.input.css").read_text()
+    assert ".hydranten-blau .hydrant-icon--hydrant { background: #2563eb; }" in css
+    assert ".hydranten-blau .hydrant-icon--unterflur { background: #1e3a8a; }" in css
+    assert ".hydrant-icon--ueberflur, .hydrant-icon--hydrant { background: #dc2626; }" in css
+    assert ".hydrant-icon--unterflur { background: #2563eb; border-radius: 4px; }" in css

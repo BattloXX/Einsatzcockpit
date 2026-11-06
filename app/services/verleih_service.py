@@ -401,49 +401,86 @@ def get_sms_ausleih_text(db: Session, org_id: int, ausleihe: VerleihAusleihe) ->
 
 async def sende_material_sms(ausleihe_id: int, org_id: int, pin_senden: bool) -> bool:
     """Versendet die Ausleih-SMS best effort und protokolliert das Ergebnis."""
+    from app.services.loop_thread_io import im_db_thread
+    from app.services.sms_service import send_sms
+
+    site_id = None
+    try:
+        daten = await im_db_thread(_material_sms_laden_sync, ausleihe_id, org_id, pin_senden)
+        if daten is None:
+            return False
+        telefon, text, site_id = daten
+        erfolgreich = bool(await send_sms(org_id, telefon, text))
+        await im_db_thread(_material_sms_ergebnis_sync, ausleihe_id, org_id, site_id, erfolgreich)
+        return erfolgreich
+    except Exception:
+        logger.exception("Material-SMS fehlgeschlagen: Ausleihe %s", ausleihe_id)
+        if site_id:
+            try:
+                await im_db_thread(_material_sms_ergebnis_sync, ausleihe_id, org_id, site_id, False)
+            except Exception:
+                logger.exception("SMS-Fehler konnte nicht in der Chronik gespeichert werden")
+        return False
+
+
+def _material_sms_laden_sync(ausleihe_id: int, org_id: int, pin_senden: bool) -> tuple[str, str, int | None] | None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.major_incident import SiteLogEntry
-    from app.services.sms_service import send_sms
 
     db = SessionLocal()
     set_tenant_context(db, None)
-    site_id: int | None = None
+    site_id = None
     try:
         ausleihe = db.get(VerleihAusleihe, ausleihe_id)
         if ausleihe is None or ausleihe.org_id != org_id or not ausleihe.telefon:
-            return False
+            return None
         site_id = ausleihe.site_id
         set_tenant_context(db, org_id)
         text = get_sms_ausleih_text(db, org_id, ausleihe)
         if pin_senden and ausleihe.pin:
             text += f" PIN: {ausleihe.pin}"
-        erfolgreich = bool(await send_sms(org_id, ausleihe.telefon, text))
-        if erfolgreich:
-            ausleihe.sms_ausleih_gesendet = True
-        if ausleihe.site_id:
-            db.add(SiteLogEntry(
-                incident_site_id=ausleihe.site_id,
-                kind="massnahmen",
-                text="SMS an Empfänger gesendet" if erfolgreich else "SMS an Empfänger fehlgeschlagen",
-            ))
-        db.commit()
-        return erfolgreich
+        return ausleihe.telefon, text, ausleihe.site_id
     except Exception:
         db.rollback()
         logger.exception("Material-SMS fehlgeschlagen: Ausleihe %s", ausleihe_id)
         if site_id:
             try:
                 db.add(SiteLogEntry(
-                    incident_site_id=site_id,
-                    kind="massnahmen",
-                    text="SMS an Empfänger fehlgeschlagen",
+                    incident_site_id=site_id, kind="massnahmen", text="SMS an Empfänger fehlgeschlagen",
                 ))
                 db.commit()
             except Exception:
                 db.rollback()
                 logger.exception("SMS-Fehler konnte nicht in der Chronik gespeichert werden")
-        return False
+        return None
+    finally:
+        db.close()
+
+
+def _material_sms_ergebnis_sync(
+    ausleihe_id: int, org_id: int, site_id: int | None, erfolgreich: bool,
+) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.major_incident import SiteLogEntry
+
+    db = SessionLocal()
+    set_tenant_context(db, org_id)
+    try:
+        if erfolgreich:
+            ausleihe = db.get(VerleihAusleihe, ausleihe_id)
+            if ausleihe is not None:
+                ausleihe.sms_ausleih_gesendet = True
+        if site_id:
+            db.add(SiteLogEntry(
+                incident_site_id=site_id, kind="massnahmen",
+                text="SMS an Empfänger gesendet" if erfolgreich else "SMS an Empfänger fehlgeschlagen",
+            ))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

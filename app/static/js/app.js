@@ -358,7 +358,8 @@ document.addEventListener('alpine:init', () => {
       if (!live?.started_at) { this.duration = '0 min'; return; }
       const startedAt = Date.parse(live.started_at);
       if (isNaN(startedAt)) { this.duration = '0 min'; return; }
-      const elapsedSeconds = Math.max(0, Math.floor((Date.now() + this.serverTimeSkew - startedAt) / 1000));
+      const endTime = live.closed_at || live.ended_at;
+      const elapsedSeconds = elapsedDurationSeconds(live.started_at, endTime, Date.now() + this.serverTimeSkew);
       this.duration = formatElapsedDuration(elapsedSeconds);
     },
 
@@ -444,6 +445,12 @@ function rsvpWidget(incidentId) {
 }
 
 /* Einheitliche Laufzeitdarstellung: MM:SS unter einer Stunde, sonst H:MM:SS. */
+function elapsedDurationSeconds(startedAt, endedAt, now = Date.now()) {
+  const start = Date.parse(startedAt);
+  const end = endedAt ? Date.parse(endedAt) : now;
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 1000)) : 0;
+}
+
 function formatElapsedDuration(totalSeconds) {
   const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
   const hours = Math.floor(seconds / 3600);
