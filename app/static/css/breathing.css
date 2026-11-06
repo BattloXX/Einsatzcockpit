@@ -85,6 +85,8 @@
 .troop-safety-banner--funk, .troop-warnings .warn-badge--max-time { background:#9a4309; color:#fff; border:1px solid #fb923c; }
 .troop-warnings .warn-badge--one-third { background:#f2b02e; color:#211500; border:1px solid #f2b02e; }
 .troop-warnings .warn-badge--yellow { background:#f2b02e; color:#211500; padding:8px 12px; }
+.btn--ack { white-space:nowrap; }
+.btn--ack:disabled { opacity:.55; cursor:default; }
 .troop-warnings .btn { min-height:48px; border:2px solid currentColor; background:#fff; color:#542400; font-weight:800; }
 .troop-warnings .press-picker-popup { color:var(--on-surface); font-weight:400; }
 .warning-actions { display:flex; gap:8px; width:100%; }
