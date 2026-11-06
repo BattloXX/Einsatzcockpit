@@ -390,7 +390,7 @@
 </div>
 {% endif %}
 
-{% if incident.breathing_troops %}
+{% if incident.breathing_troops or (incident.protokoll_assp is defined and incident.protokoll_assp) %}
 <div class="page-break"></div>
 <h2>Atemschutz-Protokoll</h2>
 {% for troop in incident.breathing_troops %}
@@ -398,6 +398,7 @@
 {% include "pdf/_troop_block.html" %}
 {% endfor %}
 {% endfor %}
+{% include "breathing/_assp_protokoll.html" %}
 {% endif %}
 
 {% if incident.atemschutz_pruefungen %}

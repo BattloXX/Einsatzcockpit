@@ -1,0 +1,34 @@
+{% if breathing_summary and breathing_summary.gesamt %}
+{% set summary = breathing_summary %}
+{% set counts = summary.zaehler %}
+<section id="breathingKachel" class="asuew-kachel" aria-label="Atemschutz" data-server-now="{{ summary.server_now|local_iso }}">
+  <div class="asuew-kachel__head">
+    <strong>Atemschutz</strong>
+    <a href="/einsatz/{{ incident.id }}/atemschutz">Zur Überwachung</a>
+    <span class="asuew-kachel__chip">{{ counts.im_einsatz }} im Einsatz</span>
+    <span class="asuew-kachel__chip">{{ counts.bereit }} bereit</span>
+    <span class="asuew-kachel__chip {% if counts.sicherheitstrupp_bereit %}asuew-kachel--gruen{% else %}asuew-kachel--rot{% endif %}">{% if counts.sicherheitstrupp_bereit %}Sicherheitstrupp bereit{% else %}Kein Sicherheitstrupp{% endif %}</span>
+    <span class="asuew-kachel__chip">{{ counts.in_erholung }} in Erholung</span>
+  </div>
+  {% for troop in summary.trupps %}
+  <div class="asuew-kachel__troop" data-troop-id="{{ troop.id }}">
+    <strong>{{ troop.name }}{% if troop.status == 'rueckzug' %} · Rückzug{% endif %}</strong>
+    <span class="asuew-kachel__time"{% if troop.entry_at %} data-entry="{{ troop.entry_iso }}"{% endif %} data-planned="{{ troop.geplant_min or 0 }}">{{ '%02d:%02d'|format(troop.laufzeit_s // 60, troop.laufzeit_s % 60) }} / {{ troop.geplant_min or 0 }} min</span>
+    <strong class="asuew-kachel__pressure asuew-kachel--{{ troop.druck_klasse }}"{% if troop.niedrigster_name %} title="{{ troop.niedrigster_name }}"{% endif %}>{% if troop.niedrigster_druck is not none %}{{ troop.niedrigster_druck|int }} bar{% else %}Kein Druck{% endif %}</strong>
+    {% if troop.naechste_frist %}
+    {% set deadline = troop.naechste_frist %}
+    {% set seconds = deadline.in_s|abs %}
+    <span class="asuew-kachel__deadline{% if deadline.in_s <= 0 %} asuew-kachel--rot{% endif %}" data-due="{{ deadline.due_at|local_iso }}" data-label="{{ deadline.label }}">{{ deadline.label }} {% if deadline.in_s <= 0 %}überfällig seit{% else %}in{% endif %} {{ '%02d:%02d'|format(seconds // 60, seconds % 60) }}</span>
+    {% endif %}
+    <span class="asuew-kachel__warnings">
+      {% if troop.notfall %}<span class="asuew-kachel__chip asuew-kachel--rot">Notfall</span>{% endif %}
+      {% if troop.funk_verloren %}<span class="asuew-kachel__chip asuew-kachel--rot">Kein Funkkontakt</span>{% endif %}
+      {% if 'withdraw' in troop.warnungen %}<span class="asuew-kachel__chip asuew-kachel--rot">Rückzugsdruck</span>{% endif %}
+      {% if 'one_third_due' in troop.warnungen or 'two_third_due' in troop.warnungen %}<span class="asuew-kachel__chip asuew-kachel--rot">Kontrolle fällig</span>{% endif %}
+      {% if 'max_exceeded' in troop.warnungen %}<span class="asuew-kachel__chip asuew-kachel--rot">Max-Zeit</span>{% endif %}
+    </span>
+  </div>
+  {% endfor %}
+  {% if summary.hinweise.assp %}<p class="asuew-kachel__hint"><a href="/einsatz/{{ incident.id }}/atemschutz/assp">Ab 3 Trupps: ASSP alarmieren</a></p>{% endif %}
+</section>
+{% endif %}

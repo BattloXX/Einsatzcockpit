@@ -1,4 +1,5 @@
 """Atemschutzüberwachung – Rückzugsdruck-Berechnung und Status-Maschine."""
+import json
 import logging
 import math
 import re
@@ -14,6 +15,7 @@ from app.core.audit import write_incident_change
 from app.models.breathing import (
     BOTTLE_PRESET_NOMINAL_BAR,
     TROOP_STATUSES,
+    BreathingAssp,
     BreathingDeployment,
     BreathingGeraetSitzung,
     BreathingKontrolle,
@@ -61,7 +63,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def troop_timeline(troop: BreathingTroop) -> list[dict]:
+def troop_timeline(troop: BreathingTroop, now: datetime | None = None) -> list[dict]:
     """Fristen und dokumentierte Ereignisse des aktuellen Einsatzzyklus."""
     if not troop.entry_at:
         return []
@@ -71,7 +73,10 @@ def troop_timeline(troop: BreathingTroop) -> list[dict]:
         events.append(dict(label=label, soll_at=soll_at, ist_at=ist_at, status=status, detail=detail))
 
     add("Eintritt", ist_at=troop.entry_at)
-    elapsed = troop.elapsed_seconds or 0
+    entry = troop.entry_at if troop.entry_at.tzinfo else troop.entry_at.replace(tzinfo=UTC)
+    end = troop.back_at or now or _now()
+    end = end if end.tzinfo else end.replace(tzinfo=UTC)
+    elapsed = (end - entry).total_seconds()
     for label, stufe, seconds in [
         ("1/3", "one_third", troop.one_third_seconds),
         ("2/3", "two_third", troop.two_third_seconds),
@@ -142,6 +147,145 @@ def get_asuew_settings(db: Session, org_id: int) -> AsuewSettings:
         bounded("asuew_gelb_prozent", 75, 50, 95),
         bounded("asuew_erholzeit_min", 30, 0, 120),
     )
+
+
+def load_asuew_formular_troops(db: Session, incident_id: int) -> list[BreathingTroop]:
+    """Lädt aktuelle Trupps und deren Meldungshistorie für beide Druckwege."""
+    from app.models.incident import IncidentChange
+
+    troops = db.query(BreathingTroop).filter_by(incident_id=incident_id).order_by(BreathingTroop.id).all()
+    changes = db.query(IncidentChange).filter(
+        IncidentChange.incident_id == incident_id,
+        IncidentChange.entity_type.in_(["breathing_troop", "troop_member"]),
+    ).order_by(IncidentChange.id).all()
+    for troop in troops:
+        member_ids = {member.id for member in troop.active_members}
+        rows = [row for row in changes if (
+            (row.entity_type == "breathing_troop" and row.entity_id == troop.id)
+            or (row.entity_type == "troop_member" and row.entity_id in member_ids)
+        )]
+        boundary = max((row.id for row in rows if row.action == "troop.redeployed"), default=0)
+        troop.formular_audits = [row for row in rows if row.id > boundary]  # type: ignore[attr-defined]
+    return troops
+
+
+def asuew_formular_seiten(troops, settings: AsuewSettings, leer: bool) -> list[list[dict]]:
+    """Reine Formulardaten; Datetimes bleiben bis zum Org-Filter unformatiert.
+
+    Frühere Deployments und deren Auditmeldungen werden nicht übernommen.
+    Alle Seiten haben drei Spalten, auch bei fehlenden Trupps.
+    """
+    def blank() -> dict:
+        return dict(funkrufname="", tf="", namen=[], startdruck="", entry_at=None,
+                    ziel="", einsatz_nr=None, kontrollen=[], bemerkungen=[], ueberwacher="",
+                    minuten=[settings.erwartete_einsatzzeit_min / 3, settings.erwartete_einsatzzeit_min * 2 / 3])
+
+    def utc(value):
+        return value.replace(tzinfo=UTC) if value and value.tzinfo is None else value
+
+    result = []
+    for troop in ([] if leer else troops):
+        data = blank()
+        members = list(troop.active_members)
+        leaders = [m for m in members if m.role == "truppfuehrer"]
+        leader = leaders[0] if leaders else None
+        data.update(
+            funkrufname=troop.unit_name or troop.name, tf=leader.display_name if leader else "",
+            namen=[m.display_name for m in members if m is not leader],
+            startdruck=" / ".join(
+                f"{'TF' if m.role == 'truppfuehrer' else 'TM'} {m.start_press:g}"
+                for m in members if m.start_press is not None),
+            entry_at=troop.entry_at, ziel=" / ".join(filter(None, [troop.task_text, troop.angriffsweg])),
+            einsatz_nr=max((d.lfd_nr for d in troop.deployments), default=0) + 1 if troop.deployments else None,
+            ueberwacher=troop.ueberwacher_name or "",
+        )
+        remarks = data["bemerkungen"]
+
+        def add(ts, text, nachgetragen=False, target=remarks):
+            target.append(dict(ts=ts, text=text, nachgetragen=bool(nachgetragen)))
+
+        for member in members:
+            if member.objective_press_at:
+                pressure = f" {member.objective_press:g} bar" if member.objective_press is not None else ""
+                add(member.objective_press_at, f"Einsatzziel erreicht: {member.display_name}{pressure}")
+        if troop.withdraw_at:
+            add(troop.withdraw_at, "Rückzug")
+        if troop.back_at:
+            pressures = " / ".join(
+                f"{m.display_name} {m.back_press:g} bar" for m in members if m.back_press is not None
+            )
+            add(troop.back_at, "Zurück" + (": " + pressures if pressures else ""))
+        for log in troop.active_pressure_logs:
+            member = next((m for m in members if m.id == log.troop_member_id), None)
+            name = member.display_name if member else "Unbekannt"
+            add(log.ts, f"{name} {log.pressure_bar:g} bar" + (f" - {log.note}" if log.note else ""), log.nachgetragen)
+        for stage in ("one_third", "two_third"):
+            controls = sorted(
+                (k for k in troop.active_kontrollen if k.stufe == stage), key=lambda k: utc(k.erledigt_at),
+            )
+            data["kontrollen"].append([
+                dict(ts=k.erledigt_at,
+                     text="kein Funkkontakt" if k.art == "kein_kontakt" else (
+                         f"{k.niedrigster_druck:g} bar" if k.niedrigster_druck is not None else ""),
+                     nachgetragen=bool(k.nachgetragen)) for k in controls
+            ])
+        for control in troop.active_kontrollen:
+            if control.art == "kein_kontakt":
+                add(control.erledigt_at, "Funkverlust: kein Funkkontakt", control.nachgetragen)
+        audits = getattr(troop, "formular_audits", [])
+        seen = set()
+        for row in audits:
+            try:
+                after = json.loads(row.after_json or "{}")
+                ts = datetime.fromisoformat(after["erfasst_at"]) if after.get("erfasst_at") else row.ts
+            except (ValueError, TypeError):
+                continue
+            if troop.entry_at and utc(ts) < utc(troop.entry_at):
+                continue
+            text = None
+            if row.action == "troop.meldung":
+                text = after.get("text")
+            elif row.action == "troop.funk_verloren" and after.get("active"):
+                text = "Funkverlust"
+            elif row.action == "troop.notfall":
+                text = "Notfall"
+            elif row.action == "troop.back_pressure_reported":
+                member = next((m for m in members if m.id == row.entity_id), None)
+                pressure = after.get("pressure_bar")
+                if member and pressure is not None:
+                    text = f"Enddruck: {member.display_name} {pressure:g} bar"
+            if text:
+                add(ts, text, after.get("nachgetragen"))
+                seen.add(row.action)
+            # Ereignisse mit Personen-/Druckdaten stammen aus den aktuellen Modellen.
+            if after.get("nachgetragen"):
+                for remark in remarks:
+                    if utc(remark["ts"]) == utc(ts):
+                        remark["nachgetragen"] = True
+        if troop.last_meldung_at and troop.last_meldung_text and "troop.meldung" not in seen:
+            add(troop.last_meldung_at, troop.last_meldung_text)
+        for attr, action, label in [("funk_verloren_at", "troop.funk_verloren", "Funkverlust"),
+                                    ("notfall_at", "troop.notfall", "Notfall")]:
+            ts = getattr(troop, attr)
+            if ts and action not in seen and not any(
+                utc(remark["ts"]) == utc(ts) and remark["text"].startswith(label) for remark in remarks
+            ):
+                add(ts, label)
+        if troop.notes:
+            add(None, troop.notes)
+        remarks.sort(key=lambda r: utc(r["ts"]) or datetime.min.replace(tzinfo=UTC))
+        result.append(data)
+    if not result:
+        result = [blank()]
+    pages = []
+    for start in range(0, len(result), 3):
+        page = result[start:start + 3]
+        page.extend(blank() for _ in range(3 - len(page)))
+        rows = max(2, max(len(column["namen"]) for column in page))
+        for column in page:
+            column["namen"].extend([""] * (rows - len(column["namen"])))
+        pages.append(page)
+    return pages
 
 
 def parse_user_id_csv(raw: str | None) -> list[int]:
@@ -872,7 +1016,7 @@ def troop_urgency(troop: BreathingTroop, warning_level: str, active_warnings: It
     return {"im_einsatz": 7, "bereit": 8, "zurueck": 9, "erholt": 10}[troop.status]
 
 
-def get_time_warnings(troop: BreathingTroop) -> list[str]:
+def get_time_warnings(troop: BreathingTroop, now: datetime | None = None) -> list[str]:
     """Gibt alle gleichzeitig aktiven Zeitwarnungen nach ASÜW-Leitfaden/FwDV 7 zurück.
 
     Trigger-Regeln (Leitfaden ASÜW / FwDV 7):
@@ -883,7 +1027,8 @@ def get_time_warnings(troop: BreathingTroop) -> list[str]:
     if troop.entry_at is None or troop.status not in ("im_einsatz", "rueckzug"):
         return []
 
-    now = _now()
+    now = now or _now()
+    now = now if now.tzinfo else now.replace(tzinfo=UTC)
     entry = troop.entry_at if troop.entry_at.tzinfo else troop.entry_at.replace(tzinfo=UTC)
     elapsed = (now - entry).total_seconds()
 
@@ -922,7 +1067,7 @@ def get_time_warning(troop: BreathingTroop) -> str:
     return "ok"
 
 
-def check_troop_warnings(troop: BreathingTroop) -> list[str]:
+def check_troop_warnings(troop: BreathingTroop, now: datetime | None = None) -> list[str]:
     """Gibt alle aktuell aktiven Warnstufen zurück (für Watchdog-Task)."""
     warnings = []
     if troop.notfall_at is not None:
@@ -937,11 +1082,60 @@ def check_troop_warnings(troop: BreathingTroop) -> list[str]:
         or (trigger_press is not None and ack_press is not None and trigger_press < ack_press)
     ):
         warnings.append("withdraw")
-    warnings.extend(get_time_warnings(troop))
+    warnings.extend(get_time_warnings(troop, now))
     return warnings
 
 
-def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTroop]:
+def get_or_none_assp(db: Session, incident_id: int) -> BreathingAssp | None:
+    """Eine Logistikzeile je Einsatz; Zugriff immer ueber den Einsatz abgrenzen."""
+    return db.query(BreathingAssp).filter(BreathingAssp.incident_id == incident_id).one_or_none()
+
+
+def assp_uebersicht(
+    troops: Iterable[BreathingTroop], settings: AsuewSettings, assp: BreathingAssp | None, now: datetime,
+) -> dict:
+    """Reine Logistikansicht ohne Druckueberwachung oder Warnungsberechnung."""
+    now = now if now.tzinfo else now.replace(tzinfo=UTC)
+    groups: dict[str, list[dict]] = {"bereit": [], "im_einsatz": [], "erholung": []}
+    counters = {"bereit": 0, "im_einsatz": 0, "erholung": 0,
+                "agt_bereit": 0, "agt_im_einsatz": 0, "agt_erholung": 0, "sicherheitstrupp_bereit": 0}
+    for troop in troops:
+        group = {"bereit": "bereit", "im_einsatz": "im_einsatz", "rueckzug": "im_einsatz",
+                 "zurueck": "erholung", "erholt": "erholung"}.get(troop.status)
+        if group is None:
+            continue
+        members = troop.active_members
+        row = {"name": troop.name, "is_sicherheitstrupp": bool(troop.is_sicherheitstrupp),
+               "unit_name": troop.unit_name}
+        if group == "bereit":
+            row["members"] = [{"name": m.display_name, "start_press": m.start_press} for m in members]
+            counters["sicherheitstrupp_bereit"] += int(bool(troop.is_sicherheitstrupp))
+        elif group == "im_einsatz":
+            entry = troop.entry_at
+            if entry and not entry.tzinfo:
+                entry = entry.replace(tzinfo=UTC)
+            row.update(entry_at=entry, laufzeit_s=max(0, int((now - entry).total_seconds())) if entry else 0,
+                       geplant_min=troop.planned_duration_min)
+        else:
+            back = troop.back_at or (troop.deployments[-1].back_at if troop.deployments else None)
+            if back and not back.tzinfo:
+                back = back.replace(tzinfo=UTC)
+            ready = back + timedelta(minutes=settings.erholzeit_min) if back else None
+            row.update(back_at=back, wieder_einsatzbereit_at=ready,
+                       erholt_fertig=bool(ready and ready <= now))
+            if not members and troop.deployments:
+                members = troop.deployments[-1].members
+        groups[group].append(row)
+        counters[group] += 1
+        counters["agt_" + group] += len(members)
+    deadlines = [row["wieder_einsatzbereit_at"] for row in groups["erholung"]
+                 if row["wieder_einsatzbereit_at"] and not row["erholt_fertig"]]
+    return {**groups, "zaehler": counters,
+            "wieder_einsatzbereit_at": min(deadlines) if deadlines else None,
+            "flaschen": {"voll": assp.flaschen_voll if assp else 0, "leer": assp.flaschen_leer if assp else 0}}
+
+
+def incident_hinweise(troops: Iterable[BreathingTroop], assp_aktiv: bool = False) -> dict[str, BreathingTroop]:
     """Einsatzbezogene Hinweise am eingesetzten Trupp mit der niedrigsten ID verankern.
 
     Erwartet die Trupps eines Einsatzes. Bei einem Ankerwechsel wird die alte
@@ -953,13 +1147,69 @@ def incident_hinweise(troops: Iterable[BreathingTroop]) -> dict[str, BreathingTr
         return {}
     anker = min(eingesetzt, key=lambda troop: troop.id)
     hinweise = {}
-    if len(eingesetzt) >= 3:
+    if len(eingesetzt) >= 3 and not assp_aktiv:
         hinweise["assp"] = anker
     if any(not troop.is_sicherheitstrupp for troop in eingesetzt) and not any(
         troop.is_sicherheitstrupp and troop.status == "bereit" for troop in troops
     ):
         hinweise["kein_sicherheitstrupp"] = anker
     return hinweise
+
+
+def dashboard_summary(
+    troops: list[BreathingTroop], settings: AsuewSettings, now: datetime, assp_aktiv: bool = False,
+) -> dict:
+    """Verdichtet bereits geladene Trupps ohne Datenbankzugriff für die EL-Kachel."""
+    now = now if now.tzinfo else now.replace(tzinfo=UTC)
+    counters = {
+        "im_einsatz": sum(t.status in ("im_einsatz", "rueckzug") for t in troops),
+        "bereit": sum(t.status == "bereit" for t in troops),
+        "sicherheitstrupp_bereit": sum(bool(t.is_sicherheitstrupp) and t.status == "bereit" for t in troops),
+        "in_erholung": sum(t.status in ("zurueck", "erholt") for t in troops),
+    }
+    rows = []
+    for troop in troops:
+        if troop.status not in ("im_einsatz", "rueckzug"):
+            continue
+        pressure = get_warning_level(troop, settings.gelb_prozent)
+        warnings = check_troop_warnings(troop, now)
+        measured = [m for m in troop.active_members if m.current_press is not None]
+        lowest = min(measured, key=lambda m: m.current_press or 0) if measured else None
+        known = any(m.current_press is not None and m.start_press is not None for m in troop.active_members)
+        entry = troop.entry_at
+        if entry and not entry.tzinfo:
+            entry = entry.replace(tzinfo=UTC)
+        deadline = None
+        kinds = {"1/3": "one_third", "2/3": "two_third", "Max": "max"}
+        for event in troop_timeline(troop, now):
+            if event["soll_at"] is None or event["status"] == "erledigt":
+                continue
+            due = event["soll_at"]
+            due = due if due.tzinfo else due.replace(tzinfo=UTC)
+            deadline = {
+                "kind": kinds[event["label"]],
+                "label": "Max-Zeit" if event["label"] == "Max" else f"Kontrolle {event['label']}",
+                "in_s": int((due - now).total_seconds()), "due_at": due,
+            }
+            break
+        rows.append({
+            "id": troop.id, "name": troop.name, "status": troop.status,
+            "entry_at": entry, "entry_iso": entry.astimezone(UTC).isoformat() if entry else None,
+            "laufzeit_s": max(0, int((now - entry).total_seconds())) if entry else 0,
+            "geplant_min": troop.planned_duration_min,
+            "niedrigster_druck": lowest.current_press if lowest else None,
+            "niedrigster_name": lowest.display_name if lowest else None,
+            "druck_klasse": {"red": "rot", "yellow": "gelb", "ok": "gruen"}[pressure.level] if known else "unbekannt",
+            "naechste_frist": deadline, "warnungen": warnings,
+            "notfall": troop.notfall_at is not None, "funk_verloren": troop.funk_verloren_at is not None,
+            "urgency": troop_urgency(troop, pressure.level, warnings),
+        })
+    rows.sort(key=lambda row: (row["urgency"], row["id"]))
+    hints = incident_hinweise(troops, assp_aktiv)
+    return {
+        "zaehler": counters, "hinweise": {key: key in hints for key in ("assp", "kein_sicherheitstrupp")},
+        "trupps": rows, "gesamt": len(troops), "server_now": now,
+    }
 
 
 def asuew_heartbeat_fehlt(db: Session, incident: Incident, now: datetime) -> bool:
@@ -1019,7 +1269,8 @@ def _collect_new_breathing_warnings(db: Session) -> list[tuple[int, int, str]]:
             if not enabled_by_org[org_id]:
                 continue
             db.refresh(incident, ["breathing_troops"])
-            hinweise = incident_hinweise(incident.breathing_troops)
+            assp = get_or_none_assp(db, incident.id)
+            hinweise = incident_hinweise(incident.breathing_troops, bool(assp and assp.aktiv))
             if asuew_heartbeat_fehlt(db, incident, now):
                 hinweise["kein_heartbeat"] = min(
                     (t for t in incident.breathing_troops if t.status in ("im_einsatz", "rueckzug")),

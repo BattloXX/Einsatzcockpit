@@ -30,7 +30,7 @@ from app.core.security import (
 )
 from app.core.templating import templates
 from app.db import get_db
-from app.models.breathing import BreathingTroop
+from app.models.breathing import BreathingTroop, PressureLog
 from app.models.incident import (
     PERSON_STATUS_VALUES,
     UNIT_STATUS_VALUES,
@@ -67,7 +67,13 @@ from app.models.road_closure import IncidentRoute
 from app.models.user import Role, User, UserRole
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.alarm_service import get_alarm_type_by_code
-from app.services.breathing_service import breathing_effective_enabled
+from app.services.breathing_service import (
+    AsuewSettings,
+    breathing_effective_enabled,
+    dashboard_summary,
+    get_asuew_settings,
+    get_or_none_assp,
+)
 from app.services.broadcast import broadcast_org, manager
 from app.services.db_transactions import commit_db_operation
 from app.services.incident_service import (
@@ -1672,6 +1678,38 @@ def incident_nachbar_gefahren(incident_id: int, request: Request, db: Session = 
     return {"objekte": ergebnis, "radius_m": radius}
 
 
+def _dashboard_breathing_summary(incident: Incident, db: Session, request: Request) -> dict | None:
+    if not getattr(request.state, "breathing_module_enabled", False):
+        return None
+    troops = db.query(BreathingTroop).options(
+        selectinload(BreathingTroop.members),
+        selectinload(BreathingTroop.pressure_logs).joinedload(PressureLog.troop_member),
+        selectinload(BreathingTroop.kontrollen),
+    ).filter(BreathingTroop.incident_id == incident.id).all()
+    settings = (get_asuew_settings(db, incident.primary_org_id)
+                if incident.primary_org_id else AsuewSettings(30, 60, 75, 30))
+    assp = get_or_none_assp(db, incident.id)
+    return dashboard_summary(troops, settings, datetime.now(UTC), bool(assp and assp.aktiv))
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/kachel", response_class=HTMLResponse)
+def incident_breathing_kachel(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    if not getattr(request.state, "breathing_module_enabled", False):
+        raise HTTPException(404, "Nicht gefunden")
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(404, "Einsatz nicht gefunden")
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+    return templates.TemplateResponse(request, "incident/_breathing_kachel.html", {
+        "user": user, "incident": incident,
+        "breathing_summary": _dashboard_breathing_summary(incident, db, request),
+    })
+
+
 async def _build_dashboard_context(
     incident: Incident, db: Session, request: Request, user: User
 ) -> dict:
@@ -1728,16 +1766,7 @@ async def _build_dashboard_context(
     lage_hints = _prepend_ai_hints(incident, lage_hints)
     lage_hints_ai = [bool(getattr(h, 'is_ai', False)) for h in lage_hints]
 
-    breathing_troops = (
-        db.query(BreathingTroop)
-        .filter(
-            BreathingTroop.incident_id == incident_id,
-            BreathingTroop.status.in_(["im_einsatz", "rueckzug"]),
-        )
-        .all()
-    )
-    for t in breathing_troops:
-        _ = list(t.pressure_logs)
+    breathing_summary = _dashboard_breathing_summary(incident, db, request)
 
     # QR-Code für Dashboard-Header (Login-QR)
     qr_img_b64 = None
@@ -1865,7 +1894,7 @@ async def _build_dashboard_context(
         "closed_at_iso": closed_at_iso,
         "lage_hints": lage_hints,
         "lage_hints_ai": lage_hints_ai,
-        "breathing_troops": breathing_troops,
+        "breathing_summary": breathing_summary,
         "qr_img": qr_img_b64,
         "qr_url": qr_url_str,
         "uas_einsatz": uas_einsatz,

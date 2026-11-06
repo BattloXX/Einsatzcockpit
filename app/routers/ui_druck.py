@@ -21,6 +21,8 @@ from app.db import get_db
 from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
     DOC_AS_PRUEFUNG,
+    DOC_ASUEW_FORMULAR,
+    DOC_ASUEW_FORMULAR_LEER,
     DOC_EINSATZINFO,
     DOC_FAHRTENBUCH_BERICHT,
     DOC_GSL_BERICHT,
@@ -54,10 +56,14 @@ def _verify_org(db: Session, org_id: int | None, document_type: str,
     def _own(obj, attr: str) -> bool:
         return obj is not None and getattr(obj, attr, None) == org_id
 
-    if document_type == DOC_EINSATZINFO:
+    if document_type in (DOC_EINSATZINFO, DOC_ASUEW_FORMULAR, DOC_ASUEW_FORMULAR_LEER):
         from app.models.incident import Incident
         if not (incident_id and _own(db.get(Incident, incident_id), "primary_org_id")):
             raise HTTPException(status_code=404, detail="Einsatz nicht gefunden")
+        if document_type in (DOC_ASUEW_FORMULAR, DOC_ASUEW_FORMULAR_LEER):
+            from app.services.breathing_service import breathing_effective_enabled
+            if not breathing_effective_enabled(org_id, db):
+                raise HTTPException(status_code=404, detail="Nicht gefunden")
     elif document_type == DOC_OBJEKTBLATT:
         from app.models.objekt import Objekt
         if not (objekt_id and _own(db.get(Objekt, objekt_id), "org_id")):

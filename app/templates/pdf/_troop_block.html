@@ -4,6 +4,8 @@
 <div style="margin-bottom:16pt;">
   <h3 style="margin-top:10pt;">{{ cycle.name }}{% if cycle.unit_name %} – {{ cycle.unit_name }}{% endif %}</h3>
 
+  {% include "breathing/_protokoll_details.html" %}
+
   <table>
     <tr>
       <td style="width:50%">
@@ -67,10 +69,10 @@
       {% if m.id == log.troop_member_id %}{% set ns_name.name = m.display_name %}{% endif %}
     {% endfor %}
     <tr>
-      <td>{{ (log.ts|local).strftime('%H:%M:%S') }}</td>
+      <td>{{ log.ts|local_datetime_sec }}</td>
       <td>{{ ns_name.name }}</td>
       <td>{{ log.pressure_bar|int }}</td>
-      <td>{{ log.note or '–' }}</td>
+      <td>{{ log.note or '–' }}{% if log.nachgetragen %} (nachgetragen){% endif %}</td>
     </tr>
     {% endfor %}
   </table>

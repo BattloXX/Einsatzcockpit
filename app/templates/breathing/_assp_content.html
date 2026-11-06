@@ -1,0 +1,100 @@
+<div id="asspContent" data-server-now="{{ server_now|local_iso }}">
+  {% set counts = uebersicht.zaehler %}
+  {% set base = '/einsatz/' ~ incident.id ~ '/atemschutz/assp' %}
+  {% if counts.im_einsatz >= 3 and not (assp and assp.aktiv) %}
+  <p class="assp-hint" role="status">Ab 3 Trupps: ASSP alarmieren</p>
+  {% endif %}
+  <div class="assp-top">
+    <section class="assp-panel" aria-label="ASSP">
+      <h2>ASSP</h2>
+      <p><strong>{% if assp and assp.aktiv %}eingerichtet{% if assp.aktiviert_at %} seit {{ assp.aktiviert_at|local_time }}{% endif %}{% else %}nicht eingerichtet{% endif %}</strong></p>
+      <dl class="assp-details">
+        <dt>Leiter</dt><dd>{{ assp.leiter_name if assp and assp.leiter_name else '-' }}</dd>
+        <dt>Standort</dt><dd>{{ assp.standort if assp and assp.standort else '-' }}</dd>
+        <dt>Notiz</dt><dd>{{ assp.notiz if assp and assp.notiz else '-' }}</dd>
+      </dl>
+      {% if can_edit %}
+      {% if not (assp and assp.aktiv) %}
+      <form hx-post="{{ base }}" hx-swap="none">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="aktiv" value="true">
+        <button class="btn btn--primary assp-activate" type="submit">ASSP eingerichtet</button>
+      </form>
+      {% endif %}
+      <details class="assp-edit">
+        <summary>Bearbeiten</summary>
+        <form hx-post="{{ base }}" hx-swap="none" class="assp-form">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <label>Status<select class="form-input" name="aktiv"><option value="false">nicht eingerichtet</option><option value="true" {% if assp and assp.aktiv %}selected{% endif %}>eingerichtet</option></select></label>
+          <label>Leiter<input class="form-input" name="leiter_name" maxlength="150" value="{{ assp.leiter_name or '' if assp else '' }}"></label>
+          <label>Standort<input class="form-input" name="standort" maxlength="200" value="{{ assp.standort or '' if assp else '' }}"></label>
+          <label>Notiz<textarea class="form-input" name="notiz" maxlength="300">{{ assp.notiz or '' if assp else '' }}</textarea></label>
+          <button class="btn btn--primary" type="submit">Speichern</button>
+        </form>
+      </details>
+      {% endif %}
+    </section>
+    <section class="assp-panel" aria-label="Flaschenpool">
+      <h2>Flaschenpool</h2>
+      <div class="assp-pool">
+        {% for key, label in [('voll', 'Volle Flaschen'), ('leer', 'Leere Flaschen')] %}
+        <div class="assp-bottle">
+          <h3>{{ label }}</h3>
+          <output class="assp-count" id="assp-{{ key }}" aria-live="polite">{{ uebersicht.flaschen[key] }}</output>
+          {% if can_edit %}
+          <form hx-post="{{ base }}/flaschen" hx-swap="none" class="assp-actions">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn assp-delta" name="delta_{{ key }}" value="-1" aria-label="{{ label }} vermindern">-</button>
+            <button type="submit" class="btn assp-delta" name="delta_{{ key }}" value="1" aria-label="{{ label }} erhöhen">+</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+  <section class="assp-panel" aria-label="Info an die Einsatzleitung">
+    <h2>Info an die Einsatzleitung</h2>
+    <p>{{ counts.im_einsatz }} Trupps im Einsatz, {{ counts.bereit }} bereit, {{ counts.erholung }} in Erholung{% if uebersicht.wieder_einsatzbereit_at %} (wieder einsatzbereit ab {{ uebersicht.wieder_einsatzbereit_at|local_time }}){% endif %}</p>
+    <p>AGT: {{ counts.agt_im_einsatz }} im Einsatz, {{ counts.agt_bereit }} bereit, {{ counts.agt_erholung }} in Erholung</p>
+    <strong>{% if counts.sicherheitstrupp_bereit %}Sicherheitstrupp bereit{% else %}Sicherheitstrupp fehlt{% endif %}</strong>
+  </section>
+  <div class="assp-columns">
+    <section class="assp-panel">
+      <h2>Bereit am ASSP</h2>
+      <ul class="assp-list">
+      {% for troop in uebersicht.bereit %}
+        <li><strong>{{ troop.name }}</strong>{% if troop.is_sicherheitstrupp %} · Sicherheitstrupp{% endif %}{% if troop.unit_name %}<p>{{ troop.unit_name }}</p>{% endif %}
+          <ul>{% for member in troop.members %}<li>{{ member.name }} · Anfangsdruck: {% if member.start_press is not none %}{{ member.start_press|int }} bar{% else %}-{% endif %}</li>{% endfor %}</ul>
+        </li>
+      {% else %}<li>Keine Trupps bereit.</li>{% endfor %}
+      </ul>
+    </section>
+    <section class="assp-panel" id="asspDeployed">
+      <h2>Im Einsatz</h2>
+      <ul class="assp-list">
+      {% for troop in uebersicht.im_einsatz %}
+        <li><strong>{{ troop.name }}</strong><p>Laufzeit: <span{% if troop.entry_at %} data-entry="{{ troop.entry_at|local_iso }}"
+          x-data="{elapsed: '', timer: null, tick() { const seconds = Math.max(0, Math.floor(((window.ECPServerClock ? window.ECPServerClock.now() : Date.now()) - Date.parse($el.dataset.entry)) / 1000)); this.elapsed = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); }, init() { this.tick(); this.timer = setInterval(() => this.tick(), 1000); }, destroy() { clearInterval(this.timer); }}"
+          x-text="elapsed"{% endif %}>{{ '%02d:%02d'|format(troop.laufzeit_s // 60, troop.laufzeit_s % 60) }}</span> · Geplante Zeit: {{ troop.geplant_min or '-' }} min</p></li>
+      {% else %}<li>Keine Trupps im Einsatz.</li>{% endfor %}
+      </ul>
+    </section>
+    <section class="assp-panel">
+      <h2>Erholung</h2>
+      <ul class="assp-list">
+      {% for troop in uebersicht.erholung %}
+        <li><strong>{{ troop.name }}</strong>
+          {% if troop.back_at %}<p>Zurück: {{ troop.back_at|local_time }}</p>{% endif %}
+          {% if troop.wieder_einsatzbereit_at %}
+          <p>Wieder einsatzbereit ab {{ troop.wieder_einsatzbereit_at|local_time }}</p>
+          <span class="assp-recovery" data-ready="{{ troop.wieder_einsatzbereit_at|local_iso }}"
+                x-data="{rest: '', timer: null, tick() { const seconds = Math.max(0, Math.ceil((Date.parse($el.dataset.ready) - (window.ECPServerClock ? window.ECPServerClock.now() : Date.now())) / 1000)); this.rest = seconds ? Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0') + ' min Erholung' : 'einsatzbereit'; }, init() { this.tick(); this.timer = setInterval(() => this.tick(), 1000); }, destroy() { clearInterval(this.timer); }}"
+                x-text="rest">{% if troop.erholt_fertig %}einsatzbereit{% else %}in Erholung{% endif %}</span>
+          {% else %}<p>Rückkehrzeit nicht erfasst.</p>{% endif %}
+        </li>
+      {% else %}<li>Keine Trupps in Erholung.</li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>

@@ -1,0 +1,10 @@
+{% if incident.protokoll_assp is defined and incident.protokoll_assp %}
+{% set assp = incident.protokoll_assp %}
+<div style="border:1px solid #777;padding:8px;margin-top:12px;">
+  <h3>Atemschutzsammelplatz</h3>
+  <p>Eingerichtet seit: {{ assp.aktiviert_at|local_datetime_sec if assp.aktiviert_at else '–' }};
+  Leiter: {{ assp.leiter_name or '–' }}; Standort: {{ assp.standort or '–' }};<br>
+  Flaschen voll: {{ assp.flaschen_voll }}; Flaschen leer: {{ assp.flaschen_leer }};<br>
+  Notiz: {{ assp.notiz or '–' }}</p>
+</div>
+{% endif %}

@@ -1,0 +1,23 @@
+<p>
+  <strong>Überwacher:</strong> {{ cycle.ueberwacher_name or '–' }};
+  <strong>Funkkanal:</strong> {{ cycle.funkkanal or '–' }};
+  <strong>Angriffsweg:</strong> {{ cycle.angriffsweg or '–' }};
+  <strong>Geplante Einsatzzeit:</strong> {{ cycle.planned_duration_min or '–' }} min
+</p>
+{% if cycle.protokoll is defined %}
+<p><strong>Zyklus {{ cycle.protokoll.nr }}:</strong>
+  {{ cycle.protokoll.nachgetragen }} nachgetragene Eingaben.
+  {% for frist in cycle.protokoll.fristen %}
+  {% if frist.versaeumt %}Kontrolle {{ frist.label }}: versäumt. {% endif %}
+  {% endfor %}
+  {% if cycle.protokoll.erholzeit_verletzt %}Erholzeit verletzt: Wiedereinsatz vor Ablauf von {{ cycle.protokoll.erholzeit_min }} min.{% endif %}
+</p>
+<table>
+  <tr><th>Zeit</th><th>Kontrollen / Status / Meldungen / Warnungen</th><th>Akteur</th></tr>
+  {% for e in cycle.protokoll.ereignisse %}
+  {% if e.art != 'druck' or e.text.startswith('Einsatzziel') or e.text.startswith('Enddruck') %}
+  <tr><td>{{ e.zeit|local_datetime_sec }}</td><td>{{ e.text }}{% if e.nachgetragen %} (nachgetragen){% endif %}</td><td>{{ e.akteur or '–' }}</td></tr>
+  {% endif %}
+  {% endfor %}
+</table>
+{% endif %}

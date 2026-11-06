@@ -60,7 +60,7 @@ def _session(playwright, ctx, viewport):
             return route.abort()
         method = route.request.method
         if method == "GET":
-            response = ctx.client.get(path)
+            response = ctx.client.get(path, headers=route.request.headers)
         else:
             response = ctx.client.post(path, content=route.request.post_data_buffer or b"",
                                        # Redirects ebenfalls im TestClient verfolgen: Playwright leitet
@@ -68,7 +68,7 @@ def _session(playwright, ctx, viewport):
                                        headers=route.request.headers, follow_redirects=True)
         route.fulfill(status=response.status_code, body=response.content,
                       headers={k: v for k, v in response.headers.items()
-                               if k.lower() in ("content-type", "cache-control", "location")})
+                               if k.lower() in ("content-type", "cache-control", "location", "hx-trigger")})
 
     page.route("http://localhost/**", handle)
     page.set_viewport_size({"width": viewport[0], "height": viewport[1]})
@@ -202,5 +202,146 @@ def test_dialog_screenshot_and_creation(breathing_routes, name):  # noqa: F811
             assert page.locator(".troop-card").count() == 4
             assert [t for t in messages if t[0] == "pageerror"] == []
             assert dialogs == []
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize("name", ["handy", "desktop"])
+def test_dashboard_kachel_screenshot_and_live_refresh(breathing_routes, name):  # noqa: F811
+    """EL-Kachel auf dem Dashboard, inklusive WS-Swap und Serverzeit-Ticker."""
+    from playwright.sync_api import sync_playwright
+    ctx = breathing_routes
+    _seed(ctx)
+    OUT.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        browser, page, messages = _session(playwright, ctx, VIEWPORTS[name])
+        try:
+            page.context.add_cookies([
+                {"name": key, "value": value, "url": "http://localhost"} for key, value in ctx.client.cookies.items()
+            ])
+            # Die TestClient-Bruecke transportiert HTTP; WS-Ereignisse gezielt einspeisen.
+            page.add_init_script("""window.WebSocket = class {
+              constructor() { this.readyState = 1; setTimeout(() => this.onopen && this.onopen(), 0); }
+              send() {}
+            };""")
+            page.goto(f"http://localhost/einsatz/{ctx.incident_id}/dashboard", wait_until="networkidle")
+            page.wait_for_selector('#breathingKachel')
+            assert page.locator('.asuew-kachel__troop').count() == 2
+            assert page.locator('#breathingKachel').evaluate("el => el.scrollWidth <= el.clientWidth")
+            timer = page.locator('.asuew-kachel__time').first
+            before = timer.inner_text()
+            page.evaluate('ECPServerClock.setOffsetMs(120000)')
+            page.wait_for_timeout(1100)
+            assert timer.inner_text() != before
+            page.screenshot(path=str(OUT / f"dashboard_{name}.png"), full_page=True)
+            ctx.troop.active_members[0].current_press = 50
+            ctx.db.commit()
+            page.evaluate("ws.onmessage({data: JSON.stringify({type: 'pressure_logged'})})")
+            page.wait_for_function("document.querySelector('#breathingKachel').textContent.includes('50 bar')")
+            assert page.locator('.asuew-kachel__pressure.asuew-kachel--rot').count() >= 1
+            page.evaluate("ws.onmessage({data: JSON.stringify({type: 'troop_updated'})})")
+            page.wait_for_timeout(600)
+            assert page.locator('#breathingKachel').count() == 1
+            assert [t for t in messages if t[0] == "pageerror"] == []
+            # Auch die Einsatzseite aus dem Aufgabenaufruf dokumentieren.
+            page.goto(f"http://localhost/einsatz/{ctx.incident_id}", wait_until="networkidle")
+            assert page.locator('body').is_visible()
+            page.screenshot(path=str(OUT / f"einsatz_{name}.png"), full_page=True)
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize("name", ["handy", "desktop"])
+def test_assp_screenshot_and_live_pool(breathing_routes, name):  # noqa: F811
+    """ASSP bei 390/1600px, Flaschen ohne Reload, WS-Swap und Erholzeit."""
+    from playwright.sync_api import sync_playwright
+
+    from app.models.breathing import BreathingTroop
+    ctx = breathing_routes
+    _seed(ctx)
+    ctx.db.add(BreathingTroop(incident_id=ctx.incident_id, name="Erholung Browser", status="zurueck",
+                             back_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=20)))
+    ctx.db.commit()
+    OUT.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        browser, page, messages = _session(playwright, ctx, VIEWPORTS[name])
+        try:
+            page.context.add_cookies([
+                {"name": key, "value": value, "url": "http://localhost"} for key, value in ctx.client.cookies.items()
+            ])
+            page.add_init_script("""window.WebSocket = class {
+              constructor(url) { if (url.includes('/ws/incident/') && !window.asspSocket) window.asspSocket = this; this.readyState = 1;
+                setTimeout(() => this.onopen && this.onopen(), 0); }
+              send() {}
+              close() {}
+              addEventListener() {}
+              removeEventListener() {}
+            };""")
+            page.goto(f"http://localhost/einsatz/{ctx.incident_id}/atemschutz/assp", wait_until="networkidle")
+            page.wait_for_selector('#asspContent')
+            assert [t for t in messages if t[0] == 'pageerror'] == []
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert page.locator('.assp-delta').first.bounding_box()['height'] >= 56
+            assert page.locator('.assp-delta').first.bounding_box()['width'] >= 56
+            page.get_by_role('button', name='Volle Flaschen erhöhen', exact=True).click()
+            page.wait_for_function("document.getElementById('assp-voll').textContent === '1'")
+            assert page.locator('#asspContent').count() == 1
+            page.locator('#breathingContrastToggle').click()
+            assert page.locator('#breathingBoard').evaluate("el => el.classList.contains('breathing-hc')")
+            # Das geschlossene Profil-Sheet liegt per Transform unter dem Viewport;
+            # Chromium bildet es sonst in einem Full-Page-Screenshot trotzdem ab.
+            page.screenshot(path=str(OUT / f'assp_{name}.png'), full_page=True,
+                            style='.profil-sheet:not(.profil-sheet--open) { visibility: hidden; }')
+            timer = page.locator('.assp-recovery').first
+            before = timer.inner_text()
+            page.evaluate('ECPServerClock.setOffsetMs(3600000)')
+            page.wait_for_function("document.querySelector('.assp-recovery').textContent === 'einsatzbereit'")
+            assert before != timer.inner_text()
+            page.get_by_role('button', name='ASSP eingerichtet', exact=True).click()
+            page.wait_for_function("document.getElementById('asspContent').textContent.includes('eingerichtet seit')")
+            # Ereignis eines anderen Clients: keinen Druck/Alarm in die Logistik holen.
+            ctx.troop.name = 'WS Trupp aktualisiert'
+            ctx.db.commit()
+            page.evaluate("asspSocket.onmessage({data: JSON.stringify({type: 'troop_status_changed'})})")
+            page.wait_for_function(
+                "document.getElementById('asspContent').textContent.includes('WS Trupp aktualisiert')"
+            )
+            assert page.locator('#breathingBoard').evaluate("el => el.classList.contains('breathing-hc')")
+            assert [t for t in messages if t[0] == 'pageerror'] == []
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize("name", ["handy", "desktop"])
+def test_protokoll_screenshot(breathing_routes, name):  # noqa: F811
+    """Protokollseite mit Druckmeldungen und Kontrolle, ohne JS-Fehler und ohne Ueberbreite."""
+    from playwright.sync_api import sync_playwright
+
+    from app.models.breathing import BreathingKontrolle, PressureLog
+    ctx = breathing_routes
+    _seed(ctx)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    member = ctx.troop.active_members[0]
+    ctx.db.add_all([
+        PressureLog(troop_id=ctx.troop.id, troop_member_id=member.id, pressure_bar=230, ts=now - timedelta(minutes=8)),
+        PressureLog(troop_id=ctx.troop.id, troop_member_id=member.id, pressure_bar=210, ts=now - timedelta(minutes=2),
+                    note="Einsatzziel erreicht", nachgetragen=True),
+        BreathingKontrolle(troop_id=ctx.troop.id, stufe="one_third", art="funk", erledigt_at=now - timedelta(minutes=1),
+                           niedrigster_druck=205),
+    ])
+    ctx.db.commit()
+    OUT.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        browser, page, messages = _session(playwright, ctx, VIEWPORTS[name])
+        try:
+            page.context.add_cookies([
+                {"name": key, "value": value, "url": "http://localhost"} for key, value in ctx.client.cookies.items()
+            ])
+            page.goto(f"http://localhost/einsatz/{ctx.incident_id}/atemschutz/{ctx.troop.id}/protokoll",
+                      wait_until="networkidle")
+            assert [t for t in messages if t[0] == "pageerror"] == []
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            page.screenshot(path=str(OUT / f"protokoll_{name}.png"), full_page=True,
+                            style=".profil-sheet:not(.profil-sheet--open) { visibility: hidden; }")
         finally:
             browser.close()

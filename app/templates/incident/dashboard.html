@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard · {{ incident.alarm_type_code }} – {{ incident.address_street or ('Einsatz #' ~ incident.id) }}</title>
   <link href="/static/css/fonts.css?v={{ ASSET_VERSION }}" rel="stylesheet">
+  {% if request.state.breathing_module_enabled %}
+  <link rel="stylesheet" href="/static/css/breathing.css?v={{ ASSET_VERSION }}">
+  {% endif %}
+  <script src="/static/js/server_clock.js?v={{ ASSET_VERSION }}"></script>
   <style>
     .ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}
     /* ── Reset & Tokens ─────────────────────────────────────────────────────── */
@@ -477,95 +481,6 @@
     .ps-group--treated     .ps-label, .ps-group--treated     .ps-count { color: var(--amber); }
     .ps-group--transported .ps-label, .ps-group--transported .ps-count { color: #5fcf8e; }
 
-    /* ── ATEMSCHUTZ-STRIP ───────────────────────────────────────────────────── */
-    .bs-strip {
-      flex-shrink: 0;
-      background: rgba(120,20,20,.45);
-      border-bottom: 1px solid rgba(248,113,113,.35);
-      display: flex;
-      align-items: center;
-      gap: .53rem;
-      padding: .4rem .8rem;
-      overflow-x: auto;
-      overflow-y: hidden;
-    }
-    .bs-strip::-webkit-scrollbar { height: 3px; }
-    .bs-strip::-webkit-scrollbar-thumb { background: rgba(248,113,113,.35); border-radius: 2px; }
-
-    .bs-strip__label {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      gap: .4rem;
-      font-family: var(--font-mono);
-      font-size: .68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      color: #fca5a5;
-      padding-right: .67rem;
-      border-right: 1px solid rgba(248,113,113,.3);
-    }
-
-    .bs-card {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      gap: .67rem;
-      background: rgba(0,0,0,.28);
-      border: 1px solid rgba(248,113,113,.25);
-      border-left: 3px solid transparent;
-      border-radius: .4rem;
-      padding: .3rem .67rem;
-    }
-    .bs-card--im_einsatz { border-left-color: #f97316; }
-    .bs-card--rueckzug   { border-left-color: #ef4444; animation: bsPulse 1.4s ease-in-out infinite; }
-    @keyframes bsPulse {
-      0%,100% { border-left-color: #ef4444; background: rgba(0,0,0,.28); }
-      50%      { border-left-color: #fca5a5; background: rgba(239,68,68,.12); }
-    }
-
-    .bs-info { display: flex; flex-direction: column; gap: 1px; }
-    .bs-name {
-      font-size: .88rem;
-      font-weight: 700;
-      color: #fff;
-      white-space: nowrap;
-    }
-    .bs-unit {
-      font-size: .72rem;
-      color: rgba(255,255,255,.5);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 9rem;
-    }
-
-    .bs-metrics {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 2px;
-    }
-    .bs-press {
-      font-family: var(--font-mono);
-      font-size: 1.05rem;
-      font-weight: 700;
-      line-height: 1;
-      white-space: nowrap;
-    }
-    .bs-press--ok   { color: #5fcf8e; }
-    .bs-press--warn { color: var(--amber); }
-    .bs-press--crit { color: #f87171; }
-    .bs-press--none { color: rgba(255,255,255,.3); font-size: .78rem; font-style: italic; font-weight: 400; }
-
-    .bs-time {
-      font-family: var(--font-mono);
-      font-size: .78rem;
-      color: rgba(255,255,255,.55);
-      white-space: nowrap;
-    }
-
     /* ── LANE-GROUP: Fahrzeuge nach Abschnitt gruppiert (Dashboard-Fahrzeugpanel) ───── */
     .lane-group { margin-bottom: .53rem; }
     .lane-group:last-child { margin-bottom: 0; }
@@ -585,19 +500,6 @@
     }
     .lane-group__leader { font-size: .74rem; color: var(--amber); }
     .lane-group__leader--none { color: var(--text-dim); font-style: italic; }
-
-    .bs-badge {
-      font-family: var(--font-mono);
-      font-size: .65rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      padding: 2px 7px;
-      border-radius: 3px;
-      white-space: nowrap;
-    }
-    .bs-badge--im_einsatz { background: rgba(242,176,46,.2); color: var(--amber); border: 1px solid rgba(242,176,46,.35); }
-    .bs-badge--rueckzug   { background: rgba(216,48,48,.25); color: #f08080; border: 1px solid rgba(216,48,48,.4); }
 
     /* ── QR-Code im Header ── */
     .hdr-qr {
@@ -752,23 +654,21 @@
   // Ebenfalls pro Tick neu abfragen (Trupps können durch einen Swap
   // hinzukommen/verschwinden).
   function tickTroopTimers() {
-    const now = Date.now();
-    document.querySelectorAll('.bs-time[data-entry]').forEach(el => {
-      const entry = new Date(el.dataset.entry).getTime();
-      const planned = parseInt(el.dataset.planned || '0', 10);
-      const s = Math.max(0, Math.floor((now - entry) / 1000));
-      const h = Math.floor(s / 3600);
-      const m = Math.floor(s % 3600 / 60);
-      const sec = s % 60;
-      const elapsed = h > 0
-        ? `${pad(h)}:${pad(m)}:${pad(sec)}`
-        : `${pad(m)}:${pad(sec)}`;
-      el.textContent = planned > 0 ? `${elapsed} / ${planned} min` : elapsed;
-      // Farbgebung: über Max = rot, über 2/3 = orange
-      if (planned > 0) {
-        const pct = s / (planned * 60);
-        el.style.color = pct >= 1 ? '#e53e3e' : pct >= 0.67 ? '#ed8936' : '';
-      }
+    const tile = document.getElementById('breathingKachel');
+    if (tile && tile !== tickTroopTimers.tile) {
+      if (window.ECPServerClock) window.ECPServerClock.sync(tile.dataset.serverNow);
+      tickTroopTimers.tile = tile;
+    }
+    const now = window.ECPServerClock ? window.ECPServerClock.now() : Date.now();
+    const duration = s => `${pad(Math.floor(Math.abs(s) / 60))}:${pad(Math.abs(s) % 60)}`;
+    document.querySelectorAll('.asuew-kachel__time[data-entry]').forEach(el => {
+      const s = Math.max(0, Math.floor((now - Date.parse(el.dataset.entry)) / 1000));
+      el.textContent = `${duration(s)} / ${el.dataset.planned} min`;
+    });
+    document.querySelectorAll('.asuew-kachel__deadline[data-due]').forEach(el => {
+      const s = Math.floor((Date.parse(el.dataset.due) - now) / 1000);
+      el.textContent = `${el.dataset.label} ${s <= 0 ? 'überfällig seit' : 'in'} ${duration(s)}`;
+      el.classList.toggle('asuew-kachel--rot', s <= 0);
     });
   }
   setInterval(tickTroopTimers, 1000);
@@ -825,6 +725,7 @@
       .then(html => {
         const target = document.getElementById('dashBody');
         if (target) target.innerHTML = html;
+        tickTroopTimers();
         initLageTicker();
         setLive(!!ws && ws.readyState === 1);
       })

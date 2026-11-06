@@ -384,6 +384,16 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
     return ergebnis
 
 
+def _load_breathing_protokoll(incident: Incident) -> None:
+    from sqlalchemy.orm import object_session
+
+    from app.services.breathing_protokoll import load_protokoll_context
+
+    db = object_session(incident)
+    if db is not None:
+        load_protokoll_context(db, incident)
+
+
 def render_incident_pdf(
     incident: Incident,
     base_url: str = "",
@@ -391,6 +401,7 @@ def render_incident_pdf(
     qr_datauri: str | None = None,
     qr_url: str | None = None,
 ) -> bytes:
+    _load_breathing_protokoll(incident)
     template = templates.env.get_template("pdf/incident_report.html")
     primary_org, teilnahmen, journal, objekte = _load_pdf_context(incident)
     zusatz = _load_pdf_zusatz(incident)
@@ -432,6 +443,7 @@ def render_incident_pdf(
 
 def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
     """Einzelexport eines Atemschutztrupps als vollständiges A4-PDF."""
+    _load_breathing_protokoll(incident)
     template = templates.env.get_template("pdf/troop_protocol.html")
     primary_org = _resolve_primary_org(incident)
     pseudo_user = SimpleNamespace(org=primary_org)
@@ -453,6 +465,45 @@ def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
         from xhtml2pdf import pisa  # noqa: PLC0415
         buf = io.BytesIO()
         pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
+        return buf.getvalue()
+
+
+def render_asuew_formular_pdf(
+    troops, incident: Incident, org, settings, leer: bool = False, base_url: str = "",
+) -> bytes:
+    """Drei aktuelle Trupps pro Formularseite oder eine leere Rückfallebene."""
+    from app.core.timezones import format_local_datetime
+    from app.services.breathing_service import asuew_formular_seiten
+
+    seiten = asuew_formular_seiten(troops, settings, leer)
+    logo = getattr(org, "logo_path", None) or "/static/img/logo_einsatzcockpit.png"
+    logo_url = base_url.rstrip("/") + logo if logo.startswith("/") else logo
+    address = " ".join(filter(None, [incident.address_street, incident.address_no]))
+    if incident.address_city:
+        address += (", " if address else "") + incident.address_city
+    names = dict.fromkeys(column["ueberwacher"] for page in seiten for column in page if column["ueberwacher"])
+    template = templates.env.get_template("pdf/asuew_formular.html")
+    context = dict(
+        seiten=seiten, incident=incident, org=org, user=SimpleNamespace(org=org),
+        now=datetime.now(UTC), logo_url=logo_url, leer=leer,
+        einsatzort="" if leer else address,
+        einsatzdatum="" if leer else format_local_datetime(incident.started_at, org).split(" ")[0],
+        ueberwacher="" if leer else ", ".join(names),
+    )
+    html_str = template.render(**context)
+    try:
+        from weasyprint import HTML
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except Exception as exc:
+        logger.warning("WeasyPrint fehlgeschlagen (ASÜW-Formular), Fallback auf xhtml2pdf: %s", exc)
+        from xhtml2pdf import pisa
+        buf = io.BytesIO()
+        fallback_html = template.render(**context, xhtml2pdf=True)
+        result = pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(fallback_html)), dest=buf)
+        if result.err:
+            raise RuntimeError("ASÜW-Formular konnte nicht gerendert werden") from exc
         return buf.getvalue()
 
 

@@ -296,3 +296,25 @@ def test_render_gsl_bericht_pdf_mit_druck_qr(db, lage):
     )
     pdf = render_job_pdf(db, job)
     assert pdf.startswith(b"%PDF") and len(pdf) > 500
+
+
+@pytest.mark.parametrize("document_type", ["asuew_formular", "asuew_formular_leer"])
+def test_verify_org_asuew_formular(db, incident, document_type):
+    from app.models.gateway import PrintJob
+    from app.models.master import OrgSettings
+    from app.services.print_artifact_service import ArtifactError, render_job_pdf
+
+    _verify_org(db, _ORG_A, document_type, incident.id, None, None, None)
+    with pytest.raises(HTTPException) as exc:
+        _verify_org(db, _ORG_B, document_type, incident.id, None, None, None)
+    assert exc.value.status_code == 404
+    with pytest.raises(ArtifactError):
+        render_job_pdf(db, PrintJob(org_id=_ORG_B, document_type=document_type, incident_id=incident.id))
+    with pytest.raises(HTTPException) as exc:
+        _verify_org(db, _ORG_A, document_type, None, None, None, None)
+    assert exc.value.status_code == 404
+    db.add(OrgSettings(org_id=_ORG_A, atemschutz_ueberwachung_modul_aktiv=False))
+    db.flush()
+    with pytest.raises(HTTPException) as exc:
+        _verify_org(db, _ORG_A, document_type, incident.id, None, None, None)
+    assert exc.value.status_code == 404

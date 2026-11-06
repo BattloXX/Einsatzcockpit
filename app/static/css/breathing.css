@@ -214,3 +214,75 @@
 .bt-dialog-footer{position:sticky;bottom:0;border-top:1px solid var(--border);padding-bottom:max(16px,env(safe-area-inset-bottom));}.bt-dialog-footer button{min-height:56px;flex:1;white-space:normal;}
 .bt-dialog .person-flyout-backdrop{z-index:10;}
 @media(max-width:600px){.bt-dialog{width:100vw;max-width:none;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;}.bt-dialog-form{height:100dvh;max-height:100dvh;}.bt-dialog-body{flex:1;padding:12px;}.bt-dialog-fields{grid-template-columns:1fr;}.bt-dialog-member{grid-template-columns:minmax(0,1fr) auto;padding:12px;}.bt-dialog-person{grid-column:1/-1;}.bt-dialog-roles{grid-column:1;}.bt-dialog-remove{grid-column:2;}.bt-dialog-header,.bt-dialog-footer{padding:12px;}.bt-dialog-footer{padding-bottom:max(12px,env(safe-area-inset-bottom));}}
+
+/* Kompakte EL-Kachel; alle Regeln bleiben auf die Kachel begrenzt. */
+.asuew-kachel { flex-shrink: 0; padding: .6rem .8rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.asuew-kachel__head, .asuew-kachel__warnings { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.asuew-kachel__head a { color: #93c5fd; margin-right: .5rem; }
+.asuew-kachel__chip { display: inline-block; padding: .15rem .45rem; border: 1px solid currentColor; border-radius: .4rem; font-size: .85em; }
+.asuew-kachel__troop { display: grid; grid-template-columns: minmax(6rem, 1fr) auto auto minmax(12rem, 1fr) minmax(0, 2fr); align-items: center; gap: .5rem 1rem; padding-top: .5rem; }
+.asuew-kachel__troop > strong { overflow-wrap: anywhere; }
+.asuew-kachel__time, .asuew-kachel__deadline { font-variant-numeric: tabular-nums; }
+.asuew-kachel__pressure { font-size: 1.3em; white-space: nowrap; }
+.asuew-kachel--rot { color: #f87171; }
+.asuew-kachel--gelb { color: #facc15; }
+.asuew-kachel--gruen { color: #5fcf8e; }
+.asuew-kachel--unbekannt { color: var(--text-muted); }
+.asuew-kachel__hint { color: #facc15; font-weight: 700; margin-top: .5rem; }
+@media (max-width: 760px) {
+  .asuew-kachel { font-size: 14px; max-height: 45dvh; overflow-y: auto; }
+  .asuew-kachel__troop { grid-template-columns: minmax(0, 1fr) auto; border-top: 1px solid var(--border); margin-top: .5rem; }
+  .asuew-kachel__deadline, .asuew-kachel__warnings { grid-column: 1 / -1; }
+}
+
+/* Atemschutzsammelplatz: Logistik und Flaschenpool. */
+.assp-page { padding:20px; color:var(--on-surface); }
+.assp-header { margin-bottom:20px; }
+.assp-header h1 { font-size:1.7rem; }
+.assp-header p { max-width:1000px; }
+.assp-actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.assp-page button, .assp-page a.btn, .assp-edit summary, .assp-page input, .assp-page select, .assp-page textarea { min-height:44px; }
+.assp-top { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.assp-panel { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:20px; overflow-wrap:anywhere; }
+.assp-panel h2 { margin:0 0 16px; font-size:1.3rem; }
+.assp-details { display:grid; grid-template-columns:auto 1fr; gap:8px 16px; }
+.assp-details dt { font-weight:700; }
+.assp-details dd { margin:0; white-space:pre-wrap; }
+.assp-edit summary { cursor:pointer; align-content:center; margin-top:12px; }
+.assp-form { display:grid; gap:12px; }
+.assp-form label { display:grid; gap:6px; }
+.assp-form input, .assp-form textarea, .assp-form select { width:100%; color:var(--on-surface); background:var(--surface-high); }
+.assp-page .assp-activate { min-height:56px; width:100%; }
+.assp-pool { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.assp-bottle { min-width:0; text-align:center; }
+.assp-bottle h3 { font-size:1.1rem; }
+.assp-count { display:block; font-size:3rem; font-weight:800; font-variant-numeric:tabular-nums; margin:16px 0; }
+.assp-bottle .assp-actions { justify-content:center; }
+.assp-page .assp-delta { color:var(--on-surface); min-width:56px; min-height:56px; font-size:1.7rem; border:1px solid var(--border); }
+.assp-columns { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+.assp-list { list-style:none; padding:0; margin:0; }
+.assp-list > li { padding:12px 0; border-bottom:1px solid var(--border); }
+.assp-list ul { padding-left:20px; }
+.assp-recovery { display:inline-block; padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-variant-numeric:tabular-nums; }
+.assp-hint, #asspError, #asspConnection { padding:16px; background:#fef3c7; color:#422006; border:2px solid #d69e2e; border-radius:8px; }
+.breathing-hc .assp-panel, .breathing-hc .assp-recovery { border:2px solid #111; }
+@media (max-width:760px) {
+  .assp-page { padding:12px; }
+  .assp-top, .assp-columns { grid-template-columns:minmax(0,1fr); gap:0; }
+  .assp-panel { padding:16px; }
+  .assp-pool { gap:12px; }
+  .assp-actions > .btn { white-space:normal; }
+}
+
+/* Vollständiges, mobil horizontal scrollbar dargestelltes Trupp-Protokoll. */
+.bp-page { padding: 1rem; }
+.bp-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.bp-actions .btn { min-height: 44px; min-width: 44px; }
+.bp-cycle { margin: 1.5rem 0; }
+.bp-scroll { overflow-x: auto; }
+.bp-table { width: 100%; border-collapse: collapse; }
+.bp-table th, .bp-table td { padding: .7rem; text-align: left; border-bottom: 1px solid var(--border); }
+.bp-table td:first-child { white-space: nowrap; }
+.bp-page.breathing-hc { background: #000; color: #fff; }
+.bp-page.breathing-hc .bp-table th, .bp-page.breathing-hc .bp-table td { background: #000; color: #fff; border-color: #fff; }
+.bp-page.breathing-hc .btn { background: #000; color: #fff; border: 2px solid #fff; }
