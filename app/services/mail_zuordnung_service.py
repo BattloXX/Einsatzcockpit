@@ -12,6 +12,7 @@ from app.models.incident import Incident
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang
 from app.services.incident_service import add_message, broadcast_message_created
+from app.services.loop_thread_io import auf_event_loop
 from app.services.mail_eingang_anhang import lade_anhang
 from app.services.mail_eingang_service import ereignis, normalisiere_absender
 from app.services.media_service import store_bytes_for_message
@@ -119,7 +120,7 @@ async def _assign(
     db.commit()
     await broadcast_message_created(incident.id, message)
     from app.services.print_dispatcher import autoprint_mail_eingang_background
-    await autoprint_mail_eingang_background(row.id)
+    await auf_event_loop(autoprint_mail_eingang_background, row.id)
     return True
 
 

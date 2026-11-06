@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.mail_weiterleitung import MailWeiterleitung, MailWeiterleitungLog
+from app.services.loop_thread_io import auf_event_loop
 from app.services.mail_service import get_resend_cfg
 from app.services.org_mail_adresse import org_aus_adresse
 from app.services.resend_inbound_service import (
@@ -240,7 +241,7 @@ async def verarbeite_log(db: Session, log_id: int) -> str:
             raise RuntimeError("konfiguration")
         key, domain = cfg["api_key"], cfg["from_domain"]
         targets = validiere_ziele(json.loads(rule.ziele))
-        payload = await _hole_mail(key, log.resend_email_id or "")
+        payload = await auf_event_loop(_hole_mail, key, log.resend_email_id or "")
         sender = _sender(payload.get("from"))
         if _automatisch(_headers(payload)):
             _ergebnis(db, log, "uebersprungen", "schleife")
@@ -269,7 +270,7 @@ async def verarbeite_log(db: Session, log_id: int) -> str:
             url = raw.get("download_url") if isinstance(raw, dict) else None
             if not isinstance(url, str):
                 raise RuntimeError("raw")
-            data = await _download(url, MAX_BYTES)
+            data = await auf_event_loop(_download, url, MAX_BYTES)
             message.set_content(_kopf_text(zeilen) + "Die Originalnachricht ist als Anhang beigefügt.")
             anhaenge.append({"filename": "original.eml", "content_type": "message/rfc822",
                              "content": base64.b64encode(data).decode()})
@@ -282,10 +283,12 @@ async def verarbeite_log(db: Session, log_id: int) -> str:
             for item in payload.get("attachments") or []:
                 if not isinstance(item, dict) or not item.get("id"):
                     continue
-                meta = await get_resend_attachment(key, log.resend_email_id or "", clean_text(item["id"], 200))
+                meta = await auf_event_loop(
+                    get_resend_attachment, key, log.resend_email_id or "", clean_text(item["id"], 200),
+                )
                 if not meta or not isinstance(meta.get("download_url"), str):
                     raise RuntimeError("anhang")
-                blob = await _download(meta["download_url"], MAX_BYTES - gesamt)
+                blob = await auf_event_loop(_download, meta["download_url"], MAX_BYTES - gesamt)
                 gesamt += len(blob)
                 ctype = clean_text(meta.get("content_type"), 100) or "application/octet-stream"
                 anhaenge.append({"filename": clean_text(meta.get("filename"), 200) or "anhang",
@@ -296,7 +299,7 @@ async def verarbeite_log(db: Session, log_id: int) -> str:
         # Originalabsender im Anzeigenamen, damit er schon in der Posteingangsliste sichtbar ist.
         von = absender_mit_name(f"{sender} via Einsatzcockpit", f"weiterleitung@{domain}") if sender \
             else f"weiterleitung@{domain}"
-        await send_via_resend(message, key, von, anhaenge)
+        await auf_event_loop(send_via_resend, message, key, von, anhaenge)
         rule.zaehler += 1
         rule.letzte_weiterleitung_at = _now()
         _ergebnis(db, log, "gesendet")

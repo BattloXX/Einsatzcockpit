@@ -80,19 +80,24 @@ def thread_ablauf[T](koroutine: Coroutine[Any, Any, T]) -> T:
 # (LIS, Routing, SMS). Im asyncio-Standardpool (min(32, CPUs + 4) = 6 Threads auf
 # vm1) wuerden sie die Session-Pruefung jeder Anfrage (#898) aushungern.
 _HINTERGRUND_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="hintergrund-db")
+# Alarmierung getrennt: Jeder Kanal (SMS, Push, Teams, Mail) haelt seinen Thread bis
+# zum Versandergebnis. Im geteilten Pool koennten LIS-Sync/Routen/Dienst-Monitor die
+# Kanaele eines Alarms in eine Warteschlange zwingen (Zustellung seriell statt parallel).
+ALARM_POOL = ThreadPoolExecutor(max_workers=12, thread_name_prefix="alarm-db")
 
 
-async def _im_pool[T](funktion: Callable[..., T], *args: Any) -> T:
+async def _im_pool[T](pool: ThreadPoolExecutor, funktion: Callable[..., T], *args: Any) -> T:
     kontext = contextvars.copy_context()
     return await asyncio.get_running_loop().run_in_executor(
-        _HINTERGRUND_POOL, functools.partial(kontext.run, funktion, *args))
+        pool, functools.partial(kontext.run, funktion, *args))
 
 
-async def im_db_thread[T](funktion: Callable[..., T], *args: Any) -> T:
+async def im_db_thread[T](funktion: Callable[..., T], *args: Any,
+                          pool: ThreadPoolExecutor | None = None) -> T:
     token = _io_loop.set(asyncio.get_running_loop())
     auftrag = _ThreadAuftrag()
     auftrag_token = _auftrag.set(auftrag)
-    arbeit = asyncio.create_task(_im_pool(funktion, *args))
+    arbeit = asyncio.create_task(_im_pool(pool or _HINTERGRUND_POOL, funktion, *args))
     try:
         return await asyncio.shield(arbeit)
     except asyncio.CancelledError:

@@ -36,6 +36,7 @@ from app.models.master import OrgSettings
 from app.models.sms import SmsLog, SmsLogRecipient
 from app.services.broadcast import broadcast_lage
 from app.services.exercise_guard import darf_extern
+from app.services.loop_thread_io import im_db_thread
 from app.services.sms_service import send_sms, sms_available
 
 TOKEN_PREFIX = "gkz_"
@@ -1106,19 +1107,23 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
             db.close()
 
 
+def _gk_versand_aufraeum_loop_sync() -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        aufraeumen_haengende_versaende(db)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 async def gk_versand_aufraeum_loop() -> None:
     """Markiert nach Prozessabbrüchen liegen gebliebene Auto-Outbox-Einträge."""
     import asyncio
 
     while True:
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            aufraeumen_haengende_versaende(db)
-        except Exception:
-            db.rollback()
-        finally:
-            db.close()
+        await im_db_thread(_gk_versand_aufraeum_loop_sync)
         await asyncio.sleep(60)
 
 

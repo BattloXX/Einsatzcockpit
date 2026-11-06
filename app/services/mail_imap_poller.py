@@ -10,6 +10,7 @@ from email.utils import parsedate_to_datetime
 from time import monotonic
 from typing import Any
 
+from app.services.loop_thread_io import auf_event_loop, im_db_thread, thread_ablauf
 from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger("einsatzleiter.mail_imap_poller")
@@ -190,80 +191,116 @@ def _config(org_id: int) -> dict[str, Any] | None:
 
 
 async def _save_one(org_id: int, uidvalidity: int, item: dict[str, Any]) -> bool:
+    return await im_db_thread(_save_one_sync, org_id, uidvalidity, item)
+
+
+def _save_one_sync(org_id: int, uidvalidity: int, item: dict[str, Any]) -> bool:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        return thread_ablauf(_save_one_ablauf(db, org_id, uidvalidity, item))
+    finally:
+        db.close()
+
+
+async def _save_one_ablauf(db, org_id: int, uidvalidity: int, item: dict[str, Any]) -> bool:
     from app.models.org_mail import OrgMailEingang, OrgSmtpConfig
     from app.services.mail_eingang_anhang import speichere_lokal
     from app.services.mail_eingang_service import ereignis, normalisiere_mime, speichere_eingang
     from app.services.mail_zuordnung_service import ordne_zu
 
+    cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == org_id).first()
+    if cfg is None:
+        return False
+    row: OrgMailEingang | None = None
+    try:
+        parsed = normalisiere_mime(item["raw"])
+        auth = parsed["auth"]
+        row = speichere_eingang(
+            db, org_id, quelle="imap", extern_id=f"{uidvalidity}:{item['uid']}",
+            absender=parsed["absender"], betreff=parsed["betreff"], empfaenger=parsed["empfaenger"],
+            cc=parsed["cc"], message_id=parsed["message_id"],
+            empfangen_at=parsed["datum"] or item["received"] or _now(), text_body=parsed["text"],
+            html_body=parsed["html"], header_json=parsed["header"], spf=auth["spf"], dkim=auth["dkim"],
+            dmarc=auth["dmarc"], groesse_bytes=item["size"], abgerufen=not item["too_large"],
+        )
+        if row is not None:
+            if item["too_large"]:
+                row.status, row.zuordnung_grund = "posteingang", "Mail größer als 35 MB, Inhalt nicht übernommen"
+                ereignis(db, row, "zu_gross", row.zuordnung_grund)
+            else:
+                speichere_lokal(db, row, parsed["anhaenge"])
+                ereignis(db, row, "abgerufen", "Inhalt per IMAP abgerufen")
+            db.commit()
+            if not item["too_large"]:
+                await ordne_zu(db, row.id)
+                db.refresh(row)
+                if row.status != "abruf_fehler":
+                    from app.services.print_dispatcher import autoprint_mail_eingang_background
+
+                    try:
+                        await auf_event_loop(autoprint_mail_eingang_background, row.id)
+                    except Exception:
+                        logger.exception("IMAP-Autodruck fehlgeschlagen (org=%s, mail=%s)", org_id, row.id)
+        cfg.imap_uidvalidity, cfg.imap_letzte_uid = uidvalidity, item["uid"]
+        cfg.imap_letzter_abruf_at, cfg.imap_letzter_fehler = _now(), None
+        db.commit()
+        return row is not None
+    except Exception:
+        db.rollback()
+        cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == org_id).first()
+        if cfg is not None:
+            failed = OrgMailEingang(
+                org_id=org_id, quelle="imap", extern_id=f"{uidvalidity}:{item['uid']}", absender="",
+                empfaenger="[]", betreff="", empfangen_at=item["received"] or _now(), status="abruf_fehler",
+                groesse_bytes=item["size"],
+            )
+            db.add(failed)
+            db.flush()
+            ereignis(db, failed, "abruf_fehler", "Mail konnte nicht verarbeitet werden")
+            cfg.imap_uidvalidity, cfg.imap_letzte_uid = uidvalidity, item["uid"]
+            cfg.imap_letzter_abruf_at = _now()
+            db.commit()
+        return False
+
+
+def _speichere_abruf_fehler_sync(org_id: int, fehler: str) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.org_mail import OrgSmtpConfig
+
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == org_id).first()
-        if cfg is None:
-            return False
-        row: OrgMailEingang | None = None
-        try:
-            parsed = normalisiere_mime(item["raw"])
-            auth = parsed["auth"]
-            row = speichere_eingang(
-                db, org_id, quelle="imap", extern_id=f"{uidvalidity}:{item['uid']}",
-                absender=parsed["absender"], betreff=parsed["betreff"], empfaenger=parsed["empfaenger"],
-                cc=parsed["cc"], message_id=parsed["message_id"],
-                empfangen_at=parsed["datum"] or item["received"] or _now(), text_body=parsed["text"],
-                html_body=parsed["html"], header_json=parsed["header"], spf=auth["spf"], dkim=auth["dkim"],
-                dmarc=auth["dmarc"], groesse_bytes=item["size"], abgerufen=not item["too_large"],
-            )
-            if row is not None:
-                if item["too_large"]:
-                    row.status, row.zuordnung_grund = "posteingang", "Mail größer als 35 MB, Inhalt nicht übernommen"
-                    ereignis(db, row, "zu_gross", row.zuordnung_grund)
-                else:
-                    speichere_lokal(db, row, parsed["anhaenge"])
-                    ereignis(db, row, "abgerufen", "Inhalt per IMAP abgerufen")
-                db.commit()
-                if not item["too_large"]:
-                    await ordne_zu(db, row.id)
-                    db.refresh(row)
-                    if row.status != "abruf_fehler":
-                        from app.services.print_dispatcher import autoprint_mail_eingang_background
-
-                        try:
-                            await autoprint_mail_eingang_background(row.id)
-                        except Exception:
-                            logger.exception("IMAP-Autodruck fehlgeschlagen (org=%s, mail=%s)", org_id, row.id)
-            cfg.imap_uidvalidity, cfg.imap_letzte_uid = uidvalidity, item["uid"]
-            cfg.imap_letzter_abruf_at, cfg.imap_letzter_fehler = _now(), None
+        if cfg is not None:
+            cfg.imap_letzter_fehler = fehler
             db.commit()
-            return row is not None
-        except Exception:
-            db.rollback()
-            cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == org_id).first()
-            if cfg is not None:
-                failed = OrgMailEingang(
-                    org_id=org_id, quelle="imap", extern_id=f"{uidvalidity}:{item['uid']}", absender="",
-                    empfaenger="[]", betreff="", empfangen_at=item["received"] or _now(), status="abruf_fehler",
-                    groesse_bytes=item["size"],
-                )
-                db.add(failed)
-                db.flush()
-                ereignis(db, failed, "abruf_fehler", "Mail konnte nicht verarbeitet werden")
-                cfg.imap_uidvalidity, cfg.imap_letzte_uid = uidvalidity, item["uid"]
-                cfg.imap_letzter_abruf_at = _now()
-                db.commit()
-            return False
+    finally:
+        db.close()
+
+
+def _abruf_erlaubt_sync(org_id: int) -> bool:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.master import OrgSettings
+    from app.services.mail_eingang_service import unter_stundenlimit
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        return not (settings_row is None or settings_row.mail_eingang_modus == "aus"
+                    or not unter_stundenlimit(db, org_id))
     finally:
         db.close()
 
 
 async def abrufen_fuer_org(org_id: int) -> int:
     """Holt höchstens 50 neue Mails einer Organisation und gibt neue Einträge zurück."""
-    from app.core.tenant import set_tenant_context
-    from app.db import SessionLocal
-    from app.models.master import OrgSettings
-    from app.models.org_mail import OrgSmtpConfig
-    from app.services.mail_eingang_service import unter_stundenlimit
 
     config = await asyncio.to_thread(_config, org_id)
     if config is None:
@@ -274,27 +311,13 @@ async def abrufen_fuer_org(org_id: int) -> int:
     try:
         uidvalidity, items = await asyncio.to_thread(_fetch_messages, config, since, initial)
     except Exception as exc:
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == org_id).first()
-            if cfg is not None:
-                cfg.imap_letzter_fehler = _error_text(exc)
-                db.commit()
-        finally:
-            db.close()
+        await im_db_thread(_speichere_abruf_fehler_sync, org_id, _error_text(exc))
         logger.warning("IMAP-Abruf fehlgeschlagen (org=%s): %s", org_id, _error_text(exc))
         return 0
     saved = 0
     for item in items:
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
-            if settings_row is None or settings_row.mail_eingang_modus == "aus" or not unter_stundenlimit(db, org_id):
-                break
-        finally:
-            db.close()
+        if not await im_db_thread(_abruf_erlaubt_sync, org_id):
+            break
         saved += await _save_one(org_id, uidvalidity, item)
     return saved
 

@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 import httpx
 
+from app.services.loop_thread_io import auf_event_loop, im_db_thread, thread_ablauf
 from app.services.loop_utils import iteration_watch
 from app.services.o365_mail_service import GRAPH_BASE_URL, _acquire_token
 
@@ -117,78 +118,87 @@ async def _mime(client: httpx.AsyncClient, url: str, token_args: dict[str, Any])
 
 
 async def _save_one(org_id: int, item: dict[str, Any], raw: bytes, too_large: bool) -> bool:
+    return await im_db_thread(_save_one_sync, org_id, item, raw, too_large)
+
+
+def _save_one_sync(org_id: int, item: dict[str, Any], raw: bytes, too_large: bool) -> bool:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        return thread_ablauf(_save_one_ablauf(db, org_id, item, raw, too_large))
+    finally:
+        db.close()
+
+
+async def _save_one_ablauf(db, org_id: int, item: dict[str, Any], raw: bytes, too_large: bool) -> bool:
     from app.models.org_mail import OrgMailEingang, OrgO365MailConfig
     from app.services.mail_eingang_anhang import speichere_lokal
     from app.services.mail_eingang_service import ereignis, normalisiere_mime, speichere_eingang
     from app.services.mail_zuordnung_service import ordne_zu
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
     received = _received(item.get("receivedDateTime"))
     external_id = str(item.get("id") or "")[:255]
+    cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
+    if cfg is None:
+        return False
     try:
-        cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
-        if cfg is None:
-            return False
-        try:
-            if too_large:
-                sender = ((item.get("from") or {}).get("emailAddress") or {}).get("address") or ""
-                row = speichere_eingang(
-                    db, org_id, quelle="o365", extern_id=external_id, absender=sender,
-                    betreff=item.get("subject") or "", empfaenger=[], cc=None,
-                    message_id=item.get("internetMessageId"), empfangen_at=received,
-                    groesse_bytes=None, abgerufen=False,
-                )
-                if row is not None:
-                    row.status, row.zuordnung_grund = "posteingang", "Mail größer als 35 MB, Inhalt nicht übernommen"
-                    ereignis(db, row, "zu_gross", row.zuordnung_grund)
-            else:
-                parsed = normalisiere_mime(raw)
-                auth = parsed["auth"]
-                row = speichere_eingang(
-                    db, org_id, quelle="o365", extern_id=external_id, absender=parsed["absender"],
-                    betreff=parsed["betreff"], empfaenger=parsed["empfaenger"], cc=parsed["cc"],
-                    message_id=parsed["message_id"] or item.get("internetMessageId"),
-                    empfangen_at=parsed["datum"] or received, text_body=parsed["text"], html_body=parsed["html"],
-                    header_json=parsed["header"], spf=auth["spf"], dkim=auth["dkim"], dmarc=auth["dmarc"],
-                    abgerufen=True,
-                )
-                if row is not None:
-                    speichere_lokal(db, row, parsed["anhaenge"])
-                    ereignis(db, row, "abgerufen", "Inhalt über Office 365 abgerufen")
+        if too_large:
+            sender = ((item.get("from") or {}).get("emailAddress") or {}).get("address") or ""
+            row = speichere_eingang(
+                db, org_id, quelle="o365", extern_id=external_id, absender=sender,
+                betreff=item.get("subject") or "", empfaenger=[], cc=None,
+                message_id=item.get("internetMessageId"), empfangen_at=received,
+                groesse_bytes=None, abgerufen=False,
+            )
             if row is not None:
-                db.commit()
-                if not too_large:
-                    await ordne_zu(db, row.id)
-                    db.refresh(row)
-                    if row.status != "abruf_fehler":
-                        from app.services.print_dispatcher import autoprint_mail_eingang_background
-
-                        try:
-                            await autoprint_mail_eingang_background(row.id)
-                        except Exception:
-                            logger.exception("Graph-Autodruck fehlgeschlagen (org=%s, mail=%s)", org_id, row.id)
-            cfg.read_seit, cfg.read_letzter_abruf_at, cfg.read_letzter_fehler = received, _now(), None
+                row.status, row.zuordnung_grund = "posteingang", "Mail größer als 35 MB, Inhalt nicht übernommen"
+                ereignis(db, row, "zu_gross", row.zuordnung_grund)
+        else:
+            parsed = normalisiere_mime(raw)
+            auth = parsed["auth"]
+            row = speichere_eingang(
+                db, org_id, quelle="o365", extern_id=external_id, absender=parsed["absender"],
+                betreff=parsed["betreff"], empfaenger=parsed["empfaenger"], cc=parsed["cc"],
+                message_id=parsed["message_id"] or item.get("internetMessageId"),
+                empfangen_at=parsed["datum"] or received, text_body=parsed["text"], html_body=parsed["html"],
+                header_json=parsed["header"], spf=auth["spf"], dkim=auth["dkim"], dmarc=auth["dmarc"],
+                abgerufen=True,
+            )
+            if row is not None:
+                speichere_lokal(db, row, parsed["anhaenge"])
+                ereignis(db, row, "abgerufen", "Inhalt über Office 365 abgerufen")
+        if row is not None:
             db.commit()
-            return row is not None
-        except Exception:
-            db.rollback()
-            cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
-            if cfg is not None:
-                failed = OrgMailEingang(
-                    org_id=org_id, quelle="o365", extern_id=external_id, absender="", empfaenger="[]",
-                    betreff=item.get("subject") or "", empfangen_at=received, status="abruf_fehler",
-                )
-                db.add(failed)
-                db.flush()
-                ereignis(db, failed, "abruf_fehler", "Mail konnte nicht verarbeitet werden")
-                cfg.read_seit, cfg.read_letzter_abruf_at = received, _now()
-                db.commit()
-            return False
-    finally:
-        db.close()
+            if not too_large:
+                await ordne_zu(db, row.id)
+                db.refresh(row)
+                if row.status != "abruf_fehler":
+                    from app.services.print_dispatcher import autoprint_mail_eingang_background
+
+                    try:
+                        await auf_event_loop(autoprint_mail_eingang_background, row.id)
+                    except Exception:
+                        logger.exception("Graph-Autodruck fehlgeschlagen (org=%s, mail=%s)", org_id, row.id)
+        cfg.read_seit, cfg.read_letzter_abruf_at, cfg.read_letzter_fehler = received, _now(), None
+        db.commit()
+        return row is not None
+    except Exception:
+        db.rollback()
+        cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
+        if cfg is not None:
+            failed = OrgMailEingang(
+                org_id=org_id, quelle="o365", extern_id=external_id, absender="", empfaenger="[]",
+                betreff=item.get("subject") or "", empfangen_at=received, status="abruf_fehler",
+            )
+            db.add(failed)
+            db.flush()
+            ereignis(db, failed, "abruf_fehler", "Mail konnte nicht verarbeitet werden")
+            cfg.read_seit, cfg.read_letzter_abruf_at = received, _now()
+            db.commit()
+        return False
 
 
 def _voruebergehend(exc: Exception) -> bool:
@@ -212,13 +222,39 @@ def _bekannt(org_id: int, extern_id: str) -> bool:
         db.close()
 
 
-async def abrufen_fuer_org(org_id: int) -> int:
-    from app.config import settings
+def _abruf_erlaubt_sync(org_id: int) -> bool:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.master import OrgSettings
-    from app.models.org_mail import OrgO365MailConfig
     from app.services.mail_eingang_service import unter_stundenlimit
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        setting = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        return not (setting is None or setting.mail_eingang_modus == "aus" or not unter_stundenlimit(db, org_id))
+    finally:
+        db.close()
+
+
+def _speichere_abruf_fehler_sync(org_id: int, fehler: str) -> None:
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.org_mail import OrgO365MailConfig
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
+        if cfg is not None:
+            cfg.read_letzter_fehler = fehler
+            db.commit()
+    finally:
+        db.close()
+
+
+async def abrufen_fuer_org(org_id: int) -> int:
+    from app.config import settings
 
     if not settings.O365_MAIL_ENABLED or not settings.MAIL_GRAPH_POLL_ENABLED:
         return 0
@@ -247,14 +283,8 @@ async def abrufen_fuer_org(org_id: int) -> int:
                 for item in data.get("value", []):
                     if processed >= _MAX_PER_RUN:
                         break
-                    db = SessionLocal()
-                    set_tenant_context(db, None)
-                    try:
-                        setting = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
-                        if setting is None or setting.mail_eingang_modus == "aus" or not unter_stundenlimit(db, org_id):
-                            return saved
-                    finally:
-                        db.close()
+                    if not await im_db_thread(_abruf_erlaubt_sync, org_id):
+                        return saved
                     processed += 1
                     # Der Filter "ge <Marke>" liefert die zuletzt verarbeitete Mail erneut; bekannte Mails
                     # nicht noch einmal herunterladen (bis zu 35 MB je Lauf).
@@ -276,15 +306,7 @@ async def abrufen_fuer_org(org_id: int) -> int:
                 next_url = candidate if isinstance(candidate, str) and candidate.startswith(GRAPH_BASE_URL) else None
                 next_params = None
     except Exception as exc:
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
-            if cfg is not None:
-                cfg.read_letzter_fehler = _error_text(exc)
-                db.commit()
-        finally:
-            db.close()
+        await im_db_thread(_speichere_abruf_fehler_sync, org_id, _error_text(exc))
         logger.warning("Graph-Abruf fehlgeschlagen (org=%s): %s", org_id, _error_text(exc))
     return saved
 

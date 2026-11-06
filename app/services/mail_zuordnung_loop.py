@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang
+from app.services.loop_thread_io import im_db_thread, thread_ablauf
 from app.services.mail_eingang_service import ereignis
 from app.services.mail_zuordnung_service import ordne_zu
 
@@ -91,8 +92,19 @@ def _eligible_incident_ids(db: Session, row: OrgMailEingang, settings_row: OrgSe
 
 
 async def _process_claimed_mail(row_id: int, now: datetime) -> bool:
+    return await im_db_thread(_process_claimed_mail_sync, row_id, now)
+
+
+def _process_claimed_mail_sync(row_id: int, now: datetime) -> bool:
     db = SessionLocal()
     set_tenant_context(db, None)
+    try:
+        return thread_ablauf(_process_claimed_mail_ablauf(db, row_id, now))
+    finally:
+        db.close()
+
+
+async def _process_claimed_mail_ablauf(db, row_id: int, now: datetime) -> bool:
     try:
         row = (
             db.query(OrgMailEingang)
@@ -133,26 +145,31 @@ async def _process_claimed_mail(row_id: int, now: datetime) -> bool:
             row.status, row.zuordnung, row.zugeordnet_at = "wartend", "wartend", None
             db.commit()
         return False
-    finally:
-        db.close()
 
 
-async def run_mail_zuordnung_once(db: Session | None = None, now: datetime | None = None) -> int:
-    """Bearbeitet einen kleinen Batch; einzelne defekte Mails bleiben isoliert."""
+def _claim_waiting_sync(db: Session | None = None, now: datetime | None = None) -> list[int]:
     now = now or _now()
     own_session = db is None
     db = db or SessionLocal()
     if own_session:
         set_tenant_context(db, None)
     try:
-        claimed = _claim_waiting_mails(db, now)
+        return _claim_waiting_mails(db, now)
     except Exception:
         db.rollback()
         logger.exception("mail_zuordnung.claim_failed")
-        return 0
+        return []
     finally:
         if own_session:
             db.close()
+
+
+async def run_mail_zuordnung_once(db: Session | None = None, now: datetime | None = None) -> int:
+    """Bearbeitet einen kleinen Batch; einzelne defekte Mails bleiben isoliert."""
+    now = now or _now()
+    # Uebergebene Sessions gehoeren dem Aufrufer und werden nicht in Threads verschoben.
+    claimed = (_claim_waiting_sync(db, now) if db is not None
+               else await im_db_thread(_claim_waiting_sync, None, now))
     results = await asyncio.gather(*(_process_claimed_mail(row_id, now) for row_id in claimed))
     return sum(results)
 
