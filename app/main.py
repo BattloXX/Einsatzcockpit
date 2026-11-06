@@ -36,6 +36,7 @@ from app.admin_mcp.server import server as admin_mcp_server
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
 from app.core.fehlerlog import korrelation_setzen, korrelations_id
+from app.core.http_cache import CacheStaticFiles
 from app.core.multi_account import ACCOUNTS_COOKIE, AccountEntry, add_account, load_accounts, set_accounts_cookie
 from app.core.security import (
     pruefe_geraete_session,
@@ -548,7 +549,7 @@ app.add_middleware(
 )
 
 # Static files
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", CacheStaticFiles(directory="app/static"), name="static")
 # MCP registriert die OAuth-Metadaten vor dem Static-Mount fuer /.well-known.
 _mcp_routes = mcp_application().routes
 for _mcp_route in _mcp_routes:

@@ -36,6 +36,7 @@ from app.services.gk_zugang_service import (
     widerrufe,
     widerrufe_alle_fuer_org,
 )
+from app.services.logo_service import logo_verkleinern
 from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
 from app.services.sms_service import sms_available
 from app.services.update_service import (
@@ -434,6 +435,10 @@ def save_org_settings(
             if not ok:
                 upload_error = msg
             else:
+                try:
+                    data = logo_verkleinern(data, ext)
+                except (OSError, ValueError):
+                    raise HTTPException(400, "Logo konnte nicht gelesen werden") from None
                 dest = UPLOAD_DIR / f"logo_org{effective_org_id}{ext}"
                 # Alte Datei mit anderer Extension löschen, damit es keine Mehrfachversionen gibt
                 for old_ext in ALLOWED_LOGO_EXTS:
