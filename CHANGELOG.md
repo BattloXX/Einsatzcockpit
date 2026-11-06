@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Hintergrund-Versand und Erinnerungen entlasten den Event-Loop:** Alarm-Outbox, Nachrichten-API, Mailings, Strassensperren-Meldungen, Plan- und Pflegeerinnerungen, Mail-Poller/-Zuordnung/-Weiterleitung, Wetterwarnungen und periodische Bereinigung fuehren ihre Datenbankarbeit in Threads aus. Claims, Leases, Versand-Reihenfolge und Wiederholungsregeln bleiben erhalten; asynchroner Transport bleibt auf dem aufrufenden Loop, IMAP im Thread. Eigenstaendige Ereignis-Sender im Alarmpfad und der Resend-Eingangsabruf folgen in L3. Die Async-DB-Baseline sinkt von 53 auf 34 Eintraege. Keine Migration.
+
 - **Hintergrund-Loops blockieren den Worker bei langsamer Datenbank seltener:** LIS-Synchronisation, DIBOS-Konfiguration und Dienstproben, Einsatzrouten, Dienstueberwachung und Atemschutz-Zustellungen fuehren ihre DB-Arbeit in Threads aus. HTTP, Broadcasts und SMS bleiben auf dem aufrufenden Event-Loop; bestehende Claim-, Alarmierungs- und Eskalationsregeln bleiben erhalten. Ein AST-Waechter mit Baseline und Thread-Tests sichern die Umstellung. Die verzahnte DIBOS-Anreicherung folgt separat. Keine Migration.
 - **Worker- und Host-Ueberwachung:** Heartbeats erfassen RSS, Prozess-Swap, Threads, Loop-Verzug, langsame Queries und den letzten Stillstand. Systemdiagnose und Admin-MCP warnen bei unsauberen Worker-Neustarts, Speicher-/Swap-Engpaessen und PSI-Ressourcendruck. Die Systemuebersicht beruecksichtigt diese Warnungen. Migration 0352.
 

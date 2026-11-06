@@ -6,8 +6,16 @@ from sqlalchemy.exc import StatementError
 
 from app.models.incident import IncidentAlarmJob
 from app.services import alarm_outbox as alarm
+from app.services.loop_thread_io import auf_event_loop
 from app.services.sms_outbox import database
 from tests.test_alarm_outbox import _aufraeumen, _db_incident
+
+
+async def _signal_and_wait(started, resume):
+    # Die Sender-Attrappe laeuft wie der echte DB-Teil im Worker; Events gehoeren
+    # weiterhin dem aufrufenden Loop.
+    started.set()
+    await resume.wait()
 
 
 @pytest.mark.parametrize("error,expected", [
@@ -42,8 +50,7 @@ async def test_expired_non_idempotent_claim_is_uncertain_and_late_result_ignored
     calls = []
     async def sender(*args):
         calls.append(1)
-        started.set()
-        await resume.wait()
+        await auf_event_loop(_signal_and_wait, started, resume)
         return "sent", None
     monkeypatch.setattr(alarm, f"_send_{channel}", sender)
     job = IncidentAlarmJob(org_id=1, incident_id=incident.id, channel=channel,
@@ -82,8 +89,7 @@ async def test_old_sms_coordinator_cannot_overwrite_new_generation(monkeypatch):
     async def sender(*args):
         calls.append(1)
         if len(calls) == 1:
-            started.set()
-            await resume.wait()
+            await auf_event_loop(_signal_and_wait, started, resume)
             return "failed", "old reply"
         return "sent", None
     monkeypatch.setattr(alarm, "_send_sms", sender)

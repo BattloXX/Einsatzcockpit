@@ -32,6 +32,7 @@ from app.models.master import (
     VehicleMaster,
 )
 from app.models.user import User
+from app.services.loop_thread_io import auf_event_loop
 
 logger = logging.getLogger("einsatzleiter.incident")
 
@@ -1217,7 +1218,7 @@ async def broadcast_message_created(incident_id: int, msg: Message) -> None:
     """Broadcast a newly created message; safe for routes and background jobs."""
     from app.services.broadcast import manager
 
-    await manager.broadcast(incident_id, {
+    await auf_event_loop(manager.broadcast, incident_id, {
         "type": "message_created", "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
     })
 

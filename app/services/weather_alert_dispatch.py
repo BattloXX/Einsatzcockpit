@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from app.services.loop_thread_io import auf_event_loop
 from app.services.weather_alert_service import RULE_LABELS, Decision, RuleResult
 
 logger = logging.getLogger("einsatzleiter.weather_alert_dispatch")
@@ -131,7 +132,7 @@ async def dispatch_alert(
     # ── Teams ─────────────────────────────────────────────────────────────────
     if rule.channel_teams and teams_url:
         theme = _THEME_COLORS.get(result.state, "d42225")
-        ok = await _post_teams(teams_url, betreff, body_text, detail_url or None, theme)
+        ok = await auf_event_loop(_post_teams, teams_url, betreff, body_text, detail_url or None, theme)
         db.add(WeatherAlertLog(
             org_id=rule.org_id,
             key=rule.key,

@@ -14,6 +14,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, Message, Task
 from app.services.broadcast import manager
+from app.services.loop_thread_io import im_db_thread, thread_ablauf
 
 logger = logging.getLogger("einsatzleiter.task_reminder")
 
@@ -241,9 +242,7 @@ async def _check_katplan_wiedervorlagen() -> None:
         nachrichten = await asyncio.to_thread(_pruefe)
         for item in nachrichten:
             try:
-                with SessionLocal() as db:
-                    set_tenant_context(db, item["org_id"])
-                    await mail_service.deliver(db, item["org_id"], item["msg"], item["smtp_cfg"])
+                await im_db_thread(_katplan_mail_sync, item)
             except Exception:
                 logger.exception("task_reminder: Katastrophenplan-Mail fehlgeschlagen")
     except Exception:
@@ -329,35 +328,34 @@ async def _check_pflegeauftrag_erinnerungen() -> None:
         if not item["to"]:
             continue
         try:
-            from app.config import settings
-            from app.core.timezones import format_local_datetime
-            from app.models.master import FireDept
-            from app.services.mail_service import send_pflegeauftrag_einladung
-
-            # Eigene Session bewusst offen ueber den deliver()-Aufruf hinweg (statt wie
-            # bei der reinen FireDept-Lookup vorher zu schliessen), da send_pflegeauftrag_
-            # einladung() db= braucht, um org-eigene SMTP/O365/Resend-Konfiguration statt
-            # nur des globalen Fallbacks zu beruecksichtigen (Muster: pflegeauftrag_einladen
-            # in ui_objekt.py, das ebenfalls db=db an send_pflegeauftrag_einladung gibt).
-            reminder_db = SessionLocal()
-            set_tenant_context(reminder_db, None)
-            try:
-                org = await asyncio.to_thread(reminder_db.get, FireDept, item["org_id"])
-                link = f"{settings.effective_public_base_url.rstrip('/')}/objektpflege/{item['raw_token']}"
-                await send_pflegeauftrag_einladung(
-                    to=item["to"],
-                    kontakt_name=item["kontakt_name"],
-                    objekt_name=item["objekt_name"],
-                    link=link,
-                    gueltig_bis_text=format_local_datetime(item["gueltig_bis"], org),
-                    auftrag_text=item["auftrag_text"],
-                    db=reminder_db,
-                    org_id=item["org_id"],
-                )
-            finally:
-                reminder_db.close()
+            await im_db_thread(_pflegeauftrag_mail_sync, item)
         except Exception:
             logger.exception("task_reminder: Pflegeauftrag-Erinnerung fehlgeschlagen")
+
+
+def _katplan_mail_sync(item: dict) -> None:
+    from app.services import mail_service
+
+    with SessionLocal() as db:
+        set_tenant_context(db, item["org_id"])
+        thread_ablauf(mail_service.deliver(db, item["org_id"], item["msg"], item["smtp_cfg"]))
+
+
+def _pflegeauftrag_mail_sync(item: dict) -> None:
+    from app.config import settings
+    from app.core.timezones import format_local_datetime
+    from app.models.master import FireDept
+    from app.services.mail_service import send_pflegeauftrag_einladung
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        org = db.get(FireDept, item["org_id"])
+        link = f"{settings.effective_public_base_url.rstrip('/')}/objektpflege/{item['raw_token']}"
+        thread_ablauf(send_pflegeauftrag_einladung(
+            to=item["to"], kontakt_name=item["kontakt_name"], objekt_name=item["objekt_name"],
+            link=link, gueltig_bis_text=format_local_datetime(item["gueltig_bis"], org),
+            auftrag_text=item["auftrag_text"], db=db, org_id=item["org_id"],
+        ))
 
 
 def _check_due_in_new_session() -> list[dict]:

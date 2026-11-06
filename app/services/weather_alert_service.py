@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from app.services.loop_thread_io import auf_event_loop
+
 logger = logging.getLogger("einsatzleiter.weather_alert")
 
 # ── Regelkatalog mit Default-Parametern ──────────────────────────────────────
@@ -104,7 +106,6 @@ _STATION_STALE_MIN = 15
 
 async def build_weather_picture(org_settings, db) -> WeatherPicture:
     """Aggregiert alle Wetterdaten für eine Org (einmal pro Loop-Durchlauf)."""
-    import asyncio
 
     from app.models.weather import WeatherStation
     from app.services import weather_service
@@ -135,12 +136,8 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
     provider_data_available = True
     warnings_status = "ok_no_warnings"
     if lat is not None and lng is not None:
-        current, nowcast, forecast, warning_result = await asyncio.gather(  # type: ignore[assignment]
-            weather_service.get_current(lat, lng, org_id=org_settings.org_id),
-            weather_service.get_nowcast(lat, lng),
-            weather_service.get_forecast(lat, lng, horizons=(6, 12, 24), org_id=org_settings.org_id),
-            weather_service.get_warnings_result(lat, lng, org_id=org_settings.org_id),
-            return_exceptions=True,
+        current, nowcast, forecast, warning_result = await auf_event_loop(
+            _anbieter_daten, lat, lng, org_settings.org_id,
         )
         results = (current, nowcast, forecast, warning_result)
         provider_data_available = not any(isinstance(value, Exception) for value in results)
@@ -170,6 +167,20 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
         bodensee_temp_c=bodensee_temp_c,
         provider_data_available=provider_data_available,
         warnings_status=warnings_status,
+    )
+
+
+async def _anbieter_daten(lat, lng, org_id):
+    import asyncio
+
+    from app.services import weather_service
+
+    return await asyncio.gather(
+        weather_service.get_current(lat, lng, org_id=org_id),
+        weather_service.get_nowcast(lat, lng),
+        weather_service.get_forecast(lat, lng, horizons=(6, 12, 24), org_id=org_id),
+        weather_service.get_warnings_result(lat, lng, org_id=org_id),
+        return_exceptions=True,
     )
 
 

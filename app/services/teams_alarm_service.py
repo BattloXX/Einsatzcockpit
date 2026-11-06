@@ -24,6 +24,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings
 from app.models.teams_bot import TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
+from app.services.loop_thread_io import auf_event_loop
 from app.services.sms_dispatch_service import _DEFAULT_GSL_ALARM_TEXT
 from app.services.teams_card import build_gsl_alarm_card, build_incident_message_card
 
@@ -113,7 +114,7 @@ async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlar
         body.insert(1 if incident.is_exercise else 0, {
             "type": "TextBlock", "text": text_prefix, "weight": "Bolder", "wrap": True,
         })
-    return await _post_payload(webhook_url, payload, log_label=f"Einsatz {incident.id}")
+    return await auf_event_loop(_post_payload, webhook_url, payload, log_label=f"Einsatz {incident.id}")
 
 
 async def post_incident_card(
@@ -342,6 +343,6 @@ async def post_gsl_alarm_card(
         payload = build_gsl_alarm_card(
             lage_id, lage_name, text, is_exercise=is_exercise, base_url=base_url,
         )
-        await _post_payload(webhook_url, payload, log_label=f"Lage {lage_id}")
+        await auf_event_loop(_post_payload, webhook_url, payload, log_label=f"Lage {lage_id}")
     finally:
         db.close()

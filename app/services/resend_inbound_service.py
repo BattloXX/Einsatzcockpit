@@ -16,6 +16,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang, OrgResendConfig
+from app.services.loop_thread_io import im_db_thread
 from app.services.mail_eingang_service import ereignis, normalisiere_absender, speichere_eingang
 
 logger = logging.getLogger("einsatzleiter.mail.inbound")
@@ -168,18 +169,22 @@ def loesche_alte_eingaenge(db: Session) -> int:
     return count
 
 
+def _resend_inbound_retention_loop_sync() -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        loesche_alte_eingaenge(db)
+    except Exception:
+        logger.exception("Aufbewahrung Resend-Posteingang fehlgeschlagen")
+        db.rollback()
+    finally:
+        db.close()
+
+
 async def resend_inbound_retention_loop() -> None:
     import asyncio
     while True:
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            loesche_alte_eingaenge(db)
-        except Exception:
-            logger.exception("Aufbewahrung Resend-Posteingang fehlgeschlagen")
-            db.rollback()
-        finally:
-            db.close()
+        await im_db_thread(_resend_inbound_retention_loop_sync)
         await asyncio.sleep(24 * 60 * 60)
 
 
