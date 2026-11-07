@@ -262,6 +262,54 @@ Agent-Anforderungen (PR A8):
 
 Nicht Teil: Sigstore/Cosign (zu schwer fuer den Bash-Installer), Auto-Freigabe ohne Admin.
 
+## 10. Repo-Modus: Installation und Update direkt aus dem Repo (Entscheidung 2026-11-07)
+
+Vorbild ist der Windows-Druckagent: Das Paket kommt direkt aus den oeffentlichen GitHub-Releases,
+das ECP gibt nur **URL + Token** mit und steuert das **Wann**. Das ECP speichert und verteilt
+keine Pakete mehr (der Upload-/Import-Weg aus S6/S8 bleibt als optionaler "verwalteter Modus"
+fuer abgeschottete Installationen erhalten, ist aber nicht mehr der Standard).
+
+Installation (aus dem ECP-Dialog kopiert):
+```
+curl -fsSL https://github.com/BattloXX/Einsatzcockpit-Infoscreen-Agent/releases/latest/download/install.sh | sudo bash -s -- --server https://<ecp> --token ABCD1234
+```
+(`--token` ist der bisherige Pairing-Code; `--pairing-code` bleibt als Alias. `--channel beta`
+liest die Release-Liste per API. Optional `--key-fingerprint sha256:...`.) Das Skript laedt `release.json`,
+`.deb` und `release-key.pem` aus demselben Release-Tag, prueft SHA256 und Ed25519-Signatur
+(oeffentlicher Schluessel steckt im Skript), installiert und koppelt mit dem ECP. Kein
+Download-Endpunkt am ECP, Token wird nicht fuer den Download missbraucht.
+
+Update (Quelle GitHub, Entscheidung beim ECP):
+1. Der Agent fragt alle `check_interval_h` (Default 6 h, vom ECP vorgegeben, +-20 % Jitter) die
+   Release-Liste auf GitHub ab (oeffentlich, ETag, nur Repo `BattloXX/Einsatzcockpit-Infoscreen-Agent`,
+   nur Hosts github.com / api.github.com / *.githubusercontent.com), oder sofort bei WS-Hinweis
+   `update_available` / Admin-Aktion "Jetzt pruefen".
+2. Fuer die neueste Version seines Kanals fragt er das ECP: `POST /api/v1/infoscreen-agent/update/check`
+   (Device-Bearer) mit {version, channel, arch, current} -> {allowed, reason(ok|incident|window|locked|pinned|rollout|blocked|unknown),
+   retry_after_s, maintenance_window, critical_allowed, check_interval_h, pinned_version}. Das ECP entscheidet
+   ueber Einsatz/GSL/Nachlauf, Wartungsfenster, Sperre, Pin, Rollout-Prozent (stabiler Bucket) und Sperre einer Version.
+3. Nur bei `allowed` laedt der Agent das Paket **direkt von GitHub**, prueft SHA256 + Signatur gegen die im
+   installierten Paket mitgelieferten Schluessel (Rotation wie bisher), und der Root-Helfer installiert (A6, unveraendert:
+   erneute Pruefung, Healthcheck, Rollback). Ergebnis weiter per `update/result`.
+4. "Direkt ueber das Repo": `ec-infoscreen-agent update now --from-repo` am Geraet prueft/installiert die neueste Version
+   ohne ECP-Freigabe, aber **nie** bei laufendem Einsatz/GSL (lokale Pruefung des letzten bekannten Zustands) und nur mit
+   gueltiger Signatur. Ist das ECP nicht erreichbar, gilt die Policy "kein automatisches Update" (konfigurierbar:
+   `update_offline_policy = never|window`, Default never).
+5. Rollout im ECP: neue Versionen werden beim ersten `update/check` automatisch als Zeile (version, channel, arch,
+   rollout_percent=0, blocked=false) angelegt. Der Sysadmin gibt sie frei (10/50/100 %, Sperre/Rueckzug) in Agent-Releases;
+   die Freigabe sendet `update_available`. Kein Paket, keine Signatur, kein Upload-Token im ECP noetig.
+
+Sicherheitsbewertung (bewusst akzeptiert): Vertrauensanker ist der Signaturschluessel im Repo-Release
+(plus optionaler Fingerprint im Einzeiler). Ein Angreifer mit Repo-/Actions-Zugriff koennte signieren; Schutz davor
+sind GitHub-2FA, geschuetzte Tags/Branches und die ECP-seitige Freigabe (rollout 0 -> Pilot). Gegenueber dem
+Windows-Agent (nur SHA256 aus demselben Release) ist die Signatur ein Mehrwert ohne Zusatzaufwand fuer den Anwender
+(`init_release_keys.sh` einmalig). Geraete brauchen ausgehend github.com und *.githubusercontent.com (443).
+
+Umsetzung: A9 (Agent: install.sh aus dem Release, `--token`, GitHub-Update-Quelle, `update/check`, `update now --from-repo`,
+Offline-Policy, Tests, Doku) und S9 (Server: `update/check`, automatische Versionszeilen, Freigabe-UI "Version freigeben",
+Einzeiler-Generator zeigt GitHub-URL + `--token`, Banner-Logik ohne Schluessel/Import, Doku/Wiki). Schluessel-UI und
+Import aus S8 werden im Standard ausgeblendet (Setting `INFOSCREEN_AGENT_DISTRIBUTION=github|managed`, Default github).
+
 ## 7. Reihenfolge und Ablauf mit Codex
 
 P0 (Claude, erledigt): dieser Plan. Danach:
