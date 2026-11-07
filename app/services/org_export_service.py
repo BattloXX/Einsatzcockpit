@@ -50,6 +50,7 @@ _GLOBAL_TABLES = frozenset({
     "diag_schedule_slot", "diag_notification", "worker_runtime", "diag_run", "diag_finding",
     # Oeffentliche, systemweite OSM-Gebaeudedaten ohne Org-Bezug.
     "osm_import_lauf", "osm_gebaeude",
+    "infoscreen_release",  # Plattformweite Agent-Artefakte, kein Org-Backup.
     "admin_repair_run", "admin_approval",
     # Systemweite Mail-Weiterleitungen (Sysadmin, kein Org-Bezug).
     "mail_weiterleitung", "mail_weiterleitung_log",

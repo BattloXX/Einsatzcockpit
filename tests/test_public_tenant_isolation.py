@@ -1683,3 +1683,30 @@ def test_elvis_event_bearer_bindet_org_auch_bei_identischer_event_id(client):
             row = db.get(AlarmIngest, row_id)
             assert row.org_id == agent["org_id"] and row.gateway_id == agent["gateway_id"]
             assert row.einsatz_id is None and row.process_status == "logged"
+
+
+def test_infoscreen_agent_pairing_und_bearer_binden_org(client):
+    """Fremde IDs im Pairing-Body aendern weder das gekoppelte Geraet noch dessen Org."""
+    from app.models.infoscreen_agent import InfoscreenDevice
+    from tests.test_infoscreen_agent import PAIR_URL, authenticate, create_device
+
+    org_b_id = _setup_zwei_orgs()
+    device_a, code_a = create_device(ORG_A)
+    device_b, code_b = create_device(org_b_id)
+    response = client.post(PAIR_URL, json={"code": code_a, "org_id": org_b_id, "device_id": device_b})
+    assert response.status_code == 200
+    assert response.json()["device_id"] == device_a
+    assert "org_id" not in response.json()
+    with SessionLocal() as db:
+        device = authenticate(db, response.json()["device_token"])
+        assert device.org_id == ORG_A
+        assert db.query(InfoscreenDevice).filter_by(id=device_b).first() is None
+        assert {d.id for d in db.query(InfoscreenDevice)} >= {device_a}
+        set_tenant_context(db, None)
+        foreign = db.get(InfoscreenDevice, device_b)
+        assert foreign.status == "pending" and foreign.device_token_hash is None
+    other = client.post(PAIR_URL, json={"code": code_b, "org_id": ORG_A, "device_id": device_a})
+    assert other.status_code == 200 and other.json()["device_id"] == device_b
+    with SessionLocal() as db:
+        assert authenticate(db, other.json()["device_token"]).org_id == org_b_id
+        assert db.query(InfoscreenDevice).filter_by(id=device_a).first() is None
