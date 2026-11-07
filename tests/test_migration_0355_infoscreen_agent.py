@@ -28,6 +28,7 @@ def test_upgrade_downgrade_modell(tmp_path):
             with Operations.context(MigrationContext.configure(conn)):
                 neu.upgrade()
                 migration("0356", "infoscreen_resolution_hash").upgrade()
+                migration("0357", "infoscreen_heartbeat").upgrade()
             inspector = sa.inspect(conn)
             assert len(TABLES) == 9
             for name in TABLES:
@@ -74,6 +75,7 @@ def test_upgrade_downgrade_modell(tmp_path):
                         {"key": key},
                     )
             with Operations.context(MigrationContext.configure(conn)):
+                migration("0357", "infoscreen_heartbeat").downgrade()
                 migration("0356", "infoscreen_resolution_hash").downgrade()
                 neu.downgrade()
             assert not set(TABLES) & set(sa.inspect(conn).get_table_names())

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from json import JSONDecodeError
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, model_validator
 from sqlalchemy.orm import Session
 
 from app.core.async_bridge import run_async
@@ -25,6 +27,7 @@ def require_device(request: Request, db: Session = Depends(get_db)) -> Infoscree
         raise HTTPException(401, "Ungueltiges Device-Token", headers={"WWW-Authenticate": "Bearer"})
     assert device.org_id is not None
     set_tenant_context(db, device.org_id)
+    request.state.infoscreen_device_id = device.id
     return device
 
 
@@ -119,3 +122,65 @@ def config(request: Request, db: Session = Depends(get_db), device: InfoscreenDe
     if _etag_matches(request, etag):
         return Response(status_code=304, headers=headers)
     return JSONResponse(data, headers=headers)
+
+
+DisplayKey = Annotated[str, StringConstraints(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_.:-]+$")]
+Revision = Annotated[int, Field(strict=True, ge=0, le=9223372036854775807)]
+ErrorCode = Literal["backend_unavailable", "power_failed", "power_unverified", "browser_failed",
+                    "page_unreachable", "renderer_failed", "offline", "clock_skew", "update_failed"]
+
+
+class DisplayHeartbeat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_key: DisplayKey
+    power: Literal["on", "off", "unknown"]
+    verified: StrictBool
+    backend: Literal["sway", "gnome-mutter", "x11", "cec", "ddc", "logical_blank", "unknown"]
+    page_state: Literal["ready", "loading", "failed", "offline", "blank", "unknown"]
+    errors: list[ErrorCode] = Field(default_factory=list, max_length=16)
+
+
+class Heartbeat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    agent_version: str = Field(min_length=1, max_length=50)
+    os_version: str = Field(min_length=1, max_length=100)
+    hostname: str = Field(min_length=1, max_length=255, pattern=r"^[a-zA-Z0-9_.-]+$")
+    last_revision: dict[DisplayKey, Revision] = Field(max_length=32)
+    config_version: Revision
+    displays: list[DisplayHeartbeat] = Field(max_length=32)
+
+    @model_validator(mode="after")
+    def unique_displays(self):
+        keys = [d.display_key for d in self.displays]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Doppelte Display-Keys")
+        return self
+
+
+def _device_limit_key(request: Request) -> str:
+    # Dependencies authentifizieren vor dem Endpoint-Wrapper; gemeinsame NAT-IP
+    # darf mehreren Monitor-PCs nicht das Heartbeat-Kontingent wegnehmen.
+    return f"infoscreen:{request.state.infoscreen_device_id}"
+
+
+@router.post("/heartbeat")
+@(limiter.limit("6/minute", key_func=_device_limit_key) if limiter else lambda fn: fn)
+def heartbeat(request: Request, body: Heartbeat, db: Session = Depends(get_db),
+              device: InfoscreenDevice = Depends(require_device)):
+    from app.models.infoscreen_agent import InfoscreenDisplay
+
+    rows = db.query(InfoscreenDisplay).filter(
+        InfoscreenDisplay.org_id == device.org_id, InfoscreenDisplay.device_id == device.id).all()
+    displays = {d.display_key: d for d in rows}
+    if (set(body.last_revision) | {d.display_key for d in body.displays}) - displays.keys():
+        raise HTTPException(404, "Display nicht gefunden")
+    service.mark_seen(db, device, agent_version=body.agent_version,
+                      os_version=body.os_version, hostname=body.hostname)
+    device.reported_config_version = body.config_version
+    for report in body.displays:
+        displays[report.display_key].reported_status = report.model_dump(exclude={"display_key"})
+    for key, revision in body.last_revision.items():
+        displays[key].last_revision = revision
+    db.commit()
+    return {"config_version": device.config_version,
+            "revisions": {d.display_key: d.revision for d in rows}}

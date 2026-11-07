@@ -47,6 +47,7 @@ class InfoscreenDevice(TenantScoped, Base):
     agent_connection_id: Mapped[str | None] = mapped_column(String(64))
     agent_worker_id: Mapped[str | None] = mapped_column(String(100))
     agent_presence_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    reported_config_version: Mapped[int | None] = mapped_column(BigInteger)
     config_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
@@ -67,6 +68,8 @@ class InfoscreenDisplay(TenantScoped, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     device_id: Mapped[int] = mapped_column(Integer, ForeignKey("infoscreen_device.id", ondelete="CASCADE"), index=True)
     display_key: Mapped[str] = mapped_column(String(100))
+    reported_status: Mapped[dict | None] = mapped_column(JSON)
+    last_revision: Mapped[int | None] = mapped_column(BigInteger)
     edid_id: Mapped[str | None] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(100))
     alarm_token_id: Mapped[int | None] = mapped_column(

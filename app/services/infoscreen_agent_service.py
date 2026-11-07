@@ -138,3 +138,10 @@ def mark_seen(
         device.os_version = os_version
     if hostname is not None:
         device.hostname = hostname
+
+
+async def publish_config_changed(org_id: int, display_ids: list[int]) -> None:
+    """Post-Commit-Hinweis fuer die Administration (S4/S5)."""
+    from app.services.infoscreen_agent_events import publish_config_changed as publish
+
+    await publish(org_id, display_ids)

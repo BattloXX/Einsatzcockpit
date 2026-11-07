@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Infoscreen-Agent S3:** Validierter technischer Heartbeat mit Displaystatus (Migration 0357), Bearer-WebSocket mit Presence und Verbindungsverdrängung, workerübergreifende Wake-Hinweise über `ec:isa`, entkoppelte Incident-/GSL-/Planspiel-Hooks und sofortiger Verbindungsabgleich nach Sperren/Token-Rotation. Snapshots bleiben autoritativ; Diagnoseereignisse werden nach 90 Tagen org-gefiltert in Batches gelöscht.
+
 - **Infoscreen-Agent S2:** Gemeinsame Alarm-Aktivitaetsabfragen, reiner Prioritaetsresolver mit Nachlauf, serverseitige UTC-Timeline mit Schedule-Zeitzone/DST und Ausnahmetagen, Plan-Rotation fuer Agent-Displays sowie org- und geraetegebundene Config-/State-Snapshots mit ETags und atomaren Revisionen (Migration 0356 fuer den dauerhaften Aufloesungs-Hash). Bestehende Alarm-Daten durch Vorher-/Nachher-Snapshots abgesichert.
 
 - **Infoscreen-Agent S1:** Datenmodell und Migration 0355, Pairing mit 15 Minuten gueltigem Einmal-Code und IP-Drossel, gehashte Device-Tokens, Sperren/Entsperren und Token-Rotation mit Org-Isolation. Grundlage fuer die spaeteren Agent-Endpunkte und Verwaltung.

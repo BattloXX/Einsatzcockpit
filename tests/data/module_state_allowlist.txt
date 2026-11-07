@@ -25,6 +25,8 @@ app.routers.ws:_print_agents
 app.routers.ws:_print_gateways
 app.routers.ws:_sms_gateways
 app.services.gateway_routing:_sockets
+# Infoscreen: Socket-Referenzen je Worker; Verbindungsautoritaet liegt in DB-Presence.
+app.services.infoscreen_agent_events:_connections
 
 # Leader-only Loop-Zustand (bestehende Poller und deren Hilfszustand)
 app.services.alarm_outbox:_running_incident_tasks
@@ -107,3 +109,6 @@ app.services.db_transactions:_retry_zaehler
 app.services.alarm_outbox:_duplikat_audit_zeiten
 # Hydranten: lokale Single-Flight-Sperren je Event-Loop (worker-uebergreifend sichert shared_cache.lock)
 app.services.hydrant_service:_flights
+
+# Infoscreen: nur laufende Wake-Tasks des Worker-Loops, kein fachlicher Zustand; Shutdown cancelt/drained sie.
+app.services.infoscreen_agent_events:_tasks
