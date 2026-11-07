@@ -41,8 +41,8 @@ Der Dialog bietet alternativ `EC_PAIRING_CODE` statt des Code-Arguments an.
 Beide kopierten Zeilen können in der Shell-History stehen; Code und Zeile nicht
 in Tickets oder Chats kopieren. Der Code gilt einmalig für 15 Minuten. Die
 Downloads verbrauchen ihn noch nicht, erst das Pairing. Bei Ablauf im ECP einen
-neuen Code erzeugen. Ein deaktivierter Installer-Banner erfordert die Freigabe
-durch den Betreiber sowie ein freigegebenes stable-Release und gültiges Skript.
+neuen Code erzeugen. Der Installer-Banner verschwindet mit bestaetigtem aktivem
+Schluessel, gueltigem Skript und freigegebenem stable-Release.
 
 Der Installer prüft Werkzeuge, Plattform, Platz und Uhr, lädt über TLS Manifest
 und Paket vom ECP, prüft Fingerprint, Signatur, Hash und Paketmetadaten und
@@ -64,7 +64,7 @@ journalctl -u ec-infoscreen-agent.service
 | Symptom | Nächster Schritt |
 | --- | --- |
 | 401 / Code abgelaufen | Neuen Code erzeugen; Sperre und Kopplung im ECP prüfen |
-| 404 beim Download | Installer-Schalter, freigegebenes Release, Architektur/Kanal prüfen lassen |
+| 404 beim Download | Bestaetigten Schluessel, Skript, freigegebenes Release, Architektur/Kanal prüfen lassen |
 | Fingerprint / Signatur falsch | Mit Betreiber den Schlüssel und das Release abgleichen; Prüfung beibehalten |
 | DNS / TLS / Uhrzeit | Hostname, CA-Kette, Zertifikatsablauf, Netz und NTP prüfen |
 | apt unterbrochen | `sudo dpkg --configure -a`, Ursache beheben und Installation erneut versuchen |
@@ -96,3 +96,15 @@ sudo bash ./install.sh --purge
 Bereinigung nicht. Unpair vor Paketentfernung ausführen; ohne erreichbaren Server
 den Zugang zusätzlich im ECP sperren. Die endgültige Entfernung löscht lokale
 Konfiguration und Browserprofile.
+
+
+## Releases im ECP bereitstellen (Sysadmin)
+
+1. Im Agent-Repository lokal `scripts/init_release_keys.sh` ausfuehren und den Fingerprint aufbewahren.
+2. Tag setzen; die CI veroeffentlicht signierte Pakete und `install.sh` im oeffentlichen GitHub-Release.
+3. Unter **Updates & Backups > Agent-Releases** den Repository-Schluessel abrufen,
+   Fingerprint gegen Schritt 1 exakt bestaetigen, **Releases von GitHub holen** und den Pilot freigeben.
+
+Kein Env-Edit und kein Neustart erforderlich. Der bisherige CI-Upload bleibt optional.
+Ein fremder/veraenderter Repo-Key wird nie automatisch vertraut. Beta-Releases sind
+GitHub-Prereleases; fuer den Standarddialog braucht es ein freigegebenes stable-Release.

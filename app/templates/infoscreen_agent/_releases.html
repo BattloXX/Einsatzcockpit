@@ -1,7 +1,35 @@
 {% import 'infoscreen_agent/_forms.html' as forms with context %}
 <div id="agent-releases" hx-history="false">
 <p>Neue Uploads starten bei 0 %. Erstinstallation: freigegebene Releases ab 10 %, ohne Canary-Begrenzung. Sperren stoppt alle Downloads. Kritisch ist eine nicht signierte Policy und umgeht niemals Einsatzschutz oder Geraetesperren.</p>
-{% for key_id, fingerprint in fingerprints.items() %}<p>{{ key_id }}: <code>{{ fingerprint }}</code></p>{% else %}<p>Keine Release-Schluessel konfiguriert. Uploads sind gesperrt.</p>{% endfor %}
+{% for key_id, fingerprint in fingerprints.items() %}<p>{{ key_id }}: <code class="break-all">{{ fingerprint }}</code></p>{% else %}<p>Keine Release-Schluessel konfiguriert. Bitte zuerst einen Schluessel bestaetigen.</p>{% endfor %}
+<h2>Release-Schluessel</h2>
+<p>Setting-Schluessel haben bei gleicher key_id Vorrang. Fuer eine Rotation zuerst den bisherigen DB-Schluessel deaktivieren. Schluessel bleiben zur Nachvollziehbarkeit gespeichert.</p>
+{% if key_message %}<p role="alert">{{ key_message }}</p>{% endif %}
+{% for key in keys %}
+<section class="sys-card"><p><strong>{{ key.key_id }}</strong>: <code class="break-all">{{ key.fingerprint }}</code></p>
+<p>{{ 'aktiv' if key.aktiv else 'inaktiv' }}, Quelle: {{ key.quelle }}, bestaetigt von {{ key_users.get(key.bestaetigt_von, 'geloeschter Benutzer') }} am {{ key.bestaetigt_am|local_datetime }}.</p>
+<form class="agent-form" hx-post="/admin/agent-releases/keys/{{ key.id }}/status" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<input type="hidden" name="aktiv" value="{{ '0' if key.aktiv else '1' }}"><button type="submit" class="btn">{{ 'Deaktivieren' if key.aktiv else 'Aktivieren' }}</button></form></section>
+{% endfor %}
+<form class="agent-form" hx-post="/admin/agent-releases/keys/preview" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<input type="hidden" name="quelle" value="repo"><button type="submit" class="btn">Schluessel aus Repository uebernehmen</button></form>
+<details><summary>Schluessel manuell einfuegen</summary>
+<form class="agent-form" hx-post="/admin/agent-releases/keys/preview" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<input type="hidden" name="quelle" value="manuell"><label>Key-ID <input name="key_id" value="release" required maxlength="100"></label>
+<label>Ed25519 Public-Key (PEM) <textarea name="pem" required maxlength="16384"></textarea></label><button type="submit" class="btn">Fingerprint pruefen</button></form></details>
+{% if key_preview %}
+<section class="sys-card"><h3>Schluessel bestaetigen</h3>
+<p>Vergleichen Sie diesen Fingerprint mit der Ausgabe der lokalen Schluesselerzeugung. Erst die exakte Eingabe aktiviert den Schluessel.</p>
+<code class="break-all">{{ key_preview.fingerprint }}</code>
+<form class="agent-form" hx-post="/admin/agent-releases/keys/confirm" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<input type="hidden" name="pem" value="{{ key_preview.pem }}"><input type="hidden" name="key_id" value="{{ key_preview.key_id }}"><input type="hidden" name="quelle" value="{{ key_preview.quelle }}">
+<label>Fingerprint exakt eintippen oder einfuegen <input name="fingerprint" required autocomplete="off" class="w-full"></label><button type="submit" class="btn">Schluessel bestaetigen und aktivieren</button></form></section>
+{% endif %}
+<h2>GitHub-Abgleich</h2>
+<p><a href="{{ repo_url }}" target="_blank" rel="noopener noreferrer">Agent-Repository</a>. Letzter Abgleich: {{ last_sync|local_datetime if last_sync else 'noch keiner' }}.</p>
+<p>Vor dem ersten Import einen Schluessel oben bestaetigen. Neue Releases starten bei 0 %; die Freigabe erfolgt manuell.</p>
+<form class="agent-form" hx-post="/admin/agent-releases/github/import" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}<button type="submit" class="btn">Releases von GitHub holen</button></form>
+<ul>{% for result in github_results %}<li>{{ result.release }}: {{ result.status }}{% if result.code %} ({{ result.code }}){% endif %}</li>{% endfor %}</ul>
 {% for release in releases %}
 <section class="sys-card">
 <h2>{{ release.version }} / {{ release.channel }} / {{ release.arch }}</h2>

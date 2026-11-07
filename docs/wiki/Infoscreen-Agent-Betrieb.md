@@ -65,7 +65,8 @@ Release die Ausnahme vom Fenster. Einsatz/GSL/Nachlauf, Pin, Updatesperre,
 Architektur, Mindestversion und Release-Sperre gelten weiterhin.
 
 Sysadmins verwalten plattformweit unter **Updates & Backups > Agent-Releases**
-CI-Upload-Tokens, Release-Freigabe und Rückzug. Neue Uploads stehen auf 0 %;
+bestaetigte Release-Schluessel, GitHub-Import, optionale CI-Upload-Tokens,
+Release-Freigabe und Rueckzug. Neue Importe und Uploads stehen auf 0 %;
 10/50/100 % erweitern die deterministische Testgruppe. Dasselbe Gerät bleibt
 für dieselbe Release-Version im gleichen Bucket. Zuerst Pilot, dann Quote erweitern.
 Die Erstinstallation nutzt ein freigegebenes Release ohne Canary-Auswahl.
@@ -88,3 +89,17 @@ enthält Resolver-Modus, Sollstrom, `valid_until` und letzten gemeldeten Strom,
 Seitenstatus, Backend, `verified` sowie wirksamen Override ja/nein.
 Tokens, Codes, URLs, Rotation und Einsatzinhalte werden nicht ausgegeben.
 Die Abfrage verändert weder Konfiguration noch Revision und ist keine Live-Probe.
+
+
+### Optionaler GitHub-Abgleich
+
+`INFOSCREEN_AGENT_GITHUB_SYNC_ENABLED=true` aktiviert den Abgleich alle 24 Stunden
+unter dem bestehenden Leader-Lock. DB-/HTTP-Arbeit laeuft im Hintergrundthread;
+Worker-Diagnose zeigt Iterationsstatus. Standard ist aus. `INFOSCREEN_AGENT_GITHUB_REPO`
+ist ein validiertes owner/name (Default BattloXX/Einsatzcockpit-Infoscreen-Agent).
+Ein optionales `INFOSCREEN_AGENT_GITHUB_TOKEN` erhoeht das API-Limit; es ist fuer
+oeffentliche Releases nicht notwendig. `rate_limited` meldet HTTP 403/429.
+
+Ergebnis und Datum stehen im Agent-Releases-Tab. Neue Releases bleiben bei 0 %;
+der Import weckt keine Geraete. Erst die manuelle Freigabe sendet den Update-Hinweis.
+Ein 304-Abgleich verwendet den ETag-Cache und versucht fehlgeschlagene Releases erneut.

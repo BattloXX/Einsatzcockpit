@@ -21,6 +21,9 @@ from __future__ import annotations
 from sqlalchemy import BigInteger, ForeignKey, event, or_
 from sqlalchemy.orm import Mapped, Session, declared_attr, mapped_column, with_loader_criteria
 
+# infoscreen_release, infoscreen_release_key und infoscreen_release_upload_token sind
+# bewusst plattformweit, ohne TenantScoped; Mutationen nur durch system_admin.
+
 # Sentinel: unterscheidet "nie gesetzt" von "explizit None (system_admin)"
 _MISSING = object()
 

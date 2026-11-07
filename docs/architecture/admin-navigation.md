@@ -158,3 +158,9 @@ im MCP-Werkzeugkatalog nach Live-Rechte-/Org-Prüfung. Es entsteht keine zusätz
 Verwaltungsroute und kein Hauptpunkt; Infoscreens > Geräte & Pläne sowie
 Updates & Backups > Agent-Releases bleiben die Verwaltungsorte.
 Verträge und Datenschutz: [Architekturübersicht](infoscreen-agent-uebersicht.md).
+
+
+S8 erweitert denselben Sysadmin-Tab `/admin/agent-releases` um Schluesselvorschau,
+exakte Fingerprint-Bestaetigung, Statuswechsel und GitHub-Abgleich. Aktionen sind
+HTMX-Buttons im Inhaltsbereich, keine neuen Tabs oder Hauptpunkte. Alle Mutationen
+pruefen `system_admin` und CSRF; Rollen/Katalog bleiben unveraendert.

@@ -200,12 +200,10 @@ def unpair(request: Request, tasks: BackgroundTasks, db: Session = Depends(get_d
 @router.get("/infoscreen-agent/install.sh")
 @(limiter.limit("30/minute") if limiter else lambda fn: fn)
 def installer(request: Request, db: Session = Depends(get_db)):
-    from app.config import settings
-
-    if not settings.INFOSCREEN_AGENT_INSTALLER_ENABLED:
+    if not releases.installer_enabled(db):
         raise HTTPException(404, "installer_missing")
     row = releases.latest_installer(db)
     if row is None:
         raise HTTPException(404, "installer_missing")
-    return Response(releases.read_installer(row), media_type="text/x-shellscript",
+    return Response(releases.read_installer(row, db), media_type="text/x-shellscript",
                     headers={"Cache-Control": "public, max-age=60"})

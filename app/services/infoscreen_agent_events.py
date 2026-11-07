@@ -15,6 +15,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import event, inspect, update
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketState
+from uvicorn.protocols.utils import ClientDisconnected
 
 from app.core.resilience import run_side_effect, run_side_effect_async
 from app.core.security import hash_api_key
@@ -123,7 +124,11 @@ async def _deliver_one(key: tuple[int, int, str], socket: WebSocket, payload: di
     if not await asyncio.to_thread(_valid, org, device, connection):
         _connections.pop(key, None)
         if socket.application_state == WebSocketState.CONNECTED:
-            await asyncio.wait_for(socket.close(code=4401), timeout=2)
+            try:
+                await asyncio.wait_for(socket.close(code=4401), timeout=2)
+            except (ClientDisconnected, WebSocketDisconnect):
+                # Widerruf kann sich mit dem clientseitigen Disconnect ueberschneiden.
+                return
     elif payload.get("type") == "update_available":
         await asyncio.wait_for(socket.send_json({"type": "update_available"}), timeout=2)
     elif payload.get("type") == "invalidate":
@@ -183,6 +188,28 @@ def _end(org_id: int, device_id: int, connection: str) -> None:
         db.commit()
 
 
+async def _wait_next_ping(socket: WebSocket) -> None:
+    """Waehrend der Ping-Pause weiterlesen; Disconnect sofort verarbeiten."""
+    timer = asyncio.create_task(asyncio.sleep(PING_S))
+    receive = asyncio.create_task(socket.receive_text())
+    try:
+        while True:
+            done, _ = await asyncio.wait({timer, receive}, return_when=asyncio.FIRST_COMPLETED)
+            if receive in done:
+                raw = receive.result()  # WebSocketDisconnect erreicht den Session-Cleanup.
+                if len(raw) > 128:
+                    await socket.close(code=4400)
+                    raise WebSocketDisconnect(code=4400)
+            if timer in done:
+                return
+            receive = asyncio.create_task(socket.receive_text())
+    finally:
+        for task in (timer, receive):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(timer, receive, return_exceptions=True)
+
+
 async def websocket_session(socket: WebSocket) -> None:
     scheme, _, token = socket.headers.get("authorization", "").partition(" ")
     identity = None
@@ -225,11 +252,11 @@ async def websocket_session(socket: WebSocket) -> None:
                 if socket.application_state == WebSocketState.CONNECTED:
                     await socket.close(code=4401)
                 return
-            await asyncio.sleep(PING_S)
+            await _wait_next_ping(socket)
     except TimeoutError:
         if socket.application_state == WebSocketState.CONNECTED:
             await socket.close(code=4408)
-    except WebSocketDisconnect:
+    except (ClientDisconnected, WebSocketDisconnect):
         pass
     finally:
         _connections.pop(key, None)
