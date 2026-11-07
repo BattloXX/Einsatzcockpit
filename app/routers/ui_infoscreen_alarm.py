@@ -35,6 +35,7 @@ from app.models.objekt import (
 )
 from app.models.user import User
 from app.services import weather_service
+from app.services.infoscreen_aktivitaet import aktive_gsl as _aktive_gsl
 from app.services.objekt_service import lade_auswahl
 
 router = APIRouter(tags=["infoscreen-alarm"])
@@ -93,11 +94,38 @@ def _org_settings(db: Session, org_id: int) -> OrgSettings | None:
     )
 
 
-def _baue_idle_urls(db: Session, token_row: AlarmInfoscreenToken, wetter_url: str | None) -> list[dict]:
+def _baue_idle_urls(
+    db: Session, token_row: AlarmInfoscreenToken, wetter_url: str | None, slot_rotation: list[dict] | None = None,
+) -> list[dict]:
     """Rotations-URLs dieses Monitors (konfigurierte Reihenfolge) + optional Wetter."""
+    from app.models.infoscreen_agent import InfoscreenDisplay
     from app.models.objekt import InfoscreenUrl
 
-    urls: list[dict] = []
+    display = db.query(InfoscreenDisplay).filter(
+        InfoscreenDisplay.org_id == token_row.org_id, InfoscreenDisplay.alarm_token_id == token_row.id,
+        InfoscreenDisplay.aktiv.is_(True)).first()
+    if display is not None:
+        if slot_rotation is None:
+            from datetime import UTC, datetime
+
+            from app.services.infoscreen_agent_resolver import current_slot
+            from app.services.infoscreen_agent_snapshot import lade_schedule
+            slot = current_slot(lade_schedule(db, display), datetime.now(UTC))
+            slot_rotation = slot[1] if slot else None
+        if slot_rotation is not None:
+            urls = []
+            for entry in slot_rotation:
+                if entry.get("url_id"):
+                    row = db.query(InfoscreenUrl).filter(
+                        InfoscreenUrl.id == entry["url_id"], InfoscreenUrl.org_id == token_row.org_id,
+                        InfoscreenUrl.aktiv.is_(True)).first()
+                    if row is not None:
+                        urls.append({"label": row.label, "url": row.url,
+                                     "dwell_sec": entry.get("dwell_sec", row.dwell_sec)})
+                elif entry.get("builtin") in ("weather", "wetter") and wetter_url:
+                    urls.append({"label": "Wetter", "url": wetter_url, "dwell_sec": entry.get("dwell_sec", 30)})
+            return urls
+    urls = []
     ids = token_row.url_ids
     if ids:
         rows = (
@@ -114,19 +142,6 @@ def _baue_idle_urls(db: Session, token_row: AlarmInfoscreenToken, wetter_url: st
     if token_row.zeigt_wetter and wetter_url:
         urls.append({"label": "Wetter", "url": wetter_url, "dwell_sec": 30})
     return urls
-
-
-def _aktive_gsl(db: Session, org_id: int):  # type: ignore[no-untyped-def]
-    """Aktive Großschadenslage der Org (bleibt, solange aktiv) oder None."""
-    from app.models.major_incident import MajorIncident, MajorIncidentStatus
-
-    return (
-        db.query(MajorIncident)
-        .filter(MajorIncident.org_id == org_id,
-                MajorIncident.status == MajorIncidentStatus.active)
-        .order_by(MajorIncident.started_at.desc())
-        .first()
-    )
 
 
 def _iso_z(dt):  # type: ignore[no-untyped-def]
@@ -322,15 +337,8 @@ def infoscreen_daten(
             return daten
 
     # ── Vorrang 2: aktiver Einsatz (bleibt, solange status == active) ──
-    incident = (
-        db.query(Incident)
-        .filter(
-            Incident.primary_org_id == org.id,
-            Incident.status == "active",
-        )
-        .order_by(Incident.started_at.desc())
-        .first()
-    )
+    from app.services.infoscreen_aktivitaet import aktiver_incident
+    incident = aktiver_incident(db, org.id)
 
     if incident is not None:
         from app.services.road_closure_flags import strassensperren_effective_enabled

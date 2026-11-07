@@ -1,0 +1,36 @@
+{
+  "org_name": "Monitor Org",
+  "modus": "gsl",
+  "idle_modus": "uhr",
+  "wetter_url": null,
+  "idle_urls": [
+    {
+      "label": "News",
+      "url": "https://news.example",
+      "dwell_sec": 20
+    },
+    {
+      "label": "Wetter",
+      "url": "https://wetter.example/screen",
+      "dwell_sec": 30
+    }
+  ],
+  "symbole": [],
+  "gsl": {
+    "name": "Hochwasser",
+    "beschreibung": "",
+    "beginn": "2026-11-02T11:00:00Z",
+    "ende": null,
+    "uebung": false,
+    "kpi": {
+      "total": 0,
+      "eingegangen": 0,
+      "in_arbeit": 0,
+      "erledigt": 0,
+      "ressourcen": 0
+    },
+    "sites": [],
+    "sektoren": [],
+    "ticker": []
+  }
+}

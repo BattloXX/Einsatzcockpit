@@ -1,0 +1,39 @@
+{
+  "org_name": "Monitor Org",
+  "modus": "alarm",
+  "idle_modus": "uhr",
+  "wetter_url": null,
+  "idle_urls": [
+    {
+      "label": "News",
+      "url": "https://news.example",
+      "dwell_sec": 20
+    },
+    {
+      "label": "Wetter",
+      "url": "https://wetter.example/screen",
+      "dwell_sec": 30
+    }
+  ],
+  "symbole": [],
+  "fahrzeuge": [],
+  "incident": {
+    "id": 1,
+    "stichwort": "F14",
+    "stichwort_label": "",
+    "adresse": "Teststrasse 1, Wolfurt",
+    "meldung": "",
+    "leitstelle_nr": null,
+    "beginn": "2026-11-02T12:00:00Z",
+    "ende": null,
+    "lat": null,
+    "lng": null,
+    "rsvp": {
+      "zusagen": 0,
+      "absagen": 0,
+      "namen": []
+    },
+    "gesamtstatus": "nicht_gesetzt",
+    "gesamtstatus_label": "Status nicht gesetzt"
+  }
+}
