@@ -23,14 +23,16 @@ def test_upgrade_downgrade_modell(tmp_path):
         # Externe FK-Ziele in exakt denselben Typen wie im Bestand.
         for name in ("fire_dept", "user", "alarm_infoscreen_token"):
             conn.exec_driver_sql(f'CREATE TABLE "{name}" (id BIGINT PRIMARY KEY)')
+        conn.exec_driver_sql("CREATE TABLE org_settings (id INTEGER PRIMARY KEY, org_id BIGINT)")
         conn.exec_driver_sql("PRAGMA foreign_keys=ON")
         for _ in range(2):
             with Operations.context(MigrationContext.configure(conn)):
                 neu.upgrade()
                 migration("0356", "infoscreen_resolution_hash").upgrade()
                 migration("0357", "infoscreen_heartbeat").upgrade()
+                migration("0358", "infoscreen_releases").upgrade()
             inspector = sa.inspect(conn)
-            assert len(TABLES) == 9
+            assert len(TABLES) == 10
             for name in TABLES:
                 table = Base.metadata.tables[name]
                 columns = {c["name"]: c for c in inspector.get_columns(name)}
@@ -75,6 +77,7 @@ def test_upgrade_downgrade_modell(tmp_path):
                         {"key": key},
                     )
             with Operations.context(MigrationContext.configure(conn)):
+                migration("0358", "infoscreen_releases").downgrade()
                 migration("0357", "infoscreen_heartbeat").downgrade()
                 migration("0356", "infoscreen_resolution_hash").downgrade()
                 neu.downgrade()
@@ -114,7 +117,7 @@ def test_tenant_modelle_fail_closed():
     assert not issubclass(InfoscreenRelease, TenantScoped)
     with TestingSession() as db:
         for mapper in Base.registry.mappers:
-            if mapper.local_table.name in set(TABLES) - {"infoscreen_release"}:
+            if mapper.local_table.name in set(TABLES) - {"infoscreen_release", "infoscreen_release_upload_token"}:
                 assert issubclass(mapper.class_, TenantScoped)
                 with pytest.raises(TenantContextMissing):
                     db.query(mapper.class_).first()

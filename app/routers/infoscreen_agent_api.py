@@ -45,10 +45,19 @@ def pair(request: Request, response: Response, db: Session = Depends(get_db)):
     code = data.get("code") or data.get("pairing_code")
     if not isinstance(code, str) or not code.strip():
         raise HTTPException(400, "code fehlt")
+    name, channel = data.get("name"), data.get("channel", "stable")
+    if name is not None and (not isinstance(name, str) or not 1 <= len(name.strip()) <= 100
+                             or any(ord(c) < 32 or ord(c) == 127 for c in name)):
+        raise HTTPException(400, "name_invalid")
+    if channel not in ("stable", "beta"):
+        raise HTTPException(400, "channel_invalid")
     result = service.pair(db, code)
     if result is None:
         raise HTTPException(401, "Ungueltiger oder abgelaufener Code")
     device, token = result
+    if name is not None:
+        device.name = name.strip()
+    device.channel = channel
     service.mark_seen(db, device, ip=request.client.host if request.client else None)
     db.commit()
     response.headers["Cache-Control"] = "no-store"
@@ -78,7 +87,7 @@ def state(request: Request, display: str, db: Session = Depends(get_db),
         raise HTTPException(404, "Display nicht gefunden")
     data = resolve_state(db, device, row, datetime.now(UTC))
     etag = f'"{data["revision"]}"'
-    headers = {"ETag": etag, "Cache-Control": "private, no-cache"}
+    headers = {"ETag": etag, "Cache-Control": "no-store"}
     if _etag_matches(request, etag):
         return Response(status_code=304, headers=headers)
     return JSONResponse(data, headers=headers)
@@ -117,11 +126,11 @@ def config(request: Request, db: Session = Depends(get_db), device: InfoscreenDe
             r.host for r in db.query(InfoscreenUrlAllowlist).filter(
                 InfoscreenUrlAllowlist.org_id == device.org_id).all()}),
         "intervals": {"poll_sec": 20, "heartbeat_sec": 90, "ping_sec": 25},
-        "update_policy": {"enabled": False, "channel": device.channel,
+        "update_policy": {"enabled": True, "channel": device.channel,
                           "locked": device.update_locked, "pinned_version": device.update_pinned_version},
     }
     etag = '"' + hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest() + '"'
-    headers = {"ETag": etag, "Cache-Control": "private, no-cache"}
+    headers = {"ETag": etag, "Cache-Control": "no-store"}
     if _etag_matches(request, etag):
         return Response(status_code=304, headers=headers)
     return JSONResponse(data, headers=headers)
@@ -145,7 +154,7 @@ class DisplayHeartbeat(BaseModel):
 
 class Heartbeat(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    agent_version: str = Field(min_length=1, max_length=50)
+    agent_version: str = Field(min_length=1, max_length=100)
     os_version: str = Field(min_length=1, max_length=100)
     hostname: str = Field(min_length=1, max_length=255, pattern=r"^[a-zA-Z0-9_.-]+$")
     last_revision: dict[DisplayKey, Revision] = Field(max_length=32)

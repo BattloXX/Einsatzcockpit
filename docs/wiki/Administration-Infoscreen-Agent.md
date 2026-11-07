@@ -115,3 +115,27 @@ der zugehoerigen Custom-Overrides. Abgelaufene Eintraege werden nach 30 Tagen
 bereinigt; Anlegen und Aufheben bleiben im Audit protokolliert.
 
 Details: [Entscheidungsmatrix und Sicherheitsgrenzen](../architecture/infoscreen-agent-overrides.md).
+
+## Releases und Updates (S6)
+
+**Systemadministratoren** verwalten signierte Agent-Releases unter
+**Updates & Backups > Agent-Releases**. Upload-Tokens fuer CI werden einmalig
+angezeigt und koennen jederzeit widerrufen werden. Neue Uploads sind mit 0 %
+noch nicht freigegeben. 10/50/100 % erweitern die feste Testgruppe; **Release
+sperren** zieht eine Version fuer weitere Downloads zurueck. Fingerprints der
+konfigurierten Schluessel stehen auf derselben Seite.
+
+**Org-Administratoren** waehlen unter **Infoscreens > Geraete & Plaene > Geraete**
+pro Geraet stable/beta, optional eine fixe Version und die Updatesperre.
+**Jetzt pruefen** weckt den Agent; ein Einsatz oder eine Sperre wird dadurch
+nicht umgangen. Letzter Update-Status und fester Fehlercode stehen am Geraet.
+Das Wartungsfenster gilt in der Org-Zeitzone (Default 02:00–04:30), auch ueber
+Mitternacht. **Kritische Updates erlauben** gibt nur die Ausnahme vom Fenster
+frei. Einsatz/GSL/Nachlauf bleiben geschuetzt.
+
+Der Installer-Hinweis verschwindet automatisch, sobald der Betrieb den harten
+Installer-Schalter aktiviert und ein gueltiges Skript plus ein freigegebenes
+stable-Release vorhanden sind. Die Erstinstallation verwendet einen gueltigen
+Pairing-Code und die neueste freigegebene Version ohne Canary-Begrenzung;
+erst das Koppeln verbraucht den Code. Details fuer Betrieb und CI:
+[Release-Verteilung](../architecture/infoscreen-agent-releases.md).

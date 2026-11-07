@@ -135,10 +135,17 @@ nach dem Commit `publish_config_changed`; Widerruf und Loeschen senden zusaetzli
 workeruebergreifend einen Verbindungsabgleich. Beim Loeschen/Verschieben eines
 Displays wird das bisherige Geraet zusaetzlich ueber den vor dem Commit erfassten
 Display-Key geweckt; damit erhaelt auch ein Geraet ohne verbleibendes Display die
-neue Konfiguration. Installer/Updates folgen in S6.
+neue Konfiguration. Installer/Updates siehe S6 unten.
 
 S5 erweitert den bestehenden Tab "Geraete & Plaene" um den Unterbereich
 `/admin/infoscreen-agent/uebersteuerung` (Overrides und URL-Allowlist).
 `/uebersteuerung/status` ist das lesende HTMX-Live-Partial. Beide bleiben im
 Hauptpunkt Infoscreens, Tab Agent, mit `require_role("org_admin")` und den
 bestehenden Admin-Alias-/Sysadmin-Rechten. Kein neuer Hauptpunkt oder Haupttab.
+
+S6: `/admin/agent-releases` ist ausschliesslich fuer `system_admin` sichtbar
+und erreichbar, als Tab **Agent-Releases** des bestehenden Hauptpunkts
+**Updates & Backups** (`updates_backups`). Keine neue Hauptnavigation.
+Rollout, Rueckzug und CI-Tokenverwaltung sind CSRF-geschuetzte HTMX-POSTs.
+Org-Fenster und Geraete-Policy bleiben im bestehenden Infoscreen-Agent-Tab
+unter `/admin/infoscreen-agent/geraete` (org_admin, explizites Org-Scoping).

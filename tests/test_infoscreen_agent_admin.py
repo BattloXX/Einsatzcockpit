@@ -471,7 +471,8 @@ def test_installer_ignores_request_host_and_enabled_banner(client, admin, monkey
     assert response.status_code == 200, response.text
     assert "https://safe.example/infoscreen-agent/install.sh" in response.text
     assert "evil.example" not in response.text
-    assert "Installer noch nicht freigeschaltet" not in response.text
+    # Der harte Schalter allein reicht seit S6 ohne gueltige Artefakte nicht.
+    assert "Installer noch nicht freigeschaltet" in response.text
 
 
 def test_pairing_status_and_default_preview_use_org_timezone(client, admin):

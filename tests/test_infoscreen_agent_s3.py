@@ -47,7 +47,7 @@ def test_heartbeat_ok_no_revision_authority(client):
 
 
 @pytest.mark.parametrize("change", [
-    {"hostname": "x" * 256}, {"agent_version": "x" * 51}, {"os_version": "x" * 101},
+    {"hostname": "x" * 256}, {"agent_version": "x" * 101}, {"os_version": "x" * 101},
     {"config_version": -1}, {"config_version": True}, {"incident": "secret"},
     {"last_revision": {"foreign": -1}},
 ])

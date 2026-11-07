@@ -307,6 +307,9 @@ class CSRFMiddleware:
     async def _call_with_cookie(
         self, scope, receive, send, new_token: str | None, path: str, sec_fetch_dest: str | None,
     ):
+        if path == "/infoscreen-agent/install.sh" or path.startswith("/api/v1/infoscreen-agent/"):
+            await self.app(scope, receive, send)
+            return
         if not new_token:
             await self.app(scope, receive, send)
             return

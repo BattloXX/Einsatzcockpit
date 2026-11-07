@@ -13,7 +13,6 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_role
@@ -29,6 +28,7 @@ from app.models.infoscreen_agent import (
     InfoscreenScheduleSlot,
     InfoscreenUrlAllowlist,
 )
+from app.models.master import OrgSettings
 from app.models.objekt import AlarmInfoscreenToken, InfoscreenUrl
 from app.models.user import User
 from app.services import infoscreen_agent_admin as validation
@@ -36,6 +36,7 @@ from app.services import infoscreen_agent_events as events
 from app.services import infoscreen_agent_overrides as overrides
 from app.services import infoscreen_agent_service as devices
 from app.services.infoscreen_agent_installer_cmd import installer_command
+from app.services.infoscreen_agent_releases import installer_ready
 from app.services.infoscreen_agent_resolver import Display, resolve
 from app.services.infoscreen_agent_snapshot import alarm_url, lade_overrides, lade_schedule
 from app.services.infoscreen_aktivitaet import lade_aktivitaet
@@ -100,6 +101,7 @@ def context(request: Request, db: Session, user: User, section: str) -> dict:
         section=section,
         base=BASE,
         devices=all_devices,
+        update_policy=db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first(),
         displays=displays,
         schedules=schedules,
         slots=slots,
@@ -164,6 +166,16 @@ def dialog(request: Request, db: Session, user: User, device: InfoscreenDevice, 
     now = datetime.now(UTC).replace(tzinfo=None)
     remaining = max(0, int((device.pairing_expires_at - now).total_seconds())) if device.pairing_expires_at else 0
     connected = bool(device.agent_presence_expires_at and device.agent_presence_expires_at > now)
+    installer_enabled = installer_ready(db)
+    installer_error = ""
+    command = env_command = ""
+    if code:
+        try:
+            command = installer_command(code, device.name)
+            env_command = installer_command(code, device.name, environment=True)
+        except ValueError:
+            installer_enabled = False
+            installer_error = "Fuer die Installation muss eine HTTPS-Serveradresse ohne Pfad konfiguriert sein."
     return templates.TemplateResponse(
         request,
         "infoscreen_agent/_pairing.html",
@@ -174,9 +186,10 @@ def dialog(request: Request, db: Session, user: User, device: InfoscreenDevice, 
             remaining=remaining,
             connected=connected,
             base=BASE,
-            installer_enabled=settings.INFOSCREEN_AGENT_INSTALLER_ENABLED,
-            command=installer_command(code, device.name) if code else "",
-            env_command=installer_command(code, device.name, environment=True) if code else "",
+            installer_enabled=installer_enabled,
+            installer_error=installer_error,
+            command=command,
+            env_command=env_command,
         ),
         headers={"Cache-Control": "no-store", "HX-Trigger": "agentChanged"},
     )
@@ -232,6 +245,43 @@ def pairing_status(
         dict(user=user, device=device, base=BASE, now=datetime.now(UTC).replace(tzinfo=None)),
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.post("/geraete/{device_id}/update", response_class=HTMLResponse)
+def device_update(device_id: int, request: Request, tasks: BackgroundTasks,
+                  db: Session = Depends(get_db), user: User = Depends(require_role("org_admin"))):
+    from app.services.infoscreen_agent_releases import valid_version
+
+    device = own(db, InfoscreenDevice, device_id, org(user))
+    form = run_async(request.form)
+    try:
+        device.channel = validation.choice(form.get("channel"), ("stable", "beta"))
+        pin = str(form.get("pin", "")).strip()
+        device.update_pinned_version = valid_version(pin) if pin else None
+        device.update_locked = form.get("locked") == "1"
+        db.execute(update(InfoscreenDevice).where(
+            InfoscreenDevice.org_id == org(user), InfoscreenDevice.id == device.id
+        ).values(config_version=InfoscreenDevice.config_version + 1))
+        write_audit(db, "infoscreen_agent.device_update_policy", org_id=org(user), user_id=user.id,
+                    payload={"device_id": device.id, "locked": device.update_locked, "channel": device.channel,
+                             "pinned_version": device.update_pinned_version})
+        db.commit()
+        tasks.add_task(events.publish_update_available, org(user), device.id)
+        return render(request, db, user, "geraete")
+    except ValueError as exc:
+        db.rollback()
+        return render(request, db, user, "geraete", error=str(exc), status=422)
+
+
+@router.post("/geraete/{device_id}/update-check", response_class=HTMLResponse)
+def device_update_check(device_id: int, request: Request, tasks: BackgroundTasks,
+                        db: Session = Depends(get_db), user: User = Depends(require_role("org_admin"))):
+    device = own(db, InfoscreenDevice, device_id, org(user))
+    write_audit(db, "infoscreen_agent.update_check", org_id=org(user), user_id=user.id,
+                payload={"device_id": device.id})
+    db.commit()
+    tasks.add_task(events.publish_update_available, org(user), device.id)
+    return render(request, db, user, "geraete")
 
 
 @router.post("/geraete/{device_id}/{action}", response_class=HTMLResponse)
@@ -717,6 +767,33 @@ def allowlist_remove(
     write_audit(db, "infoscreen_agent.allowlist_removed", org_id=org(user), user_id=user.id)
     override_changed(db, tasks, user, None)
     return render(request, db, user, "uebersteuerung")
+
+
+@router.post("/update-policy", response_class=HTMLResponse)
+def org_update_policy(request: Request, tasks: BackgroundTasks, db: Session = Depends(get_db),
+                      user: User = Depends(require_role("org_admin"))):
+    import re
+
+    form = run_async(request.form)
+    start, end = str(form.get("start", "")), str(form.get("end", ""))
+    if any(not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", value) for value in (start, end)) or start == end:
+        raise HTTPException(422, "Gueltige, unterschiedliche Uhrzeiten im Format HH:MM eingeben")
+    policy = db.query(OrgSettings).filter(OrgSettings.org_id == org(user)).first()
+    if policy is None:
+        policy = OrgSettings(org_id=org(user))
+        db.add(policy)
+    policy.infoscreen_update_start, policy.infoscreen_update_end = start, end
+    policy.infoscreen_critical_allowed = form.get("critical_allowed") == "1"
+    write_audit(db, "infoscreen_agent.org_update_policy", org_id=org(user), user_id=user.id,
+                payload={"start": start, "end": end, "critical_allowed": policy.infoscreen_critical_allowed})
+    targets = rows(db, InfoscreenDevice, org(user)).all()
+    db.execute(update(InfoscreenDevice).where(
+        InfoscreenDevice.org_id == org(user)
+    ).values(config_version=InfoscreenDevice.config_version + 1))
+    db.commit()
+    for device in targets:
+        tasks.add_task(events.publish_update_available, org(user), device.id)
+    return render(request, db, user, "geraete")
 
 
 @router.get("/{section}", response_class=HTMLResponse)

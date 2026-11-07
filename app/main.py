@@ -53,6 +53,7 @@ from app.mcp import router as mcp_router
 from app.mcp import upload_router as mcp_upload_router
 from app.mcp.server import application as mcp_application
 from app.mcp.server import provider as mcp_provider
+from app.middleware.infoscreen_agent import InfoscreenAgentMiddleware
 from app.middleware.write_failure_log import WriteFailureLogMiddleware
 from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
@@ -71,6 +72,7 @@ from app.routers import (
     device_api,
     gateway_api,
     infoscreen_agent_api,
+    infoscreen_agent_releases,
     lagekarte_api,
     mail_inbound_webhook,
     mailing_webhook,
@@ -113,6 +115,7 @@ from app.routers import (
     ui_hilfe,
     ui_incident,
     ui_infoscreen_agent_admin,
+    ui_infoscreen_agent_releases,
     ui_infoscreen_alarm,
     ui_infoscreen_stats,
     ui_invitation,
@@ -609,7 +612,7 @@ class _QrUser:
 # Asset-Request mit Session-Cookie einen User-Lookup (+ Rollen) in der DB aus
 # (Audit B3). /sw.js und /favicon.ico sind zwar Routen, nutzen den User aber
 # ebenfalls nicht.
-_SESSION_SKIP_PREFIXES = ("/static/", "/.well-known/")
+_SESSION_SKIP_PREFIXES = ("/static/", "/.well-known/", "/api/v1/infoscreen-agent/", "/infoscreen-agent/")
 _SESSION_SKIP_PATHS = ("/sw.js", "/favicon.ico")
 
 
@@ -1159,7 +1162,11 @@ app.include_router(asuew_api.router)
 app.include_router(api_feed.router)
 app.include_router(api_live.router)
 app.include_router(gateway_api.router)
+app.add_middleware(InfoscreenAgentMiddleware)
+
 app.include_router(infoscreen_agent_api.router)
+app.include_router(infoscreen_agent_releases.router)
+app.include_router(ui_infoscreen_agent_releases.router)
 app.include_router(lagekarte_api.router)
 app.include_router(teams_bot.router)
 app.include_router(ws.router)

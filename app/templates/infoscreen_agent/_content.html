@@ -11,6 +11,14 @@
 <button class="btn btn--primary" type="submit">{{ icon("plus") }} Geraet hinzufuegen</button>
 </form>
 </section>
+<section class="sys-card"><h2>Update-Wartungsfenster</h2>
+<p>Org-Zeitzone. Kritische Updates duerfen das Fenster nur nach Freigabe umgehen; Einsatz, GSL und Nachlauf bleiben geschuetzt.</p>
+<form class="agent-form" hx-post="{{ base }}/update-policy" hx-target="#agent-content" hx-swap="outerHTML">
+{{ forms.csrf() }}
+{{ forms.input('start', 'Beginn', update_policy.infoscreen_update_start if update_policy else '02:00', type='time', required=true) }}
+{{ forms.input('end', 'Ende', update_policy.infoscreen_update_end if update_policy else '04:30', type='time', required=true) }}
+<label><input type="checkbox" name="critical_allowed" value="1" {% if update_policy and update_policy.infoscreen_critical_allowed %}checked{% endif %}> Kritische Updates erlauben</label>
+<button class="btn" type="submit">Wartungsfenster speichern</button></form></section>
 {% for device in devices %}
 <section class="sys-card">
 <h3>{{ device.name }}</h3>
@@ -19,7 +27,8 @@
 <dt>Betriebssystem</dt><dd>{{ device.os_version or '-' }}</dd>
 <dt>Agent-Version</dt><dd>{{ device.agent_version or '-' }}</dd>
 <dt>Letzter Heartbeat</dt><dd>{{ device.last_seen_at|local_datetime_sec if device.last_seen_at else '-' }}</dd>
-<dt>Updatefehler</dt><dd>Noch keine Update-Diagnose verfuegbar</dd>
+<dt>Update-Meldung</dt><dd>{{ device.update_reported_at|local_datetime_sec if device.update_reported_at else '-' }}</dd>
+<dt>Update-Status</dt><dd>{{ device.update_status or '-' }} / {{ device.update_error_code or '-' }}</dd>
 </dl>
 {% for display in displays if display.device_id == device.id %}
 {% set report = display.reported_status or {} %}
@@ -28,6 +37,12 @@
 <form class="agent-form" hx-post="{{ base }}/geraete/{{ device.id }}/umbenennen" hx-target="#agent-content" hx-swap="outerHTML">
 {{ forms.csrf() }}{{ forms.input('name', 'Name', device.name, required=true) }}<button class="btn" type="submit">Umbenennen</button>
 </form>
+<form class="agent-form" hx-post="{{ base }}/geraete/{{ device.id }}/update" hx-target="#agent-content" hx-swap="outerHTML">
+{{ forms.csrf() }}<label>Kanal<select name="channel">{% for channel in ['stable','beta'] %}<option value="{{ channel }}" {% if device.channel == channel %}selected{% endif %}>{{ channel }}</option>{% endfor %}</select></label>
+{{ forms.input('pin', 'Version fixieren (leer = automatisch)', device.update_pinned_version or '') }}
+<label><input type="checkbox" name="locked" value="1" {% if device.update_locked %}checked{% endif %}> Updates sperren</label>
+<button type="submit" class="btn">Update-Policy speichern</button></form>
+<form hx-post="{{ base }}/geraete/{{ device.id }}/update-check" hx-target="#agent-content" hx-swap="outerHTML">{{ forms.csrf() }}<button class="btn" type="submit">Jetzt pruefen</button></form>
 <div class="agent-actions">
 {% for action, label in [('entsperren', 'Entsperren und neu koppeln')] if device.status == 'revoked' %}
 <form hx-post="{{ base }}/geraete/{{ device.id }}/{{ action }}" hx-target="#agent-dialog-body" data-agent-open>{{ forms.csrf() }}<button class="btn" type="submit">{{ label }}</button></form>
