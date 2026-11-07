@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.security import generate_pairing_code, hash_api_key
 from app.models.infoscreen_agent import InfoscreenDevice
 
-PAIRING_CODE_TTL_MINUTES = 15
+PAIRING_CODE_TTL_MINUTES = 60
 
 
 def _utcnow() -> datetime:

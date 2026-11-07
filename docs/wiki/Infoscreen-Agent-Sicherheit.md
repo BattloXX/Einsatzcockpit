@@ -10,7 +10,7 @@ Im Repo-Modus liegen keine Pakete oder Signaturen im ECP; der Client prueft GitH
 
 ## Zugangsdaten
 
-Der Pairing-Code ist einmalig und 15 Minuten gültig. Er autorisiert den
+Der Pairing-Code ist einmalig und 60 Minuten gültig. Er autorisiert den
 Erstdownload; erst Pairing verbraucht ihn atomar. Ein neuer Code ersetzt den
 vorigen. Codes nur am vorgesehenen Gerät eingeben und nicht veröffentlichen.
 Die Umgebungsvariante des Einzeilers vermeidet ein Installer-Code-Argument,

@@ -89,7 +89,7 @@ Vor Implementierung bestehendes Versionsschema (`/api/v1/gateway/…`) spiegeln.
 
 | Methode/Pfad | Zweck |
 |---|---|
-| `POST /pair` | Code einlösen → `device_token`, `device_id` (wie `pair_gateway`, Code 8 Zeichen, TTL 15 min, Brute-Force-Drossel) |
+| `POST /pair` | Code einlösen → `device_token`, `device_id` (wie `pair_gateway`, Code 8 Zeichen, TTL 60 min (seit 2026-11-07, vorher 15), Brute-Force-Drossel) |
 | `GET /config` | Snapshot (Displays, Allowlist, Intervalle, Timeline, Update-Policy), `ETag`/`If-None-Match` → 304 |
 | `GET /state?display=…` | Resolver-Ergebnis; ETag = `revision` |
 | `POST /heartbeat` | alle 60–120 s: Agent-Version, OS, Displays mit tatsächlichem Strom-/Seitenzustand, Backend, `last_revision`, Fehlercodes. Keine Einsatzdaten, keine Seiteninhalte |
@@ -186,7 +186,7 @@ Ziel: Ein Org-Admin klickt im ECP auf „Gerät hinzufügen“, kopiert **eine Z
 curl -fsSL https://<ecp-host>/infoscreen-agent/install.sh | sudo bash -s -- --server https://<ecp-host> --pairing-code ABCD1234 --key-fingerprint sha256:<hex>
 ```
 
-- Wird serverseitig aus Org-Host, frisch erzeugtem Pairing-Code (S1: einmalig, TTL 15 min) und Fingerprint des Release-Signaturschlüssels zusammengesetzt; nie aus Nutzereingaben ohne Escaping (Shell-Quoting per `shlex.quote`, Test mit Sonderzeichen im Gerätenamen). Optionaler Gerätename: `--name "Fahrzeughalle"`.
+- Wird serverseitig aus Org-Host, frisch erzeugtem Pairing-Code (S1: einmalig, TTL 60 min (seit 2026-11-07, vorher 15)) und Fingerprint des Release-Signaturschlüssels zusammengesetzt; nie aus Nutzereingaben ohne Escaping (Shell-Quoting per `shlex.quote`, Test mit Sonderzeichen im Gerätenamen). Optionaler Gerätename: `--name "Fahrzeughalle"`.
 - Alternative ohne Code in der Prozessliste/History: `curl ... | sudo EC_PAIRING_CODE=ABCD1234 bash -s -- --server ...`; UI bietet beide Varianten per Umschalter an. Der Code ist einmalig und kurzlebig; das Dialogtext weist darauf hin.
 - Der Dialog zeigt den Code mit Restlaufzeit, einen „Neuen Code erzeugen“-Button und aktualisiert sich per HTMX, sobald das Gerät gekoppelt hat (Status „verbunden“, ohne F5).
 

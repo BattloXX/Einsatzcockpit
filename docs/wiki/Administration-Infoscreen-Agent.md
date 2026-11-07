@@ -15,7 +15,7 @@ bestehenden Verwaltungsrechte; andere Rollen haben keinen Zugriff.
 ## Geraete koppeln
 
 1. Geraetename eingeben und **Geraet hinzufuegen** waehlen.
-2. Der Dialog zeigt einen einmaligen Pairing-Code (15 Minuten gueltig) und einen
+2. Der Dialog zeigt einen einmaligen Pairing-Code (60 Minuten gueltig) und einen
    kopierbaren Installationsbefehl. **Einzeiler kopieren** verwendet die Zwischenablage;
    falls diese nicht verfuegbar ist, wird der Text zum manuellen Kopieren markiert.
 3. Die Variante **EC_PAIRING_CODE** uebergibt den Code als Umgebungsvariable statt
