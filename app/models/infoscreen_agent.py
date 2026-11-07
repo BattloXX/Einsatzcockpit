@@ -198,3 +198,19 @@ class InfoscreenReleaseUploadToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class InfoscreenReleaseKey(Base):
+    """Explizit bestaetigte, plattformweite Vertrauensanker; niemals Org-Daten."""
+    __tablename__ = "infoscreen_release_key"
+    __table_args__ = (UniqueConstraint("key_id", "fingerprint", name="uq_infoscreen_release_key_fingerprint"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key_id: Mapped[str] = mapped_column(String(100))
+    pem: Mapped[str] = mapped_column(Text)
+    fingerprint: Mapped[str] = mapped_column(String(71))
+    aktiv: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    bestaetigt_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    bestaetigt_am: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    quelle: Mapped[str] = mapped_column(String(16))
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

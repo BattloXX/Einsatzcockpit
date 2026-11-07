@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Self
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.git_sha import lese_git_sha
@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     INFOSCREEN_AGENT_KEY_FINGERPRINT: str = ""
     INFOSCREEN_AGENT_INSTALLER_ENABLED: bool = False
     INFOSCREEN_AGENT_RELEASE_PUBKEYS: dict[str, str] = {}
+    INFOSCREEN_AGENT_GITHUB_REPO: str = "BattloXX/Einsatzcockpit-Infoscreen-Agent"
+    INFOSCREEN_AGENT_GITHUB_TOKEN: str = Field(default="", repr=False)
+    INFOSCREEN_AGENT_GITHUB_SYNC_ENABLED: bool = False
+
+    @field_validator("INFOSCREEN_AGENT_GITHUB_REPO")
+    @classmethod
+    def validate_agent_repo(cls, value: str) -> str:
+        import re
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}", value):
+            raise ValueError("github_repo_invalid")
+        return value
+
     INFOSCREEN_AGENT_RELEASE_STORAGE_DIR: str = "app_storage/infoscreen_agent_releases"
     APP_BASE_URL: str = "http://localhost:8092"
     LEADER_LOCK_PATH: str = "app_storage/background-leader.lock"

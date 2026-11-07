@@ -28,6 +28,7 @@ from app.models.infoscreen_agent import (
     InfoscreenDevice,
     InfoscreenDisplay,
     InfoscreenRelease,
+    InfoscreenReleaseKey,
     InfoscreenReleaseUploadToken,
 )
 from app.models.master import FireDept, OrgSettings
@@ -40,6 +41,15 @@ VERSION_PATTERN = r"[0-9][A-Za-z0-9.+:~\-]{0,99}"
 
 def valid_version(value: str) -> str:
     if not re.fullmatch(VERSION_PATTERN, value):
+        raise ValueError("version_invalid")
+    epoch, sep, upstream = value.partition(":")
+    if sep and not epoch.isdigit():
+        raise ValueError("version_invalid")
+    upstream = upstream if sep else value
+    if not re.match(r"^[0-9]", upstream):
+        raise ValueError("version_invalid")
+    upstream, sep, revision = upstream.rpartition("-")
+    if sep and not re.fullmatch(r"[A-Za-z0-9+.~]+", revision):
         raise ValueError("version_invalid")
     return value
 
@@ -64,16 +74,28 @@ def canonical_manifest(metadata: ReleaseMetadata | InfoscreenRelease) -> bytes:
             f"sha256={metadata.sha256}\nsize={metadata.size}\nmin_version={metadata.min_version}").encode("ascii")
 
 
-def public_keys() -> dict[str, Ed25519PublicKey]:
-    keys = {}
-    for key_id, pem in settings.INFOSCREEN_AGENT_RELEASE_PUBKEYS.items():
-        try:
-            key = serialization.load_pem_public_key(pem.encode("ascii"))
-        except (ValueError, TypeError, UnicodeError) as exc:
-            raise ValueError("release_key_invalid") from exc
-        if not isinstance(key, Ed25519PublicKey):
+def parse_public_key(pem: str) -> Ed25519PublicKey:
+    try:
+        if not re.fullmatch(r"\s*-----BEGIN PUBLIC KEY-----\s+[A-Za-z0-9+/=\s]+-----END PUBLIC KEY-----\s*", pem):
             raise ValueError("release_key_invalid")
-        keys[key_id] = key
+        key = serialization.load_pem_public_key(pem.encode("ascii"))
+    except (ValueError, TypeError, UnicodeError) as exc:
+        raise ValueError("release_key_invalid") from exc
+    if not isinstance(key, Ed25519PublicKey):
+        raise ValueError("release_key_invalid")
+    return key
+
+
+def public_keys(db: Session | None = None) -> dict[str, Ed25519PublicKey]:
+    """Setting gewinnt bei gleicher ID; DB-Reihenfolge ist deterministisch (id)."""
+    if db is None:
+        from app.db import SessionLocal
+        with SessionLocal() as session:
+            return public_keys(session)
+    keys = {row.key_id: parse_public_key(row.pem) for row in db.query(InfoscreenReleaseKey).filter_by(
+        aktiv=True).order_by(InfoscreenReleaseKey.id).all()
+        if row.key_id not in settings.INFOSCREEN_AGENT_RELEASE_PUBKEYS}
+    keys.update({key_id: parse_public_key(pem) for key_id, pem in settings.INFOSCREEN_AGENT_RELEASE_PUBKEYS.items()})
     return keys
 
 
@@ -82,17 +104,27 @@ def fingerprint(key: Ed25519PublicKey) -> str:
     return "sha256:" + hashlib.sha256(der).hexdigest()
 
 
-def release_fingerprint() -> str:
+def release_fingerprint(db: Session | None = None) -> str:
     if settings.INFOSCREEN_AGENT_KEY_FINGERPRINT:
         return settings.INFOSCREEN_AGENT_KEY_FINGERPRINT
+    if db is None:
+        from app.db import SessionLocal
+        with SessionLocal() as session:
+            return release_fingerprint(session)
     try:
-        return next((fingerprint(key) for key in public_keys().values()), "")
+        keys = public_keys(db)
+        # Ueberschattete DB-Keys sind kein wirksamer Vertrauensanker.
+        for row in db.query(InfoscreenReleaseKey).filter_by(aktiv=True).order_by(InfoscreenReleaseKey.id).all():
+            if fingerprint(keys[row.key_id]) == row.fingerprint:
+                return row.fingerprint
+        return next((fingerprint(parse_public_key(pem)) for pem in
+                     settings.INFOSCREEN_AGENT_RELEASE_PUBKEYS.values()), "")
     except ValueError:
         return ""
 
 
-def verify_signature(key_id: str, signature: str, content: bytes) -> None:
-    key = public_keys().get(key_id)
+def verify_signature(key_id: str, signature: str, content: bytes, db: Session | None = None) -> None:
+    key = public_keys(db).get(key_id)
     if key is None:
         raise ValueError("release_key_unknown")
     try:
@@ -207,11 +239,11 @@ def verify_package(file: BinaryIO, metadata: ReleaseMetadata) -> None:
 
 def store_release(db: Session, metadata: ReleaseMetadata, package: BinaryIO,
                   script: bytes, script_signature: str) -> InfoscreenRelease:
-    verify_signature(metadata.key_id, metadata.signature, canonical_manifest(metadata))
+    verify_signature(metadata.key_id, metadata.signature, canonical_manifest(metadata), db)
     if not script or len(script) > MAX_SCRIPT:
         raise ValueError("installer_invalid")
     # Das Skript wird separat ueber seine unveraenderten Bytes signiert.
-    verify_signature(metadata.key_id, script_signature, script)
+    verify_signature(metadata.key_id, script_signature, script, db)
     digest = hashlib.sha256()
     size = 0
     package.seek(0)
@@ -371,12 +403,12 @@ def update_policy(db: Session, device: InfoscreenDevice, now: datetime | None = 
             "critical_allowed": bool(policy and policy.infoscreen_critical_allowed), "check_interval_h": 6}
 
 
-def read_installer(row: InfoscreenRelease) -> bytes:
+def read_installer(row: InfoscreenRelease, db: Session | None = None) -> bytes:
     with artifact_path(row.installer_path).open("rb") as source:
         script = source.read(MAX_SCRIPT + 1)
     if not script or len(script) > MAX_SCRIPT or hashlib.sha256(script).hexdigest() != row.installer_sha256:
         raise ValueError("installer_invalid")
-    verify_signature(row.key_id, row.installer_signature or "", script)
+    verify_signature(row.key_id, row.installer_signature or "", script, db)
     return script
 
 
@@ -384,17 +416,33 @@ def latest_installer(db: Session) -> InfoscreenRelease | None:
     for row in db.query(InfoscreenRelease).filter(InfoscreenRelease.blocked.is_(False),
             InfoscreenRelease.installer_path.is_not(None)).order_by(InfoscreenRelease.id.desc()).all():
         try:
-            read_installer(row)
+            read_installer(row, db)
             return row
         except (OSError, ValueError):
             continue
     return None
 
 
+def installer_enabled(db: Session) -> bool:
+    if settings.INFOSCREEN_AGENT_INSTALLER_ENABLED:
+        return True
+    keys = public_keys(db)
+    return any(fingerprint(keys[row.key_id]) == row.fingerprint for row in
+               db.query(InfoscreenReleaseKey).filter_by(aktiv=True).all())
+
+
 def installer_ready(db: Session) -> bool:
-    return bool(settings.INFOSCREEN_AGENT_INSTALLER_ENABLED and latest_installer(db) and
-                db.query(InfoscreenRelease.id).filter(InfoscreenRelease.channel == "stable",
-                    InfoscreenRelease.blocked.is_(False), InfoscreenRelease.rollout_percent > 0).first())
+    if not installer_enabled(db) or not latest_installer(db):
+        return False
+    for row in db.query(InfoscreenRelease).filter(InfoscreenRelease.channel == "stable",
+            InfoscreenRelease.blocked.is_(False), InfoscreenRelease.rollout_percent > 0).all():
+        try:
+            verify_signature(row.key_id, row.signature, canonical_manifest(row), db)
+            if artifact_path(row.storage_path).stat().st_size == row.size:
+                return True
+        except (ValueError, OSError):
+            continue
+    return False
 
 
 # Ein DB-Fehler darf keine verwaisten Downloads hinterlassen.

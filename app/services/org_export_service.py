@@ -50,6 +50,7 @@ _GLOBAL_TABLES = frozenset({
     "diag_schedule_slot", "diag_notification", "worker_runtime", "diag_run", "diag_finding",
     # Oeffentliche, systemweite OSM-Gebaeudedaten ohne Org-Bezug.
     "osm_import_lauf", "osm_gebaeude",
+    "infoscreen_release_key",  # Plattformweite Vertrauensanker, kein Org-Backup.
     "infoscreen_release",  # Plattformweite Agent-Artefakte, kein Org-Backup.
     "infoscreen_release_upload_token",  # Plattformweiter CI-Zugang, nie im Org-Export.
     "admin_repair_run", "admin_approval",

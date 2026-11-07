@@ -1872,3 +1872,26 @@ def test_agent_release_token_routen_scope_und_replay(client, agent_release_signi
     script = client.get("/infoscreen-agent/install.sh")
     assert script.status_code == 200 and code_a not in script.text and code_b not in script.text
     assert "set-cookie" not in script.headers
+
+
+def test_agent_release_keys_sind_global_aber_nur_sysadmin_mutiert(client):
+    from app.models.infoscreen_agent import InfoscreenReleaseKey
+    from app.services.org_export_service import EXCLUDE_TABLES
+    from tests.test_infoscreen_agent_releases import login, post
+
+    assert "org_id" not in InfoscreenReleaseKey.__table__.columns
+    assert "infoscreen_release_key" in EXCLUDE_TABLES
+    with SessionLocal() as db:
+        # Mit einer echten Zeile pruefen, damit eine leere Tabelle den Test nicht trivial erfuellt.
+        marker = InfoscreenReleaseKey(key_id="tenant-s8", pem="nicht aktiv", fingerprint="sha256:" + "0" * 64,
+                                      aktiv=False, quelle="manuell")
+        db.add(marker)
+        db.flush()
+        set_tenant_context(db, 1)
+        first = [(row.id, row.fingerprint) for row in db.query(InfoscreenReleaseKey).all()]
+        assert (marker.id, marker.fingerprint) in first
+        set_tenant_context(db, 999999)
+        assert [(row.id, row.fingerprint) for row in db.query(InfoscreenReleaseKey).all()] == first
+    login(client, "org_admin")
+    for path in ("/keys/preview", "/keys/confirm", "/keys/1/status", "/github/import"):
+        assert post(client, "/admin/agent-releases" + path).status_code == 403

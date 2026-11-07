@@ -1,4 +1,4 @@
-# Infoscreen-Agent: Releases, Installation und Updates (S6)
+# Infoscreen-Agent: Releases, Installation und Updates (S6/S8)
 
 ## Vertrag und Vertrauensgrenze
 
@@ -25,7 +25,56 @@ Der Downloadpfad bleibt relativ, ohne Redirects. Authentifizierte Antworten,
 auch Fehler und 304, tragen `Cache-Control: no-store`; Paketantworten liefern
 `Content-Length` und immer die gesamte Datei, auch bei Range-Anfragen.
 
-## CI-Upload und Ablage
+## Neuer Ablauf in drei Schritten (S8)
+
+1. Lokal im oeffentlichen Agent-Repository `scripts/init_release_keys.sh` ausfuehren.
+   Privaten Schluessel sichern, angezeigten Fingerprint unabhaengig aufbewahren.
+2. Tag setzen. GitHub Actions baut und signiert ein oeffentliches Release mit
+   `release.json`, `.deb`, `install.sh`, `release-key.pem`; beta ist ein GitHub-Prerelease
+   (z. B. Debian-Version `2026.11.08~beta.1`). Kein ECP-Upload-Token erforderlich.
+3. Als Sysadmin **Updates & Backups > Agent-Releases**: einmal **Schluessel aus
+   Repository uebernehmen**, Fingerprint mit Schritt 1 vergleichen und exakt eingeben.
+   Alternativ PEM manuell einfuegen und ebenso bestaetigen. Danach **Releases von
+   GitHub holen**, Ergebnis kontrollieren und Pilot mit 10 % freigeben.
+
+Die Vorschau speichert nichts. Ein Repo-Key ist niemals automatisch ein Vertrauensanker.
+`infoscreen_release_key` ist plattformweit, ohne org_id und vom Org-Export ausgeschlossen.
+Alle Keys bleiben erhalten: Key-ID, DER-Fingerprint, Status, Quelle, bestaetigende Person
+und UTC-Zeitpunkt. Aktivierung/Deaktivierung und Bestaetigung werden auditiert.
+Fuer dieselbe Key-ID muss der bisherige aktive DB-Key zuerst deaktiviert werden.
+Ein Setting-Key gewinnt immer bei gleicher ID; ein dadurch ueberschatteter DB-Key
+wird auch fuer den Installer-Fingerprint nicht verwendet.
+
+`release.json` akzeptiert ausschliesslich Schema 1 und die vereinbarten Felder;
+Artefaktnamen muessen exakt `ec-infoscreen-agent_<version>_<arch>.deb` sein.
+Signaturen, Paketheader, SHA256, Groesse und Duplikate prueft dieselbe Funktion wie
+beim Upload. Alle Architekturen eines Release werden gemeinsam committed; ein Fehler
+verwirft dessen neue Artefakte, weitere Releases werden unabhaengig verarbeitet.
+`install.sh` wird ueber seine exakten Bytes geprueft. Heruntergeladene Inhalte werden
+niemals ausgefuehrt oder auf das Dateisystem entpackt.
+
+Transport: ausschliesslich HTTPS/443 auf `api.github.com`, `github.com`,
+`objects.githubusercontent.com`, `release-assets.githubusercontent.com`; maximal drei
+Redirects, jeder Hop geprueft. Token nur an api.github.com, niemals an Asset-Hosts.
+Connect-Timeout 10 s, Lese-Timeout 30 s. Streaming auf temporaere Dateien mit Limits:
+512 MiB je Paket, 1 MiB je Skript/JSON/Release-Listenseite, 16 KiB je PEM.
+Release-Liste: bis zehn Seiten mit je 100 Releases, ETag/If-None-Match je Seite;
+304 verwendet die gespeicherte Liste erneut (fehlgeschlagene Importe sind wiederholbar).
+Cache, Ergebnisse und letzter Abgleich liegen im globalen `system_settings`-Store,
+getrennt je Repository, atomar in ASCII-Teilen unterhalb der MariaDB-TEXT-Grenze.
+HTTP 403/429 ergeben `rate_limited`. Weitere feste Codes sind
+`release_json_invalid`, `signature_invalid`, `hash_mismatch`, `size_limit`,
+`host_not_allowed`, `key_not_pinned`, `asset_missing`, `package_mismatch`.
+Ohne gepinnten Key wird vor dem ersten HTTP-Aufruf mit `key_not_pinned` abgelehnt.
+
+`INFOSCREEN_AGENT_GITHUB_SYNC_ENABLED=false` ist Standard. Optional laeuft der
+Abgleich alle 24 Stunden im DB-Thread (`im_db_thread` aus `loop_thread_io`), registriert
+unter dem vorhandenen BackgroundRuntime-Leader-Lock. Der gespeicherte letzte
+Abgleich verhindert einen verfruehten Wiederholungslauf bei Leader-Uebernahme. Iterationsstatus erscheint in
+Worker-/Systemdiagnose; Fehler enthalten nur Codes bzw. Exception-Typen. Neue Importe
+bleiben bei 0 %, ohne `update_available`-Event. Die bestehende Freigabe sendet den Wake.
+
+## Optionaler CI-Upload und Ablage
 
 Systemadministration: **Updates & Backups > Agent-Releases**
 (`/admin/agent-releases`). Dort ein CI-Upload-Token erzeugen und unmittelbar
@@ -115,9 +164,10 @@ oder Einsatzdaten.
 `GET /infoscreen-agent/install.sh` liefert das zuletzt hochgeladene, nicht
 blockierte, aktuell signatur- und hashgepruefte Skript. Oeffentlich, keine Cookies,
 `text/x-shellscript`, `Cache-Control: public, max-age=60`, 30/min/IP, sonst 404.
-Der harte Installer-Schalter sperrt auch diese Route. Das Dialog-Banner
-verschwindet nur bei aktiviertem Schalter, gueltigem Skript und mindestens
-einem freigegebenen stable-Release. Beta-only reicht fuer den Standarddialog nicht.
+Ein wirksamer aktiver DB-Key aktiviert den Installer ohne Env-Aenderung.
+Der Altweg ueber Setting-Keys verwendet weiterhin `INFOSCREEN_AGENT_INSTALLER_ENABLED`.
+Das Dialog-Banner verschwindet bei gueltigem Skript und mindestens einem aktuell
+signaturgeprueften, freigegebenen stable-Release mit vorhandenem Paket. Beta-only reicht fuer den Standarddialog nicht.
 
 `GET /api/v1/infoscreen-agent/download/latest?arch=amd64&channel=stable`
 verlangt einen ungebrauchten, nicht abgelaufenen Pairing-Bearer und ist auf
@@ -125,7 +175,7 @@ verlangt einen ungebrauchten, nicht abgelaufenen Pairing-Bearer und ist auf
 `peek_pairing_code` prueft den Org-Nachweis ohne Seiteneffekte. Weder Manifest
 noch Paketdownload verbrauchen den Code; erst `/pair` loest ihn atomar ein.
 Abgelaufene, widerrufene und verbrauchte Codes: 401; kein passendes Release: 404.
-Plattformweite Release-Artefakte enthalten keine Org-Daten. Release- und
+Plattformweite Release-Artefakte enthalten keine Org-Daten. Release-, Schluessel- und
 CI-Token-Tabellen sind explizit vom Org-Export ausgeschlossen. IDs/Org-Angaben aus
 Queries oder Bodies veraendern niemals den durch Code/Device-Token bewiesenen Tenant.
 
@@ -146,11 +196,14 @@ ueberschreiben keine installierte Version. Audit/Device-Event enthalten nur Code
 
 - `INFOSCREEN_AGENT_RELEASE_STORAGE_DIR`: Default `app_storage/infoscreen_agent_releases`.
 - `INFOSCREEN_AGENT_RELEASE_PUBKEYS`: JSON-Objekt `{key_id: PEM_PUBLIC_KEY}`;
-  leer bedeutet Upload gesperrt. Ausschliesslich oeffentliche Ed25519-PEMs.
-- `INFOSCREEN_AGENT_INSTALLER_ENABLED`: Default false; harter Notausschalter
-  fuer Installer und Dialog-Freigabe. Pakete/Updates bleiben getrennt nutzbar.
+  zusaetzlich zu bestaetigten aktiven DB-Keys, Setting gewinnt bei gleicher ID. Ausschliesslich oeffentliche Ed25519-PEMs.
+- `INFOSCREEN_AGENT_INSTALLER_ENABLED`: Default false; Freischaltung fuer den
+  Altweg ohne DB-Key. Ein bestaetigter aktiver DB-Key schaltet den Installer ebenfalls frei.
 - `INFOSCREEN_AGENT_KEY_FINGERPRINT`: expliziter Fingerprint fuer den Einzeiler;
-  wenn leer, `sha256:<hex>` ueber DER des ersten konfigurierten Public Keys.
+  wenn leer, erster wirksamer aktiver DB-Key (ID aufsteigend), danach erster Setting-Key.
+- `INFOSCREEN_AGENT_GITHUB_REPO`: `BattloXX/Einsatzcockpit-Infoscreen-Agent`, validiertes owner/name.
+- `INFOSCREEN_AGENT_GITHUB_TOKEN`: optional fuer hoehere API-Limits, nicht angezeigt/geloggt.
+- `INFOSCREEN_AGENT_GITHUB_SYNC_ENABLED`: Default false, taeglicher Leader-Abgleich.
 
 Rotation: neuen oeffentlichen Schluessel neben dem alten konfigurieren, die
 Geraete vorab mit dem neuen Trust-Key ausstatten (Agent-Verantwortung), dann
@@ -176,4 +229,6 @@ Org-Aktivitaet. Die relative Download-URL enthaelt kein separates signiertes,
 kurzlebiges Zugangstoken (anders als der Vorschlag in Plan 4.2); Bearer und
 jeweils aktuelle DB-Freigabe sind bei jedem Download Pflicht. Erstinstallationen
 sind zusaetzlich an die 15-minuetige Lebenszeit des ungebrauchten Codes gebunden.
-Der bereitgestellte Plan endet mit Abschnitt 7; ein Abschnitt 9 ist darin nicht enthalten.
+Plan Abschnitt 9 ersetzt den CI-Upload als Standardweg; er bleibt optional nutzbar.
+Migration **0359**, `down_revision=0358`, ergaenzt nur die globale Key-Tabelle;
+`bestaetigt_von` spiegelt `user.id` als BIGINT und verwendet ON DELETE SET NULL.

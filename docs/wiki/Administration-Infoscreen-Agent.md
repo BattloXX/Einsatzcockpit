@@ -18,10 +18,11 @@ bestehenden Verwaltungsrechte; andere Rollen haben keinen Zugriff.
 5. Der offene Dialog fragt alle 5 Sekunden den Status ab und zeigt nach dem Pairing
    **gekoppelt**, bei aktiver Verbindung **verbunden**. Schliessen beendet das Polling.
 
-**Installer-Freigabe:** Der Banner bleibt
-sichtbar, solange `INFOSCREEN_AGENT_INSTALLER_ENABLED=false` (Standard).
-`INFOSCREEN_AGENT_KEY_FINGERPRINT` ist standardmaessig leer; dann wird der
-Fingerprint aus dem ersten konfigurierten Release-Public-Key abgeleitet. Der Server stammt aus
+**Installer-Freigabe:** Ein bestaetigter aktiver Release-Schluessel, ein gueltiges
+Skript und ein freigegebenes stable-Release lassen den Banner verschwinden.
+Der Altweg ohne DB-Schluessel braucht `INFOSCREEN_AGENT_INSTALLER_ENABLED=true`.
+`INFOSCREEN_AGENT_KEY_FINGERPRINT` hat Vorrang, danach folgt der wirksame aktive
+DB-Schluessel und zuletzt der erste Setting-Public-Key. Der Server stammt aus
 `PUBLIC_BASE_URL` (Fallback `APP_BASE_URL`), niemals aus dem Browser-Host-Header.
 
 Die Liste zeigt Presence bzw. einen Heartbeat der letzten drei Minuten als online,
@@ -133,12 +134,31 @@ Das Wartungsfenster gilt in der Org-Zeitzone (Default 02:00–04:30), auch ueber
 Mitternacht. **Kritische Updates erlauben** gibt nur die Ausnahme vom Fenster
 frei. Einsatz/GSL/Nachlauf bleiben geschuetzt.
 
-Der Installer-Hinweis verschwindet automatisch, sobald der Betrieb den harten
-Installer-Schalter aktiviert und ein gueltiges Skript plus ein freigegebenes
-stable-Release vorhanden sind. Die Erstinstallation verwendet einen gueltigen
+Der Installer-Hinweis verschwindet automatisch, sobald ein wirksamer aktiver
+DB-Schluessel, ein gueltiges Skript und ein freigegebenes stable-Release vorhanden sind. Die Erstinstallation verwendet einen gueltigen
 Pairing-Code und die neueste freigegebene Version ohne Canary-Begrenzung;
 erst das Koppeln verbraucht den Code. Details fuer Betrieb und CI:
 [Installation](Infoscreen-Agent-Installation) und [Betrieb](Infoscreen-Agent-Betrieb).
 
 Weitere Anleitungen: [Überblick](Infoscreen-Agent), [Installation](Infoscreen-Agent-Installation),
 [Betrieb](Infoscreen-Agent-Betrieb), [Sicherheit](Infoscreen-Agent-Sicherheit).
+
+
+## GitHub-Import und Schluessel (S8)
+
+Im selben Tab **Updates & Backups > Agent-Releases** waehlt der Sysadmin
+**Schluessel aus Repository uebernehmen**. Die Vorschau zeigt den SHA256-Fingerprint.
+Mit der lokalen Ausgabe der Schluesselerzeugung vergleichen und exakt eintippen
+oder einfuegen, dann **Schluessel bestaetigen und aktivieren** waehlen. Alternativ
+**Schluessel manuell einfuegen** (Ed25519-PEM). Ohne Bestaetigung wird nichts gespeichert.
+
+**Releases von GitHub holen** zeigt importierte, uebersprungene und abgelehnte
+Releases samt Fehlercode und letztem Abgleich ohne Neuladen. `key_not_pinned`
+bedeutet: zuerst den Schluessel-Schritt abschliessen. Neue Releases bleiben auf 0 %.
+Bei `rate_limited` spaeter erneut versuchen. Upload-Tokens bleiben optional.
+
+Vorhandene aktive Keys werden niemals durch den Repo-Abruf ersetzt oder ergaenzt.
+Bei Rotation zuerst den bisherigen DB-Key deaktivieren, dann den neuen Fingerprint
+bestaetigen. Keys werden nie geloescht; Bestaetigung und Statuswechsel bleiben im Audit.
+Setting-Keys haben bei gleicher Key-ID Vorrang. Der optionale taegliche Abgleich
+wird durch den Betrieb aktiviert und gibt keine Releases automatisch frei.

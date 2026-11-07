@@ -298,3 +298,24 @@ Keine Secret-Werte gehören in dieses Runbook.
 Technische Details und genaue Signatur-/Settings-Referenz:
 [Architekturübersicht](architecture/infoscreen-agent-uebersicht.md),
 [Release-Vertrag](architecture/infoscreen-agent-releases.md).
+
+
+## 0359 – Infoscreen-Release-Schluessel (S8)
+
+Vorgaenger: **0358**, Revision ausschliesslich **0359**. `alembic upgrade head`
+legt `infoscreen_release_key` an: globale, explizit bestaetigte Ed25519-Public-Keys,
+DER-SHA256-Fingerprint, Status, Quelle und Bestaetigungsdaten. Keine Org-Spalte;
+vom Org-Export ausgeschlossen. `bestaetigt_von` ist BIGINT wie `user.id`,
+FK ON DELETE SET NULL; SQLite verwendet die vorhandene INTEGER-Kompilierung.
+Keine Aenderung bestehender Geraete/Displays, kein SQLite-Tabellen-Rebuild.
+
+Vorher DB und Release-Ablage gemeinsam sichern. Nachher als Sysadmin im bestehenden
+Agent-Releases-Tab Key-Fingerprint bestaetigen, GitHub-Import pruefen und Pilot
+manuell freigeben. Setting-Keys bleiben gueltig und gewinnen bei gleicher ID.
+Der Hintergrundabgleich ist standardmaessig aus. Keine privaten Keys migrieren.
+
+Downgrade auf 0358 entfernt nur die neue Key-Tabelle. Vorher benoetigte Public-Keys
+in `INFOSCREEN_AGENT_RELEASE_PUBKEYS` uebernehmen und den Altweg-Installer-Schalter
+setzen, falls Installation weiterhin verfuegbar sein soll. Releases/Artefakte bleiben
+bestehen. SQLite-Roundtrip und SQLite/MySQL/MariaDB-DDL sind durch Tests abgedeckt;
+ein echter MariaDB-Upgrade bleibt Teil des Migrationsjobs.

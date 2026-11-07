@@ -22,7 +22,7 @@ widerrufbar und ausschließlich für Release-Uploads verwendbar.
 
 TLS schützt die Übertragung vom ECP. CI signiert Paketmanifest und unveränderte
 Installerbytes mit Ed25519; private Schlüssel bleiben in CI. ECP prüft beim
-Upload Signaturen, Paketgröße, SHA256, Paketname, Version und Architektur.
+Upload und GitHub-Import Signaturen, Paketgröße, SHA256, Paketname, Version und Architektur.
 Der Installer vergleicht den übergebenen Fingerprint mit seinem eingebetteten
 Public Key und prüft Manifest und Paket vor apt. Fingerprint unabhängig mit dem
 Betreiber abgleichen. Ein Fingerprint schützt nicht die Ausführung eines bereits
@@ -63,3 +63,21 @@ nach 30 Tagen. Die tägliche Bereinigung ersetzt nicht die eigene Backup-Retenti
 Sicherungen von DB, Release-Ablage und lokalem Store benötigen Zugriffsschutz.
 Lesende MCP-Tools geben nur ausdrücklich ausgewählte Statusfelder aus, keine
 IP, Hostnamen, Tokens, Codes oder Seiten-URLs.
+
+
+## Vertrauen beim GitHub-Import
+
+GitHub liefert nur oeffentliche Dateien. Ein Release-Key aus dem Repository ist
+zunaechst eine Vorschau: Erst der Sysadmin bestaetigt den DER-SHA256-Fingerprint
+exakt gegen die unabhaengige lokale Ausgabe. Auch ein kompromittiertes Repository
+kann keinen aktiven Key automatisch austauschen oder einen zusaetzlichen aktivieren.
+Manuelle PEM-Eingabe verwendet dieselbe Pruefung. Deaktivierte Keys bleiben mit
+Bestaetigungsdaten erhalten; Statuswechsel und Bestaetigung werden auditiert.
+Bei gleicher Key-ID gewinnt immer das Setting gegenueber der Datenbank.
+
+Alle Downloads und jeden Redirect begrenzen eine feste HTTPS-Host-Allowlist,
+Timeouts und Streaming-Limits. Paket und Skript werden ausschliesslich gegen
+gepinnten Ed25519-Schluessel geprueft; Pakete werden nicht ausgefuehrt/entpackt.
+Ohne Pin wird der Import abgelehnt. Das optionale GitHub-Token geht nur an die API,
+nicht an Download-Hosts. Fehlerausgaben enthalten feste Codes, keine Token/Inhalte.
+Keys und Releases sind plattformweit und nicht Bestandteil eines Org-Exports.

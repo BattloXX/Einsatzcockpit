@@ -402,3 +402,24 @@ def test_hook_from_temporary_loop_keeps_wake_task(client):
         asyncio.run(broadcast_org(1, {"type": "incident_updated"}))
         assert socket.receive_json() == {"type": "invalidate", "revision": 0,
                                          "reason": "incident_changed", "display_key": key}
+
+
+@pytest.mark.asyncio
+async def test_ws_pong_then_disconnect_cleans_presence_promptly(monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+    from starlette.websockets import WebSocketState
+
+    monkeypatch.setattr(events, "PING_S", 60)
+    monkeypatch.setattr(events, "_begin", lambda *args: (1, 42, "hash"))
+    monkeypatch.setattr(events, "_valid", lambda *args, **kwargs: True)
+    monkeypatch.setattr(events, "_targets", lambda *args: [])
+    monkeypatch.setattr(events, "_publish", AsyncMock())
+    end = Mock()
+    monkeypatch.setattr(events, "_end", end)
+    socket = AsyncMock()
+    socket.headers = {"authorization": "Bearer device"}
+    socket.application_state = WebSocketState.CONNECTED
+    socket.receive_text.side_effect = ['{"type":"pong"}', WebSocketDisconnect()]
+    await asyncio.wait_for(events.websocket_session(socket), timeout=1)
+    end.assert_called_once()
+    assert not any(key[1] == 42 for key in events._connections)

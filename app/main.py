@@ -300,6 +300,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.gk_zugang_service import gk_versand_aufraeum_loop
     from app.services.gsl_lagemeldung_reminder import gsl_lagemeldung_reminder_loop
     from app.services.incident_route_loop import incident_route_loop
+    from app.services.infoscreen_agent_github_import import infoscreen_agent_github_sync_loop
     from app.services.lis.lis_capture import lis_capture_retention_loop
     from app.services.lis.lis_loop import lis_poll_loop
     from app.services.mail_graph_poller import mail_graph_poll_loop
@@ -344,7 +345,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         mail_graph_poll_loop,
         mail_zuordnung_loop,
         mail_weiterleitung_loop,
-        incident_route_loop,
+        incident_route_loop, infoscreen_agent_github_sync_loop,
         planspiel_loop, osm_gebaeude_loop,
     )
     return [asyncio.create_task(supervised_loop(loop), name=loop.__name__) for loop in loops]
