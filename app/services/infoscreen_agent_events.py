@@ -124,6 +124,8 @@ async def _deliver_one(key: tuple[int, int, str], socket: WebSocket, payload: di
         _connections.pop(key, None)
         if socket.application_state == WebSocketState.CONNECTED:
             await asyncio.wait_for(socket.close(code=4401), timeout=2)
+    elif payload.get("type") == "update_available":
+        await asyncio.wait_for(socket.send_json({"type": "update_available"}), timeout=2)
     elif payload.get("type") == "invalidate":
         # Niemals beliebige Bus-/Browser-Payloads an das Geraet weiterreichen.
         await asyncio.wait_for(socket.send_json({k: payload[k] for k in
@@ -308,3 +310,8 @@ def broadcast_hook(channel: int, event_type: str) -> None:
     else:
         return
     schedule(_channel_changed, channel, reason)
+
+
+async def publish_update_available(org_id: int, device_id: int) -> None:
+    """Plattform- und Geraeteverwaltung: Wake auf demselben Mehrworker-Bus."""
+    await _publish({"type": "update_available", "org_id": org_id, "device_id": device_id})

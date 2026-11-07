@@ -77,3 +77,8 @@ bestaetigten Faktor nach der gewaehlten Richtlinie.
 Im Infoscreen-Tab **Geraete & Plaene** enthaelt der Unterbereich **Uebersteuerung**
 die zeitlich begrenzten Seitenoverrides und die URL-Allowlist der Organisation.
 Org-Admins verwalten beides; die Live-Anzeige aktualisiert die Sollwirkung per HTMX.
+
+Agent-Releases liegen fuer Systemadministratoren als Tab unter **Updates &
+Backups**. Dort stehen Rollout, Rueckzug, Upload-Tokens und Key-Fingerprints.
+Org-Administratoren verwalten Wartungsfenster und Geraete-Updates weiterhin
+unter **Infoscreens > Geraete & Plaene > Geraete**.

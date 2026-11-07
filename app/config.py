@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     APP_PORT: int = 8092
     INFOSCREEN_AGENT_KEY_FINGERPRINT: str = ""
     INFOSCREEN_AGENT_INSTALLER_ENABLED: bool = False
+    INFOSCREEN_AGENT_RELEASE_PUBKEYS: dict[str, str] = {}
+    INFOSCREEN_AGENT_RELEASE_STORAGE_DIR: str = "app_storage/infoscreen_agent_releases"
     APP_BASE_URL: str = "http://localhost:8092"
     LEADER_LOCK_PATH: str = "app_storage/background-leader.lock"
     PUBLIC_BASE_URL: str = ""  # Für Mail-Links; leer = falls leer APP_BASE_URL verwenden

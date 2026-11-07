@@ -534,3 +534,13 @@ def test_infoscreen_agent_ein_hauptpunkt_und_tab(role, suffix):
     assert nav.aktiver_tab.label == "Geräte & Pläne"
     assert nav.aktiver_tab.rollen == ("admin", "org_admin", "system_admin")
     assert sum(e.ist_aktiv("/admin/infoscreen-agent" + suffix) for e in _entries(nav)) == 1
+
+
+@pytest.mark.parametrize("role,visible", [("system_admin", True), ("org_admin", False), ("admin", False)])
+def test_agent_releases_als_plattform_tab(role, visible):
+    nav = _nav("/admin/agent-releases", role=role)
+    matches = [e for e in _entries(nav) if e.ist_aktiv("/admin/agent-releases")]
+    assert bool(matches) is visible
+    if visible:
+        assert len(matches) == 1 and matches[0].id == "updates_backups"
+        assert nav.aktiver_tab.id == "agent_releases"

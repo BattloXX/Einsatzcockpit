@@ -1,0 +1,14 @@
+{% extends 'admin/_layout.html' %}
+{% block title %}Agent-Releases{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/sysadmin.css?v={{ CSS_VERSION }}">
+<link rel="stylesheet" href="/static/css/infoscreen_agent_admin.css?v={{ CSS_VERSION }}">
+{% endblock %}
+{% block admin_content %}
+<div class="sys-page agent-admin">
+{% with section_id='updates_backups' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
+<h1>Agent-Releases</h1>
+{% include 'infoscreen_agent/_releases.html' %}
+</div>
+{% endblock %}

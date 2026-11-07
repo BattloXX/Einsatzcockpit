@@ -388,6 +388,10 @@ class OrgSettings(Base):
     mfa_sms_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     mfa_sso_ausgenommen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
 
+    infoscreen_update_start: Mapped[str] = mapped_column(String(5), default="02:00", server_default="02:00")
+    infoscreen_update_end: Mapped[str] = mapped_column(String(5), default="04:30", server_default="04:30")
+    infoscreen_critical_allowed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
     alarm_parser_mcp_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

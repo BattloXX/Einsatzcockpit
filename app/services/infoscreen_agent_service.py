@@ -145,3 +145,15 @@ async def publish_config_changed(org_id: int, display_ids: list[int]) -> None:
     from app.services.infoscreen_agent_events import publish_config_changed as publish
 
     await publish(org_id, display_ids)
+
+
+def peek_pairing_code(db: Session, code: str) -> InfoscreenDevice | None:
+    """Code-Nachweis ohne Verbrauch, Presence-, Audit- oder sonstige Mutation."""
+    code = code.strip().upper()
+    if len(code) != 8:
+        return None
+    return (db.query(InfoscreenDevice).filter(
+        InfoscreenDevice.pairing_code_hash == hash_api_key(code),
+        InfoscreenDevice.org_id.is_not(None), InfoscreenDevice.status.in_(("pending", "active")),
+        InfoscreenDevice.pairing_expires_at > _utcnow())
+        .execution_options(include_all_tenants=True).populate_existing().first())

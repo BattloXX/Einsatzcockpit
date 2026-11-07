@@ -6,10 +6,13 @@
 {% if code %}
 <p>Einmaliger Pairing-Code: <strong>{{ code }}</strong>. Restlaufzeit bei Ausgabe: {{ remaining // 60 }} Minuten {{ remaining % 60 }} Sekunden (maximal 15 Minuten).</p>
 <p>Der Code ist kurzlebig und wird nach dem Koppeln ungueltig. Die Variante EC_PAIRING_CODE uebergibt ihn als Umgebungsvariable statt als Bash-Argument; die eingefuegte Zeile kann weiterhin in der Shell-History stehen.</p>
+{% if installer_error %}<p role="status">{{ installer_error }}</p>{% endif %}
+{% if command %}
 <label><input type="checkbox" data-agent-env> Variante mit EC_PAIRING_CODE</label>
 <label>Installationszeile<textarea class="form-input" rows="6" readonly data-agent-command>{{ command }}</textarea></label>
 <textarea hidden data-agent-command-normal>{{ command }}</textarea><textarea hidden data-agent-command-env>{{ env_command }}</textarea>
 <button class="btn" type="button" data-agent-copy>Einzeiler kopieren</button><p data-agent-copy-status aria-live="polite"></p>
+{% endif %}
 {% endif %}
 <form hx-post="{{ base }}/geraete/{{ device.id }}/code" hx-target="#agent-dialog-body" hx-swap="innerHTML">{{ forms.csrf() }}<button class="btn" type="submit">Neuen Code erzeugen</button></form>
 </div>

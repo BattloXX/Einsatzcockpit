@@ -1,0 +1,22 @@
+{% import 'infoscreen_agent/_forms.html' as forms with context %}
+<div id="agent-releases" hx-history="false">
+<p>Neue Uploads starten bei 0 %. Erstinstallation: freigegebene Releases ab 10 %, ohne Canary-Begrenzung. Sperren stoppt alle Downloads. Kritisch ist eine nicht signierte Policy und umgeht niemals Einsatzschutz oder Geraetesperren.</p>
+{% for key_id, fingerprint in fingerprints.items() %}<p>{{ key_id }}: <code>{{ fingerprint }}</code></p>{% else %}<p>Keine Release-Schluessel konfiguriert. Uploads sind gesperrt.</p>{% endfor %}
+{% for release in releases %}
+<section class="sys-card">
+<h2>{{ release.version }} / {{ release.channel }} / {{ release.arch }}</h2>
+<p>{{ release.size }} Bytes, {{ release.created_at|local_datetime }}. Rollout {{ release.rollout_percent }} %, {{ 'gesperrt' if release.blocked else 'nicht gesperrt' }}.</p>
+<form class="agent-form" hx-post="/admin/agent-releases/{{ release.id }}/policy" hx-target="#agent-releases" hx-swap="outerHTML">
+{{ forms.csrf() }}
+<label>Rollout <select name="rollout_percent">{% for percent in [0,10,50,100] %}<option value="{{ percent }}" {% if release.rollout_percent == percent %}selected{% endif %}>{{ percent }} %</option>{% endfor %}</select></label>
+<label><input type="checkbox" name="blocked" value="1" {% if release.blocked %}checked{% endif %}> Release sperren (Rueckzug)</label>
+<label><input type="checkbox" name="critical" value="1" {% if release.critical %}checked{% endif %}> Kritisch</label>
+<button type="submit" class="btn">Speichern</button>
+</form></section>
+{% else %}<p>Keine Releases vorhanden.</p>{% endfor %}
+<h2>CI-Upload-Tokens</h2>
+{% if new_token %}<p>Nur jetzt sichtbar. Sicher in CI hinterlegen:</p><code>{{ new_token }}</code>{% endif %}
+<form class="agent-form" hx-post="/admin/agent-releases/tokens/create" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}<button class="btn" type="submit">Upload-Token erzeugen</button></form>
+{% for token in tokens %}<p>Token #{{ token.id }}, {{ token.created_at|local_datetime }}: {{ 'widerrufen' if token.revoked_at else 'aktiv' }}</p>
+{% if not token.revoked_at %}<form class="agent-form" hx-post="/admin/agent-releases/tokens/{{ token.id }}/revoke" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}<button class="btn" type="submit">Token #{{ token.id }} widerrufen</button></form>{% endif %}{% endfor %}
+</div>

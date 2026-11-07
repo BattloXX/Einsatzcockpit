@@ -780,7 +780,7 @@ ADMIN_GRUPPEN = (
                 "system",
                 "archive",
                 "/admin/system/update",
-                ("/admin/system/update", "/admin/backup", "/admin/db-backups"),
+                ("/admin/system/update", "/admin/backup", "/admin/agent-releases", "/admin/db-backups"),
                 sichtbarkeit="sysadmin",
                 tabs=(
                     AdminTab(
@@ -798,6 +798,10 @@ ADMIN_GRUPPEN = (
                         ("/admin/backup",),
                         exakt=False,
                         sichtbarkeit="sysadmin",
+                    ),
+                    AdminTab(
+                        "agent_releases", "Agent-Releases", "/admin/agent-releases",
+                        ("/admin/agent-releases",), exakt=False, sichtbarkeit="sysadmin",
                     ),
                     AdminTab(
                         "db_backups",

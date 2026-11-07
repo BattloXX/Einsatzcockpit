@@ -1817,3 +1817,58 @@ def test_infoscreen_agent_ws_wake_ist_org_gefiltert(client):
                                         "display_key": key_a, "reason": "incident_changed"}
             assert b.receive_json() == {"type": "invalidate", "revision": 0,
                                         "display_key": key_b, "reason": "gsl_changed"}
+
+
+# Fixture erzeugt pro Test einen Schluessel und eine isolierte globale Release-Ablage.
+from tests.test_infoscreen_agent_releases import signing as agent_release_signing  # noqa: E402
+
+
+def test_agent_release_token_routen_scope_und_replay(client, agent_release_signing):
+    from app.models.infoscreen_agent import InfoscreenDevice
+    from app.services import infoscreen_agent_service as service
+    from tests.test_infoscreen_agent import create_device
+    from tests.test_infoscreen_agent_releases import BASE, paired, release, upload
+
+    org_b = _setup_zwei_orgs()
+    stable = release(client, agent_release_signing)
+    beta = release(client, agent_release_signing, version="2.0", channel="beta")
+    device_a, code_a = create_device(ORG_A)
+    device_b, code_b = create_device(org_b)
+    headers = {"Authorization": "Bearer " + code_a}
+    # Fremde Org/Geraete-IDs koennen den Code-Nachweis nicht umhaengen.
+    response = client.get(BASE + f"/download/latest?arch=amd64&org_id={org_b}&device_id={device_b}", headers=headers)
+    assert response.status_code == 200 and response.json()["version"] == "1.0"
+    assert client.get(response.json()["download_url"], headers=headers).status_code == 200
+    assert upload(client, agent_release_signing, bearer=code_a).status_code == 401
+    assert client.get(BASE + "/update/manifest?arch=amd64&current=0", headers=headers).status_code == 401
+    assert client.post(BASE + "/unpair", headers=headers).status_code == 401
+    assert client.post(BASE + "/update/result", headers=headers,
+                       json={"version": "1.0", "status": "ok", "error_code": None}).status_code == 401
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert service.peek_pairing_code(db, code_a).id == device_a
+        assert service.peek_pairing_code(db, code_b).id == device_b
+        assert db.get(InfoscreenDevice, device_b).status == "pending"
+    paired_a = client.post(BASE + "/pair", json={"code": code_a}).json()
+    bearer_a = {"Authorization": "Bearer " + paired_a["device_token"]}
+    device_b_active, bearer_b = paired(client, org_b, "beta")
+    assert client.get(response.json()["download_url"], headers=headers).status_code == 401
+    assert client.get(BASE + f"/download/artifact/{beta}", headers=bearer_a).status_code == 404
+    assert client.get(BASE + f"/download/artifact/{stable}", headers=bearer_b).status_code == 404
+    assert client.get(BASE + "/download/latest?arch=amd64", headers=bearer_a).status_code == 401
+    assert client.get(BASE + "/download/latest?arch=amd64", headers={
+        "Authorization": "Bearer " + agent_release_signing[1]}).status_code == 401
+    result = client.post(BASE + f"/update/result?org_id={org_b}&device_id={device_b_active}", headers=bearer_a,
+                         json={"version": "1.0", "status": "ok", "error_code": None})
+    assert result.status_code == 200
+    assert client.post(BASE + f"/unpair?device_id={device_b_active}", headers=bearer_a).status_code == 200
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert db.get(InfoscreenDevice, device_a).status == "revoked"
+        foreign = db.get(InfoscreenDevice, device_b_active)
+        assert foreign.agent_version is None and foreign.update_status is None and foreign.status == "active"
+    assert client.get(BASE + "/update/manifest?arch=amd64&current=0", headers=bearer_b).json()["manifest"]["channel"] == "beta"
+    # Das oeffentliche Skript enthaelt auch mit Fremd-Session keinerlei Org-Daten.
+    script = client.get("/infoscreen-agent/install.sh")
+    assert script.status_code == 200 and code_a not in script.text and code_b not in script.text
+    assert "set-cookie" not in script.headers

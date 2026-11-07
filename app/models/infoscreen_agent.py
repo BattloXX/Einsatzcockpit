@@ -38,10 +38,13 @@ class InfoscreenDevice(TenantScoped, Base):
     status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
     hostname: Mapped[str | None] = mapped_column(String(255))
     os_version: Mapped[str | None] = mapped_column(String(100))
-    agent_version: Mapped[str | None] = mapped_column(String(50))
+    agent_version: Mapped[str | None] = mapped_column(String(100))
     channel: Mapped[str] = mapped_column(String(16), default="stable", server_default="stable")
-    update_pinned_version: Mapped[str | None] = mapped_column(String(50))
+    update_pinned_version: Mapped[str | None] = mapped_column(String(100))
     update_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    update_status: Mapped[str | None] = mapped_column(String(16))
+    update_error_code: Mapped[str | None] = mapped_column(String(32))
+    update_reported_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_ip: Mapped[str | None] = mapped_column(String(45))
     agent_connection_id: Mapped[str | None] = mapped_column(String(64))
@@ -160,17 +163,22 @@ class InfoscreenRelease(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    version: Mapped[str] = mapped_column(String(50))
+    version: Mapped[str] = mapped_column(String(100))
     channel: Mapped[str] = mapped_column(String(16), default="stable", server_default="stable")
     arch: Mapped[str] = mapped_column(String(16))
     sha256: Mapped[str] = mapped_column(String(64))
     signature: Mapped[str] = mapped_column(String(255))
     size: Mapped[int] = mapped_column(BigInteger)
-    min_version: Mapped[str | None] = mapped_column(String(50))
+    min_version: Mapped[str | None] = mapped_column(String(100))
     rollout_percent: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    key_id: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    critical: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    installer_path: Mapped[str | None] = mapped_column(String(500))
+    installer_sha256: Mapped[str | None] = mapped_column(String(64))
+    installer_signature: Mapped[str | None] = mapped_column(String(255))
     storage_path: Mapped[str] = mapped_column(String(500))
 
 
@@ -180,3 +188,13 @@ class InfoscreenUrlAllowlist(TenantScoped, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     host: Mapped[str] = mapped_column(String(253))
+
+
+class InfoscreenReleaseUploadToken(Base):
+    """Plattformweiter, ausschliesslich fuer Release-Uploads gueltiger CI-Zugang."""
+    __tablename__ = "infoscreen_release_upload_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
