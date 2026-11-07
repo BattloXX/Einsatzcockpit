@@ -63,6 +63,10 @@ Bereits produktiv gekoppelte Agents bleiben gekoppelt.
 
 Die folgenden Docker-Schritte betreffen das Linux-Gateway.
 
+Für ELVis-Einsatzmeldungen über `ecp-elvis.cmd`, Inbox und Windows-Agent siehe
+[ELVis-Anbindung](Administration-ELVis-Anbindung). Dort sind Einrichtung, Tests,
+Modi und die noch offene Prüfung am Echtgerät beschrieben.
+
 ## Voraussetzungen
 
 | Anforderung | Details |

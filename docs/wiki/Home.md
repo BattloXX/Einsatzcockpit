@@ -135,6 +135,7 @@ Für Org-Administratoren. Die Einrichtung der einzelnen Module steht oben bei de
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem: Einsatz- und Fahrzeugabgleich, Diagnose |
 | [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindung) | EventHub der Landeswarnzentrale: Einsätze, Wachenstatus, Zu-/Absagen |
 | [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Serieller Leitstellenalarm und Druckregeln je Alarmstufe |
+| [ELVis-Anbindung](Administration-ELVis-Anbindung) | ELVis-Batch-Aufruf über den Windows-Agent, Test und schrittweise Inbetriebnahme |
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, Weiterleitungsregeln für eingehende SMS |
 | [SMS-Versandweg](Administration-SMS-Versandweg) | Primärer SMS-Provider und Fallback |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Alarmkarte per Webhook, optional Bot mit Zu-/Absage |

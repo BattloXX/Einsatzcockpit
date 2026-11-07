@@ -40,6 +40,7 @@ class DienstCheck:
     detail: str
     relevant: bool
     teile: tuple[DienstTeil, ...] = ()
+    alert: bool = True
 
 
 @dataclass(frozen=True)
@@ -91,13 +92,15 @@ def aggregiere(teile: tuple[DienstTeil, ...]) -> str:
 
 
 def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> list[DienstCheck]:
+    from app.core.timezones import format_local_datetime
     from app.models.dibos import OrgDibosConfig
-    from app.models.gateway import Gateway
+    from app.models.gateway import AlarmIngest, Gateway
     from app.models.incident import IncidentAlarmJob
     from app.models.lis import OrgLisConfig
     from app.models.master import FireDept, OrgSettings
     from app.models.user import SmsGatewayToken
     from app.routers.ws import connected_gateway_token_ids
+    from app.services.elvis_event_service import elvis_modus
     from app.services.sms_service import resolve_sms_config
 
     jetzt = _naive_utc(now or datetime.now(UTC))
@@ -105,6 +108,35 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     org = db.get(FireDept, org_id)
     gateways = db.query(Gateway).filter(Gateway.org_id == org_id).execution_options(include_all_tenants=True).all()
     paired = [g for g in gateways if g.device_token_hash is not None]
+    elvis_agents = [g for g in paired if g.is_windows_agent and elvis_modus(g) != "aus"]
+    if not elvis_agents:
+        elvis = DienstCheck(
+            "elvis_weiterleitung", "nicht_konfiguriert",
+            "Kein gekoppelter Windows-Agent mit aktivierter ELVis-Weiterleitung.", False, alert=False,
+        )
+    else:
+        elvis_teile = []
+        for agent in elvis_agents:
+            event = db.query(AlarmIngest).filter(
+                AlarmIngest.org_id == org_id, AlarmIngest.gateway_id == agent.id, AlarmIngest.source == "elvis",
+            ).execution_options(include_all_tenants=True).order_by(
+                AlarmIngest.received_at.desc(), AlarmIngest.id.desc(),
+            ).first()
+            zuletzt = (
+                f"{format_local_datetime(event.received_at, org)} "
+                f"({'Test' if (event.parsed or {}).get('elvis_test') else 'echt'})"
+                if event else "noch keines"
+            )
+            elvis_teile.append(DienstTeil(
+                f"gateway:{agent.id}", agent.name, "ok" if event else "unknown",
+                f"Modus: {elvis_modus(agent)}; letztes ELVis-Event (Org-Zeit): {zuletzt}.",
+            ))
+        elvis = DienstCheck(
+            "elvis_weiterleitung", aggregiere(tuple(elvis_teile)),
+            " ".join(f"{t.name}: {t.detail}" for t in elvis_teile)
+            + " Rein informativ; keine Ausfallalarmierung bei Stille.",
+            True, tuple(elvis_teile), alert=False,
+        )
     monitored = [g for g in paired if g.offline_alert_enabled]
     if not monitored:
         detail = ("Ausfallalarmierung fuer alle Print-Gateways deaktiviert."
@@ -318,9 +350,9 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         org_settings.dienst_monitor_ausgeschaltet if org_settings else "alarm_lis"
     )
     return [
-        DienstCheck(c.key, "nicht_konfiguriert", "Ueberwachung ausgeschaltet.", False)
+        DienstCheck(c.key, "nicht_konfiguriert", "Ueberwachung ausgeschaltet.", False, alert=c.alert)
         if c.key in ausgeschaltet else c
-        for c in [print_check, sms_check, serial, dibos, lis, outbox, *checks(snapshot(db, org_id, jetzt))]
+        for c in [print_check, sms_check, serial, dibos, lis, elvis, outbox, *checks(snapshot(db, org_id, jetzt))]
     ]
 
 
@@ -334,7 +366,7 @@ def entscheide(
         row.fail_cycles = row.ok_cycles = 0
         row.last_error = None
         return Entscheidung(None)
-    if not check.relevant or check.state == "unknown":
+    if not check.alert or not check.relevant or check.state == "unknown":
         return Entscheidung(None)
     if check.state in ("down", "teilweise"):
         if row.down_since is None:

@@ -15,6 +15,7 @@ erreichbar.
 | Alarm seriell (W&T) | Jede konfigurierte W&T-Verbindung wird einzeln geprüft. Das zugehörige Gateway muss über `last_seen_at` frisch sein und die serielle Verbindung als verbunden melden. |
 | Alarm DIBOS | Aktiv und vollstaendig konfiguriert, mit Einsatzanlage, Anreicherung oder automatischer Aufzeichnung. Letzter Poll erfolgreich und hoechstens `max(180, 6 * poll_interval_seconds)` Sekunden alt. |
 | LIS-Schnittstelle | Aktiv und vollstaendig konfiguriert. Letzter ActiveParticipation-Poll erfolgreich und hoechstens `max(180, 6 * poll_interval_seconds)` Sekunden alt. Vor der ersten Probe unbekannt; Ueberwachung standardmaessig aus. |
+| ELVis-Weiterleitung | Rein informativ für gekoppelte Windows-Agents mit ELVis-Modus ungleich `aus`: Modus und letzter ELVis-Cloud-Empfang in Org-Zeit mit Test/echt. Mit Event `ok`, ohne Event `unknown`; ohne passenden Agent `nicht_konfiguriert`. Keine Ausfallalarmierung bei Stille, unabhängig vom Alter des letzten Events. Einrichtung und offene Echtgeräte-Prüfung: [ELVis-Anbindung](Administration-ELVis-Anbindung). |
 
 Der Dienst ist OK, wenn kein Gerät ausgefallen und mindestens eines OK ist. Sind nur
 einige Geräte ausgefallen, liegt eine Teilstörung vor; sind alle ausgefallen, liegt ein
@@ -24,9 +25,11 @@ Vollausfall vor. Die Detailzeilen nennen den Zustand und Grund jedes einzelnen G
 
 Im Benachrichtigungsformular unter **Ueberwachte Dienste** waehlen Org-Admins die
 Dienste der eigenen Organisation aus: Print-Gateway, SMS-Gateway, Alarm seriell,
-DIBOS, LIS und Alarm-Outbox. Nicht ausgewaehlte Dienste erscheinen grau als
+DIBOS, LIS, ELVis-Weiterleitung und Alarm-Outbox. Nicht ausgewaehlte Dienste erscheinen grau als
 **Ueberwachung ausgeschaltet**. Die Schnittstelle beziehungsweise Verarbeitung
 arbeitet weiter. Globale Worker-/Redis-Pruefungen besitzen hier keinen Schalter.
+ELVis bleibt auch bei eingeschaltetem Dienstschalter rein informativ (`alert=False`);
+`ok` bestätigt einen gespeicherten Empfang, keine aktuelle Erreichbarkeit.
 
 Ausschalten unterdrueckt Stoerung, Wiederholung und Entwarnung auf allen Kanaelen
 (SMS, Teams, E-Mail) und schliesst offene Ausfaelle still. Beim Wiedereinschalten
@@ -116,7 +119,7 @@ sofort. Ein widerrufener Token kann nicht mehr verwendet werden.
 |----------|-------|-------------------------------|
 | `GET /health` | nein | Prüft Anwendung und Datenbankverbindung; antwortet mit `{"status":"ok","db":"up"}` oder bei nicht erreichbarer Datenbank mit HTTP 503 und `{"status":"error","db":"down"}` |
 | `GET /health/dienste` | ja | Gesamtstatus der Org-Dienste sowie Worker-/Auftragspruefungen |
-| `GET /health/dienst/{key}` | ja | Einzelstatus; Org-Schluessel: `print_gateway`, `sms_gateway`, `alarm_seriell`, `alarm_dibos`, `alarm_lis`, `alarm_outbox`; zusaetzlich `worker_runtime`, `redis_bus`, `sms_jobs`, `print_jobs`. Alias: `/health/dienste/{key}` |
+| `GET /health/dienst/{key}` | ja | Einzelstatus; Org-Schluessel: `print_gateway`, `sms_gateway`, `alarm_seriell`, `alarm_dibos`, `alarm_lis`, `elvis_weiterleitung`, `alarm_outbox`; zusaetzlich `worker_runtime`, `redis_bus`, `sms_jobs`, `print_jobs`. Alias: `/health/dienste/{key}` |
 
 `/health` beantwortet die Frage „Läuft die Cloud?“, während `/health/dienste`
 beantwortet: „Laufen die Dienste dieser Organisation?“. Nur die Dienst-Endpunkte

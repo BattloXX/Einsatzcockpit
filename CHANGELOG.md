@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **ELVis Phase 3:** Dienstüberwachung zeigt Modus und letzten ELVis-Empfang je gekoppeltem, aktiviertem Windows-Agent in Org-Zeit mit Test/echt. Rein informativ: ohne Event unbekannt, kein Ausfallalarm bei Stille; bestehender Dienstschalter, UI und Admin-MCP berücksichtigen den neuen Check. Neue Wiki-Anleitung für Batch-Aufruf, Inbox, Tests und schrittweise Aktivierung. Parameterübergabe, Mehrfachaufrufe und die Annahme `Nr = Leitstellennummer` müssen noch am Echtgerät beziehungsweise echten Einsatz bestätigt werden. Keine Migration, kein neuer Modulzustand.
+
 - **ELVis-Einsatz-Events (Cloud Phase 1):** Windows-Druckagents können Batch-Felder per WebSocket oder HTTP-Fallback übertragen. Admin-Modi Aus/Protokollieren/Alarmquelle, standardmäßig nur Protokollierung; Test-/Dummy-Aufrufe erzeugen nie Einsätze oder Alarme. Event-ID- und Inhaltsdedup, Org-Isolation, bestehender Alarmnachlauf und Zusammenführung über die Leitstellennummer; Agent-Detailseite mit Live-Eventliste und Modus-Schalter. Konfiguration in `wut_config.elvis`, keine Migration. Agent-Anbindung und Prüfung des LWZ-Nr-Formats vor Ort bleiben offen.
 
 - **LIS/IPR-Poll mit adaptivem Takt:** Je Org Aktiv-Intervall (Standard 30 s, mindestens 20 s), im Leerlauf mindestens 60 s, jeweils ±20 % Jitter. 60 s Aktiv-Startphase, 30 min Aktiv-Fenster nach gelieferten Einsätzen und Aktiv-Takt bei bestehenden aktiven LIS-Einsätzen. Login-/Poll-Fehler führen zu gestaffelten Pausen von 10 bis 300 s und anschließendem Client-Neuaufbau; Erfolg setzt den Backoff zurück. Neue Env-Einstellungen, ehrlicher User-Agent und an den Leerlauf angepasste Fallback-/Monitor-Fristen. Keine Migration nötig.
