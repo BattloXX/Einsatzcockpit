@@ -86,6 +86,7 @@ class InfoscreenDisplay(TenantScoped, Base):
     gsl_override_erlaubt: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     aktiv: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    resolution_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class InfoscreenScheduleSlot(TenantScoped, Base):

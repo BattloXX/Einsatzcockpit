@@ -1710,3 +1710,66 @@ def test_infoscreen_agent_pairing_und_bearer_binden_org(client):
     with SessionLocal() as db:
         assert authenticate(db, other.json()["device_token"]).org_id == org_b_id
         assert db.query(InfoscreenDevice).filter_by(id=device_a).first() is None
+
+
+def test_infoscreen_agent_config_state_isolieren_org_und_geraet(client):
+    from app.models.infoscreen_agent import (
+        InfoscreenDisplay, InfoscreenSchedule, InfoscreenScheduleSlot, InfoscreenOverride, InfoscreenUrlAllowlist,
+    )
+    from tests.test_infoscreen_agent_s2_api import BASE, setup_display
+
+    org_b = _setup_zwei_orgs()
+    _, display_a, key_a, headers_a, raw_a = setup_display(ORG_A)
+    _, _, key_b, headers_b, raw_b = setup_display(org_b)
+    _, _, key_same_org, _, _ = setup_display(ORG_A)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        plan_b = InfoscreenSchedule(org_id=org_b, name="GEHEIMER PLAN", timezone="Europe/Vienna")
+        db.add(plan_b)
+        db.flush()
+        db.add(InfoscreenScheduleSlot(org_id=org_b, schedule_id=plan_b.id, weekdays=127,
+                                      start_time=datetime.min.time(), end_time=datetime.min.time(), power="off"))
+        # Manipulierter Fremdschluessel darf keinen fremden Plan aufloesen.
+        db.get(InfoscreenDisplay, display_a).schedule_id = plan_b.id
+        db.add(InfoscreenUrlAllowlist(org_id=org_b, host="geheim.example"))
+        db.add(InfoscreenOverride(org_id=org_b, display_id=None, kind="manual", url_kind="weather",
+                                  url_ref="/GEHEIM", von=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
+                                  bis=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), reason="Test"))
+        db.commit()
+    for key in (key_b, key_same_org):
+        assert client.get(BASE + "/state", params={"display": key}, headers=headers_a).status_code == 404
+    config = client.get(BASE + "/config", headers=headers_a)
+    assert config.status_code == 200
+    assert [d["display_key"] for d in config.json()["displays"]] == [key_a]
+    assert raw_b not in config.text and "geheim" not in config.text.lower()
+    assert all(r["power"] == "on" for r in config.json()["displays"][0]["timeline"])
+    own_state = client.get(BASE + "/state", params={"display": key_a}, headers=headers_a)
+    assert own_state.status_code == 200
+    assert own_state.json()["url"] == "/infoscreen/alarm/" + raw_a
+    assert "GEHEIM" not in own_state.text
+    assert client.get(BASE + "/state", params={"display": key_b}, headers=headers_b).status_code == 200
+
+
+def test_infoscreen_agent_fremder_alarm_token_bleibt_unzugaenglich(client):
+    from app.models.infoscreen_agent import InfoscreenDisplay
+    from tests.test_infoscreen_agent_s2_api import BASE, setup_display
+
+    org_b = _setup_zwei_orgs()
+    _, display_a, key_a, headers_a, _ = setup_display(ORG_A)
+    _, display_b, _, _, raw_b = setup_display(org_b)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        a, b = db.get(InfoscreenDisplay, display_a), db.get(InfoscreenDisplay, display_b)
+        foreign_token = b.alarm_token_id
+        b.alarm_token_id = None
+        db.flush()
+        a.alarm_token_id = foreign_token
+        db.commit()
+    config = client.get(BASE + "/config", headers=headers_a)
+    assert config.status_code == 200
+    assert config.json()["displays"][0]["url"] is None
+    assert raw_b not in config.text
+    state = client.get(BASE + "/state", params={"display": key_a}, headers=headers_a)
+    assert state.status_code == 200
+    assert state.json()["mode"] == "locked"
+    assert raw_b not in state.text

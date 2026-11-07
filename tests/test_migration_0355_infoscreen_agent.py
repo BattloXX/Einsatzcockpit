@@ -27,6 +27,7 @@ def test_upgrade_downgrade_modell(tmp_path):
         for _ in range(2):
             with Operations.context(MigrationContext.configure(conn)):
                 neu.upgrade()
+                migration("0356", "infoscreen_resolution_hash").upgrade()
             inspector = sa.inspect(conn)
             assert len(TABLES) == 9
             for name in TABLES:
@@ -73,6 +74,7 @@ def test_upgrade_downgrade_modell(tmp_path):
                         {"key": key},
                     )
             with Operations.context(MigrationContext.configure(conn)):
+                migration("0356", "infoscreen_resolution_hash").downgrade()
                 neu.downgrade()
             assert not set(TABLES) & set(sa.inspect(conn).get_table_names())
             conn.exec_driver_sql("DELETE FROM alarm_infoscreen_token")

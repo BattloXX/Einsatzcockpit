@@ -1,0 +1,19 @@
+{
+  "org_name": "Monitor Org",
+  "modus": "idle",
+  "idle_modus": "uhr",
+  "wetter_url": null,
+  "idle_urls": [
+    {
+      "label": "News",
+      "url": "https://news.example",
+      "dwell_sec": 20
+    },
+    {
+      "label": "Wetter",
+      "url": "https://wetter.example/screen",
+      "dwell_sec": 30
+    }
+  ],
+  "symbole": []
+}

@@ -50,3 +50,72 @@ def pair(request: Request, response: Response, db: Session = Depends(get_db)):
     db.commit()
     response.headers["Cache-Control"] = "no-store"
     return {"device_token": token, "device_id": device.id, "name": device.name}
+
+
+def _etag_matches(request: Request, etag: str) -> bool:
+    return any(value.strip().removeprefix("W/") in (etag, "*")
+               for value in request.headers.get("if-none-match", "").split(","))
+
+
+@router.get("/state")
+@(limiter.limit("120/minute") if limiter else lambda fn: fn)
+def state(request: Request, display: str, db: Session = Depends(get_db),
+          device: InfoscreenDevice = Depends(require_device)):
+    from datetime import UTC, datetime
+
+    from fastapi.responses import JSONResponse
+
+    from app.models.infoscreen_agent import InfoscreenDisplay
+    from app.services.infoscreen_agent_snapshot import state as resolve_state
+
+    row = db.query(InfoscreenDisplay).filter(
+        InfoscreenDisplay.org_id == device.org_id, InfoscreenDisplay.device_id == device.id,
+        InfoscreenDisplay.display_key == display).first()
+    if row is None:
+        raise HTTPException(404, "Display nicht gefunden")
+    data = resolve_state(db, device, row, datetime.now(UTC))
+    etag = f'"{data["revision"]}"'
+    headers = {"ETag": etag, "Cache-Control": "private, no-cache"}
+    if _etag_matches(request, etag):
+        return Response(status_code=304, headers=headers)
+    return JSONResponse(data, headers=headers)
+
+
+@router.get("/config")
+@(limiter.limit("60/minute") if limiter else lambda fn: fn)
+def config(request: Request, db: Session = Depends(get_db), device: InfoscreenDevice = Depends(require_device)):
+    import hashlib
+    import json
+    from datetime import UTC, datetime
+
+    from fastapi.responses import JSONResponse
+
+    from app.models.infoscreen_agent import InfoscreenDisplay, InfoscreenUrlAllowlist
+    from app.services.infoscreen_agent_resolver import timeline
+    from app.services.infoscreen_agent_snapshot import alarm_url, lade_schedule
+
+    now = datetime.now(UTC)
+    # Stundenraster haelt den Snapshot cachebar und garantiert mindestens 72 h.
+    anchor = now.replace(minute=0, second=0, microsecond=0)
+    displays = db.query(InfoscreenDisplay).filter(
+        InfoscreenDisplay.org_id == device.org_id, InfoscreenDisplay.device_id == device.id,
+    ).order_by(InfoscreenDisplay.id).all()
+    data = {
+        "config_version": device.config_version,
+        "displays": [{"display_key": d.display_key, "name": d.name, "edid_id": d.edid_id,
+                      "aktiv": d.aktiv, "power_mode": d.power_mode, "nachlauf_min": d.nachlauf_min,
+                      "offline_wake_after_min": d.offline_wake_after_min,
+                      "url": alarm_url(db, d), "timeline": timeline(lade_schedule(db, d), anchor, hours=73)}
+                     for d in displays],
+        "allowlist": sorted(({request.url.hostname} if request.url.hostname else set()) | {
+            r.host for r in db.query(InfoscreenUrlAllowlist).filter(
+                InfoscreenUrlAllowlist.org_id == device.org_id).all()}),
+        "intervals": {"poll_sec": 20, "heartbeat_sec": 90, "ping_sec": 25},
+        "update_policy": {"enabled": False, "channel": device.channel,
+                          "locked": device.update_locked, "pinned_version": device.update_pinned_version},
+    }
+    etag = '"' + hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest() + '"'
+    headers = {"ETag": etag, "Cache-Control": "private, no-cache"}
+    if _etag_matches(request, etag):
+        return Response(status_code=304, headers=headers)
+    return JSONResponse(data, headers=headers)

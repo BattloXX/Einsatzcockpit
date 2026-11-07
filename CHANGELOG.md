@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Infoscreen-Agent S2:** Gemeinsame Alarm-Aktivitaetsabfragen, reiner Prioritaetsresolver mit Nachlauf, serverseitige UTC-Timeline mit Schedule-Zeitzone/DST und Ausnahmetagen, Plan-Rotation fuer Agent-Displays sowie org- und geraetegebundene Config-/State-Snapshots mit ETags und atomaren Revisionen (Migration 0356 fuer den dauerhaften Aufloesungs-Hash). Bestehende Alarm-Daten durch Vorher-/Nachher-Snapshots abgesichert.
+
 - **Infoscreen-Agent S1:** Datenmodell und Migration 0355, Pairing mit 15 Minuten gueltigem Einmal-Code und IP-Drossel, gehashte Device-Tokens, Sperren/Entsperren und Token-Rotation mit Org-Isolation. Grundlage fuer die spaeteren Agent-Endpunkte und Verwaltung.
 
 - **ELVis-Abnahme im Parallelbetrieb (Phase 4):** Lesender, organisationsgebundener Batch-Abgleich der letzten Events über die Leitstellennummer mit DIBOS/LIS/seriellen Eingängen. Live-Eventliste mit Abgleich-Badge, Einsatzlink, Zeitdelta und Median ohne Testevents. DIBOS-Quellenannahme gekennzeichnet; Abnahme-Checkliste einschließlich Windows-Dienst-/Netzausfall und Rückweg unter `docs/konzepte/elvis-abnahme.md`. Keine Migration.
