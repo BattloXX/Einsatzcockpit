@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 
 from app.core.tenant import set_tenant_context
-from app.db import Base
+from app.db import Base, _set_db_timezone_utc
 from app.models.infoscreen_agent import InfoscreenDevice
 from app.models.master import FireDept
 from app.services import infoscreen_agent_service as service
@@ -73,6 +73,8 @@ def test_update_check_legt_neue_version_nur_einmal_an():
     from app.services import infoscreen_agent_update_check as update_check
 
     engine = sa.create_engine(os.environ["MARIADB_TEST_URL"])
+    # Wie die App-Engine: Snapshot-Isolation (MariaDB >= 11.6.2) per Connect-Listener abschalten.
+    sa.event.listen(engine, "connect", _set_db_timezone_utc)
     sessions = sessionmaker(engine)
     org_id = None
     device_ids: list[int] = []
