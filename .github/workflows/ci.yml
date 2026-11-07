@@ -134,6 +134,7 @@ jobs:
           tests/test_dokumentviewer_ui.py
           tests/test_dokumentdruck_ui.py
           tests/test_einsatz_dokumente_ui.py
+          tests/test_infoscreen_agent_overrides.py::test_mobile_htmx_create_cancel
       - name: Board-Stack konfigurieren und starten
         id: board-stack
         run: |

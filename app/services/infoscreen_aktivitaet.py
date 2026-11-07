@@ -26,6 +26,7 @@ class Aktivitaet:
     gsl: bool = False
     incident: bool = False
     letztes_ende: datetime | None = None
+    gsl_ende: datetime | None = None
 
 
 def lade_aktivitaet(db: Session, org_id: int) -> Aktivitaet:
@@ -35,4 +36,4 @@ def lade_aktivitaet(db: Session, org_id: int) -> Aktivitaet:
         MajorIncident.org_id == org_id, MajorIncident.ended_at.is_not(None)).scalar()
     enden = [ende for ende in (incident_ende, gsl_ende) if ende is not None]
     return Aktivitaet(aktive_gsl(db, org_id) is not None, aktiver_incident(db, org_id) is not None,
-                      max(enden) if enden else None)
+                      max(enden) if enden else None, gsl_ende)

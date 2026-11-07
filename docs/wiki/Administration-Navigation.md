@@ -73,3 +73,7 @@ Unter **Benutzer & Rechte** fuehrt der Tab **Anmeldung & 2FA** (`/admin/sicherhe
 SMS-Freigabe und SSO-Ausnahme. Systemadmins waehlen die Organisation; Org-Admins
 aendern nur ihre eigene. Die Vorschau zaehlt aktive persoenliche Benutzer ohne
 bestaetigten Faktor nach der gewaehlten Richtlinie.
+
+Im Infoscreen-Tab **Geraete & Plaene** enthaelt der Unterbereich **Uebersteuerung**
+die zeitlich begrenzten Seitenoverrides und die URL-Allowlist der Organisation.
+Org-Admins verwalten beides; die Live-Anzeige aktualisiert die Sollwirkung per HTMX.

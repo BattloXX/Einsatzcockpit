@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-from urllib.parse import urlsplit
 
 from cryptography.fernet import InvalidToken
 from sqlalchemy import update
@@ -19,7 +18,6 @@ from app.models.infoscreen_agent import (
     InfoscreenSchedule,
     InfoscreenScheduleException,
     InfoscreenScheduleSlot,
-    InfoscreenUrlAllowlist,
 )
 from app.models.objekt import AlarmInfoscreenToken
 from app.services.infoscreen_agent_resolver import Display, Schedule, resolve
@@ -55,24 +53,23 @@ def alarm_url(db: Session, display: InfoscreenDisplay) -> str | None:
 
 
 def lade_overrides(db: Session, display: InfoscreenDisplay) -> list[dict]:
-    hosts = {r.host.lower() for r in db.query(InfoscreenUrlAllowlist).filter(
-        InfoscreenUrlAllowlist.org_id == display.org_id).all()}
+    from app.services.infoscreen_agent_overrides import page_url
+
+    assert display.org_id is not None
+
     rows = db.query(InfoscreenOverride).filter(
         InfoscreenOverride.org_id == display.org_id,
         (InfoscreenOverride.display_id == display.id) | InfoscreenOverride.display_id.is_(None),
         InfoscreenOverride.aufgehoben_am.is_(None)).all()
     result = []
     for row in rows:
-        url = row.url_ref or ""
-        parts = urlsplit(url)
-        # Kein freies Navigieren ueber Protokoll-relative URLs, Credentials oder JS.
-        local = url.startswith("/") and not url.startswith("//") and "\\" not in url
-        remote = (row.url_kind == "custom_allowlisted" and parts.scheme == "https"
-                  and parts.hostname in hosts and not parts.username and not parts.password)
-        if not (local or remote):
+        try:
+            url = page_url(db, display.org_id, row.url_kind, row.url_ref or "", stored=True)
+        except ValueError:
             continue
         result.append({key: getattr(row, key) for key in
-                       ("id", "org_id", "display_id", "kind", "von", "bis", "aufgehoben_am")} | {"url": url})
+                       ("id", "org_id", "display_id", "kind", "url_kind", "von", "bis", "aufgehoben_am")}
+                      | {"url": url})
     return result
 
 

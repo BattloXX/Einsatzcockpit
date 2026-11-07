@@ -11,7 +11,7 @@
 {% with section_id='infoscreens' %}{% include 'admin/_section_tabs.html' %}{% endwith %}
 <h1>{{ icon("device-tv") }} Geraete & Plaene</h1>
 <nav class="agent-tabs" aria-label="Geraete und Plaene">
-{% for key, label in [('geraete', 'Geraete'), ('displays', 'Displays'), ('plaene', 'Zeitplaene')] %}
+{% for key, label in [('geraete', 'Geraete'), ('displays', 'Displays'), ('plaene', 'Zeitplaene'), ('uebersteuerung', 'Uebersteuerung')] %}
 <a href="{{ base }}/{{ key }}" {% if section == key %}aria-current="page"{% endif %}>{{ label }}</a>
 {% endfor %}
 </nav>

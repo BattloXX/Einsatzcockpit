@@ -27,3 +27,29 @@ def purge_old_device_events(chunk_size: int = 500) -> int:
                 db.commit()
                 total += len(rows)
     return total
+
+
+def purge_old_overrides(chunk_size: int = 500) -> int:
+    """Abgelaufene Uebersteuerungen nach 30 Tagen, getrennte Org-Batches."""
+    from app.models.infoscreen_agent import InfoscreenOverride
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size muss positiv sein")
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    total = 0
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        orgs = db.query(InfoscreenOverride.org_id).filter(
+            InfoscreenOverride.bis < cutoff, InfoscreenOverride.org_id.is_not(None)).distinct().all()
+        for (org_id,) in orgs:
+            while True:
+                rows = db.query(InfoscreenOverride).filter(
+                    InfoscreenOverride.org_id == org_id, InfoscreenOverride.bis < cutoff,
+                ).order_by(InfoscreenOverride.id).limit(chunk_size).all()
+                if not rows:
+                    break
+                for row in rows:
+                    db.delete(row)
+                db.commit()
+                total += len(rows)
+    return total

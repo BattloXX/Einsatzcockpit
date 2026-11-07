@@ -1,0 +1,4 @@
+<div id="agent-override-status" hx-get="{{ base }}/uebersteuerung/status" hx-trigger="every 15s" hx-swap="outerHTML" aria-live="polite">
+<h2>Aktuelle Wirkung</h2>
+{% for item in live %}<p>Display {{ item.display.name }} zeigt jetzt: {{ item.label }}{% if item.until %} bis {{ item.until|local_datetime }}{% endif %}.</p>{% else %}<p>Keine Displays vorhanden.</p>{% endfor %}
+</div>

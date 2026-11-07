@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Infoscreen-Agent S5:** Org-gefilterte Seitenuebersteuerungen und HTTPS-Host-Allowlist unter "Geraete & Plaene", Pflicht-Ablauf (maximal 8 Stunden), Begruendung und Audit beim Anlegen/Aufheben, Wetter-Schnellaktionen, HTMX-Live-Sollwirkung ohne Revisionsschreibzugriff. Serverseitige Wetter-/Statistik-Tokenaufloesung und erneute DNS-Pruefung fuer Custom-URLs; keine privaten Ziele. GSL-Seiten wirken nur bei aktiver GSL und enden mit ihr (Resolver-Korrektur gegen S2). Lagekarte/Einsatzstellen fehlen als eigenstaendige tokenbasierte Infoscreen-Seiten und werden noch nicht angeboten. Konfigurationsversion und Wake-Hinweis bei Mutationen, alte Overrides nach 30 Tagen org-gefiltert bereinigt. Keine Migration.
+
 - **Infoscreen-Agent S4:** Tab "Geräte & Pläne" unter Infoscreens mit org-gefilterter Geräte-/Displayverwaltung, Pairing-Dialog und kopierbarem Installationsbefehl, Wochenplänen mit Rotationen, Ausnahmetagen, Wochenraster und schreibfreier Monitor-Vorschau. Pairing-Status per HTMX, Token-Widerruf trennt Verbindungen; Änderungen versionieren die Konfiguration und senden Wake-Hinweise. Installer bleibt standardmäßig deaktiviert und folgt in S6. Keine Migration.
 
 - **Infoscreen-Agent S3:** Validierter technischer Heartbeat mit Displaystatus (Migration 0357), Bearer-WebSocket mit Presence und Verbindungsverdrängung, workerübergreifende Wake-Hinweise über `ec:isa`, entkoppelte Incident-/GSL-/Planspiel-Hooks und sofortiger Verbindungsabgleich nach Sperren/Token-Rotation. Snapshots bleiben autoritativ; Diagnoseereignisse werden nach 90 Tagen org-gefiltert in Batches gelöscht.
