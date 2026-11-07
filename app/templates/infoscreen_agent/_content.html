@@ -1,0 +1,81 @@
+{% import 'infoscreen_agent/_forms.html' as forms with context %}
+<div id="agent-content" hx-get="{{ base }}/{{ section }}" hx-trigger="agentChanged from:body" hx-swap="outerHTML">
+{% if error %}<div class="alert alert--error" role="alert">{{ error }}</div>{% endif %}
+{% if section == 'geraete' %}
+<section class="sys-card">
+<h2>Geraete</h2>
+<form hx-post="{{ base }}/geraete/neu" hx-target="#agent-dialog-body" hx-swap="innerHTML" class="agent-form" data-agent-open>
+{{ forms.csrf() }}{{ forms.input('name', 'Geraetename', '', required=true) }}
+<button class="btn btn--primary" type="submit">{{ icon("plus") }} Geraet hinzufuegen</button>
+</form>
+</section>
+{% for device in devices %}
+<section class="sys-card">
+<h3>{{ device.name }}</h3>
+<p>{{ status_dot('gruen' if online[device.id] else 'grau', 'Online' if online[device.id] else 'Offline') }} {{ 'online' if online[device.id] else 'offline' }} / {{ device.status }}</p>
+<dl class="agent-status">
+<dt>Betriebssystem</dt><dd>{{ device.os_version or '-' }}</dd>
+<dt>Agent-Version</dt><dd>{{ device.agent_version or '-' }}</dd>
+<dt>Letzter Heartbeat</dt><dd>{{ device.last_seen_at|local_datetime_sec if device.last_seen_at else '-' }}</dd>
+<dt>Updatefehler</dt><dd>Noch keine Update-Diagnose verfuegbar</dd>
+</dl>
+{% for display in displays if display.device_id == device.id %}
+{% set report = display.reported_status or {} %}
+<p><strong>{{ display.name }}</strong>: Seite {{ report.get('page_state', '-') }}, Monitor {{ report.get('power', '-') }}, Backend {{ report.get('backend', '-') }}, bestaetigt {{ 'ja' if report.get('verified') else 'nein' }}. Fehler: {{ report.get('errors', [])|join(', ') or '-' }}</p>
+{% endfor %}
+<form class="agent-form" hx-post="{{ base }}/geraete/{{ device.id }}/umbenennen" hx-target="#agent-content" hx-swap="outerHTML">
+{{ forms.csrf() }}{{ forms.input('name', 'Name', device.name, required=true) }}<button class="btn" type="submit">Umbenennen</button>
+</form>
+<div class="agent-actions">
+{% for action, label in [('entsperren', 'Entsperren und neu koppeln')] if device.status == 'revoked' %}
+<form hx-post="{{ base }}/geraete/{{ device.id }}/{{ action }}" hx-target="#agent-dialog-body" data-agent-open>{{ forms.csrf() }}<button class="btn" type="submit">{{ label }}</button></form>
+{% endfor %}
+{% if device.status != 'revoked' %}
+<form hx-post="{{ base }}/geraete/{{ device.id }}/sperren" hx-target="#agent-content" hx-swap="outerHTML">{{ forms.csrf() }}<button class="btn" type="submit">Sperren</button></form>
+<form hx-post="{{ base }}/geraete/{{ device.id }}/rotieren" hx-target="#agent-dialog-body" data-agent-open hx-confirm="Verbindung trennen und alten Token widerrufen? Das Geraet muss neu gekoppelt werden.">{{ forms.csrf() }}<button class="btn" type="submit">Token rotieren / neu koppeln</button></form>
+{% endif %}
+{{ forms.delete('geraete', device.id, 'Geraet und Displays wirklich loeschen?') }}
+</div>
+</section>
+{% else %}<p>Keine Geraete vorhanden.</p>{% endfor %}
+{% elif section == 'displays' %}
+<p>Ein Alarm-Infoscreen-Token kann genau einem Display zugeordnet werden. Bereits belegte Tokens sind gekennzeichnet. Offline-Aufwecken leer lassen zum Deaktivieren.</p>
+{% for display in displays %}
+<details class="sys-card"><summary>{{ display.name }} ({{ display.display_key }})</summary>
+{{ forms.display_form(display) }}{{ forms.delete('displays', display.id, 'Display wirklich loeschen?') }}</details>
+{% endfor %}
+<details class="sys-card"><summary>Display anlegen</summary>{{ forms.display_form(none) }}</details>
+{% else %}
+<details class="sys-card"><summary>Zeitplan anlegen</summary>{{ forms.schedule_form(none) }}</details>
+{% for schedule in schedules %}
+<section class="sys-card">
+<h2>{{ schedule.name }} ({{ schedule.timezone }})</h2>
+<details><summary>Zeitplan bearbeiten</summary>{{ forms.schedule_form(schedule) }}{{ forms.delete('plaene', schedule.id, 'Zeitplan mit Slots und Ausnahmen wirklich loeschen?') }}</details>
+<p>Wanduhrzeiten in {{ schedule.timezone }}. Ende vor Start bedeutet ueber Mitternacht. Ausnahmen ersetzen den ganzen Tag; Luecken bleiben aus.</p>
+<div class="agent-week" aria-label="Wochenraster {{ schedule.name }}">
+<div class="agent-week-axis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+{% for day in grids[schedule.id] %}
+<div class="agent-week-column"><strong>{{ weekdays[loop.index0] }}</strong><div class="agent-week-day">
+{% for segment in day %}<div class="agent-week-slot {{ 'agent-week-off' if segment.slot.power == 'off' else '' }}" style="top:{{ segment.top }}%;height:{{ segment.height }}%" title="{{ segment.slot.label or 'Slot' }}: {{ segment.slot.start_time }} - {{ segment.slot.end_time }}, Prioritaet {{ segment.slot.priority }}">{{ segment.slot.label or segment.slot.power }}</div>{% endfor %}
+</div></div>{% endfor %}
+</div>
+{% for slot in slots if slot.schedule_id == schedule.id %}
+<details><summary>{{ slot.label or 'Slot' }}: {{ slot.start_time }} - {{ slot.end_time }} / Prioritaet {{ slot.priority }}</summary>{{ forms.slot_form(schedule, slot) }}{{ forms.delete('slots', slot.id, 'Slot wirklich loeschen?') }}</details>
+{% endfor %}
+<details><summary>Slot hinzufuegen</summary>{{ forms.slot_form(schedule, none) }}</details>
+<h3>Ausnahmetage</h3>
+{% for exception in exceptions if exception.schedule_id == schedule.id %}
+<details><summary>{{ exception.datum }} {{ exception.label or '' }} ({{ 'Ersatz-Slots' if exception.slots_ersatz else 'ganzer Tag aus' }})</summary>{{ forms.exception_form(schedule, exception) }}{{ forms.delete('ausnahmen', exception.id, 'Ausnahmetag wirklich loeschen?') }}</details>
+{% endfor %}
+<details><summary>Ausnahmetag hinzufuegen</summary>{{ forms.exception_form(schedule, none) }}</details>
+</section>
+{% endfor %}
+<section class="sys-card"><h2>Was zeigt Monitor X?</h2>
+<p>Vorschau fuer den naechsten gewaehlten Wochentag in der Plan-Zeitzone, einschliesslich aktueller Einsatz-/GSL-Aktivitaet. Speichert keine Aenderungen.</p>
+<form hx-get="{{ base }}/vorschau" hx-target="#agent-preview" class="agent-form">
+<label>Monitor<select class="form-input" name="display_id" required>{% for display in displays %}<option value="{{ display.id }}">{{ display.name }}</option>{% endfor %}</select></label>
+<label>Wochentag<select class="form-input" name="weekday">{% for day in weekdays %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></label>
+{{ forms.input('clock', 'Uhrzeit', '10:00', type='time', required=true) }}
+<button class="btn" type="submit">Vorschau</button></form><div id="agent-preview" aria-live="polite"></div></section>
+{% endif %}
+</div>

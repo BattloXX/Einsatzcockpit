@@ -21,7 +21,7 @@ Im Verwaltungsmenü gibt es pro Fachgebiet **einen** Menüpunkt. Die zugehörige
 |---|---|
 | Benutzer & Rechte | Benutzer · Audit-Log · Anmeldung & 2FA |
 | Probenplanung | Probearten · Checklisten-Vorlagen · Öffentlicher Plan |
-| Infoscreens | Alarm-Infoscreen · Wetter-Infoscreen · Statistik · Straßensperren |
+| Infoscreens | Alarm-Infoscreen · [Geräte & Pläne](Administration-Infoscreen-Agent) · Wetter-Infoscreen · Statistik · Straßensperren |
 | Alarmierung | SMS senden · SMS-Versandweg · SMS-Empfang · SMS-Einsatzinfo · Einsatzinfo-Mail · Teams-Alarmierung · Push-Nachrichten |
 | Gateway / Druck | Gateway & Drucker · Druckregeln · Alarmempfang (je Gateway) |
 | Einsatzdaten | Einsatz-Import |

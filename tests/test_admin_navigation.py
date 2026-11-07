@@ -523,3 +523,14 @@ def test_app_geraete_gehoeren_zur_systemdiagnose(path):
 def isolated_update_status(monkeypatch, tmp_path):
     from app.services import update_service
     monkeypatch.setattr(update_service, "APP_ROOT", tmp_path)
+
+
+@pytest.mark.parametrize("role", ["admin", "org_admin", "system_admin"])
+@pytest.mark.parametrize("suffix", ["", "/geraete", "/displays", "/plaene", "/vorschau"])
+def test_infoscreen_agent_ein_hauptpunkt_und_tab(role, suffix):
+    nav = _nav("/admin/infoscreen-agent" + suffix, role=role)
+    assert nav.aktiver_eintrag.id == "infoscreens"
+    assert nav.aktiver_tab.id == "agent"
+    assert nav.aktiver_tab.label == "Geräte & Pläne"
+    assert nav.aktiver_tab.rollen == ("admin", "org_admin", "system_admin")
+    assert sum(e.ist_aktiv("/admin/infoscreen-agent" + suffix) for e in _entries(nav)) == 1

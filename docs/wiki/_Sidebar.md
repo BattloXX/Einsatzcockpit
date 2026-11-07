@@ -36,6 +36,7 @@
 
 **Verwaltung**
 - [Verwaltungsmenü](Administration-Navigation)
+- [Infoscreen-Agent: Geräte & Pläne](Administration-Infoscreen-Agent)
 - [Einstellungen](Administration-Einstellungen)
 - [ELVis-Anbindung](Administration-ELVis-Anbindung)
 

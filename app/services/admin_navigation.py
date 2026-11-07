@@ -255,6 +255,7 @@ ADMIN_GRUPPEN = (
                 href="/infoscreen-alarm/verwaltung",
                 aktiv_praefixe=(
                     "/infoscreen-alarm",
+                    "/admin/infoscreen-agent",
                     "/admin/settings/wetter/infoscreen",
                     "/admin/settings/statistik",
                     "/admin/settings/strassensperren-infoscreen",
@@ -266,6 +267,13 @@ ADMIN_GRUPPEN = (
                         label="Alarm-Infoscreen",
                         href="/infoscreen-alarm/verwaltung",
                         aktiv_praefixe=("/infoscreen-alarm",),
+                    ),
+                    AdminTab(
+                        id="agent",
+                        label="Geräte & Pläne",
+                        href="/admin/infoscreen-agent",
+                        aktiv_praefixe=("/admin/infoscreen-agent",),
+                        rollen=("admin", "org_admin", "system_admin"),
                     ),
                     AdminTab(
                         id="infoscreen",

@@ -112,6 +112,7 @@ from app.routers import (
     ui_gsl_staff,
     ui_hilfe,
     ui_incident,
+    ui_infoscreen_agent_admin,
     ui_infoscreen_alarm,
     ui_infoscreen_stats,
     ui_invitation,
@@ -1237,6 +1238,7 @@ app.include_router(ui_gateway.router)
 app.include_router(ui_druck.router)
 app.include_router(ui_dokumentdruck.router)
 app.include_router(ui_einsatz_dokumente.router)
+app.include_router(ui_infoscreen_agent_admin.router)
 app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_infoscreen_stats.router)
 app.include_router(ui_verleih.router)

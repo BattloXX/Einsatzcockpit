@@ -1,0 +1,79 @@
+{% macro csrf() %}<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% endmacro %}
+{% macro input(name, label, value='', type='text', required=false, maximum=100) %}
+<label>{{ label }}<input class="form-input" type="{{ type }}" name="{{ name }}" value="{{ value if value is not none else '' }}" {% if required %}required{% endif %} {% if type == 'text' %}maxlength="{{ maximum }}"{% endif %}></label>
+{% endmacro %}
+{% macro select(name, label, options, selected) %}
+<label>{{ label }}<select class="form-input" name="{{ name }}">{% for value, title in options %}<option value="{{ value }}" {% if value|string == selected|string %}selected{% endif %}>{{ title }}</option>{% endfor %}</select></label>
+{% endmacro %}
+{% macro delete(entity, id, message) %}
+<form hx-post="{{ base }}/{{ entity }}/{{ id }}/loeschen" hx-target="#agent-content" hx-swap="outerHTML" hx-confirm="{{ message }}">{{ csrf() }}<input type="hidden" name="confirm" value="ja"><button class="btn btn--danger" type="submit">Loeschen</button></form>
+{% endmacro %}
+{% macro display_form(d) %}
+<form class="agent-form" hx-post="{{ base }}/displays/{{ d.id if d else 0 }}/speichern" hx-target="#agent-content" hx-swap="outerHTML">
+{{ csrf() }}
+<label>Geraet<select class="form-input" name="device_id" required>{% for device in devices %}<option value="{{ device.id }}" {% if d and d.device_id == device.id %}selected{% endif %}>{{ device.name }}</option>{% endfor %}</select></label>
+{{ input('display_key', 'Display-Key', d.display_key if d else '', required=true) }}{{ input('name', 'Name', d.name if d else '', required=true) }}
+<label>Alarm-Infoscreen-Token<select class="form-input" name="alarm_token_id"><option value="">Kein Token</option>{% for token in tokens %}{% set used = displays|selectattr('alarm_token_id', 'equalto', token.id)|list %}<option value="{{ token.id }}" {% if d and d.alarm_token_id == token.id %}selected{% endif %} {% if used and (not d or used[0].id != d.id) %}disabled{% endif %}>{{ token.name }}{{ ' (belegt)' if used else '' }}</option>{% endfor %}</select></label>
+<label>Zeitplan<select class="form-input" name="schedule_id"><option value="">Kein Zeitplan</option>{% for s in schedules %}<option value="{{ s.id }}" {% if d and d.schedule_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+{{ select('power_mode', 'Monitorsteuerung', [('auto','Automatisch'),('logical_blank','Schwarzbild'),('output_power_save','Output Power Save'),('hardware_standby','Hardware Standby')], d.power_mode if d else 'auto') }}
+{{ input('nachlauf_min', 'Nachlauf-Minuten (0-1440)', d.nachlauf_min if d else 10, type='number', required=true) }}
+{{ input('offline_wake_after_min', 'Offline-Aufwecken nach Minuten (1-1440, leer = aus)', d.offline_wake_after_min if d else 5, type='number') }}
+<label><input type="checkbox" name="gsl_override_erlaubt" value="1" {% if d and d.gsl_override_erlaubt %}checked{% endif %}> GSL-Override erlaubt</label>
+<label><input type="checkbox" name="aktiv" value="1" {% if not d or d.aktiv %}checked{% endif %}> Aktiv</label>
+<button class="btn btn--primary" type="submit">Display speichern</button></form>
+{% endmacro %}
+{% macro schedule_form(s) %}
+<form class="agent-form" hx-post="{{ base }}/plaene/{{ s.id if s else 0 }}/speichern" hx-target="#agent-content" hx-swap="outerHTML">{{ csrf() }}
+{{ input('name', 'Name', s.name if s else '', required=true) }}
+{{ input('timezone', 'Zeitzone (IANA)', s.timezone if s else 'Europe/Vienna', required=true, maximum=64) }}
+{{ select('ruhemodus', 'Ruhemodus', [('aus','Monitor aus'),('schwarz','Schwarzbild')], s.ruhemodus if s else 'aus') }}
+<button class="btn btn--primary" type="submit">Zeitplan speichern</button></form>
+{% endmacro %}
+{% macro rotation_editor(value, id, fieldname='rotation_json') %}
+<div class="agent-rotation" data-rotation>
+<textarea hidden {% if fieldname %}name="{{ fieldname }}"{% endif %} data-rotation-value maxlength="12000">{{ value|tojson }}</textarea>
+<p>Rotation: Seiten werden in dieser Reihenfolge angezeigt.</p>
+<div data-rotation-rows></div>
+<div class="agent-form"><label>Seite<select class="form-input" data-rotation-url><option value="weather">Wetter (builtin)</option>{% for url in urls %}<option value="{{ url.id }}">{{ url.label }}</option>{% endfor %}</select></label>
+<label>Verweildauer (5-3600 s)<input class="form-input" type="number" min="5" max="3600" value="30" data-rotation-dwell></label>
+<button class="btn" type="button" data-rotation-add>Seite anhaengen</button></div>
+<p data-rotation-error role="alert"></p></div>
+{% endmacro %}
+{% macro slot_form(s, slot) %}
+<form class="agent-form" hx-post="{{ base }}/slots/{{ slot.id if slot else 0 }}/speichern" hx-target="#agent-content" hx-swap="outerHTML">{{ csrf() }}<input type="hidden" name="schedule_id" value="{{ s.id }}">
+<fieldset class="agent-days"><legend>Wochentage</legend>{% for day in weekdays %}<label><input type="checkbox" name="days" value="{{ loop.index0 }}" {% if not slot or (slot.weekdays // (2 ** loop.index0)) % 2 %}checked{% endif %}>{{ day }}</label>{% endfor %}</fieldset>
+{{ input('start_time', 'Start', slot.start_time if slot else '08:00', type='time', required=true) }}{{ input('end_time', 'Ende (ueber Mitternacht erlaubt)', slot.end_time if slot else '18:00', type='time', required=true) }}
+{{ select('power', 'Monitor', [('on','An'),('off','Aus')], slot.power if slot else 'on') }}
+{{ input('priority', 'Prioritaet (-1000 bis 1000)', slot.priority if slot else 0, type='number', required=true) }}
+{{ input('label', 'Label', slot.label if slot else '', maximum=200) }}
+{{ input('valid_from', 'Gueltig ab', slot.valid_from if slot else '', type='date') }}{{ input('valid_to', 'Gueltig bis', slot.valid_to if slot else '', type='date') }}
+{{ rotation_editor(slot.rotation_json if slot else [], slot.id if slot else 0) }}
+<label><input type="checkbox" name="ack_overlap" value="1"> Warnung: Ueberlappungen gleicher Prioritaet bewusst zulassen</label>
+<button class="btn btn--primary" type="submit">Slot speichern</button></form>
+{% endmacro %}
+{% macro replacement_row(row=none) %}
+<div class="agent-replacement-row" data-replacement-row>
+<div class="agent-form">
+<label>Start<input class="form-input" type="time" value="{{ row.start_time if row else '08:00' }}" data-replacement-field="start_time" required></label>
+<label>Ende<input class="form-input" type="time" value="{{ row.end_time if row else '18:00' }}" data-replacement-field="end_time" required></label>
+<label>Monitor<select class="form-input" data-replacement-field="power"><option value="on">An</option><option value="off" {% if row and row.power == 'off' %}selected{% endif %}>Aus</option></select></label>
+<label>Prioritaet<input class="form-input" type="number" min="-1000" max="1000" value="{{ row.priority if row else 0 }}" data-replacement-field="priority" required></label>
+<label>Label<input class="form-input" maxlength="200" value="{{ row.label or '' if row else '' }}" data-replacement-field="label"></label>
+</div>
+{{ rotation_editor(row.rotation_json if row else [], 0, fieldname='') }}
+<button class="btn" type="button" data-replacement-remove>Ersatz-Slot entfernen</button>
+</div>
+{% endmacro %}
+{% macro exception_form(s, e) %}
+<form class="agent-form" hx-post="{{ base }}/ausnahmen/{{ e.id if e else 0 }}/speichern" hx-target="#agent-content" hx-swap="outerHTML">{{ csrf() }}<input type="hidden" name="schedule_id" value="{{ s.id }}">
+{{ input('datum', 'Datum', e.datum if e else '', type='date', required=true) }}{{ input('label', 'Label', e.label if e else '', maximum=200) }}
+<div class="agent-replacements" data-replacements>
+<input type="hidden" name="slots_ersatz" value="[]" data-replacement-value>
+<p>Ohne Ersatz-Slots bleibt der ganze Tag aus. Ersatz-Slots ersetzen den Wochenplan; Luecken bleiben aus.</p>
+<div data-replacement-rows>{% for row in (e.slots_ersatz or [] if e else []) %}{{ replacement_row(row) }}{% endfor %}</div>
+<template data-replacement-template>{{ replacement_row() }}</template>
+<button class="btn" type="button" data-replacement-add>Ersatz-Slot hinzufuegen</button>
+</div>
+<label><input type="checkbox" name="ack_overlap" value="1"> Warnung: Ueberlappungen gleicher Prioritaet bewusst zulassen</label>
+<button class="btn btn--primary" type="submit">Ausnahmetag speichern</button></form>
+{% endmacro %}

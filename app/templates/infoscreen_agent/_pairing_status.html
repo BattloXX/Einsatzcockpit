@@ -1,0 +1,6 @@
+{% set paired = device.status == 'active' and device.device_token_hash %}
+{% set connected = device.agent_presence_expires_at and device.agent_presence_expires_at > now if now is defined else connected %}
+<div id="agent-pairing-status" {% if not connected %}hx-get="{{ base }}/geraete/{{ device.id }}/status" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %} aria-live="polite" {% if paired %}data-agent-paired="true"{% endif %}>
+<strong>{{ 'verbunden' if connected else ('gekoppelt' if paired else 'Wartet auf Kopplung') }}</strong>
+{% if not paired and device.pairing_expires_at %}<p>Code gueltig bis {{ device.pairing_expires_at|local_datetime_sec }}{% if now is defined %} ({{ [0, ((device.pairing_expires_at - now).total_seconds()|int)]|max }} Sekunden verbleibend){% endif %}.</p>{% endif %}
+</div>

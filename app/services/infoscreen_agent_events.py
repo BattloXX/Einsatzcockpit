@@ -84,6 +84,17 @@ async def publish_org_changed(org_id: int, reason: str, display_ids: list[int] |
         await _publish({**target, "type": "invalidate", "reason": reason})
 
 
+async def publish_device_config_changed(org_id: int, device_id: int, display_key: str, revision: int) -> None:
+    """Altes Geraet wecken, wenn sein Display nach dem Commit nicht mehr zuordenbar ist."""
+    await _publish({"type": "invalidate", "org_id": org_id, "device_id": device_id,
+                    "display_key": display_key, "revision": revision, "reason": "config_changed"})
+
+
+async def disconnect_device(org_id: int, device_id: int) -> None:
+    """Nach Widerruf/Loeschen alle Worker gegen die DB abgleichen lassen."""
+    await _publish({"type": "reconcile", "org_id": org_id, "device_id": device_id})
+
+
 async def publish_config_changed(org_id: int, display_ids: list[int]) -> None:
     """Nach Config-Commit aufrufen; Versionierung liegt beim mutierenden Service."""
     await publish_org_changed(org_id, "config_changed", display_ids)
