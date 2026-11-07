@@ -21,6 +21,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.async_bridge import run_async
+from app.core.rate_limit import limiter
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import get_db
@@ -44,6 +45,32 @@ def _resolve_gateway_from_bearer(request: Request, db: Session) -> Gateway | Non
         .filter(Gateway.device_token_hash == hash_api_key(raw))
         .first()
     )
+
+
+@router.post("/gateway/elvis-events")
+@(limiter.limit("120/minute") if limiter else lambda fn: fn)
+def elvis_event(
+    request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db),
+):
+    """HTTP-Fallback, ausschliesslich mit Bearer-Device-Token eines Windows-Agents."""
+    from app.services.elvis_event_service import lese_event_body, verarbeite_elvis_event
+
+    set_tenant_context(db, None)
+    if not request.headers.get("authorization", "").lower().startswith("bearer "):
+        raise HTTPException(401, "Bearer-Device-Token erforderlich")
+    gateway = _resolve_gateway_from_bearer(request, db)
+    if gateway is None or not gateway.is_windows_agent:
+        raise HTTPException(401, "Ungueltiges Windows-Agent-Token")
+    data = run_async(lese_event_body, request)
+    if not isinstance(data.get("args"), dict):
+        raise HTTPException(400, "args muss ein Objekt sein")
+    try:
+        return verarbeite_elvis_event(
+            db, gateway, data.get("event_id"), data["args"], data.get("received_at"),
+            background_tasks,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 # ── Pairing ────────────────────────────────────────────────────────────────────

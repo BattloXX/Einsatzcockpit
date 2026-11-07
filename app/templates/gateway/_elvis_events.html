@@ -1,0 +1,16 @@
+<div id="elvis-events" class="sys-scroll sys-mt-2" hx-get="/gateway/{{ gw.id }}/elvis?events=1"
+     hx-trigger="every 15s" hx-target="this" hx-swap="outerHTML">
+  <table class="sys-table">
+    <thead><tr><th>Zeit</th><th>Nr</th><th>ESW</th><th>Adresse</th><th>Test/echt</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for event in elvis_events %}
+      {% set args = (event.parsed or {}).get('elvis_args', {}) %}
+      <tr>
+        <td>{{ event.received_at|local_datetime_sec }}</td><td>{{ args.get('Nr', '') }}</td>
+        <td>{{ args.get('ESW', '') }}</td><td>{{ args.get('Adresse') or [args.get('Straße', ''), args.get('Hausnummer', ''), args.get('Ort', '')]|join(' ') }}</td>
+        <td>{{ 'Test' if (event.parsed or {}).get('elvis_test') else 'echt' }}</td><td>{{ event.process_status }}</td>
+      </tr>
+      {% else %}<tr><td colspan="6">Noch keine ELVis-Events empfangen.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

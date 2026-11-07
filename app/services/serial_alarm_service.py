@@ -45,6 +45,7 @@ def store_raw(
     sequence: int | None = None,
     received_at_gateway: datetime | None = None,
     source: str = "wut",
+    process_status: str = "stored",
 ) -> tuple[AlarmIngest, bool]:
     """Speichert Rohdaten in einer eigenen Transaktion, ohne Einsatzverarbeitung."""
     h = raw_hash(raw_text)
@@ -70,7 +71,7 @@ def store_raw(
         raw_text=raw_text, raw_bytes=raw_bytes[:65536] if raw_bytes is not None else None,
         charset=charset, parsed=parsed, parse_status=parse_status,
         sequence=sequence, received_at_gateway=_parse_dt(received_at_gateway),
-        source=source, received_at=now, process_status="stored", process_attempts=0,
+        source=source, received_at=now, process_status=process_status, process_attempts=0,
     )
     db.add(ingest)
     try:
@@ -109,6 +110,11 @@ def process_ingest(
                 .execution_options(include_all_tenants=True).populate_existing().one())
 
     ingest = load()
+    if ingest.source == "elvis" and (
+        (ingest.parsed or {}).get("elvis_test")
+        or (ingest.parsed or {}).get("elvis_mode") != "alarmquelle"
+    ):
+        return ingest
     now = datetime.now(UTC).replace(tzinfo=None)
     claimed = (db.query(AlarmIngest)
                .filter(AlarmIngest.id == ingest_id, AlarmIngest.org_id == org_id,
@@ -157,6 +163,17 @@ def process_ingest(
 def _parse_ingest(db: Session, ingest: AlarmIngest, org_id: int) -> dict:
     """Cloud-Ergebnis speichern und kompatible Werte fuer die Einsatzanlage bauen."""
     gespeichert = ingest.parsed or {}
+    if ingest.source == "elvis":
+        from app.models.master import FireDept
+        from app.services.elvis_event_service import parsed_elvis
+
+        parsed = parsed_elvis(gespeichert.get("elvis_args", {}), ingest.raw_text, db.get(FireDept, org_id))
+        ingest.process_error = None
+        ingest.parsed = {**gespeichert, **parsed}
+        ingest.leitstellennummer = parsed["leitstellennummer"]
+        ingest.parser_version = "elvis-1"
+        ingest.parse_status = "parsed"
+        return parsed
     gateway = gespeichert.get("gateway_parsed") if "gateway_parsed" in gespeichert else ingest.parsed
     fallback = gateway or {}
     ingest.process_error = None

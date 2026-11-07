@@ -644,7 +644,10 @@ def agent_config_sync(db: Session, gateway: Gateway) -> dict:
         .execution_options(include_all_tenants=True)
         .all()
     )
+    from app.services.elvis_event_service import elvis_modus
+
     return {
+        "elvis": {"mode": elvis_modus(gateway)},
         "agent_id": gateway.id,
         "name": gateway.name,
         "routes": [

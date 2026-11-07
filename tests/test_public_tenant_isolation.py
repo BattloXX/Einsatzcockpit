@@ -1652,3 +1652,34 @@ def test_diagnose_report_bearer_bleibt_in_eigener_org(client):
             row = db.get(AppGeraet, gid)
             assert (row.user_id, row.org_id) == ids[nummer]
             assert row.app_version == f"org-{nummer}"
+
+
+def test_elvis_event_bearer_bindet_org_auch_bei_identischer_event_id(client):
+    """Ein gueltiger fremder Device-Token schreibt ausschliesslich in seine eigene Org."""
+    from uuid import uuid4
+
+    from app.models.gateway import AlarmIngest
+    from tests.test_print_agent_ws import _anlegen, _auth
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        orgs = [FireDept(slug=uuid4().hex, name="ELVis Tenant") for _ in range(2)]
+        db.add_all(orgs)
+        db.commit()
+        ids = [org.id for org in orgs]
+    agents = [_anlegen(org_id, routen=False) for org_id in ids]
+    payload = {"event_id": uuid4().hex, "args": {"Nr": "f12345678", "ESW": "t1",
+               "Organisation": str(ids[1]), "org_id": ids[1]}, "org_id": ids[1],
+               "gateway_id": agents[1]["gateway_id"]}
+    ingest_ids = []
+    for agent in agents:
+        response = client.post("/api/v1/gateway/elvis-events", json=payload, headers=_auth(agent["token"]))
+        assert response.status_code == 200, response.text
+        assert response.json()["duplicate"] is False
+        ingest_ids.append(response.json()["ingest_id"])
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        for row_id, agent in zip(ingest_ids, agents, strict=True):
+            row = db.get(AlarmIngest, row_id)
+            assert row.org_id == agent["org_id"] and row.gateway_id == agent["gateway_id"]
+            assert row.einsatz_id is None and row.process_status == "logged"

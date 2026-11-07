@@ -17,7 +17,7 @@ from app.models.gateway import PARSE_FAILED, AlarmIngest
 from app.models.incident import Incident
 from app.models.incident_alarm_field import IncidentAlarmField
 from app.models.user import User
-from app.services.loop_thread_io import ALARM_POOL, im_db_thread
+from app.services.loop_thread_io import ALARM_POOL, auf_event_loop, im_db_thread
 
 logger = logging.getLogger("einsatzleiter.alarm")
 
@@ -246,8 +246,8 @@ def verarbeite_neu(db: Session, ingest: AlarmIngest, org_id: int, user: User) ->
         from app.services.broadcast import broadcast_org, manager
         payload = {"type": "incident_updated", "incident_id": incident.id}
         try:
-            run_async(broadcast_org, org_id, payload)
-            run_async(manager.broadcast, incident.id, payload)
+            run_async(auf_event_loop, broadcast_org, org_id, payload)
+            run_async(auf_event_loop, manager.broadcast, incident.id, payload)
         except Exception:
             logger.warning("Manueller Alarmupdate-Broadcast fehlgeschlagen (ingest %s, org %s)",
                            ingest.id, org_id, exc_info=True)
@@ -259,7 +259,7 @@ def melde_ingest_geaendert(ingest: AlarmIngest) -> None:
     from app.services.broadcast import broadcast_org
 
     try:
-        run_async(broadcast_org, ingest.org_id, {
+        run_async(auf_event_loop, broadcast_org, ingest.org_id, {
             "type": "alarm_ingest_changed", "gateway_id": ingest.gateway_id, "ingest_id": ingest.id,
         })
     except Exception:
@@ -429,8 +429,8 @@ def nachlauf(
             from app.services.broadcast import broadcast_org, manager
             payload = {"type": "incident_updated", "incident_id": ingest.einsatz_id}
             try:
-                run_async(broadcast_org, org_id, payload)
-                run_async(manager.broadcast, ingest.einsatz_id, payload)
+                run_async(auf_event_loop, broadcast_org, org_id, payload)
+                run_async(auf_event_loop, manager.broadcast, ingest.einsatz_id, payload)
             except Exception:
                 logger.warning("Alarmupdate-Broadcast fehlgeschlagen (ingest %s, org %s)",
                                ingest.id, org_id, exc_info=True)
@@ -473,7 +473,7 @@ def nachlauf(
             try:
                 from app.services.broadcast import broadcast_org
                 from app.services.exercise_guard import darf_extern
-                run_async(broadcast_org, org_id, {
+                run_async(auf_event_loop, broadcast_org, org_id, {
                         "type": "incident_created",
                         "incident_id": ingest.einsatz_id,
                         "alarm": inc.alarm_type_code,

@@ -1349,6 +1349,35 @@ async def print_agent_ws(websocket: WebSocket):
             elif mtype == "job_status":
                 await _agent_job_status(websocket, org_id, gateway_id, msg,
                                         connection_id=connection_id, token_hash=token_hash)
+            elif mtype == "elvis_event":
+                from functools import partial
+
+                from fastapi import BackgroundTasks
+
+                from app.services.elvis_event_service import verarbeite_elvis_event
+                from app.services.loop_thread_io import im_db_thread
+
+                tasks = BackgroundTasks()
+                try:
+                    if len(raw.encode("utf-8")) > 32768:
+                        raise ValueError("ELVis-Event ist groesser als 32 KiB")
+                    # Nachlauf kann loopgebundene I/O aufrufen; DB und Session
+                    # bleiben im Thread, die Bruecke behaelt den aufrufenden Loop.
+                    result = await im_db_thread(partial(
+                        _agent_call, gateway_id, verarbeite_elvis_event,
+                        p.get("event_id"), p.get("args"), p.get("received_at"), tasks,
+                        connection_id=connection_id, token_hash=token_hash,
+                    ))
+                    if result is None:
+                        await senden("error", {"id": msg.get("id"), "error": "Agent nicht autorisiert"}, rid)
+                    else:
+                        await senden("ack", {"id": msg.get("id") or p.get("event_id")}, rid)
+                        await tasks()
+                except ValueError as exc:
+                    await senden("error", {"id": msg.get("id"), "error": str(exc)}, rid)
+                except Exception:
+                    logger.exception("ELVis-Event fehlgeschlagen (gateway %s)", gateway_id)
+                    await senden("error", {"id": msg.get("id"), "error": "ELVis-Verarbeitung fehlgeschlagen"}, rid)
             elif mtype == "log_event":
                 level = str(p.get("level") or "info").lower()
                 log_fn = logger.error if level == "error" else logger.warning if level == "warning" else logger.info

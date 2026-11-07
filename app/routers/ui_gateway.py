@@ -100,6 +100,58 @@ def _historie_context(db: Session, gw: Gateway) -> dict:
 
 # ── Windows-Druckagent ─────────────────────────────────────────────────────────
 
+def _elvis_context(db: Session, gw: Gateway) -> dict:
+    from app.services.elvis_event_service import elvis_modus
+
+    events = db.query(AlarmIngest).filter(
+        AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id, AlarmIngest.source == "elvis",
+    ).order_by(AlarmIngest.received_at.desc(), AlarmIngest.id.desc()).limit(20).all()
+    return {"gw": gw, "elvis_mode": elvis_modus(gw), "elvis_events": events}
+
+
+@router.get("/{gateway_id}/elvis", response_class=HTMLResponse)
+def agent_elvis_panel(
+    gateway_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    if not gw.is_windows_agent:
+        raise HTTPException(404, "Kein Windows-Druckagent")
+    template = "gateway/_elvis_events.html" if request.query_params.get("events") else "gateway/_elvis.html"
+    return templates.TemplateResponse(request, template, {"user": user, **_elvis_context(db, gw)},
+                                      headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{gateway_id}/elvis", response_class=HTMLResponse)
+def agent_elvis_save(
+    gateway_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    if not gw.is_windows_agent:
+        raise HTTPException(404, "Kein Windows-Druckagent")
+    form = run_async(request.form)
+    mode = form.get("mode")
+    if mode not in ("aus", "protokollieren", "alarmquelle"):
+        raise HTTPException(400, "Ungueltiger ELVis-Modus")
+    config = dict(gw.wut_config or {})
+    config["elvis"] = {"mode": mode}
+    gw.wut_config = config
+    db.commit()
+    from app.routers.ws import push_agent_message
+    from app.services.broadcast import broadcast_org
+    from app.services.print_agent_service import agent_config_sync
+
+    payload = agent_config_sync(db, gw)
+    run_async(push_agent_message, gw.org_id, [gw.id], {"type": "config_sync", "payload": payload})
+    run_async(broadcast_org, gw.org_id, {"type": "alarm_ingest_changed", "gateway_id": gw.id})
+    return templates.TemplateResponse(request, "gateway/_elvis.html", {
+        "user": user, "elvis_saved": True, **_elvis_context(db, gw),
+    }, headers={"Cache-Control": "no-store"})
+
+
 def _agent_detail(
     request: Request, db: Session, user: User, gw: Gateway,
     *, pairing_code: str | None = None, device_token: str | None = None,
@@ -173,6 +225,7 @@ def _agent_detail(
         # Druckhistorie-Partial: Druckernamen aller Druckziele (auch fremd beheimatete)
         "printers": org_printers,
         "jobs": jobs,
+        **_elvis_context(db, gw),
         "cloud_url": str(request.base_url).rstrip("/"),
         "pairing_code": pairing_code,
         "device_token": device_token,

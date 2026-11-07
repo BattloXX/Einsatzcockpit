@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **ELVis-Einsatz-Events (Cloud Phase 1):** Windows-Druckagents können Batch-Felder per WebSocket oder HTTP-Fallback übertragen. Admin-Modi Aus/Protokollieren/Alarmquelle, standardmäßig nur Protokollierung; Test-/Dummy-Aufrufe erzeugen nie Einsätze oder Alarme. Event-ID- und Inhaltsdedup, Org-Isolation, bestehender Alarmnachlauf und Zusammenführung über die Leitstellennummer; Agent-Detailseite mit Live-Eventliste und Modus-Schalter. Konfiguration in `wut_config.elvis`, keine Migration. Agent-Anbindung und Prüfung des LWZ-Nr-Formats vor Ort bleiben offen.
+
 - **LIS/IPR-Poll mit adaptivem Takt:** Je Org Aktiv-Intervall (Standard 30 s, mindestens 20 s), im Leerlauf mindestens 60 s, jeweils ±20 % Jitter. 60 s Aktiv-Startphase, 30 min Aktiv-Fenster nach gelieferten Einsätzen und Aktiv-Takt bei bestehenden aktiven LIS-Einsätzen. Login-/Poll-Fehler führen zu gestaffelten Pausen von 10 bis 300 s und anschließendem Client-Neuaufbau; Erfolg setzt den Backoff zurück. Neue Env-Einstellungen, ehrlicher User-Agent und an den Leerlauf angepasste Fallback-/Monitor-Fristen. Keine Migration nötig.
 
 - **DIBOS-Poll mit adaptivem Takt:** Je Org 5 s bei Aktivität und 15 s im Leerlauf, jeweils ±20 % Jitter; 60 s Aktiv-Startphase und 30 min Aktiv-Fenster nach echten Events (ohne F30-Proberufe). Fehler einschließlich Login/401 führen zu gestaffelten Pausen von 10 bis 300 s statt wiederholten Logins im 5-s-Takt. Units werden bei unveränderten Events höchstens alle 20 s geholt; neue/geänderte Events sofort, Anlage und Alarmierung bleiben im Fast Path. Neue Env-Einstellungen, Legacy-Intervall-Alias, ehrlicher User-Agent und angepasste Monitor-Stale-Frist. Keine Migration nötig.
