@@ -37,6 +37,7 @@
 **Verwaltung**
 - [Verwaltungsmenü](Administration-Navigation)
 - [Einstellungen](Administration-Einstellungen)
+- [ELVis-Anbindung](Administration-ELVis-Anbindung)
 
 **Systemadministration**
 - [Überblick und Inbetriebnahme](Administration-System-Admin-Ueberblick)

@@ -14,6 +14,7 @@ DIENST_LABELS = {
     "alarm_seriell": "Alarm seriell (W&T)",
     "alarm_dibos": "Alarm DIBOS",
     "alarm_lis": "LIS-Schnittstelle",
+    "elvis_weiterleitung": "ELVis-Weiterleitung",
     "alarm_outbox": "Alarm-Outbox",
     "worker_runtime": "Worker und Leader",
     "redis_bus": "Redis-Bus",
@@ -24,7 +25,7 @@ DIENST_LABELS = {
 
 # Nur diese organisationsbezogenen Dienste besitzen einen Ueberwachungsschalter.
 ORG_DIENST_KEYS = (
-    "print_gateway", "sms_gateway", "alarm_seriell", "alarm_dibos", "alarm_lis", "alarm_outbox",
+    "print_gateway", "sms_gateway", "alarm_seriell", "alarm_dibos", "alarm_lis", "elvis_weiterleitung", "alarm_outbox",
 )
 
 
