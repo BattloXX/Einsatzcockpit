@@ -85,7 +85,8 @@ def test_update_check_legt_neue_version_nur_einmal_an():
             db.flush()
             org_id = org.id
             for index in range(4):
-                device = InfoscreenDevice(org_id=org.id, name=f"Test {index}", channel="stable", agent_version="2026.1.1")
+                device = InfoscreenDevice(
+                    org_id=org.id, name=f"Test {index}", channel="stable", agent_version="2026.1.1")
                 db.add(device)
                 db.flush()
                 device_ids.append(device.id)
