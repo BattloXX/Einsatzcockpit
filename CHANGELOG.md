@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Infoscreen-Agent S1:** Datenmodell und Migration 0355, Pairing mit 15 Minuten gueltigem Einmal-Code und IP-Drossel, gehashte Device-Tokens, Sperren/Entsperren und Token-Rotation mit Org-Isolation. Grundlage fuer die spaeteren Agent-Endpunkte und Verwaltung.
+
 - **ELVis-Abnahme im Parallelbetrieb (Phase 4):** Lesender, organisationsgebundener Batch-Abgleich der letzten Events über die Leitstellennummer mit DIBOS/LIS/seriellen Eingängen. Live-Eventliste mit Abgleich-Badge, Einsatzlink, Zeitdelta und Median ohne Testevents. DIBOS-Quellenannahme gekennzeichnet; Abnahme-Checkliste einschließlich Windows-Dienst-/Netzausfall und Rückweg unter `docs/konzepte/elvis-abnahme.md`. Keine Migration.
 - **ELVis Phase 3:** Dienstüberwachung zeigt Modus und letzten ELVis-Empfang je gekoppeltem, aktiviertem Windows-Agent in Org-Zeit mit Test/echt. Rein informativ: ohne Event unbekannt, kein Ausfallalarm bei Stille; bestehender Dienstschalter, UI und Admin-MCP berücksichtigen den neuen Check. Neue Wiki-Anleitung für Batch-Aufruf, Inbox, Tests und schrittweise Aktivierung. Parameterübergabe, Mehrfachaufrufe und die Annahme `Nr = Leitstellennummer` müssen noch am Echtgerät beziehungsweise echten Einsatz bestätigt werden. Keine Migration, kein neuer Modulzustand.
 

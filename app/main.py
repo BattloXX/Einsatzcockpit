@@ -70,6 +70,7 @@ from app.routers import (
     csp_report,
     device_api,
     gateway_api,
+    infoscreen_agent_api,
     lagekarte_api,
     mail_inbound_webhook,
     mailing_webhook,
@@ -1155,6 +1156,7 @@ app.include_router(asuew_api.router)
 app.include_router(api_feed.router)
 app.include_router(api_live.router)
 app.include_router(gateway_api.router)
+app.include_router(infoscreen_agent_api.router)
 app.include_router(lagekarte_api.router)
 app.include_router(teams_bot.router)
 app.include_router(ws.router)
