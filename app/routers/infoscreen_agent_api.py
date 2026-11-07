@@ -90,9 +90,11 @@ def config(request: Request, db: Session = Depends(get_db), device: InfoscreenDe
     import hashlib
     import json
     from datetime import UTC, datetime
+    from urllib.parse import urlsplit
 
     from fastapi.responses import JSONResponse
 
+    from app.config import settings
     from app.models.infoscreen_agent import InfoscreenDisplay, InfoscreenUrlAllowlist
     from app.services.infoscreen_agent_resolver import timeline
     from app.services.infoscreen_agent_snapshot import alarm_url, lade_schedule
@@ -103,6 +105,7 @@ def config(request: Request, db: Session = Depends(get_db), device: InfoscreenDe
     displays = db.query(InfoscreenDisplay).filter(
         InfoscreenDisplay.org_id == device.org_id, InfoscreenDisplay.device_id == device.id,
     ).order_by(InfoscreenDisplay.id).all()
+    server_host = urlsplit(settings.effective_public_base_url).hostname
     data = {
         "config_version": device.config_version,
         "displays": [{"display_key": d.display_key, "name": d.name, "edid_id": d.edid_id,
@@ -110,7 +113,7 @@ def config(request: Request, db: Session = Depends(get_db), device: InfoscreenDe
                       "offline_wake_after_min": d.offline_wake_after_min,
                       "url": alarm_url(db, d), "timeline": timeline(lade_schedule(db, d), anchor, hours=73)}
                      for d in displays],
-        "allowlist": sorted(({request.url.hostname} if request.url.hostname else set()) | {
+        "allowlist": sorted(({server_host} if server_host else set()) | {
             r.host for r in db.query(InfoscreenUrlAllowlist).filter(
                 InfoscreenUrlAllowlist.org_id == device.org_id).all()}),
         "intervals": {"poll_sec": 20, "heartbeat_sec": 90, "ping_sec": 25},

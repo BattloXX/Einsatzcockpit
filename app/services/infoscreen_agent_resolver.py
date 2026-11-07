@@ -124,7 +124,9 @@ def resolve(display: Display, now_utc: datetime, aktivitaet: Aktivitaet,
     mode, power, url, until = "default", "on", display.url, None
     active = [o for o in overrides if o.get("org_id") == display.org_id
               and o.get("display_id") in (None, display.id) and not o.get("aufgehoben_am")
-              and utc(o["von"]) <= now < utc(o["bis"])]
+              and utc(o["von"]) <= now < utc(o["bis"])
+              and not (o["kind"] == "gsl_page" and aktivitaet.gsl_ende
+                       and utc(o["von"]) <= utc(aktivitaet.gsl_ende))]
     active.sort(key=lambda o: (utc(o["von"]), o.get("id", 0)), reverse=True)
     gsl_override = next((o for o in active if o["kind"] == "gsl_page"), None)
     manual = next((o for o in active if o["kind"] == "manual"), None)
@@ -134,7 +136,7 @@ def resolve(display: Display, now_utc: datetime, aktivitaet: Aktivitaet,
     override = None
     if display.locked:
         mode, url = "locked", "/static/infoscreen-agent/locked.html"
-    elif display.gsl_override_erlaubt and gsl_override:
+    elif aktivitaet.gsl and display.gsl_override_erlaubt and gsl_override:
         mode, override = "override", gsl_override
     elif aktivitaet.gsl:
         mode = "gsl"
@@ -148,10 +150,10 @@ def resolve(display: Display, now_utc: datetime, aktivitaet: Aktivitaet,
         mode, power, _, until = "schedule", *slot
     if override:
         url, until = override["url"], utc(override["bis"])
-    # Gueltigkeit auch durch einen kuenftig beginnenden Override begrenzen.
-    starts = [utc(o["von"]) for o in overrides if o.get("org_id") == display.org_id
+    # Gueltigkeit konservativ an jedem Override-Beginn/-Ende begrenzen.
+    starts = [utc(o[key]) for o in overrides if o.get("org_id") == display.org_id
               and o.get("display_id") in (None, display.id) and not o.get("aufgehoben_am")
-              and utc(o["von"]) > now]
+              for key in ("von", "bis") if utc(o[key]) > now]
     if schedule and mode in ("schedule", "default"):
         starts.extend(v for row in _intervals(schedule, now, now + timedelta(days=8))
                       for v in row[:2] if v > now)

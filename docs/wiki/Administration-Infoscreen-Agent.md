@@ -85,3 +85,33 @@ Revision noch Konfigurationsversion.
 Nach gespeicherten Aenderungen aktualisiert sich die Verwaltung ohne F5.
 Betroffene Geraete erhalten eine neue Konfigurationsversion und einen Wake-Hinweis.
 Overrides, Releases, Updateverwaltung und Installer-Endpunkte folgen in S5/S6.
+
+## Uebersteuerung und URL-Allowlist (S5)
+
+Im Unterbereich **Uebersteuerung** koennen Org-Admins Seiten fuer ein Display oder
+alle Displays der eigenen Organisation planen. Von/bis beziehen sich auf die
+Org-Zeitzone; Ablauf ist Pflicht, maximal 8 Stunden. Die Begruendung ist Pflicht,
+auch beim Aufheben. Keine Einsatzdetails oder personenbezogenen Angaben eingeben.
+Aktuelle, geplante und abgelaufene/aufgehobene Eintraege stehen getrennt in der Liste.
+
+**GSL-Seite** wirkt nur bei aktiver GSL und fuer Displays mit erlaubter
+GSL-Uebersteuerung. Mit dem GSL-Ende endet sie dauerhaft. Ein neuer regulaerer
+Einsatz unterbricht sie bei aktiver GSL nicht. **Manuell** wirkt erst nach GSL,
+Einsatz und Nachlauf. Schnellaktionen **Wetter fuer 30 min / 2 h** brauchen dieselbe
+Begruendung. Die Live-Anzeige zeigt alle 15 Sekunden die serverseitige Sollwirkung;
+sie veraendert keine Revision. Heartbeat-Diagnose zeigt separat den Geraetezustand.
+
+Wetter und Statistik verwenden bestehende Infoscreen-Tokens als Referenz; bei
+Wetter darf die Referenz leer bleiben, um das konfigurierte Wetter zu verwenden.
+Die Statistik muss aktiviert sein. Lagekarte/Einsatzstellen werden mangels eigener
+tokenbasierter Infoscreen-Seite noch nicht angeboten.
+
+Fuer **Freigegebene URL** zuerst den exakten Host unter **URL-Allowlist** freigeben.
+Nur HTTPS auf Port 443 ohne Zugangsdaten, IP-Adressen oder interne Ziele ist erlaubt.
+Unicode-Hosts werden in Punycode gespeichert. DNS muss beim Freigeben und beim
+Anlegen des Overrides ausschliesslich oeffentliche Ziele ergeben. DNS-Fehler werden
+angezeigt; es wird nichts gespeichert. Entfernen eines Hosts beendet die Wirkung
+der zugehoerigen Custom-Overrides. Abgelaufene Eintraege werden nach 30 Tagen
+bereinigt; Anlegen und Aufheben bleiben im Audit protokolliert.
+
+Details: [Entscheidungsmatrix und Sicherheitsgrenzen](../architecture/infoscreen-agent-overrides.md).

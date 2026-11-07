@@ -1,0 +1,35 @@
+<p>Zeiten in {{ timezone }}. Pflicht-Ablauf nach maximal 8 Stunden. Begruendungen ohne Einsatzdetails oder personenbezogene Angaben eingeben.</p>
+<p>GSL-Seiten wirken nur bei aktiver GSL auf freigegebenen Displays und enden mit der GSL. Manuelle Seiten warten hinter GSL, Einsatz und Nachlauf.</p>
+{% include 'infoscreen_agent/_override_status.html' %}
+<section class="sys-card"><h2>Uebersteuerung anlegen</h2>
+<form hx-post="{{ base }}/overrides/neu" hx-target="#agent-content" hx-swap="outerHTML" class="agent-form">
+{{ forms.csrf() }}
+<label>Display<select name="display_id" class="form-input"><option value="">Alle Displays der Organisation</option>{% for display in displays %}<option value="{{ display.id }}">{{ display.name }}</option>{% endfor %}</select></label>
+<label>Art<select name="kind" class="form-input"><option value="manual">Manuell (nach Einsatz/GSL/Nachlauf)</option><option value="gsl_page">GSL-Seite (nur freigegebene Displays)</option></select></label>
+<label>Seite<select name="url_kind" class="form-input">{% for key, label in kinds.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+<label>Referenz<input name="url_ref" class="form-input" maxlength="2048"><small>Wetter/Statistik: bestehender Infoscreen-Token. Wetter leer: konfiguriertes Wetter verwenden. Freigegebene URL: vollstaendige HTTPS-URL.</small></label>
+{{ forms.input('von', 'Von', (now|local).strftime('%Y-%m-%dT%H:%M'), type='datetime-local', required=true) }}
+{{ forms.input('bis', 'Bis (max. 8 Stunden)', '', type='datetime-local', required=true) }}
+<label>Begruendung<input name="reason" required maxlength="500" class="form-input"></label>
+<button type="submit" class="btn btn--primary">Uebersteuerung anlegen</button></form></section>
+<section class="sys-card"><h2>Schnellaktionen</h2>
+<p>Lagekarte/Einsatzstellen sind noch nicht als eigenstaendige tokenbasierte Infoscreen-Seiten verfuegbar.</p>
+{% for display in displays if display.gsl_override_erlaubt %}
+<form hx-post="{{ base }}/overrides/neu" hx-target="#agent-content" hx-swap="outerHTML" class="agent-form">
+{{ forms.csrf() }}<strong>{{ display.name }}</strong><input type="hidden" name="display_id" value="{{ display.id }}"><input type="hidden" name="kind" value="gsl_page"><input type="hidden" name="url_kind" value="weather">
+<label>Begruendung<input name="reason" required maxlength="500" class="form-input"></label>
+<button type="submit" name="minutes" value="30" class="btn">Wetter fuer 30 min</button><button type="submit" name="minutes" value="120" class="btn">Wetter fuer 2 h</button>
+</form>{% else %}<p>Keine fuer GSL-Uebersteuerung freigegebenen Displays.</p>{% endfor %}</section>
+{% for status in ['Aktuell', 'Geplant', 'Abgelaufen / aufgehoben'] %}
+<section class="sys-card"><h2>{{ status }}</h2>
+{% for item in overrides %}
+{% set item_status = 'Abgelaufen / aufgehoben' if item.aufgehoben_am or item.bis <= now else ('Geplant' if item.von > now else 'Aktuell') %}
+{% if item_status == status %}
+<article><h3>{{ display_names.get(item.display_id, 'Alle Displays der Organisation') }}: {{ kinds.get(item.url_kind, item.url_kind) }}</h3>
+<p>{{ item.kind }} / {{ item.von|local_datetime }} - {{ item.bis|local_datetime }} / {{ item.reason }}</p>
+{% if item.aufgehoben_am %}<p>Aufgehoben: {{ item.aufgehoben_am|local_datetime }}</p>{% elif item.bis > now %}
+<form hx-post="{{ base }}/overrides/{{ item.id }}/aufheben" hx-target="#agent-content" hx-swap="outerHTML" class="agent-form">{{ forms.csrf() }}<label>Begruendung zum Aufheben<input name="reason" required maxlength="500" class="form-input"></label><button class="btn" type="submit">Aufheben</button></form>
+{% endif %}</article>{% endif %}{% endfor %}</section>{% endfor %}
+<section class="sys-card"><h2>URL-Allowlist</h2><p>Zusaetzliche HTTPS-Hosts, Port 443. Oeffentliche DNS-Ziele werden beim Speichern und bei jeder neuen Custom-Uebersteuerung geprueft. Entfernen beendet die Wirkung zugehoeriger Custom-URLs.</p>
+{% for host in allowlist %}<form hx-post="{{ base }}/allowlist/{{ host.id }}/entfernen" hx-target="#agent-content" hx-swap="outerHTML" class="agent-form">{{ forms.csrf() }}<span>{{ host.host }}</span><button class="btn" type="submit">Entfernen</button></form>{% endfor %}
+<form hx-post="{{ base }}/allowlist/neu" hx-target="#agent-content" hx-swap="outerHTML" class="agent-form">{{ forms.csrf() }}<label>Hostname<input name="host" required maxlength="253" class="form-input" placeholder="monitor.example.org"></label><button class="btn" type="submit">Host freigeben</button></form></section>

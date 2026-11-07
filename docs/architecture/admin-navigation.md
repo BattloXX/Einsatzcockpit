@@ -136,3 +136,9 @@ workeruebergreifend einen Verbindungsabgleich. Beim Loeschen/Verschieben eines
 Displays wird das bisherige Geraet zusaetzlich ueber den vor dem Commit erfassten
 Display-Key geweckt; damit erhaelt auch ein Geraet ohne verbleibendes Display die
 neue Konfiguration. Installer/Updates folgen in S6.
+
+S5 erweitert den bestehenden Tab "Geraete & Plaene" um den Unterbereich
+`/admin/infoscreen-agent/uebersteuerung` (Overrides und URL-Allowlist).
+`/uebersteuerung/status` ist das lesende HTMX-Live-Partial. Beide bleiben im
+Hauptpunkt Infoscreens, Tab Agent, mit `require_role("org_admin")` und den
+bestehenden Admin-Alias-/Sysadmin-Rechten. Kein neuer Hauptpunkt oder Haupttab.

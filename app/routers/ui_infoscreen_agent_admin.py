@@ -23,14 +23,17 @@ from app.db import get_db
 from app.models.infoscreen_agent import (
     InfoscreenDevice,
     InfoscreenDisplay,
+    InfoscreenOverride,
     InfoscreenSchedule,
     InfoscreenScheduleException,
     InfoscreenScheduleSlot,
+    InfoscreenUrlAllowlist,
 )
 from app.models.objekt import AlarmInfoscreenToken, InfoscreenUrl
 from app.models.user import User
 from app.services import infoscreen_agent_admin as validation
 from app.services import infoscreen_agent_events as events
+from app.services import infoscreen_agent_overrides as overrides
 from app.services import infoscreen_agent_service as devices
 from app.services.infoscreen_agent_installer_cmd import installer_command
 from app.services.infoscreen_agent_resolver import Display, resolve
@@ -73,7 +76,25 @@ def context(request: Request, db: Session, user: User, section: str) -> dict:
     slots = rows(db, InfoscreenScheduleSlot, org_id).order_by(InfoscreenScheduleSlot.start_time).all()
     exceptions = rows(db, InfoscreenScheduleException, org_id).order_by(InfoscreenScheduleException.datum).all()
     now = datetime.now(UTC).replace(tzinfo=None)
+    extra = {}
+    if section == "uebersteuerung":
+        history = (
+            rows(db, InfoscreenOverride, org_id)
+            .filter(InfoscreenOverride.bis >= now - timedelta(days=30))
+            .order_by(InfoscreenOverride.von.desc())
+            .all()
+        )
+        extra = dict(
+            overrides=history,
+            allowlist=rows(db, InfoscreenUrlAllowlist, org_id).all(),
+            kinds=overrides.KINDS,
+            now=now,
+            timezone=org_tz(user.org).key,
+            display_names={d.id: d.name for d in displays},
+            live=live_states(db, user, displays),
+        )
     return dict(
+        **extra,
         request=request,
         user=user,
         section=section,
@@ -99,7 +120,7 @@ def context(request: Request, db: Session, user: User, section: str) -> dict:
 
 
 def render(request: Request, db: Session, user: User, section: str, *, error: str = "", status: int = 200):
-    if section not in ("geraete", "displays", "plaene"):
+    if section not in ("geraete", "displays", "plaene", "uebersteuerung"):
         raise HTTPException(404)
     partial = request.headers.get("HX-Request") == "true"
     if error and partial:
@@ -487,6 +508,215 @@ def delete(
     if removed_target:
         tasks.add_task(events.publish_device_config_changed, org(user), *removed_target)
     return render(request, db, user, "displays" if entity == "displays" else "plaene")
+
+
+def live_states(db: Session, user: User, displays: list[InfoscreenDisplay]) -> list[dict]:
+    """Reine Aufloesung: niemals state() und damit keine Revision schreiben."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    activity = lade_aktivitaet(db, org(user))
+    result = []
+    for display in displays:
+        device = own(db, InfoscreenDevice, display.device_id, org(user))
+        url = alarm_url(db, display)
+        loaded_overrides = lade_overrides(db, display)
+        state = resolve(
+            Display(
+                display.id,
+                org(user),
+                url or "about:blank",
+                device.status != "active" or not display.aktiv or url is None,
+                display.gsl_override_erlaubt,
+                display.nachlauf_min,
+                device.config_version,
+                display.revision,
+            ),
+            now,
+            activity,
+            loaded_overrides,
+            lade_schedule(db, display),
+        )
+        label = {
+            "locked": "Gesperrt",
+            "gsl": "GSL",
+            "incident": "Einsatz",
+            "nachlauf": "Nachlauf",
+            "default": "Alarm-Infoscreen",
+            "schedule": "Zeitplan",
+        }.get(state["mode"], "Uebersteuerung")
+        for item in loaded_overrides:
+            if state["mode"] in ("override", "manual") and item["url"] == state["url"]:
+                label = overrides.KINDS.get(item["url_kind"], label)
+        result.append(
+            dict(
+                display=display,
+                label=label,
+                mode=state["mode"],
+                until=datetime.fromisoformat(state["valid_until"]) if state["valid_until"] else None,
+            )
+        )
+    return result
+
+
+@router.get("/uebersteuerung/status", response_class=HTMLResponse)
+def override_status(
+    request: Request,
+    display_id: int | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+):
+    displays = (
+        [own(db, InfoscreenDisplay, display_id, org(user))]
+        if display_id is not None
+        else rows(db, InfoscreenDisplay, org(user)).order_by(InfoscreenDisplay.name).all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "infoscreen_agent/_override_status.html",
+        dict(user=user, base=BASE, live=live_states(db, user, displays)),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def override_changed(db: Session, tasks: BackgroundTasks, user: User, display_id: int | None) -> None:
+    targets = rows(db, InfoscreenDisplay, org(user))
+    if display_id is not None:
+        targets = targets.filter(InfoscreenDisplay.id == display_id)
+    all_device_ids = [d.id for d in rows(db, InfoscreenDevice, org(user)).all()] if display_id is None else []
+    changed(db, tasks, org(user), [d.id for d in targets.all()], all_device_ids)
+
+
+@router.post("/overrides/neu", response_class=HTMLResponse)
+def override_new(
+    request: Request,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+):
+    form = run_async(request.form)
+    try:
+        display_id = validation.number(form.get("display_id"), 1, 2**63 - 1) if form.get("display_id") else None
+        display = own(db, InfoscreenDisplay, display_id, org(user)) if display_id is not None else None
+        kind = validation.choice(form.get("kind"), ("gsl_page", "manual"))
+        url_kind = validation.choice(form.get("url_kind"), tuple(overrides.KINDS))
+        reason = validation.text(form.get("reason"), 500)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        begin: datetime | None
+        end: datetime | None
+        if form.get("minutes"):
+            if kind != "gsl_page" or url_kind != "weather" or not display or not display.gsl_override_erlaubt:
+                raise ValueError("Schnellaktion braucht ein fuer GSL-Uebersteuerung freigegebenes Display")
+            minutes = validation.number(form.get("minutes"), 30, 120)
+            if minutes not in (30, 120):
+                raise ValueError("Schnellaktion: 30 Minuten oder 2 Stunden")
+            begin, end = now, now + timedelta(minutes=minutes)
+        else:
+            for key in ("von", "bis"):
+                if datetime.fromisoformat(str(form.get(key, ""))).tzinfo is not None:
+                    raise ValueError("Lokale Zeit ohne Zeitzonenoffset eingeben")
+            begin = local_input_to_utc(str(form.get("von", "")), user.org)
+            end = local_input_to_utc(str(form.get("bis", "")), user.org)
+        if begin is None or end is None or not timedelta(0) < end - begin <= timedelta(hours=8) or end <= now:
+            raise ValueError("Von/bis erforderlich; Ablauf in der Zukunft, Dauer maximal 8 Stunden")
+        url = overrides.page_url(db, org(user), url_kind, str(form.get("url_ref", "")).strip())
+        row = InfoscreenOverride(
+            org_id=org(user),
+            display_id=display_id,
+            kind=kind,
+            url_kind=url_kind,
+            url_ref=url,
+            von=begin,
+            bis=end,
+            reason=reason,
+            created_by=user.id,
+        )
+        db.add(row)
+        db.flush()
+        write_audit(
+            db,
+            "infoscreen_agent.override_created",
+            org_id=org(user),
+            user_id=user.id,
+            entity_type="infoscreen_override",
+            entity_id=row.id,
+            payload={
+                "created_by": user.id,
+                "reason": reason,
+                "display_id": display_id,
+                "kind": kind,
+                "url_kind": url_kind,
+            },
+        )
+        override_changed(db, tasks, user, display_id)
+        return render(request, db, user, "uebersteuerung")
+    except (ValueError, IntegrityError) as exc:
+        db.rollback()
+        return render(request, db, user, "uebersteuerung", error=str(exc), status=422)
+
+
+@router.post("/overrides/{override_id}/aufheben", response_class=HTMLResponse)
+def override_cancel(
+    override_id: int,
+    request: Request,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+):
+    row = own(db, InfoscreenOverride, override_id, org(user))
+    try:
+        reason = validation.text(run_async(request.form).get("reason"), 500)
+        if row.aufgehoben_am is not None:
+            raise ValueError("Uebersteuerung wurde bereits aufgehoben")
+        row.aufgehoben_am = datetime.now(UTC).replace(tzinfo=None)
+        row.aufgehoben_von = user.id
+        write_audit(
+            db,
+            "infoscreen_agent.override_cancelled",
+            org_id=org(user),
+            user_id=user.id,
+            entity_type="infoscreen_override",
+            entity_id=row.id,
+            payload={"created_by": row.created_by, "aufgehoben_von": user.id, "reason": reason},
+        )
+        override_changed(db, tasks, user, row.display_id)
+        return render(request, db, user, "uebersteuerung")
+    except ValueError as exc:
+        db.rollback()
+        return render(request, db, user, "uebersteuerung", error=str(exc), status=422)
+
+
+@router.post("/allowlist/neu", response_class=HTMLResponse)
+def allowlist_new(
+    request: Request,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+):
+    try:
+        host = overrides.hostname(str(run_async(request.form).get("host", "")))
+        db.add(InfoscreenUrlAllowlist(org_id=org(user), host=host))
+        db.flush()
+        write_audit(db, "infoscreen_agent.allowlist_created", org_id=org(user), user_id=user.id)
+        override_changed(db, tasks, user, None)
+        return render(request, db, user, "uebersteuerung")
+    except (ValueError, IntegrityError) as exc:
+        db.rollback()
+        message = "Host ist bereits freigegeben" if isinstance(exc, IntegrityError) else str(exc)
+        return render(request, db, user, "uebersteuerung", error=message, status=422)
+
+
+@router.post("/allowlist/{host_id}/entfernen", response_class=HTMLResponse)
+def allowlist_remove(
+    host_id: int,
+    request: Request,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+):
+    row = own(db, InfoscreenUrlAllowlist, host_id, org(user))
+    db.delete(row)
+    write_audit(db, "infoscreen_agent.allowlist_removed", org_id=org(user), user_id=user.id)
+    override_changed(db, tasks, user, None)
+    return render(request, db, user, "uebersteuerung")
 
 
 @router.get("/{section}", response_class=HTMLResponse)

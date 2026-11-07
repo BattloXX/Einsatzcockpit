@@ -1,7 +1,9 @@
 {% import 'infoscreen_agent/_forms.html' as forms with context %}
 <div id="agent-content" hx-get="{{ base }}/{{ section }}" hx-trigger="agentChanged from:body" hx-swap="outerHTML">
 {% if error %}<div class="alert alert--error" role="alert">{{ error }}</div>{% endif %}
-{% if section == 'geraete' %}
+{% if section == 'uebersteuerung' %}
+{% include 'infoscreen_agent/_overrides.html' %}
+{% elif section == 'geraete' %}
 <section class="sys-card">
 <h2>Geraete</h2>
 <form hx-post="{{ base }}/geraete/neu" hx-target="#agent-dialog-body" hx-swap="innerHTML" class="agent-form" data-agent-open>

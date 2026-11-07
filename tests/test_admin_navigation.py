@@ -526,7 +526,7 @@ def isolated_update_status(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("role", ["admin", "org_admin", "system_admin"])
-@pytest.mark.parametrize("suffix", ["", "/geraete", "/displays", "/plaene", "/vorschau"])
+@pytest.mark.parametrize("suffix", ["", "/geraete", "/displays", "/plaene", "/vorschau", "/uebersteuerung", "/uebersteuerung/status"])
 def test_infoscreen_agent_ein_hauptpunkt_und_tab(role, suffix):
     nav = _nav("/admin/infoscreen-agent" + suffix, role=role)
     assert nav.aktiver_eintrag.id == "infoscreens"

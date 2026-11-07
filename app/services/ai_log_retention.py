@@ -59,12 +59,16 @@ async def ai_log_retention_loop() -> None:
     while True:
         await asyncio.sleep(_seconds_until_next())
         # Gleicher Tageslauf, eigener Fehlerbereich fuer Infoscreen-Diagnose.
-        from app.services.infoscreen_agent_retention import purge_old_device_events
+        from app.services.infoscreen_agent_retention import purge_old_device_events, purge_old_overrides
 
         try:
             await asyncio.to_thread(purge_old_device_events)
         except Exception:
             logger.exception("Infoscreen-Event-Retention fehlgeschlagen")
+        try:
+            await asyncio.to_thread(purge_old_overrides)
+        except Exception:
+            logger.exception("Infoscreen-Override-Retention fehlgeschlagen")
         try:
             await asyncio.to_thread(purge_old_ai_requests)
         except Exception:
