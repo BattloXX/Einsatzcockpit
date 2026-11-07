@@ -18,17 +18,16 @@ bestehenden Verwaltungsrechte; andere Rollen haben keinen Zugriff.
 5. Der offene Dialog fragt alle 5 Sekunden den Status ab und zeigt nach dem Pairing
    **gekoppelt**, bei aktiver Verbindung **verbunden**. Schliessen beendet das Polling.
 
-**Installer noch nicht freigeschaltet:** S4 bereitet den Dialog vor. Der
-`install.sh`-Endpunkt und die Paketauslieferung entstehen in S6. Der Banner bleibt
+**Installer-Freigabe:** Der Banner bleibt
 sichtbar, solange `INFOSCREEN_AGENT_INSTALLER_ENABLED=false` (Standard).
-`INFOSCREEN_AGENT_KEY_FINGERPRINT` ist optional und standardmaessig leer; nur ein
-konfigurierter Wert erscheint als `--key-fingerprint`. Der Server stammt aus
+`INFOSCREEN_AGENT_KEY_FINGERPRINT` ist standardmaessig leer; dann wird der
+Fingerprint aus dem ersten konfigurierten Release-Public-Key abgeleitet. Der Server stammt aus
 `PUBLIC_BASE_URL` (Fallback `APP_BASE_URL`), niemals aus dem Browser-Host-Header.
 
 Die Liste zeigt Presence bzw. einen Heartbeat der letzten drei Minuten als online,
 ausser das Geraet ist gesperrt. OS, Version und letzter Heartbeat sowie gemeldete
 Seiten-, Monitor- und Backendzustaende helfen bei der Diagnose. "Bestaetigt" bezieht
-sich auf den Rueckkanal der Monitorsteuerung. Die Update-Diagnose folgt in S6.
+sich auf den Rueckkanal der Monitorsteuerung. Update-Status und Fehlercode stehen ebenfalls am Geraet.
 
 **Sperren** widerruft Zugangsdaten und trennt bestehende Verbindungen.
 **Entsperren** und **Token rotieren / neu koppeln** erzeugen einen neuen Pairing-Code.
@@ -84,7 +83,7 @@ Revision noch Konfigurationsversion.
 
 Nach gespeicherten Aenderungen aktualisiert sich die Verwaltung ohne F5.
 Betroffene Geraete erhalten eine neue Konfigurationsversion und einen Wake-Hinweis.
-Overrides, Releases, Updateverwaltung und Installer-Endpunkte folgen in S5/S6.
+Overrides und Updateverwaltung sind in den folgenden Abschnitten beschrieben.
 
 ## Uebersteuerung und URL-Allowlist (S5)
 
@@ -114,7 +113,8 @@ angezeigt; es wird nichts gespeichert. Entfernen eines Hosts beendet die Wirkung
 der zugehoerigen Custom-Overrides. Abgelaufene Eintraege werden nach 30 Tagen
 bereinigt; Anlegen und Aufheben bleiben im Audit protokolliert.
 
-Details: [Entscheidungsmatrix und Sicherheitsgrenzen](../architecture/infoscreen-agent-overrides.md).
+Details: [Betrieb und Prioritäten](Infoscreen-Agent-Betrieb) und
+[Sicherheit](Infoscreen-Agent-Sicherheit).
 
 ## Releases und Updates (S6)
 
@@ -138,4 +138,7 @@ Installer-Schalter aktiviert und ein gueltiges Skript plus ein freigegebenes
 stable-Release vorhanden sind. Die Erstinstallation verwendet einen gueltigen
 Pairing-Code und die neueste freigegebene Version ohne Canary-Begrenzung;
 erst das Koppeln verbraucht den Code. Details fuer Betrieb und CI:
-[Release-Verteilung](../architecture/infoscreen-agent-releases.md).
+[Installation](Infoscreen-Agent-Installation) und [Betrieb](Infoscreen-Agent-Betrieb).
+
+Weitere Anleitungen: [Überblick](Infoscreen-Agent), [Installation](Infoscreen-Agent-Installation),
+[Betrieb](Infoscreen-Agent-Betrieb), [Sicherheit](Infoscreen-Agent-Sicherheit).

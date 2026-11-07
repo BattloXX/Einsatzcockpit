@@ -82,3 +82,8 @@ Agent-Releases liegen fuer Systemadministratoren als Tab unter **Updates &
 Backups**. Dort stehen Rollout, Rueckzug, Upload-Tokens und Key-Fingerprints.
 Org-Administratoren verwalten Wartungsfenster und Geraete-Updates weiterhin
 unter **Infoscreens > Geraete & Plaene > Geraete**.
+
+Die [Infoscreen-Agent-Anleitungen](Infoscreen-Agent) erklären Installation,
+Betrieb und Sicherheit. Lesende MCP-Diagnose (`infoscreen_geraete_liste`,
+`infoscreen_display_status`) steht Org-Admins im MCP-Werkzeugkatalog zur Verfügung;
+sie benötigt keinen zusätzlichen Verwaltungsmenüpunkt und verändert keine Geräte.

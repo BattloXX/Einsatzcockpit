@@ -38,6 +38,7 @@ from app.mcp.tools import einsatzwissen as _einsatzwissen  # noqa: F401 - Wissen
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import gsl_lage as _gsl_lage  # noqa: F401 - registriert GSL-Lagebild-Tools
+from app.mcp.tools import infoscreen as _infoscreen  # noqa: F401 - registriert technische Lesetools
 from app.mcp.tools import katplan as _katplan  # noqa: F401 - registriert Katplan-Lesetools
 from app.mcp.tools import katplan_schreiben as _katplan_schreiben  # noqa: F401 - registriert Entwurfswerkzeuge
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
@@ -2509,3 +2510,13 @@ async def objekt_karte_freigeben(
         "objekt_karte_freigeben", objekt_id=objekt_id, vorschlag_ids=vorschlag_ids,
         bestaetigte_warnungen=bestaetigte_warnungen, bestaetigung=bestaetigung, pruefen=pruefen,
     )
+
+
+@server.tool(name="infoscreen_geraete_liste", description="Liest technische Infoscreen-Geraete der eigenen Organisation.")
+async def infoscreen_geraete_liste() -> dict[str, object]:
+    return await _call_registered_tool("infoscreen_geraete_liste")
+
+
+@server.tool(name="infoscreen_display_status", description="Liest Resolver-Sollzustand und letzten Display-Heartbeat ohne URLs.")
+async def infoscreen_display_status(device_id: int) -> dict[str, object]:
+    return await _call_registered_tool("infoscreen_display_status", device_id=device_id)

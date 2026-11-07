@@ -36,6 +36,10 @@
 
 **Verwaltung**
 - [Verwaltungsmenü](Administration-Navigation)
+- [Infoscreen-Agent](Infoscreen-Agent)
+- [Agent installieren](Infoscreen-Agent-Installation)
+- [Agent betreiben](Infoscreen-Agent-Betrieb)
+- [Agent-Sicherheit](Infoscreen-Agent-Sicherheit)
 - [Infoscreen-Agent: Geräte & Pläne](Administration-Infoscreen-Agent)
 - [Einstellungen](Administration-Einstellungen)
 - [ELVis-Anbindung](Administration-ELVis-Anbindung)

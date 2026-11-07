@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Infoscreen-Agent S7:** Vollständige Wiki-Anleitungen für Überblick, Installation, Betrieb und Sicherheit; Architektur-/Settings-Referenz und Migrations-/Deploy-Runbook 0355–0358. Auskommentierte Proxy-Vorlagen für große Release-Uploads. Lesende MCP-Geräte-/Displaydiagnose für Org-Admins, org-gefiltert und ohne Token, Codes, URLs oder Einsatzinhalte; keine Schreibzugriffe oder neue Migration.
+
 - **Infoscreen-Agent S6:** Signierte CI-Release-Uploads mit widerrufbaren Upload-Tokens, Ed25519-/Hash-/Debian-Paketpruefung und atomarer Ablage. Erstdownload mit unverbrauchtem Pairing-Code, signiertes Installerskript, Update-Manifest mit Canary, Pin, Sperre und Org-Wartungsfenster/Einsatzschutz. Update-Diagnose, Unpair mit WS-Trennung und Update-Wake ueber ec:isa. Plattform-Tab Agent-Releases unter Updates & Backups; Geraete-/Org-Policy per HTMX. Migration 0358, neue Release-Pubkey-/Storage-Settings; Installer-Notausschalter bleibt erhalten.
 
 - **Infoscreen-Agent S5:** Org-gefilterte Seitenuebersteuerungen und HTTPS-Host-Allowlist unter "Geraete & Plaene", Pflicht-Ablauf (maximal 8 Stunden), Begruendung und Audit beim Anlegen/Aufheben, Wetter-Schnellaktionen, HTMX-Live-Sollwirkung ohne Revisionsschreibzugriff. Serverseitige Wetter-/Statistik-Tokenaufloesung und erneute DNS-Pruefung fuer Custom-URLs; keine privaten Ziele. GSL-Seiten wirken nur bei aktiver GSL und enden mit ihr (Resolver-Korrektur gegen S2). Lagekarte/Einsatzstellen fehlen als eigenstaendige tokenbasierte Infoscreen-Seiten und werden noch nicht angeboten. Konfigurationsversion und Wake-Hinweis bei Mutationen, alte Overrides nach 30 Tagen org-gefiltert bereinigt. Keine Migration.
