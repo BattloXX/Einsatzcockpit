@@ -1400,3 +1400,10 @@ async def print_agent_ws(websocket: WebSocket):
                 gateway_routing.detach(connection)
             if await asyncio.to_thread(_mark_agent_offline, org_id, gateway_id, connection_id):
                 await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": False})
+
+
+@router.websocket("/ws/infoscreen-agent")
+async def infoscreen_agent_ws(websocket: WebSocket):
+    from app.services.infoscreen_agent_events import websocket_session
+
+    await websocket_session(websocket)

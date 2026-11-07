@@ -400,8 +400,9 @@ async def lifespan(app: FastAPI):
 
         # Redis Pub/Sub-Bus für worker-übergreifende WS-Zustellung starten (No-Op ohne
         # REDIS_URL). Nach dem Router-Import, damit alle Bus-Handler registriert sind.
-        from app.services import ws_bus
+        from app.services import infoscreen_agent_events, ws_bus
 
+        await infoscreen_agent_events.start()
         await ws_bus.start()
         from app.services import gateway_routing
         await gateway_routing.start()
@@ -456,6 +457,7 @@ async def lifespan(app: FastAPI):
             await sms_outbox.stop()
             await gateway_routing.stop()
             await ws_bus.stop()
+            await infoscreen_agent_events.stop()
             from app.services.teams_alarm_service import aclose_teams_client
 
             await aclose_teams_client()

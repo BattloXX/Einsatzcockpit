@@ -1773,3 +1773,47 @@ def test_infoscreen_agent_fremder_alarm_token_bleibt_unzugaenglich(client):
     assert state.status_code == 200
     assert state.json()["mode"] == "locked"
     assert raw_b not in state.text
+
+
+def test_infoscreen_agent_heartbeat_isoliert_org_und_geraet(client):
+    from app.models.infoscreen_agent import InfoscreenDisplay
+    from tests.test_infoscreen_agent_s2_api import BASE, setup_display
+    from tests.test_infoscreen_agent_s3 import body
+
+    org_b = _setup_zwei_orgs()
+    _, display_a, key_a, headers_a, _ = setup_display(ORG_A)
+    _, display_b, key_b, _, _ = setup_display(org_b)
+    _, _, key_same_org, _, _ = setup_display(ORG_A)
+    for foreign_key in (key_b, key_same_org):
+        assert client.post(BASE + "/heartbeat", json=body(foreign_key), headers=headers_a).status_code == 404
+        data = body(key_a)
+        data["last_revision"][foreign_key] = 5
+        assert client.post(BASE + "/heartbeat", json=data, headers=headers_a).status_code == 404
+    result = client.post(BASE + "/heartbeat", json=body(key_a), headers=headers_a)
+    assert result.status_code == 200
+    assert set(result.json()["revisions"]) == {key_a}
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert db.get(InfoscreenDisplay, display_b).reported_status is None
+        assert db.get(InfoscreenDisplay, display_a).reported_status is not None
+
+
+def test_infoscreen_agent_ws_wake_ist_org_gefiltert(client):
+    from app.services.infoscreen_agent_events import publish_org_changed
+    from tests.test_infoscreen_agent_s2_api import setup_display
+
+    org_b = _setup_zwei_orgs()
+    _, _, key_a, headers_a, _ = setup_display(ORG_A)
+    _, _, key_b, headers_b, _ = setup_display(org_b)
+    with client.websocket_connect("/ws/infoscreen-agent", headers=headers_a) as a:
+        assert a.receive_json()["display_key"] == key_a
+        assert a.receive_json() == {"type": "ping"}
+        with client.websocket_connect("/ws/infoscreen-agent", headers=headers_b) as b:
+            assert b.receive_json()["display_key"] == key_b
+            assert b.receive_json() == {"type": "ping"}
+            client.portal.call(publish_org_changed, ORG_A, "incident_changed")
+            client.portal.call(publish_org_changed, org_b, "gsl_changed")
+            assert a.receive_json() == {"type": "invalidate", "revision": 0,
+                                        "display_key": key_a, "reason": "incident_changed"}
+            assert b.receive_json() == {"type": "invalidate", "revision": 0,
+                                        "display_key": key_b, "reason": "gsl_changed"}

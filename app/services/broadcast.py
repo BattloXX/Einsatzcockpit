@@ -89,6 +89,10 @@ class ConnectionManager:
 
     async def broadcast(self, incident_id: int, event: dict) -> None:
         """Broadcast an einen Kanal – worker-übergreifend via Bus, sonst lokal."""
+        from app.core.resilience import run_side_effect
+        from app.services.infoscreen_agent_events import broadcast_hook
+
+        run_side_effect("infoscreen_hook", broadcast_hook, incident_id, str(event.get("type", "")))
         origin = _request_client_id.get()
         if origin and "origin" not in event:
             event = {**event, "origin": origin}
