@@ -1,16 +1,46 @@
-<div id="elvis-events" class="sys-scroll sys-mt-2" hx-get="/gateway/{{ gw.id }}/elvis?events=1"
+<div id="elvis-events" class="sys-mt-2" hx-get="/gateway/{{ gw.id }}/elvis?events=1"
      hx-trigger="every 15s" hx-target="this" hx-swap="outerHTML">
+  <p class="sys-small" role="status">
+    {{ elvis_auswertung.gesamt }} echte Events: {{ elvis_auswertung.zugeordnet }} zugeordnet,
+    {{ elvis_auswertung.nur_elvis }} nur ELVis, {{ elvis_auswertung.nummer_unplausibel }} unplausibel.
+    {% if elvis_auswertung.median_s is not none %}
+      ELVis im Median {{ '%g'|format(elvis_auswertung.median_s|abs) }} s
+      {{ 'früher' if elvis_auswertung.median_s < 0 else 'später' if elvis_auswertung.median_s > 0 else 'zeitgleich' }}.
+    {% endif %}
+  </p>
+  <p class="sys-small sys-muted">Auswertung der letzten 20 Events, ohne Tests; Mehrfachaufrufe zählen einzeln.
+    "Nur ELVis": Noch kein Einsatz mit dieser Leitstellennummer gefunden. DIBOS/LIS kann fehlen oder später
+    eintreffen; möglicherweise ist die Annahme zu Nr falsch. Delta: Cloud-Empfang minus Einsatzanlage,
+    negativ = ELVis früher. DIBOS* ist aus dem Nummernfeld abgeleitet, keine belegte Anlagequelle.</p>
+  <div class="sys-scroll">
   <table class="sys-table">
-    <thead><tr><th>Zeit</th><th>Nr</th><th>ESW</th><th>Adresse</th><th>Test/echt</th><th>Status</th></tr></thead>
+    <thead><tr><th>Zeit</th><th>Nr</th><th>ESW</th><th>Adresse</th><th>Test/echt</th><th>Status</th><th>Abgleich</th></tr></thead>
     <tbody>
       {% for event in elvis_events %}
       {% set args = (event.parsed or {}).get('elvis_args', {}) %}
+      {% set abgleich = elvis_abgleich.get(event.id) %}
       <tr>
         <td>{{ event.received_at|local_datetime_sec }}</td><td>{{ args.get('Nr', '') }}</td>
         <td>{{ args.get('ESW', '') }}</td><td>{{ args.get('Adresse') or [args.get('Straße', ''), args.get('Hausnummer', ''), args.get('Ort', '')]|join(' ') }}</td>
-        <td>{{ 'Test' if (event.parsed or {}).get('elvis_test') else 'echt' }}</td><td>{{ event.process_status }}</td>
+        <td>{{ 'echt' if abgleich else 'Test' }}</td><td>{{ event.process_status }}</td>
+        <td>
+          {% if abgleich %}
+            {% if abgleich.status == 'zugeordnet' %}
+              <a class="sys-pill sys-status--ok" href="{{ abgleich.einsatz_link }}">
+                {{ icon('circle-check', size='sm') }} Zugeordnet #{{ abgleich.einsatz_id }}
+                ({{ abgleich.quelle|upper }}{{ '*' if abgleich.quelle_angenommen else '' }})
+              </a>
+              <span class="sys-small">{{ '%+g'|format(abgleich.delta_s) }} s</span>
+            {% elif abgleich.status == 'nur_elvis' %}
+              <span class="sys-pill sys-status--warn">{{ icon('alert-triangle', size='sm') }} Nur ELVis</span>
+            {% else %}
+              <span class="sys-pill sys-status--fail">{{ icon('alert-triangle', size='sm') }} Nr unplausibel</span>
+            {% endif %}
+          {% else %}<span class="sys-muted">Test: kein Abgleich</span>{% endif %}
+        </td>
       </tr>
-      {% else %}<tr><td colspan="6">Noch keine ELVis-Events empfangen.</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="7">Noch keine ELVis-Events empfangen.</td></tr>{% endfor %}
     </tbody>
   </table>
+  </div>
 </div>

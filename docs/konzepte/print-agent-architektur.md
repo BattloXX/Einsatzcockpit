@@ -402,3 +402,6 @@ Org/Quelle zehn Minuten lang unterdrückt; bei zugeordneten Einsätzen zusätzli
 den bestehenden Inhaltsdedup ohne Zeitfenster. Geänderte Folgenachrichten mergen über
 `lis_operation_number`, auch zu bereits vorhandenen DIBOS-/LIS-Einsätzen.
 Agent-seitige Batch-Anbindung und Abnahme vor Ort folgen separat.
+
+Phase 4: [Abnahme-Checkliste für den ELVis-Parallelbetrieb](elvis-abnahme.md)
+mit Nummernabgleich, Zeitdelta, Windows-Dienst-Ausfalltest und HTTP-Fallback-Prüfung.

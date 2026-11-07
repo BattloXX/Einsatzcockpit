@@ -6,12 +6,16 @@ import json
 import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from statistics import median
+from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException, Request
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.gateway import AlarmIngest, Gateway
+from app.models.incident import Incident
 from app.models.master import FireDept
 
 
@@ -202,3 +206,82 @@ def verarbeite_elvis_event(
             "duplicate": duplicate or ingest.dedup_action == "duplicate", "einsatz_id": ingest.einsatz_id,
             "modus": saved.get("elvis_mode", mode), "test": saved.get("elvis_test", test),
             "parse_status": ingest.parse_status, "process_status": ingest.process_status}
+
+
+def vergleiche_elvis_events(db: Session, org_id: int, gateway_id: int, limit: int = 20) -> dict:
+    """Letzte Events und rein lesender Nummernabgleich in drei Batch-SELECTs.
+
+    Delta = Cloud-Empfang minus Einsatzanlage (naive UTC). Testevents bleiben in
+    der Liste, nehmen aber weder am Abgleich noch an der Statistik teil.
+    include_all_tenants ist nur zusammen mit expliziten Org-Filtern erlaubt.
+    Quellen sind Verknuepfungsnachweise, keine gesicherte Anlagehistorie:
+    LIS-GUID, sonst anderer Ingest, sonst DIBOS-Annahme anhand des Nummernfelds.
+    """
+    with db.no_autoflush:
+        events = (db.query(AlarmIngest).filter(
+            AlarmIngest.org_id == org_id, AlarmIngest.gateway_id == gateway_id,
+            AlarmIngest.source == "elvis",
+        ).execution_options(include_all_tenants=True)
+            .order_by(AlarmIngest.received_at.desc(), AlarmIngest.id.desc()).limit(max(0, limit)).all())
+        nummern = {}
+        for event in events:
+            metadata = event.parsed or {}
+            args = metadata.get("elvis_args", {})
+            # Auch aeltere Datensaetze mit Testmarker in den Argumenten ausschliessen.
+            if metadata.get("elvis_test") or _sanitizing(args)[1]:
+                continue
+            nummern[event.id] = parsed_elvis({"Nr": args.get("Nr", "")}, "")["leitstellennummer"]
+        plausible = {nr for nr in nummern.values() if nr}
+        treffer: dict[str, tuple[Incident, str, bool]] = {}
+        if plausible:
+            direkt = (db.query(Incident).filter(
+                Incident.primary_org_id == org_id,
+                func.lower(Incident.lis_operation_number).in_(plausible),
+            ).execution_options(include_all_tenants=True).order_by(Incident.created_at, Incident.id).all())
+            # Beide Seiten des Joins explizit scopen; fremde Ingest-Verknuepfungen
+            # duerfen selbst mit fehlerhaften Daten keinen Einsatz offenlegen.
+            andere = (db.query(AlarmIngest, Incident).join(Incident, Incident.id == AlarmIngest.einsatz_id).filter(
+                AlarmIngest.org_id == org_id, Incident.primary_org_id == org_id,
+                AlarmIngest.source != "elvis",
+                or_(func.lower(AlarmIngest.leitstellennummer).in_(plausible),
+                    Incident.id.in_([inc.id for inc in direkt])),
+            ).execution_options(include_all_tenants=True)
+                .order_by(Incident.created_at, Incident.id, AlarmIngest.id).all())
+            quellen: dict[int, str] = {}
+            for ingest, inc in andere:
+                quelle = ingest.source if ingest.source in ("dibos", "lis") else "seriell"
+                quellen.setdefault(inc.id, quelle)
+                nr = (ingest.leitstellennummer or "").lower()
+                if nr in plausible:
+                    treffer.setdefault(nr, (inc, quelle, False))
+            for inc in direkt:
+                quelle = "lis" if inc.lis_operation_id else quellen.get(inc.id, "dibos")
+                treffer[(inc.lis_operation_number or "").lower()] = (
+                    inc, quelle, not inc.lis_operation_id and inc.id not in quellen,
+                )
+        ergebnisse: dict[int, dict[str, Any]] = {}
+        for event in events:
+            if event.id not in nummern:
+                continue
+            nr = nummern[event.id]
+            match = treffer.get(nr)
+            einsatz = match[0] if match else None
+            quelle_name = match[1] if match else None
+            angenommen = match[2] if match else False
+            ergebnisse[event.id] = {
+                "status": "nummer_unplausibel" if not nr else "zugeordnet" if einsatz else "nur_elvis",
+                "delta_s": (event.received_at - einsatz.created_at).total_seconds() if einsatz else None,
+                "einsatz_id": einsatz.id if einsatz else None,
+                "einsatz_link": f"/einsatz/{einsatz.id}" if einsatz else None,
+                "quelle": quelle_name, "quelle_angenommen": angenommen,
+            }
+        deltas = [r["delta_s"] for r in ergebnisse.values() if r["delta_s"] is not None]
+        return {
+            "elvis_events": events, "elvis_abgleich": ergebnisse,
+            "elvis_auswertung": {
+                "gesamt": len(ergebnisse),
+                **{status: sum(r["status"] == status for r in ergebnisse.values())
+                   for status in ("zugeordnet", "nur_elvis", "nummer_unplausibel")},
+                "median_s": median(deltas) if deltas else None,
+            },
+        }
