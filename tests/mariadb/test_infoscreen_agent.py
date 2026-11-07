@@ -65,3 +65,59 @@ def test_migriertes_schema_und_pairing_einmalig():
                 db.delete(db.get(FireDept, org_id))
             db.commit()
         engine.dispose()
+
+
+def test_update_check_legt_neue_version_nur_einmal_an():
+    """Mehrere Geraete melden dieselbe neue Version gleichzeitig: genau eine Zeile (Mutex + UNIQUE)."""
+    from app.models.infoscreen_agent import InfoscreenRelease
+    from app.services import infoscreen_agent_update_check as update_check
+
+    engine = sa.create_engine(os.environ["MARIADB_TEST_URL"])
+    sessions = sessionmaker(engine)
+    org_id = None
+    device_ids: list[int] = []
+    version = f"2026.12.{uuid4().int % 10**6}"
+    try:
+        with sessions() as db:
+            set_tenant_context(db, None)
+            org = FireDept(slug="infoscreen-" + uuid4().hex, name="Infoscreen Update Test")
+            db.add(org)
+            db.flush()
+            org_id = org.id
+            for index in range(4):
+                device = InfoscreenDevice(org_id=org.id, name=f"Test {index}", channel="stable", agent_version="2026.1.1")
+                db.add(device)
+                db.flush()
+                device_ids.append(device.id)
+            db.commit()
+        barrier = Barrier(4)
+
+        def check_once(device_id):
+            with sessions() as db:
+                set_tenant_context(db, None)
+                device = db.get(InfoscreenDevice, device_id)
+                barrier.wait(timeout=10)
+                result = update_check.check(db, device, version, "stable", "amd64", "2026.1.1")
+                db.commit()
+                return result["reason"]
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            reasons = list(executor.map(check_once, device_ids))
+        assert all(reason in ("rollout", "unknown", "incident", "ok", "window") for reason in reasons)
+        with sessions() as db:
+            set_tenant_context(db, None)
+            rows = db.query(InfoscreenRelease).filter_by(version=version, channel="stable", arch="amd64").all()
+            assert len(rows) == 1
+    finally:
+        with sessions() as db:
+            set_tenant_context(db, None)
+            for row in db.query(InfoscreenRelease).filter_by(version=version).all():
+                db.delete(row)
+            for device_id in device_ids:
+                device = db.get(InfoscreenDevice, device_id)
+                if device is not None:
+                    db.delete(device)
+            if org_id is not None:
+                db.delete(db.get(FireDept, org_id))
+            db.commit()
+        engine.dispose()

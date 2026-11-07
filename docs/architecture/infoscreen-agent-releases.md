@@ -1,4 +1,86 @@
-# Infoscreen-Agent: Releases, Installation und Updates (S6/S8)
+# Infoscreen-Agent: Releases, Installation und Updates (S9)
+
+## Standard: Repo-Modus (GitHub)
+
+`INFOSCREEN_AGENT_DISTRIBUTION=github` ist der Standard. Das ECP steuert nur
+Freigabe und Zeitpunkt; Pakete, Installer und Signaturen kommen direkt aus dem
+oeffentlichen `INFOSCREEN_AGENT_GITHUB_REPO` (Default
+`BattloXX/Einsatzcockpit-Infoscreen-Agent`). Im Pairing-Dialog steht:
+
+```sh
+curl -fsSL https://github.com/BattloXX/Einsatzcockpit-Infoscreen-Agent/releases/latest/download/install.sh | sudo bash -s -- --server https://ecp.example --token ABCD1234
+```
+
+Name und Argumente werden shell-sicher gequotet. Die Variante mit
+`sudo EC_PAIRING_CODE=... bash` bleibt verfuegbar. Ein konfigurierter Fingerprint
+oder aktiver DB-/Setting-Schluessel ergaenzt `--key-fingerprint`; ohne Schluessel
+entfaellt das Argument. Das ECP braucht im Repo-Modus keinen Importschluessel,
+kein Upload-Token und keine lokal gespeicherten Artefakte. Die Signaturpruefung
+bleibt Aufgabe des Clients. GitHub-/Actions-Zugriff ist damit eine
+Vertrauensgrenze; geschuetzte Tags/Branches und 2FA bleiben notwendig.
+
+### Check-Vertrag
+
+`POST /api/v1/infoscreen-agent/update/check` braucht einen aktiven Device-Bearer
+und genau `{version, channel, arch, current}`. Versionsfelder verwenden dieselbe
+Debian-Validierung wie Uploads; Kanal ist stable/beta, Arch amd64/arm64. Andere
+Felder oder Typen ergeben 422, falsche Tokens 401. Das Limit ist 12 Checks pro
+Minute und Geraet, unabhaengig von IP oder anderen Geraeten. Alle Antworten,
+auch Fehler und Rate-Limits, tragen `Cache-Control: no-store`.
+
+Antwortfelder: `allowed`, `reason`, `retry_after_s`, `maintenance_window`
+(`start`, `end`, IANA-`timezone`), `critical_allowed`, `check_interval_h` (6),
+`pinned_version`. Der Check enthaelt keinerlei Einsatzdaten oder Org-IDs.
+`incident` ist die einzige Information ueber Aktivitaet. Der Bearer bestimmt
+Org und Geraet; Query-Parameter koennen diese Zuordnung nicht aendern.
+
+Falscher Kanal/Arch, gleiche oder aeltere Version und nicht angelegte Versionen
+werden mit `unknown` abgelehnt. Danach gewinnt die erste Ablehnung:
+`blocked` -> `locked` -> `pinned` -> `incident` -> `rollout` -> `window` -> `ok`.
+Aktive GSL, Einsatz oder der laengste Nachlauf aktiver Org-Displays sperren
+Updates. Bei `incident` nach 300 Sekunden erneut fragen, bei `window` nach der
+berechneten UTC-Dauer bis zum naechsten Fenster. Sonst ist `retry_after_s=null`.
+Wartungsfenster verwenden die Org-Zeitzone, einschliesslich Mitternacht und DST;
+gleicher Beginn/Ende bedeutet ganztags. Nur eine als critical markierte Version
+und eine Org-Freigabe fuer kritische Updates umgehen das Fenster.
+Der SHA256-Bucket aus S6 bleibt unveraendert und stabil.
+
+**Arch-Bindung:** Bisherige Pairing-/Heartbeat-Vertraege haben kein Arch-Feld.
+Darum bindet der erste gueltige Check seine Architektur dauerhaft ans Geraet;
+weitere Checks duerfen nur diese Architektur verwenden. Kanalwechsel bleiben
+ueber die bestehende Org-Admin-Aktion moeglich. Check-Zeit und Grund werden am
+Geraet gespeichert und im Geraete-Tab angezeigt.
+
+### Entdeckung und Freigabe
+
+Eine neue Version erzeugt eine globale Metadatenzeile mit Rollout 0, ohne Datei,
+Hash oder Signatur. UNIQUE(version, channel, arch), ein transaktionaler globaler
+Mutex und SAVEPOINT/IntegrityError-Behandlung sichern parallele Checks ab.
+Pro Geraet entstehen hoechstens drei neue Zeilen pro UTC-Tag. Automatische
+Entdeckung stoppt bei insgesamt 1000 bekannten Releases. Admins koennen danach
+weiter explizit Versionen anlegen. Neue Epochs und Hauptversionsspruenge von
+mehr als zehn gegenueber der hoechsten bekannten Kanal-/Arch-Version bzw. der
+Heartbeat-Version werden automatisch abgelehnt; `current` hebt dieses Limit
+nicht an. Ein Admin kann solche Versionen nach Pruefung manuell anlegen.
+
+Unter **Updates & Backups -> Agent-Releases** sehen ausschliesslich Sysadmins
+Version, Kanal/Arch, erstes Auftreten, Rollout, Sperre, critical und einen
+aggregierten Geraetezaehler aus bestaetigter Heartbeat-/Update-Ergebnisversion.
+Freigabe 10/50/100 %, Ruecknahme auf 0 und Sperre/Entsperre senden
+`update_available` an aktive Geraete des Kanals und passender/bisher unbekannter
+Architektur. Aenderungen und manuelle Anlage schreiben Audit; Formulare brauchen
+CSRF und aktualisieren den Bereich per HTMX. Schluessel, Dateiimport und
+Upload-Tokens liegen im zugeklappten Bereich **Verwalteter Modus (optional)**.
+Ein eigener Metadaten-Abgleich mit GitHub ist nicht implementiert; der bestehende
+Import in diesem Bereich bleibt ein vollstaendiger Artefaktimport.
+
+## Anhang: verwalteter Modus (S6/S8)
+
+`INFOSCREEN_AGENT_DISTRIBUTION=managed` verwendet weiterhin den ECP-Installer,
+`--pairing-code`, die Artefakt-/Schluessel-Bereitschaft und den bisherigen Banner.
+Schluessel-, Import- und Upload-UI bleiben sichtbar. Die folgenden Vertraege
+gelten fuer diesen Modus; Metadatenzeilen werden nie als Downloads angeboten.
+Bereits importierte/hochgeladene Artefakte bleiben unveraendert erhalten.
 
 ## Vertrag und Vertrauensgrenze
 

@@ -23,11 +23,15 @@ def installer_origin() -> str:
 
 def installer_command(code: str, name: str | None = None, *, environment: bool = False) -> str:
     server = installer_origin()
-    command = f"curl -fsSL {quote(server + '/infoscreen-agent/install.sh')} | sudo "
+    github = settings.INFOSCREEN_AGENT_DISTRIBUTION == "github"
+    url = ("https://github.com/" + settings.validate_agent_repo(settings.INFOSCREEN_AGENT_GITHUB_REPO)
+           + "/releases/latest/download/install.sh") if github else server + "/infoscreen-agent/install.sh"
+    token_flag = "--token" if github else "--pairing-code"
+    command = f"curl -fsSL {quote(url)} | sudo "
     if environment:
         command += f"EC_PAIRING_CODE={quote(code)} bash -s -- --server {quote(server)}"
     else:
-        command += f"bash -s -- --server {quote(server)} --pairing-code {quote(code)}"
+        command += f"bash -s -- --server {quote(server)} {token_flag} {quote(code)}"
     fingerprint = release_fingerprint()
     if fingerprint:
         command += " --key-fingerprint " + quote(fingerprint)

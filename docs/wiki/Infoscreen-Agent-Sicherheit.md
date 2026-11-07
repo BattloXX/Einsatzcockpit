@@ -1,5 +1,11 @@
 # Infoscreen-Agent: Sicherheit und Datenschutz
 
+## Repo-Modus (Standard seit S9)
+
+Im Repo-Modus liegen keine Pakete oder Signaturen im ECP; der Client prueft GitHub-Artefakte gegen seinen Signaturschluessel. GitHub-/Actions-Zugriff ist eine Vertrauensgrenze: 2FA und geschuetzte Tags/Branches verwenden. Ein optionaler Fingerprint aus dem Pairing-Befehl verstaerkt den Vertrauensanker. Das ECP antwortet nur mit technischer Update-Policy, ohne Einsatzdaten oder fremde Org-Informationen; incident ist die einzige Aktivitaetsinformation. Bearer bindet Geraet und Org, 12 Checks/Minute/Geraet, strikt validierte JSON-Felder und no-store auch fuer Fehler. Neue Versionszeilen sind begrenzt und beginnen mit 0 %. Nur Sysadmins koennen Releases und critical aendern; CSRF, Audit und bestehende Tenant-Grenzen bleiben. Der globale Entdeckungs-Mutex gehoert nicht in Org-Exporte. Die bisherigen Schluessel-/Downloadregeln unten gelten fuer den optionalen verwalteten Modus.
+
+## Bisheriger Ablauf und weitere Details
+
 [Überblick](Infoscreen-Agent) · [Installation](Infoscreen-Agent-Installation) · [Betrieb](Infoscreen-Agent-Betrieb)
 
 ## Zugangsdaten

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8092
+    INFOSCREEN_AGENT_DISTRIBUTION: Literal["github", "managed"] = "github"
     INFOSCREEN_AGENT_KEY_FINGERPRINT: str = ""
     INFOSCREEN_AGENT_INSTALLER_ENABLED: bool = False
     INFOSCREEN_AGENT_RELEASE_PUBKEYS: dict[str, str] = {}

@@ -13,7 +13,8 @@ from app.models.infoscreen_agent import InfoscreenRelease, InfoscreenReleaseKey
 from tests.test_migration_0332_objekt_dokument_georef import migration
 
 TABLES = sorted(t for t in Base.metadata.tables if t.startswith("infoscreen_") and t != "infoscreen_url")
-GLOBAL_TABLES = {"infoscreen_release", "infoscreen_release_key", "infoscreen_release_upload_token"}
+GLOBAL_TABLES = {"infoscreen_release", "infoscreen_release_key", "infoscreen_release_upload_token",
+                 "infoscreen_release_discovery_lock"}
 
 
 def test_upgrade_downgrade_modell(tmp_path):
@@ -33,8 +34,9 @@ def test_upgrade_downgrade_modell(tmp_path):
                 migration("0357", "infoscreen_heartbeat").upgrade()
                 migration("0358", "infoscreen_releases").upgrade()
                 migration("0359", "infoscreen_release_keys").upgrade()
+                migration("0360", "infoscreen_repo").upgrade()
             inspector = sa.inspect(conn)
-            assert len(TABLES) == 11
+            assert len(TABLES) == 12
             for name in TABLES:
                 table = Base.metadata.tables[name]
                 columns = {c["name"]: c for c in inspector.get_columns(name)}
@@ -79,6 +81,7 @@ def test_upgrade_downgrade_modell(tmp_path):
                         {"key": key},
                     )
             with Operations.context(MigrationContext.configure(conn)):
+                migration("0360", "infoscreen_repo").downgrade()
                 migration("0359", "infoscreen_release_keys").downgrade()
                 migration("0358", "infoscreen_releases").downgrade()
                 migration("0357", "infoscreen_heartbeat").downgrade()

@@ -45,6 +45,11 @@ class InfoscreenDevice(TenantScoped, Base):
     update_status: Mapped[str | None] = mapped_column(String(16))
     update_error_code: Mapped[str | None] = mapped_column(String(32))
     update_reported_at: Mapped[datetime | None] = mapped_column(DateTime)
+    arch: Mapped[str | None] = mapped_column(String(16))
+    last_update_check_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_update_check_reason: Mapped[str | None] = mapped_column(String(16))
+    release_discovery_day: Mapped[date | None] = mapped_column(Date)
+    release_discovery_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_ip: Mapped[str | None] = mapped_column(String(45))
     agent_connection_id: Mapped[str | None] = mapped_column(String(64))
@@ -166,9 +171,9 @@ class InfoscreenRelease(Base):
     version: Mapped[str] = mapped_column(String(100))
     channel: Mapped[str] = mapped_column(String(16), default="stable", server_default="stable")
     arch: Mapped[str] = mapped_column(String(16))
-    sha256: Mapped[str] = mapped_column(String(64))
-    signature: Mapped[str] = mapped_column(String(255))
-    size: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    signature: Mapped[str | None] = mapped_column(String(255))
+    size: Mapped[int | None] = mapped_column(BigInteger)
     min_version: Mapped[str | None] = mapped_column(String(100))
     rollout_percent: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -179,7 +184,7 @@ class InfoscreenRelease(Base):
     installer_path: Mapped[str | None] = mapped_column(String(500))
     installer_sha256: Mapped[str | None] = mapped_column(String(64))
     installer_signature: Mapped[str | None] = mapped_column(String(255))
-    storage_path: Mapped[str] = mapped_column(String(500))
+    storage_path: Mapped[str | None] = mapped_column(String(500))
 
 
 class InfoscreenUrlAllowlist(TenantScoped, Base):
@@ -214,3 +219,11 @@ class InfoscreenReleaseKey(Base):
     bestaetigt_am: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     quelle: Mapped[str] = mapped_column(String(16))
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class InfoscreenReleaseDiscoveryLock(Base):
+    """Plattformweiter Mutex fuer begrenzte automatische Versionsentdeckung."""
+    __tablename__ = "infoscreen_release_discovery_lock"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    generation: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

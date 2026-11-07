@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Infoscreen-Agent S9:** GitHub als Standardquelle, sicher gequoteter Repo-Installer mit --token und optionalem Fingerprint; verwalteter Modus bleibt verfuegbar. Device-Update-Check steuert Einsatzschutz, Pin/Sperre, Rollout und Org-Wartungsfenster, mit Rate-Limit und begrenzter automatischer Versionserkennung. Sysadmin-Freigabetabelle ohne Pakete, Audit/Update-Events, Check-Grund im Geraete-Tab. Migration 0360 erlaubt Metadaten ohne Artefakte und speichert Arch-/Check-/Kontingentdaten. Betrieb ohne Internet muss explizit INFOSCREEN_AGENT_DISTRIBUTION=managed setzen.
+
 - **Infoscreen-Agent S8:** GitHub-Releases direkt im bestehenden Agent-Releases-Tab importieren, Ed25519-Schluessel per exakter Fingerprint-Bestaetigung verwalten (Migration 0359), optional taeglicher Leader-Abgleich. Setting-Keys bleiben vorrangig, Freigabe manuell; Installer nutzt aktive DB-Keys ohne Env-Edit. WebSocket-Pausen verarbeiten Disconnects sofort, Sperr-/Close-Rennen bleiben ohne Fehlermeldung.
 
 - **Infoscreen-Agent S7:** Vollständige Wiki-Anleitungen für Überblick, Installation, Betrieb und Sicherheit; Architektur-/Settings-Referenz und Migrations-/Deploy-Runbook 0355–0358. Auskommentierte Proxy-Vorlagen für große Release-Uploads. Lesende MCP-Geräte-/Displaydiagnose für Org-Admins, org-gefiltert und ohne Token, Codes, URLs oder Einsatzinhalte; keine Schreibzugriffe oder neue Migration.

@@ -1895,3 +1895,36 @@ def test_agent_release_keys_sind_global_aber_nur_sysadmin_mutiert(client):
     login(client, "org_admin")
     for path in ("/keys/preview", "/keys/confirm", "/keys/1/status", "/github/import"):
         assert post(client, "/admin/agent-releases" + path).status_code == 403
+
+
+def test_agent_repo_check_bleibt_beim_bearer_geraet(client, monkeypatch):
+    from app.models.infoscreen_agent import InfoscreenDevice, InfoscreenReleaseDiscoveryLock
+    from app.models.master import OrgSettings
+    from app.services.org_export_service import EXCLUDE_TABLES
+    from tests.test_infoscreen_agent_releases import BASE, login, paired
+
+    org_b = login(client, "org_admin")
+    device_a, bearer_a = paired(client, 1)
+    device_b, bearer_b = paired(client, org_b)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        foreign = db.get(InfoscreenDevice, device_b)
+        foreign.update_locked = True
+        policy = db.query(OrgSettings).filter_by(org_id=org_b).first()
+        if policy is None:
+            policy = OrgSettings(org_id=org_b)
+            db.add(policy)
+        policy.infoscreen_update_start, policy.infoscreen_update_end = "13:13", "14:14"
+        db.commit()
+    body = {"version": "2.0", "current": "1.0", "channel": "stable", "arch": "amd64"}
+    response = client.post(BASE + f"/update/check?org_id={org_b}&device_id={device_b}", json=body, headers=bearer_a)
+    assert response.status_code == 200
+    assert response.json()["reason"] != "locked"
+    assert response.json()["maintenance_window"]["start"] != "13:13"
+    assert "org_id" not in response.json()
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert db.get(InfoscreenDevice, device_b).last_update_check_at is None
+        assert db.get(InfoscreenDevice, device_a).last_update_check_at is not None
+    assert "org_id" not in InfoscreenReleaseDiscoveryLock.__table__.columns
+    assert "infoscreen_release_discovery_lock" in EXCLUDE_TABLES

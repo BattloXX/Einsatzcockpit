@@ -207,3 +207,30 @@ def installer(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(404, "installer_missing")
     return Response(releases.read_installer(row, db), media_type="text/x-shellscript",
                     headers={"Cache-Control": "public, max-age=60"})
+
+
+class UpdateCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    version: str
+    channel: Literal["stable", "beta"]
+    arch: Literal["amd64", "arm64"]
+    current: str
+
+    _versions = field_validator("version", "current")(releases.valid_version)
+
+
+def device_check_key(request: Request) -> str:
+    # require_device setzt die ID vor Aufruf des SlowAPI-Wrappers; keine Token im Bucket.
+    return "infoscreen-device:" + str(request.state.infoscreen_device_id)
+
+
+@router.post(BASE + "/update/check")
+@(limiter.limit("12/minute", key_func=device_check_key) if limiter else lambda fn: fn)
+def update_check(request: Request, response: Response, body: UpdateCheck, db: Session = Depends(get_db),
+                 device: InfoscreenDevice = Depends(require_device)):
+    from app.services.infoscreen_agent_update_check import check
+
+    response.headers["Cache-Control"] = "no-store"
+    result = check(db, device, body.version, body.channel, body.arch, body.current)
+    db.commit()
+    return result

@@ -319,3 +319,22 @@ in `INFOSCREEN_AGENT_RELEASE_PUBKEYS` uebernehmen und den Altweg-Installer-Schal
 setzen, falls Installation weiterhin verfuegbar sein soll. Releases/Artefakte bleiben
 bestehen. SQLite-Roundtrip und SQLite/MySQL/MariaDB-DDL sind durch Tests abgedeckt;
 ein echter MariaDB-Upgrade bleibt Teil des Migrationsjobs.
+
+
+## 0360: Infoscreen-Agent Repo-Modus
+
+Vor Upgrade DB-Backup erstellen. `alembic upgrade head` fuehrt 0360 nach 0359 aus.
+Die globale Release-Tabelle erlaubt NULL fuer sha256, signature, size und storage_path.
+SQLite baut nur diese Tabelle neu; keine eingehenden FKs, kein Rebuild der
+Geraete-/Displaytabellen und damit kein CASCADE-Datenverlust. MariaDB verwendet
+ALTER COLUMN mit den bestehenden Typen. Es werden keine FKs hinzugefuegt/geaendert.
+Neue nullable Geraetefelder: arch, last_update_check_at/-reason, release_discovery_day;
+release_discovery_count startet bei 0. Globaler Entdeckungs-Mutex wird mit id=1 angelegt.
+Bestehende Paket-/Signaturdaten bleiben unveraendert. Nach Upgrade ein Geraet koppeln,
+GitHub-Einzeiler und Check (zunaechst rollout) pruefen, Version freigeben und Event/Audit
+pruefen. In abgeschotteten Umgebungen vor Deploy explizit
+`INFOSCREEN_AGENT_DISTRIBUTION=managed` setzen; Standard wechselt auf github.
+Downgrade entfernt ausschliesslich die nicht im alten Schema darstellbaren
+Metadatenzeilen (ohne vollstaendige Artefaktfelder), neue Geraetefelder und Mutex.
+Freigaben solcher Metadatenzeilen gehen beim Downgrade verloren; vorher exportieren.
+SQLite-Datenerhalt und MySQL-/MariaDB-DDL sind durch Migrationstests abgedeckt.
