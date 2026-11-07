@@ -115,9 +115,9 @@ Vor Implementierung bestehendes Versionsschema (`/api/v1/gateway/…`) spiegeln.
 | S1 | Modelle + Migration `0355`, Pairing, Device-Token, Sperren/Rotation, Cross-Org-Tests | pytest + MariaDB-Migrationsjob |
 | S2 | Resolver + Timeline + `/config` `/state` + Regressionstest `/daten` unverändert | Tabellentest Prioritäten, DST 2026-03-29 / 2026-10-25, über Mitternacht, Feiertag |
 | S3 | `/heartbeat`, `WS /ws/infoscreen-agent`, ws_bus-Kanal, Event-Hooks, Presence | Reconnect-Test, 2 Worker, Revision monoton |
-| S4 | Admin-UI Geräte/Displays/Pläne + Navigation + Doku | Playwright-Smoke, mobile |
+| S4 | Admin-UI Geräte/Displays/Pläne + Navigation + Doku, **Dialog „Gerät hinzufügen“ mit kopierbarem Einzeiler (Abschnitt 8)** | Playwright-Smoke, mobile |
 | S5 | Overrides (GSL-Einsatzleitung), Allowlist, Audit | Rechte-Matrix-Test |
-| S6 | Release-Upload (CI-Token), Manifest, Rollout/Canary, Update-Policy, `/update/result`, Admin „Updates“ | 4.2-Tests |
+| S6 | Release-Upload (CI-Token), Manifest, Rollout/Canary, Update-Policy, `/update/result`, Admin „Updates“, **Installer-Endpunkte `install.sh` und Erst-Download (Abschnitt 8)** | 4.2-Tests |
 | S7 | Wiki/Doku, MCP optional (nur lesend: Geräte-/Displaystatus), Changelog | – |
 
 ## 3. Agent – neues privates Repo `BattloXX/Einsatzcockpit-Infoscreen-Agent`
@@ -144,7 +144,7 @@ Struktur: `src/ec_infoscreen_agent/` (`api.py`, `ws.py`, `state.py`, `timeline.p
 | A2 | API-Client (Pairing, config/state/heartbeat, ETag), WS-Client mit Reconnect, Zustandsautomat + Timeline-Folger + Fail-safe, Store, Fake-Server für Tests |
 | A3 | Display-Backends `logical_blank`, `sway`, `gnome-mutter`, `x11` (+ Fake-Backend für Tests), Probe, EDID-Mapping; `cec`/`ddc` nur hinter Konfigurationsschalter |
 | A4 | Kiosk-Dienst (sway-Kiosk-Config, Chromium-Start, Watchdog, Inhibit, Unix-Socket zwischen Agent und Kiosk) |
-| A5 | Setup-Assistent, `doctor`, systemd-Units, Postinst/Prerm (idempotent, Upgrade-fest), Doku Installation/Betrieb/Upgrade |
+| A5 | Setup-Assistent, `doctor`, systemd-Units, Postinst/Prerm (idempotent, Upgrade-fest), **`scripts/install.sh` (Einzeiler-Installer, Abschnitt 8)**, Doku Installation/Betrieb/Upgrade |
 | A6 | Auto-Update (siehe 4) |
 | A7 | E2E mit Fake-ECP, Ubuntu-VM-Smoke in CI soweit ohne echte Monitore möglich, Betriebs-/Fehlerhandbuch, Hardware-Abnahmeprotokoll-Vorlage |
 
@@ -176,6 +176,43 @@ Struktur: `src/ec_infoscreen_agent/` (`api.py`, `ws.py`, `state.py`, `timeline.p
 4. Pilot in der Fahrzeughalle (Pilotgerät, Display-Key z. B. `fahrzeughalle`): Alarm im Standby, GSL-Override, Netz weg, Strom weg, Update + Rollback, Browser-Absturz.
 5. Produktivsetzung/Deploy des Servers (Migration `0355ff`) durch Betrieb; ECP-Prod bekommt die Releases erst nach Pilot.
 
+## 8. Einzeiler-Installation (Entscheidung 2026-11-07)
+
+Ziel: Ein Org-Admin klickt im ECP auf „Gerät hinzufügen“, kopiert **eine Zeile** samt Server, Pairing-Code und Fingerprint, fügt sie auf dem frischen Ubuntu-Rechner ein, und danach läuft alles: Paket, Benutzer, Pairing, Kiosk, Autostart.
+
+### 8.1 Der Einzeiler (im ECP per Kopier-Button)
+
+```
+curl -fsSL https://<ecp-host>/infoscreen-agent/install.sh | sudo bash -s -- --server https://<ecp-host> --pairing-code ABCD1234 --key-fingerprint sha256:<hex>
+```
+
+- Wird serverseitig aus Org-Host, frisch erzeugtem Pairing-Code (S1: einmalig, TTL 15 min) und Fingerprint des Release-Signaturschlüssels zusammengesetzt; nie aus Nutzereingaben ohne Escaping (Shell-Quoting per `shlex.quote`, Test mit Sonderzeichen im Gerätenamen). Optionaler Gerätename: `--name "Fahrzeughalle"`.
+- Alternative ohne Code in der Prozessliste/History: `curl ... | sudo EC_PAIRING_CODE=ABCD1234 bash -s -- --server ...`; UI bietet beide Varianten per Umschalter an. Der Code ist einmalig und kurzlebig; das Dialogtext weist darauf hin.
+- Der Dialog zeigt den Code mit Restlaufzeit, einen „Neuen Code erzeugen“-Button und aktualisiert sich per HTMX, sobald das Gerät gekoppelt hat (Status „verbunden“, ohne F5).
+
+### 8.2 Verhalten von `scripts/install.sh` (Agent-Repo, `set -euo pipefail`, POSIX-nahes Bash)
+
+1. Vorprüfungen: root (sonst Hinweis auf `sudo`), Ubuntu/Debian mit `apt`, Architektur `amd64` (arm64 nur wenn Release vorhanden), Systemzeit/NTP plausibel, Netz zum ECP, genug Platz. Klare Fehlermeldungen mit Exit-Codes, nichts wird halb installiert.
+2. Lädt per TLS den Erst-Download vom ECP (`GET /api/v1/infoscreen-agent/download/latest?arch=amd64&channel=stable`, Autorisierung mit dem Pairing-Code als Bearer, nicht öffentlich) samt Manifest (`.deb`-SHA256, Ed25519-Signatur).
+3. Prüft Signatur und SHA256 **vor** `dpkg`/`apt`; der im Skript eingebettete öffentliche Schlüssel muss zum übergebenen `--key-fingerprint` passen (sonst Abbruch). Nur kanonisches Manifest, nur Paketname `ec-infoscreen-agent`.
+4. `apt-get install -y ./paket.deb` (zieht Abhängigkeiten wie Chromium und sway aus Ubuntu; Chromium-Variante je Ubuntu-Version in `docs/hardware-matrix.md` festhalten, snap-Chromium-Falle prüfen).
+5. `ec-infoscreen-agent setup --server ... --pairing-code ... --non-interactive` (A5): Pairing, Display-Erkennung, **Monitor-Probe nur mit `--probe` oder bei vorhandener grafischer Sitzung**, sonst `logical_blank` und Hinweis; Kiosk-Benutzer und Autostart; Dienste aktivieren und starten.
+6. Abschluss: `ec-infoscreen-agent doctor` ausführen und Ergebnis kompakt ausgeben (grün/gelb/rot), Hinweis auf Neustart nur wenn nötig. Code und Token erscheinen nie in der Ausgabe oder im Journal.
+7. Idempotent: erneuter Aufruf ist Reparatur/Update (gleiche Version -> nur `setup`/`doctor`); mit neuem Code wird neu gekoppelt (`--force-repair`). `--uninstall` entfernt Paket, Dienste und Benutzer, `--purge` zusätzlich Daten und Token (mit `unpair` am Server, wenn erreichbar).
+8. Keine weiteren Kommandos aus dem Netz: das Skript führt nur eigene, fest einprogrammierte Schritte aus. `curl | bash`-Nachteile (Teilübertragung) mitigieren: gesamtes Skript steht in einer `main()`-Funktion, die erst am Dateiende aufgerufen wird.
+
+### 8.3 Server-Seite
+
+- Öffentliche Route `GET /infoscreen-agent/install.sh` (Content-Type `text/x-shellscript`, kein Cookie, enthält **keine** Geheimnisse): liefert die zuletzt signiert hochgeladene Skriptversion aus der Release-Ablage (CI lädt `install.sh` mit jedem Agent-Release zum ECP, signiert wie das Paket; ECP prüft die Signatur beim Upload). Rate-Limit, Cache-Header, Pfad zum Skript nicht aus Nutzereingaben.
+- `GET /api/v1/infoscreen-agent/download/latest` akzeptiert als Bearer **nur** einen gültigen, noch nicht eingelösten Pairing-Code, liefert den freigegebenen `stable`-Build (Rollout-Prozent gilt nur für Updates, nicht für die Erstinstallation), Drossel gegen Raten, Cross-Org-/Replay-Tests.
+- Admin-Dialog „Gerät hinzufügen“ (S4) erzeugt den Code per bestehendem `erzeuge_pairing_code`, zeigt Einzeiler, Kopier-Button (Clipboard-API mit Fallback „Text markieren“), Mobilansicht <= 760 px; Audit-Eintrag „Pairing-Code erzeugt“ (ohne Code).
+
+### 8.4 Tests
+
+- Agent-Repo: ShellCheck in der CI; Install-Test im Container ubuntu:24.04 und 26.04 gegen den Fake-ECP (frische Installation, zweiter Aufruf, falscher Fingerprint, manipulierte Signatur, abgelaufener Code, kein Netz, ohne root, Abbruch mitten im Download), Ausgabe enthält nie den Code.
+- Server: Einzeiler-Generator (Quoting, Host aus Konfiguration, kein Open-Redirect-/Host-Header-Einfluss), Download nur mit gültigem Code, Code ist nach `setup` verbraucht, `install.sh` ohne Geheimnisse.
+- Hardware-Gate: Einzeiler einmal auf frisch installiertem Ubuntu 26.04 am Pilotgerät (Fahrzeughalle) ausführen, Dauer und Fehlermeldungen protokollieren.
+
 ## 7. Reihenfolge und Ablauf mit Codex
 
 P0 (Claude, erledigt): dieser Plan. Danach:
@@ -184,7 +221,7 @@ P0 (Claude, erledigt): dieser Plan. Danach:
 2. Claude legt parallel das Agent-Repo an; **A1 → A2** gegen die Fake-Server-Spezifikation aus S2/S3.
 3. **S3, A3, A4, A5** (WS/Events, Display, Kiosk, Installer).
 4. **S4, S5** (UI, Overrides).
-5. **S6 + A6** (Release/Manifest/Canary + Updater).
+5. **S6 + A6** (Release/Manifest/Canary + Updater, Installer-Endpunkte; `install.sh` kommt in A5, Dialog in S4).
 6. **A7, S7**, Hardware-Gates, Pilot.
 
 Arbeitsregeln für jeden Codex-Auftrag: Modell `gpt-6.1-sol`; Codex committet nicht (read-only `.git`), Claude verifiziert Diff/Secrets/Checks und shippt (Commit, Push, PR, Merge). Aufträge selbsttragend mit `Datei:Zeile` und Sollverhalten; **keine** ELVIS/LIS-Polling-Schleifen, keine Emojis, nur ASCII-Anführungszeichen, DB-Routen synchron (`def`), Alembic-IDs nur Nummern. Wo dieser Plan eine Annahme macht, die der Code widerlegt, meldet Codex das im PR, statt zu raten.
