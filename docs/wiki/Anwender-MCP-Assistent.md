@@ -284,3 +284,11 @@ Adresse), offene Import-Vorschläge je Seite und bis zu 30 nächste Schritte. Du
 werden nur gemeldet; prüfen und zusammenführen erfolgt in der Oberfläche.
 `katplan_vorschlaege_aus_dokument` liefert unter `warnungen` Hinweise auf ähnliche
 bestehende Elemente desselben Typs. Die Vorschläge landen trotzdem in der Review-Queue.
+
+## Infoscreen-Agent-Diagnose
+
+`infoscreen_geraete_liste` und `infoscreen_display_status(device_id)` sind rein
+lesend für `org_admin` (bestehende Admin-Aliase eingeschlossen), mit aktivem MCP.
+Nur Geräte der eigenen Organisation; Resolver-Sollzustand und letzter technischer
+Heartbeat ohne Tokens, Codes, URLs, Rotation oder Einsatzdetails. Keine Revision
+oder Konfiguration wird verändert. Details: [Agent-Betrieb](Infoscreen-Agent-Betrieb).

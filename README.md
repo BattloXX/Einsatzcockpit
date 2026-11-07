@@ -29,6 +29,12 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 - Offline-fähige PWA — eingeschränkte Nutzung auch ohne Netzverbindung
 - Native Android-App — eigenständiger Client mit echtem Offline-Datenbestand für Objekte & Kontakte, Live-Einsatzstatus und Homescreen-Widgets
 
+## Infoscreen-Agent
+
+Der [Ubuntu-Infoscreen-Agent](https://github.com/BattloXX/Einsatzcockpit-Infoscreen-Agent)
+steuert Kiosk-Browser, Monitorstrom, Zeitpläne und signierte Updates.
+Einrichtung und Betrieb: [Wiki](https://github.com/BattloXX/Einsatzcockpit/wiki/Infoscreen-Agent).
+
 ## Features
 
 Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in der Reihenfolge, in der man sie im Einsatz braucht.

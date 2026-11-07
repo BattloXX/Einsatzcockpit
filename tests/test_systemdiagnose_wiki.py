@@ -7,7 +7,9 @@ def test_systemadmin_wiki_links_exist_without_md():
     root = Path("docs/wiki")
     names = ("Administration-Systemdiagnose", "Administration-System-Admin-Ueberblick",
              "Administration-System-Admin-MCP", "Administration-Zwei-Faktor-Authentifizierung",
-             "Administration-Einstellungen", "Administration-Datenbank-Snapshot-Isolation", "Home", "_Sidebar")
+             "Administration-Einstellungen", "Administration-Datenbank-Snapshot-Isolation", "Home", "_Sidebar",
+             "Infoscreen-Agent", "Infoscreen-Agent-Installation", "Infoscreen-Agent-Betrieb",
+             "Infoscreen-Agent-Sicherheit", "Administration-Infoscreen-Agent")
     for name in names:
         source = (root / (name + ".md")).read_text()
         for target in re.findall(r"\]\(([^)]+)\)", source):

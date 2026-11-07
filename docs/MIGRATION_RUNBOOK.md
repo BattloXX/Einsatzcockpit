@@ -201,3 +201,100 @@ die Ursache beheben und den Sicherungslauf wiederholen. Die wöchentliche Probe
 prüft tägliche Dumps gegen den aktuellen Alembic-Head; ein Dump vor einer
 Migration kann erwartungsgemäß eine ältere Revision enthalten. Die Wetter-Probe
 benötigt zusätzlich CREATE/DROP auf `<BACKUP_RESTORE_TEST_DB>_weather`.
+
+## Infoscreen-Agent: Migrationen 0355–0358
+
+Die lineare Kette lautet **0354 → 0355 → 0356 → 0357 → 0358**.
+Mit dem üblichen `alembic upgrade head` im Deployment ausführen, nicht einzelne
+Dateien manuell importieren. S4/S5/S7 benötigen keine zusätzliche Migration.
+
+| Revision | Änderung |
+| --- | --- |
+| 0355 | Geräte, Displays, Wochenpläne/Slots/Ausnahmen, Overrides, Events, Releases und Host-Allowlist mit Org-FKs; Presence und Token-Hashes |
+| 0356 | Dauerhafter resolution_hash am Display für idempotente Revisionen |
+| 0357 | reported_config_version am Gerät; reported_status und last_revision am Display |
+| 0358 | Update-Diagnose, Release-Key/Installer/Critical, CI-Upload-Token-Tabelle, Org-Wartungsfenster/Freigabe; Versionsspalten unter MariaDB auf 100 Zeichen |
+
+0358 vermeidet einen SQLite-Tabellenneubau, weil dieser bei aktiven FKs Displays
+per Cascade löschen könnte. SQLite erzwingt VARCHAR-Längen nicht. MariaDB-
+Migrationsprüfung inklusive Seed im CI muss erfolgreich sein; ein SQLite-Test
+ersetzt sie nicht.
+
+### Prod-Deploy-Checkliste
+
+- [ ] DB und Release-Ablage konsistent sichern, Restore prüfen; Wartungs-/Rollbackzeit
+  festlegen. Org-Backup allein enthält die plattformweiten Releases/Upload-Tokens nicht.
+- [ ] Ziel-Revision und freien Platz für DB-DDL, Uploads und dauerhaft aufbewahrte
+  Release-Dateien prüfen. Schreibrechte der App auf persistente Release-Ablage
+  sicherstellen; kein Static-Mount, keine Ablage im flüchtigen Container-Dateisystem.
+- [ ] Settings aus `app/config.py` prüfen: `INFOSCREEN_AGENT_KEY_FINGERPRINT=""`,
+  `INFOSCREEN_AGENT_INSTALLER_ENABLED=False`, `INFOSCREEN_AGENT_RELEASE_PUBKEYS={}`,
+  `INFOSCREEN_AGENT_RELEASE_STORAGE_DIR="app_storage/infoscreen_agent_releases"`
+  sind die deklarierten Defaults. Pubkeys als JSON-Objekt **key_id → PEM**
+  konfigurieren; für den Agent-Release-Workflow ist der Key **`release`** erforderlich.
+  Keine privaten Schlüssel im ECP speichern. Fingerprint muss zum im signierten
+  Installerskript eingebetteten Key passen; bei leerem Setting wird der erste
+  konfigurierte Public Key verwendet.
+- [ ] Öffentliche HTTPS-Origin `PUBLIC_BASE_URL`/`APP_BASE_URL`, Proxy-Vertrauen,
+  Zertifikat und Uhrzeit/NTP prüfen. Redis und `ec:isa` für alle Worker prüfen;
+  WS-Upgrade und Authorization-Header erhalten.
+- [ ] Vor dem ersten Release-Upload die auskommentierte Location in `deploy/nginx-*.conf`
+  durch Betrieb prüfen: ausschließlich `/api/v1/infoscreen-agent/releases` benötigt
+  mindestens `client_max_body_size 520m`, passende Upload-/Proxy-Timeouts und Platz
+  für Body-/Dateitemporärdaten. Beispielwerte sind keine produktive Freigabe.
+  Proxy-Konfiguration validieren und separat ausrollen.
+- [ ] Migrationen in obiger Reihenfolge über Alembic ausführen; Erfolg/Head und
+  App-Start prüfen, keine alten Worker mit unvollständigem Schema weiterbetreiben.
+- [ ] Als Sysadmin unter **Updates & Backups > Agent-Releases** Upload-Token
+  erzeugen, den einmalig sichtbaren Wert unmittelbar als CI-Secret
+  `EC_RELEASE_UPLOAD_TOKEN` speichern; `ECP_URL` ist die HTTPS-Origin.
+  Nur Release-Upload-Scope; Widerruf testen, Wert nicht in Logs/Tickets übernehmen.
+- [ ] Signiertes Paket plus Skript aus CI hochladen, `key_id=release`, Signatur/Hash
+  und Architektur kontrollieren. Upload startet mit 0 %, Pilotfreigabe separat setzen.
+  Ohne Pubkeys ist der Upload gesperrt. Fehlversuche 401/413/422 gezielt prüfen.
+- [ ] Installer-Schalter erst mit passendem freigegebenem stable-Paket, gültigem
+  signiertem Skript und bestätigtem Fingerprint aktivieren; Org-Dialog kontrollieren.
+  Aktueller Download selektiert nur Architektur/Kanal: Ubuntu-/Python-kompatibles
+  Paket sicherstellen, insbesondere für 26.04 (Release-Build derzeit auf 24.04).
+- [ ] Pilot: Einzeiler/Pairing, Heartbeat, WS-Reconnect über mehrere Worker,
+  Display-Vorschau, Overrides, Sperren und Offline-Verhalten kontrollieren.
+  Aufwachzeit/Monitor-Aus und Update-Rollback am echten Gerät menschlich abnehmen.
+- [ ] Org-Fenster (Default 02:00–04:30 Org-Zeitzone), stable/beta, Pin und Updatesperre
+  prüfen; kritische Fenster-Ausnahme standardmäßig aus. Einsatzschutz prüfen,
+  dann Rollout stufenweise erhöhen; Release-Rückzug auf Downloadwirkung testen.
+- [ ] Backupplan um `INFOSCREEN_AGENT_RELEASE_STORAGE_DIR` ergänzen; nach Restore
+  Artefakte/Signaturen, Token-Widerruf und Pilotstatus prüfen.
+
+### Rollback-Hinweise
+
+Ein App-Rollback und ein Agent-Paketrollback sind getrennte Vorgänge.
+Für ein kurzfristiges Stoppen der Erstinstallation den Installer-Schalter auf
+false setzen; Updates bei Bedarf separat über Release-Sperre/Geräte-Updatesperre
+stoppen. Rückzug deinstalliert keine vorhandenen Pakete.
+
+Schema-Downgrade nur mit gestoppter App/allen Workern und gesichertem Datenbestand:
+**0358 → 0357 → 0356 → 0355 → 0354**. 0358 verliert Upload-Token-Hashes,
+Release-Signatur-/Installerzuordnung, Update-Diagnose und Org-Policy; bei MariaDB
+können Werte über 50 Zeichen die Rückverkleinerung der Versionsspalten verhindern.
+0357 verliert Heartbeat-Diagnose, 0356 die Auflösungs-Hashes, 0355 sämtliche
+Agenttabellen samt Kopplungen/Plänen/Audit. Ein Downgrade ist kein Weg zur
+Bewahrung bereits angelegter Agentdaten. Im Produktivbetrieb konsistenten
+DB-/Release-Backupstand und passenden Appstand wiederherstellen. Nach Restore
+mögliche wieder gültige alte Tokens berücksichtigen und nötigenfalls widerrufen.
+Dateien werden durch Alembic nicht zurückgerollt oder gelöscht.
+
+### Bekannte Grenze des aktuellen Agent-Release-Workflows
+
+Das Agent-Repository ist öffentlich. Sein lokal gelesener `release.yml` enthält
+vor dem ECP-Upload noch einen Schritt „Private repository release archive“, der
+mit `test ... .private = true` abbricht, wenn das Repository öffentlich ist.
+Der Betreiber muss diesen Workflow im Agent-Repository an den öffentlichen
+Betrieb anpassen, bevor ein Tag-Release durchgehend bis zum ECP-Upload laufen
+kann. S7 ändert das Agent-Repository nicht. Die CI-Secrets dort heißen
+`EC_RELEASE_SIGNING_KEY` (privater Signaturschlüssel), `EC_RELEASE_UPLOAD_TOKEN`
+und `ECP_URL`; der Signierer verwendet standardmäßig `key_id="release"`.
+Keine Secret-Werte gehören in dieses Runbook.
+
+Technische Details und genaue Signatur-/Settings-Referenz:
+[Architekturübersicht](architecture/infoscreen-agent-uebersicht.md),
+[Release-Vertrag](architecture/infoscreen-agent-releases.md).

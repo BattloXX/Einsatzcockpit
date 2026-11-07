@@ -149,3 +149,12 @@ und erreichbar, als Tab **Agent-Releases** des bestehenden Hauptpunkts
 Rollout, Rueckzug und CI-Tokenverwaltung sind CSRF-geschuetzte HTMX-POSTs.
 Org-Fenster und Geraete-Policy bleiben im bestehenden Infoscreen-Agent-Tab
 unter `/admin/infoscreen-agent/geraete` (org_admin, explizites Org-Scoping).
+
+### Infoscreen-Agent: lesende MCP-Diagnose (S7)
+
+`infoscreen_geraete_liste` und `infoscreen_display_status` verwenden wie die
+Geräteverwaltung `org_admin` mit bestehenden Admin-Aliasrechten. Sie erscheinen
+im MCP-Werkzeugkatalog nach Live-Rechte-/Org-Prüfung. Es entsteht keine zusätzliche
+Verwaltungsroute und kein Hauptpunkt; Infoscreens > Geräte & Pläne sowie
+Updates & Backups > Agent-Releases bleiben die Verwaltungsorte.
+Verträge und Datenschutz: [Architekturübersicht](infoscreen-agent-uebersicht.md).

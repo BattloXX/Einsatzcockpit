@@ -221,3 +221,9 @@ Standardweg, ohne Panel geht die manuelle Debian-Installation, containerisiert D
 [Feedback & Support](Feedback-und-Support) · [Repository](https://github.com/BattloXX/Einsatzcockpit) ·
 [Issues](https://github.com/BattloXX/Einsatzcockpit/issues) · [Releases](https://github.com/BattloXX/Einsatzcockpit/releases) ·
 [Feuerwehr Wolfurt](https://www.feuerwehr-wolfurt.at)
+
+## Infoscreen-Agent
+
+Ubuntu-Kiosk mit Monitorsteuerung: [Überblick](Infoscreen-Agent),
+[Installation](Infoscreen-Agent-Installation), [Betrieb](Infoscreen-Agent-Betrieb),
+[Sicherheit](Infoscreen-Agent-Sicherheit) und [Geräte & Pläne](Administration-Infoscreen-Agent).
