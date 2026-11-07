@@ -1,0 +1,36 @@
+.agent-admin { min-width: 0; overflow-wrap: anywhere; }
+.agent-admin h1 { display:flex; align-items:center; gap:.5rem; }
+.agent-tabs,.agent-actions { display:flex; flex-wrap:wrap; gap:1rem; margin:1rem 0; }
+.agent-tabs [aria-current] { font-weight:700; text-decoration:underline; }
+.agent-form { display:flex; flex-wrap:wrap; align-items:end; gap:1rem; margin:1rem 0; }
+.agent-replacements { flex:1 1 100%; min-width:0; }
+.agent-replacement-row { border:1px solid #94a3b8; padding:.7rem; margin:.7rem 0; }
+.agent-form > label { flex:1 1 200px; min-width:0; }
+.agent-admin input,.agent-admin select,.agent-admin textarea { max-width:100%; box-sizing:border-box; }
+.agent-admin label { display:block; }
+.agent-admin .agent-rotation { flex:1 1 100%; min-width:0; }
+.agent-admin details { margin:.8rem 0; }
+.agent-admin summary { cursor:pointer; padding:.7rem 0; }
+.agent-admin p,.agent-admin dd { overflow-wrap:anywhere; }
+.agent-days { display:flex; flex-wrap:wrap; gap:.5rem; flex:1 1 100%; }
+.agent-days label { border:1px solid #94a3b8; border-radius:1rem; padding:.35rem .6rem; }
+.agent-status { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap:.4rem; }
+.agent-week { display:grid; grid-template-columns:3rem repeat(7,minmax(0,1fr)); margin:1rem 0 2rem; }
+.agent-week-axis { display:flex; flex-direction:column; justify-content:space-between; padding-top:1.5rem; font-size:.75rem; }
+.agent-week-column { min-width:0; text-align:center; }
+.agent-week-day { height:480px; position:relative; border:1px solid #94a3b8; background:repeating-linear-gradient(180deg,transparent 0,transparent calc(25% - 1px),#94a3b8 25%); }
+.agent-week-slot { position:absolute; inset-inline:2px; background:#bfdbfe; color:#172554; border:1px solid #3b82f6; overflow:hidden; font-size:.7rem; min-height:2px; overflow-wrap:anywhere; }
+.agent-week-off { background:#e2e8f0; color:#334155; border-color:#64748b; }
+#agent-dialog { width:min(760px,calc(100vw - 2rem)); max-height:90dvh; box-sizing:border-box; padding:1rem; overflow:auto; border-radius:.5rem; }
+#agent-dialog::backdrop { background:#0008; }
+.agent-dialog-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+#agent-dialog-body textarea { width:100%; overflow-wrap:anywhere; }
+@media(max-width:760px) {
+ .agent-form { flex-direction:column; align-items:stretch; }
+ .agent-form > label { flex:auto; }
+ .agent-week { grid-template-columns:2.5rem repeat(7,minmax(0,1fr)); font-size:.75rem; }
+ .agent-week-day { height:360px; }
+ .agent-dialog-head { flex-wrap:wrap; }
+ .agent-status { grid-template-columns:1fr; }
+ .agent-status dd { margin:0 0 .5rem; }
+}

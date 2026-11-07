@@ -1,0 +1,5 @@
+{% set modes = {'locked':'Gesperrt', 'override':'GSL-Sonderseite', 'gsl':'Grossschadenslage', 'incident':'Einsatz', 'nachlauf':'Nachlauf', 'manual':'Manuelle Sonderseite', 'schedule':'Zeitplan', 'default':'Standardanzeige'} %}
+<p><strong>{{ display.name }}</strong> am {{ day }} um {{ clock }} ({{ zone }}): Anzeige: {{ modes.get(result.mode, result.mode) }}, Monitor {{ 'an' if result.display_power == 'on' else 'aus' }}.</p>
+{% if rotation %}<p>Rotation: {% for entry in rotation %}{{ entry.label }} ({{ entry.dwell }} Sekunden){{ ', ' if not loop.last else '' }}{% endfor %}</p>
+{% else %}<p>Standardrotation des Alarm-Infoscreens, sofern der Monitor eingeschaltet ist.</p>{% endif %}
+

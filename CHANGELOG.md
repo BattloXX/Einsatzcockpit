@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **Infoscreen-Agent S4:** Tab "Geräte & Pläne" unter Infoscreens mit org-gefilterter Geräte-/Displayverwaltung, Pairing-Dialog und kopierbarem Installationsbefehl, Wochenplänen mit Rotationen, Ausnahmetagen, Wochenraster und schreibfreier Monitor-Vorschau. Pairing-Status per HTMX, Token-Widerruf trennt Verbindungen; Änderungen versionieren die Konfiguration und senden Wake-Hinweise. Installer bleibt standardmäßig deaktiviert und folgt in S6. Keine Migration.
+
 - **Infoscreen-Agent S3:** Validierter technischer Heartbeat mit Displaystatus (Migration 0357), Bearer-WebSocket mit Presence und Verbindungsverdrängung, workerübergreifende Wake-Hinweise über `ec:isa`, entkoppelte Incident-/GSL-/Planspiel-Hooks und sofortiger Verbindungsabgleich nach Sperren/Token-Rotation. Snapshots bleiben autoritativ; Diagnoseereignisse werden nach 90 Tagen org-gefiltert in Batches gelöscht.
 
 - **Infoscreen-Agent S2:** Gemeinsame Alarm-Aktivitaetsabfragen, reiner Prioritaetsresolver mit Nachlauf, serverseitige UTC-Timeline mit Schedule-Zeitzone/DST und Ausnahmetagen, Plan-Rotation fuer Agent-Displays sowie org- und geraetegebundene Config-/State-Snapshots mit ETags und atomaren Revisionen (Migration 0356 fuer den dauerhaften Aufloesungs-Hash). Bestehende Alarm-Daten durch Vorher-/Nachher-Snapshots abgesichert.

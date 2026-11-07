@@ -51,7 +51,7 @@ sichtbarkeit, modulflag, tabs, ...)` -> `AdminTab(id, label, href, aktiv_praefix
 Ausrueckordnung, Auftragsvorlagen, Meldungsvorlagen, Lage-Hinweise, Default-Meldungen)
 
 **Verwaltung:** Benutzer & Rechte (Benutzer, Audit-Log, Anmeldung & 2FA) · Probenplanung (Probearten, Checklisten-Vorlagen,
-Oeffentlicher Plan) · Infoscreens (Alarm, Wetter, Statistik, Strassensperren) · Alarmierung (SMS senden,
+Oeffentlicher Plan) · Infoscreens (Alarm, Geraete & Plaene, Wetter, Statistik, Strassensperren) · Alarmierung (SMS senden,
 Versandweg, Empfang, SMS-Einsatzinfo, Einsatzinfo-Mail, Teams, Push) · Gateway / Druck · Einsatzdaten ·
 Loeschwasserversorgung · Foerderstrecke (Pumpen, Schlaeuche, Kalibrierung) · Geraeteverleih (Artikel,
 Stuecklisten, Uebersicht, Geraetetypen) · Dateien & Medien (nur Org-Admins) · Zugaenge & Tokens (Geraete-Login,
@@ -118,3 +118,21 @@ Unter **Benutzer & Rechte** fuehrt der Tab **Anmeldung & 2FA** (`/admin/sicherhe
 SMS-Freigabe und SSO-Ausnahme. Systemadmins waehlen die Organisation; Org-Admins
 aendern nur ihre eigene. Die Vorschau zaehlt aktive persoenliche Benutzer ohne
 bestaetigten Faktor nach der gewaehlten Richtlinie.
+
+
+### Infoscreen-Agent (S4)
+
+`/admin/infoscreen-agent` ist der Tab "Geraete & Plaene" im Hauptpunkt
+"Infoscreens". Die URL-Unterbereiche `/geraete`, `/displays` und `/plaene`
+bleiben demselben Tab zugeordnet. Status und Vorschau sind untergeordnete GETs,
+CRUD und Pairing sind CSRF-geschuetzte POSTs mit HTMX-Swap. Jede Route prueft
+`require_role("org_admin")` (bestehende Aliase admin/system_admin gelten weiter)
+und filtert IDs und Auswahlwerte explizit auf `user.org_id`.
+
+Die Vorschau verwendet `resolve` direkt und schreibt keine Snapshot-Revision.
+Aenderungen erhoehen die Konfigurationsversion betroffener Geraete und senden
+nach dem Commit `publish_config_changed`; Widerruf und Loeschen senden zusaetzlich
+workeruebergreifend einen Verbindungsabgleich. Beim Loeschen/Verschieben eines
+Displays wird das bisherige Geraet zusaetzlich ueber den vor dem Commit erfassten
+Display-Key geweckt; damit erhaelt auch ein Geraet ohne verbleibendes Display die
+neue Konfiguration. Installer/Updates folgen in S6.
