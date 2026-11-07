@@ -45,7 +45,7 @@ curl -fsSL https://<ecp-host>/infoscreen-agent/install.sh | sudo bash -s -- --se
 
 Der Dialog bietet alternativ `EC_PAIRING_CODE` statt des Code-Arguments an.
 Beide kopierten Zeilen können in der Shell-History stehen; Code und Zeile nicht
-in Tickets oder Chats kopieren. Der Code gilt einmalig für 15 Minuten. Die
+in Tickets oder Chats kopieren. Der Code gilt einmalig für 60 Minuten. Die
 Downloads verbrauchen ihn noch nicht, erst das Pairing. Bei Ablauf im ECP einen
 neuen Code erzeugen. Der Installer-Banner verschwindet mit bestaetigtem aktivem
 Schluessel, gueltigem Skript und freigegebenem stable-Release.

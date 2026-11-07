@@ -51,7 +51,7 @@ def test_pairing_ok_hash_ttl_und_wiederverwendung(client):
         assert device.pairing_code_hash == hash_api_key(code)
         assert device.pairing_expires_at.tzinfo is None
         rest = device.pairing_expires_at - datetime.now(UTC).replace(tzinfo=None)
-        assert timedelta(minutes=14) < rest <= timedelta(minutes=15)
+        assert timedelta(minutes=59) < rest <= timedelta(minutes=60)
     response = client.post(PAIR_URL, json={"code": " " + code.lower() + " "})
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == "no-store"
