@@ -363,6 +363,7 @@ def select_release(db: Session, device: InfoscreenDevice, arch: str, *, initial:
     rows = db.query(InfoscreenRelease).filter(InfoscreenRelease.arch == arch,
                                             InfoscreenRelease.channel == device.channel,
                                             InfoscreenRelease.key_id != "",
+                                            InfoscreenRelease.storage_path.is_not(None),
                                             InfoscreenRelease.min_version.is_not(None)).all()
     rows = [row for row in rows if eligible(row, device, initial=initial, current=current)]
     def compare(a: InfoscreenRelease, b: InfoscreenRelease) -> int:
@@ -437,7 +438,7 @@ def installer_ready(db: Session) -> bool:
     for row in db.query(InfoscreenRelease).filter(InfoscreenRelease.channel == "stable",
             InfoscreenRelease.blocked.is_(False), InfoscreenRelease.rollout_percent > 0).all():
         try:
-            verify_signature(row.key_id, row.signature, canonical_manifest(row), db)
+            verify_signature(row.key_id, row.signature or "", canonical_manifest(row), db)
             if artifact_path(row.storage_path).stat().st_size == row.size:
                 return True
         except (ValueError, OSError):

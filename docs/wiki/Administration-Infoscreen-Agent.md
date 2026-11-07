@@ -1,5 +1,11 @@
 # Infoscreen-Agent: Geraete, Displays und Plaene
 
+## Repo-Modus (Standard seit S9)
+
+Standard ist `INFOSCREEN_AGENT_DISTRIBUTION=github`: Das ECP steuert nur Freigabe und Zeitpunkt. Unter **Updates & Backups -> Agent-Releases** legt der Sysadmin eine Version (Kanal/Arch) an oder gibt eine automatisch erkannte Version mit 10/50/100 % frei. Ruecknahme auf 0, Sperre und critical sind dort ebenfalls moeglich. Die Tabelle zeigt erste Sichtung und Geraeteanzahl. Aenderungen senden einen Update-Hinweis und schreiben Audit. Schluessel/Dateiimport/Upload-Tokens sind unter **Verwalteter Modus (optional)** eingeklappt. Mit `managed` bleiben diese sichtbar und die bisherige Installation bleibt aktiv.
+
+## Bisheriger Ablauf und weitere Details
+
 [Zurueck zur Verwaltungsnavigation](Administration-Navigation)
 
 Unter **Verwaltung > Infoscreens > Geraete & Plaene** verwalten Org-Admins die

@@ -93,6 +93,7 @@ def create_display(client, device_id, schedule_id="", token_id=""):
 @pytest.mark.parametrize("environment", [False, True])
 @pytest.mark.parametrize("fingerprint", ["", "sha256:123abc"])
 def test_installer_quote_and_configuration(monkeypatch, environment, fingerprint):
+    monkeypatch.setattr(settings, "INFOSCREEN_AGENT_DISTRIBUTION", "managed")
     monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://configured.example")
     monkeypatch.setattr(settings, "INFOSCREEN_AGENT_KEY_FINGERPRINT", fingerprint)
     name = 'Halle \' ; $(touch /tmp/no) `echo nein` & "West"'
@@ -108,6 +109,7 @@ def test_installer_quote_and_configuration(monkeypatch, environment, fingerprint
 
 
 def test_pairing_dialog_status_host_audit_and_code_refresh(client, admin, monkeypatch):
+    monkeypatch.setattr(settings, "INFOSCREEN_AGENT_DISTRIBUTION", "managed")
     monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://configured.example")
     monkeypatch.setattr(settings, "INFOSCREEN_AGENT_INSTALLER_ENABLED", False)
     device_id, code, response = create_device(client)
@@ -461,6 +463,7 @@ def test_exception_overlap_limits_and_device_actions(client, admin, monkeypatch)
 
 
 def test_installer_ignores_request_host_and_enabled_banner(client, admin, monkeypatch):
+    monkeypatch.setattr(settings, "INFOSCREEN_AGENT_DISTRIBUTION", "managed")
     monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://safe.example")
     monkeypatch.setattr(settings, "INFOSCREEN_AGENT_INSTALLER_ENABLED", True)
     response = client.post(

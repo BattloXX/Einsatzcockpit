@@ -21,6 +21,7 @@ from __future__ import annotations
 from sqlalchemy import BigInteger, ForeignKey, event, or_
 from sqlalchemy.orm import Mapped, Session, declared_attr, mapped_column, with_loader_criteria
 
+# infoscreen_release_discovery_lock ist ein plattformweiter Mutex ohne Org-Daten.
 # infoscreen_release, infoscreen_release_key und infoscreen_release_upload_token sind
 # bewusst plattformweit, ohne TenantScoped; Mutationen nur durch system_admin.
 

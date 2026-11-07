@@ -1,5 +1,11 @@
 # Infoscreen-Agent installieren
 
+## Repo-Modus (Standard seit S9)
+
+Im Standardmodus `github` kommt der kopierbare Befehl direkt aus dem Pairing-Dialog: `curl -fsSL https://github.com/BattloXX/Einsatzcockpit-Infoscreen-Agent/releases/latest/download/install.sh | sudo bash -s -- --server https://ecp.example --token CODE`. Repo und HTTPS-Server stammen aus der Serverkonfiguration; Name und optionaler Fingerprint werden sicher ergaenzt. Ohne hinterlegten Schluessel entfaellt der Fingerprint und der bisherige Freischaltungsbanner. Die Variante mit `EC_PAIRING_CODE` bleibt. Ausgehend muessen github.com und *.githubusercontent.com ueber 443 erreichbar sein. Fuer abgeschottete Installationen `INFOSCREEN_AGENT_DISTRIBUTION=managed` verwenden; die folgende ECP-Installation gilt dann weiterhin.
+
+## Bisheriger Ablauf und weitere Details
+
 Zurück zum [Überblick](Infoscreen-Agent). Die Einrichtung im ECP beschreibt
 [Geräte & Pläne](Administration-Infoscreen-Agent).
 

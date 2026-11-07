@@ -28,6 +28,8 @@
 <dt>Agent-Version</dt><dd>{{ device.agent_version or '-' }}</dd>
 <dt>Letzter Heartbeat</dt><dd>{{ device.last_seen_at|local_datetime_sec if device.last_seen_at else '-' }}</dd>
 <dt>Update-Meldung</dt><dd>{{ device.update_reported_at|local_datetime_sec if device.update_reported_at else '-' }}</dd>
+<dt>Quelle</dt><dd>{{ 'GitHub' if agent_distribution == 'github' else 'Verwalteter Modus' }}</dd>
+<dt>Letzter Update-Check</dt><dd>{{ device.last_update_check_at|local_datetime_sec if device.last_update_check_at else '-' }} / {{ device.last_update_check_reason or '-' }}</dd>
 <dt>Update-Status</dt><dd>{{ device.update_status or '-' }} / {{ device.update_error_code or '-' }}</dd>
 </dl>
 {% for display in displays if display.device_id == device.id %}

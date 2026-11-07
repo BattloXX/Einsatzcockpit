@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_role
@@ -33,10 +35,13 @@ def render(request, db, user, token="", *, preview=None, message=""):
         fingerprints = {key_id: releases.fingerprint(key) for key_id, key in releases.public_keys(db).items()}
     except ValueError:
         fingerprints = {"Konfigurationsfehler": "release_key_invalid"}
+    counts = dict(db.query(InfoscreenDevice.agent_version, func.count(InfoscreenDevice.id))
+                  .execution_options(include_all_tenants=True).group_by(InfoscreenDevice.agent_version).all())
     return templates.TemplateResponse(request,
         "infoscreen_agent/_releases.html" if request.headers.get("HX-Request") == "true"
         else "infoscreen_agent/releases.html",
-        {"user": user, "releases": db.query(InfoscreenRelease).order_by(InfoscreenRelease.id.desc()).all(),
+        {"user": user, "version_counts": counts, "distribution": settings.INFOSCREEN_AGENT_DISTRIBUTION,
+         "releases": db.query(InfoscreenRelease).order_by(InfoscreenRelease.id.desc()).all(),
          "tokens": db.query(InfoscreenReleaseUploadToken).order_by(InfoscreenReleaseUploadToken.id.desc()).all(),
          "fingerprints": fingerprints, "new_token": token, "key_preview": preview, "key_message": message,
          "keys": db.query(InfoscreenReleaseKey).order_by(InfoscreenReleaseKey.id).all(),
@@ -67,7 +72,8 @@ def policy(release_id: int, request: Request, tasks: BackgroundTasks, db: Sessio
                                            "critical": row.critical})
     set_tenant_context(db, None)
     targets = db.query(InfoscreenDevice).filter(InfoscreenDevice.channel == row.channel,
-        InfoscreenDevice.status == "active", InfoscreenDevice.org_id.is_not(None)).all()
+        InfoscreenDevice.status == "active", InfoscreenDevice.org_id.is_not(None),
+        (InfoscreenDevice.arch == row.arch) | InfoscreenDevice.arch.is_(None)).all()
     db.commit()
     for device in targets:
         assert device.org_id is not None
@@ -171,5 +177,32 @@ def key_status(key_id: int, request: Request, db: Session = Depends(get_db),
     write_audit(db, "infoscreen_agent.key_activated" if active else "infoscreen_agent.key_deactivated",
                 user_id=user.id, entity_type="infoscreen_release_key", entity_id=row.id,
                 payload={"key_id": row.key_id, "fingerprint": row.fingerprint})
+    db.commit()
+    return render(request, db, user)
+
+
+@router.post("/versions/create", response_class=HTMLResponse)
+def version_create(request: Request, tasks: BackgroundTasks, db: Session = Depends(get_db),
+                   user: User = Depends(require_role("system_admin"))):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.routers.infoscreen_agent_releases import UpdateCheck
+
+    form = run_async(request.form)
+    try:
+        data = UpdateCheck.model_validate({"version": form.get("version"), "channel": form.get("channel"),
+                                          "arch": form.get("arch"), "current": "0"})
+    except ValueError as exc:
+        raise HTTPException(422, "version_invalid") from exc
+    row = InfoscreenRelease(version=data.version, channel=data.channel, arch=data.arch,
+                            rollout_percent=0, blocked=False)
+    try:
+        db.add(row)
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "release_duplicate") from exc
+    write_audit(db, "infoscreen_agent.release_created", user_id=user.id,
+                entity_type="infoscreen_release", entity_id=row.id)
     db.commit()
     return render(request, db, user)

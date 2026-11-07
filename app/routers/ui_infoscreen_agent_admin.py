@@ -13,6 +13,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_role
@@ -101,6 +102,7 @@ def context(request: Request, db: Session, user: User, section: str) -> dict:
         section=section,
         base=BASE,
         devices=all_devices,
+        agent_distribution=settings.INFOSCREEN_AGENT_DISTRIBUTION,
         update_policy=db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first(),
         displays=displays,
         schedules=schedules,
@@ -166,7 +168,7 @@ def dialog(request: Request, db: Session, user: User, device: InfoscreenDevice, 
     now = datetime.now(UTC).replace(tzinfo=None)
     remaining = max(0, int((device.pairing_expires_at - now).total_seconds())) if device.pairing_expires_at else 0
     connected = bool(device.agent_presence_expires_at and device.agent_presence_expires_at > now)
-    installer_enabled = installer_ready(db)
+    installer_enabled = settings.INFOSCREEN_AGENT_DISTRIBUTION == "github" or installer_ready(db)
     installer_error = ""
     command = env_command = ""
     if code:

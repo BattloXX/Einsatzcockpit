@@ -1,5 +1,11 @@
 # Infoscreen-Agent betreiben
 
+## Repo-Modus (Standard seit S9)
+
+Der Agent bezieht Updates im Standard direkt von GitHub und fragt davor `POST /api/v1/infoscreen-agent/update/check` mit Device-Bearer. Neue Versionen starten mit 0 %; Freigabe durch den Sysadmin. Der Geraete-Tab zeigt Quelle und letzten Check-Grund. Ablehnungen priorisieren blocked, locked, pinned, incident, rollout, window; gleiche/aeltere oder unbekannte/unzulaessige Versionen ergeben unknown. Incident bedeutet nach 300 Sekunden erneut pruefen, window nennt die Dauer bis zum naechsten Wartungsfenster in Org-Zeit. Critical umgeht mit Org-Freigabe nur das Fenster. Kanal/Pin/Sperre und **Jetzt pruefen** bleiben erhalten. Der erste Check bindet die bislang nicht gespeicherte Architektur. Automatisch maximal drei neue Versionen pro Geraet/UTC-Tag und 1000 bekannte Versionen insgesamt; groessere Versionsspruenge manuell anlegen. Die folgenden Artefaktablaeufe betreffen `managed`.
+
+## Bisheriger Ablauf und weitere Details
+
 [Überblick](Infoscreen-Agent) · [Formularbedienung Geräte & Pläne](Administration-Infoscreen-Agent)
 
 ## Status lesen

@@ -1,5 +1,33 @@
 {% import 'infoscreen_agent/_forms.html' as forms with context %}
 <div id="agent-releases" hx-history="false">
+<p>Pakete kommen direkt von GitHub. Das ECP steuert Freigabe und Zeitpunkt. Neue Versionen starten bei 0 %. Kritisch umgeht nur mit Org-Freigabe das Wartungsfenster, niemals den Einsatzschutz.</p>
+<form class="agent-form" hx-post="/admin/agent-releases/versions/create" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<h2>Version freigeben</h2><label>Version <input name="version" required maxlength="100"></label>
+<label>Kanal <select name="channel"><option>stable</option><option>beta</option></select></label>
+<label>Arch <select name="arch"><option>amd64</option><option>arm64</option></select></label>
+<button type="submit" class="btn">Version anlegen (0 %)</button></form>
+<div class="overflow-x-auto"><table class="w-full"><thead><tr><th>Version</th><th>Kanal / Arch</th><th>Zuerst gesehen</th><th>Geraete</th><th>Freigabe</th></tr></thead><tbody>
+{% for release in releases %}
+<tr><td>{{ release.version }}</td><td>{{ release.channel }} / {{ release.arch }}</td>
+<td>{{ release.created_at|local_datetime }}</td><td>{{ version_counts.get(release.version, 0) }}</td><td>
+<form class="agent-form" hx-post="/admin/agent-releases/{{ release.id }}/policy" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<label>Rollout <select name="rollout_percent">{% for percent in [0,10,50,100] %}<option value="{{ percent }}" {% if release.rollout_percent == percent %}selected{% endif %}>{{ percent }} %</option>{% endfor %}</select></label>
+<label><input type="checkbox" name="blocked" value="1" {% if release.blocked %}checked{% endif %}> Gesperrt</label>
+<label><input type="checkbox" name="critical" value="1" {% if release.critical %}checked{% endif %}> Kritisch</label>
+<button type="submit" class="btn">Speichern</button></form>
+{% for percent in [10,50,100,0] %}
+<form class="agent-form" hx-post="/admin/agent-releases/{{ release.id }}/policy" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<input type="hidden" name="rollout_percent" value="{{ percent }}"><input type="hidden" name="blocked" value="{{ '1' if release.blocked else '0' }}"><input type="hidden" name="critical" value="{{ '1' if release.critical else '0' }}">
+<button type="submit" class="btn">{{ 'Freigeben ' ~ percent ~ ' %' if percent else 'Zuruecknehmen' }}</button></form>
+{% endfor %}
+<form class="agent-form" hx-post="/admin/agent-releases/{{ release.id }}/policy" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}
+<input type="hidden" name="rollout_percent" value="{{ release.rollout_percent }}"><input type="hidden" name="blocked" value="{{ '0' if release.blocked else '1' }}"><input type="hidden" name="critical" value="{{ '1' if release.critical else '0' }}">
+<button type="submit" class="btn">{{ 'Entsperren' if release.blocked else 'Sperren' }}</button></form>
+</td></tr>
+{% else %}<tr><td colspan="5">Keine Releases vorhanden.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if distribution == 'github' %}<details{% if key_preview or key_message or new_token %} open{% endif %}><summary>Verwalteter Modus (optional)</summary>
+<p>Fuer abgeschottete Installationen kann das ECP signierte Pakete speichern und verteilen. Dafuer Schluessel, Import oder CI-Upload konfigurieren; INFOSCREEN_AGENT_DISTRIBUTION=managed aktiviert die Installationszeile vom ECP.</p>{% endif %}
 <p>Neue Uploads starten bei 0 %. Erstinstallation: freigegebene Releases ab 10 %, ohne Canary-Begrenzung. Sperren stoppt alle Downloads. Kritisch ist eine nicht signierte Policy und umgeht niemals Einsatzschutz oder Geraetesperren.</p>
 {% for key_id, fingerprint in fingerprints.items() %}<p>{{ key_id }}: <code class="break-all">{{ fingerprint }}</code></p>{% else %}<p>Keine Release-Schluessel konfiguriert. Bitte zuerst einen Schluessel bestaetigen.</p>{% endfor %}
 <h2>Release-Schluessel</h2>
@@ -30,21 +58,10 @@
 <p>Vor dem ersten Import einen Schluessel oben bestaetigen. Neue Releases starten bei 0 %; die Freigabe erfolgt manuell.</p>
 <form class="agent-form" hx-post="/admin/agent-releases/github/import" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}<button type="submit" class="btn">Releases von GitHub holen</button></form>
 <ul>{% for result in github_results %}<li>{{ result.release }}: {{ result.status }}{% if result.code %} ({{ result.code }}){% endif %}</li>{% endfor %}</ul>
-{% for release in releases %}
-<section class="sys-card">
-<h2>{{ release.version }} / {{ release.channel }} / {{ release.arch }}</h2>
-<p>{{ release.size }} Bytes, {{ release.created_at|local_datetime }}. Rollout {{ release.rollout_percent }} %, {{ 'gesperrt' if release.blocked else 'nicht gesperrt' }}.</p>
-<form class="agent-form" hx-post="/admin/agent-releases/{{ release.id }}/policy" hx-target="#agent-releases" hx-swap="outerHTML">
-{{ forms.csrf() }}
-<label>Rollout <select name="rollout_percent">{% for percent in [0,10,50,100] %}<option value="{{ percent }}" {% if release.rollout_percent == percent %}selected{% endif %}>{{ percent }} %</option>{% endfor %}</select></label>
-<label><input type="checkbox" name="blocked" value="1" {% if release.blocked %}checked{% endif %}> Release sperren (Rueckzug)</label>
-<label><input type="checkbox" name="critical" value="1" {% if release.critical %}checked{% endif %}> Kritisch</label>
-<button type="submit" class="btn">Speichern</button>
-</form></section>
-{% else %}<p>Keine Releases vorhanden.</p>{% endfor %}
 <h2>CI-Upload-Tokens</h2>
 {% if new_token %}<p>Nur jetzt sichtbar. Sicher in CI hinterlegen:</p><code>{{ new_token }}</code>{% endif %}
 <form class="agent-form" hx-post="/admin/agent-releases/tokens/create" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}<button class="btn" type="submit">Upload-Token erzeugen</button></form>
 {% for token in tokens %}<p>Token #{{ token.id }}, {{ token.created_at|local_datetime }}: {{ 'widerrufen' if token.revoked_at else 'aktiv' }}</p>
 {% if not token.revoked_at %}<form class="agent-form" hx-post="/admin/agent-releases/tokens/{{ token.id }}/revoke" hx-target="#agent-releases" hx-swap="outerHTML">{{ forms.csrf() }}<button class="btn" type="submit">Token #{{ token.id }} widerrufen</button></form>{% endif %}{% endfor %}
+{% if distribution == 'github' %}</details>{% endif %}
 </div>
