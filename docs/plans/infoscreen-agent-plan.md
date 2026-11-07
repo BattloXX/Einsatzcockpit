@@ -213,6 +213,55 @@ curl -fsSL https://<ecp-host>/infoscreen-agent/install.sh | sudo bash -s -- --se
 - Server: Einzeiler-Generator (Quoting, Host aus Konfiguration, kein Open-Redirect-/Host-Header-Einfluss), Download nur mit gültigem Code, Code ist nach `setup` verbraucht, `install.sh` ohne Geheimnisse.
 - Hardware-Gate: Einzeiler einmal auf frisch installiertem Ubuntu 26.04 am Pilotgerät (Fahrzeughalle) ausführen, Dauer und Fehlermeldungen protokollieren.
 
+## 9. Vereinfachung Schluessel und Releases (Entscheidung 2026-11-07, Repo ist oeffentlich)
+
+Problem: Schluessel erzeugen, `.env` editieren, Upload-Token, drei GitHub-Secrets und ein
+Server-Neustart sind zu viele manuelle Schritte. Da das Agent-Repo oeffentlich ist, entfallen
+die Gruende fuer Upload und Secrets-Aufwand: Pakete und Signaturen sind ohnehin oeffentlich;
+das Vertrauen liegt allein im **gepinnten oeffentlichen Schluessel** im ECP, nicht in GitHub.
+
+Zielablauf (3 Schritte):
+1. **Einmalig, lokal:** `scripts/init_release_keys.sh` im Agent-Repo: erzeugt das Ed25519-Paar in
+   einem temporaeren Verzeichnis, setzt `EC_RELEASE_SIGNING_KEY` per `gh secret set`, schreibt den
+   oeffentlichen Teil nach `packaging/release-key.pem`, legt eine Sicherungskopie des privaten
+   Schluessels verschluesselt (`openssl enc`/Passphrase) in eine vom Nutzer gewaehlte Datei ab,
+   zeigt den Fingerprint gross an und raeumt auf (kein Klartext-Schluessel bleibt liegen). Das
+   Skript ist idempotent (bricht ab, wenn das Secret schon existiert, ausser `--rotate`).
+2. **Tag setzen:** die CI baut, signiert und veroeffentlicht ein normales GitHub-Release
+   (Assets mit festen Namen: `release.json`, `ec-infoscreen-agent_<ver>_<arch>.deb`, `install.sh`,
+   `release-key.pem`). **Kein Upload-Token, kein `ECP_URL`-Secret.** Der bisherige Upload
+   (`POST /api/v1/infoscreen-agent/releases`) bleibt als optionaler Weg erhalten (nur wenn die
+   Secrets gesetzt sind) fuer abgeschottete Installationen.
+3. **Im ECP (Sysadmin, Agent-Releases):** einmal „Schluessel aus Repository uebernehmen“ (zeigt den
+   Fingerprint, Sysadmin bestaetigt ihn gegen die Ausgabe von Schritt 1), danach „Releases von
+   GitHub holen“ (Button, optional taeglicher Abgleich) und freigeben. Kein `.env`-Edit, kein
+   Neustart.
+
+Server-Anforderungen (PR S8):
+- Tabelle `infoscreen_release_key` (key_id, PEM, Fingerprint, aktiv, bestaetigt_von/-am); Quelle
+  zusaetzlich zum Setting `INFOSCREEN_AGENT_RELEASE_PUBKEYS` (Setting bleibt gueltig). Der
+  Fingerprint fuer den Einzeiler kommt aus dem aktiven DB-Schluessel.
+- Importer `infoscreen_agent_github_import`: **fest verdrahtetes Repo** (Setting
+  `INFOSCREEN_AGENT_GITHUB_REPO`, Default `BattloXX/Einsatzcockpit-Infoscreen-Agent`, Format
+  `owner/name` validiert), nur https, nur Hosts `api.github.com`, `github.com`,
+  `objects.githubusercontent.com`; Redirects nur auf diese Hosts, Groessenlimits (.deb 512 MiB,
+  Metadaten 1 MiB), Timeouts, ETag-Caching, kein Token noetig; dieselbe Pruefkette wie beim Upload
+  (Signatur gegen gepinnten Schluessel, SHA256, Paketheader, Duplikate); neue Releases starten
+  mit `rollout_percent=0`. Keine Ausfuehrung heruntergeladener Inhalte.
+- Optionaler Abgleich im Hintergrund (Setting `INFOSCREEN_AGENT_GITHUB_SYNC_ENABLED`, Default
+  false; ein Lauf pro Tag, Leader-Lock, `loop_thread_io`-Muster der Hintergrund-Loops).
+- UI: Sysadmin-Seite zeigt Schluessel (Fingerprint, Status), Import-Button mit Ergebnisliste
+  (neu/uebersprungen/abgelehnt mit Code), keine Geheimnisse.
+
+Agent-Anforderungen (PR A8):
+- `scripts/init_release_keys.sh` (ShellCheck, Test mit Fake-`gh` und Temp-Verzeichnis).
+- `release.yml`: veroeffentlicht das GitHub-Release mit den festen Assets; Upload zum ECP nur wenn
+  `ECP_URL` und `EC_RELEASE_UPLOAD_TOKEN` gesetzt sind. `release.json` enthaelt je Arch das
+  Manifest nach `installer-protocol.md` plus Signatur von `install.sh`.
+- Doku: `docs/release.md` und README neu (Repo ist oeffentlich), Schritt-fuer-Schritt in 3 Schritten.
+
+Nicht Teil: Sigstore/Cosign (zu schwer fuer den Bash-Installer), Auto-Freigabe ohne Admin.
+
 ## 7. Reihenfolge und Ablauf mit Codex
 
 P0 (Claude, erledigt): dieser Plan. Danach:
