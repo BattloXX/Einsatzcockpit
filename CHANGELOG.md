@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt obe
 
 ## Unreleased
 
+- **ELVis-Abnahme im Parallelbetrieb (Phase 4):** Lesender, organisationsgebundener Batch-Abgleich der letzten Events über die Leitstellennummer mit DIBOS/LIS/seriellen Eingängen. Live-Eventliste mit Abgleich-Badge, Einsatzlink, Zeitdelta und Median ohne Testevents. DIBOS-Quellenannahme gekennzeichnet; Abnahme-Checkliste einschließlich Windows-Dienst-/Netzausfall und Rückweg unter `docs/konzepte/elvis-abnahme.md`. Keine Migration.
+
 - **ELVis-Einsatz-Events (Cloud Phase 1):** Windows-Druckagents können Batch-Felder per WebSocket oder HTTP-Fallback übertragen. Admin-Modi Aus/Protokollieren/Alarmquelle, standardmäßig nur Protokollierung; Test-/Dummy-Aufrufe erzeugen nie Einsätze oder Alarme. Event-ID- und Inhaltsdedup, Org-Isolation, bestehender Alarmnachlauf und Zusammenführung über die Leitstellennummer; Agent-Detailseite mit Live-Eventliste und Modus-Schalter. Konfiguration in `wut_config.elvis`, keine Migration. Agent-Anbindung und Prüfung des LWZ-Nr-Formats vor Ort bleiben offen.
 
 - **LIS/IPR-Poll mit adaptivem Takt:** Je Org Aktiv-Intervall (Standard 30 s, mindestens 20 s), im Leerlauf mindestens 60 s, jeweils ±20 % Jitter. 60 s Aktiv-Startphase, 30 min Aktiv-Fenster nach gelieferten Einsätzen und Aktiv-Takt bei bestehenden aktiven LIS-Einsätzen. Login-/Poll-Fehler führen zu gestaffelten Pausen von 10 bis 300 s und anschließendem Client-Neuaufbau; Erfolg setzt den Backoff zurück. Neue Env-Einstellungen, ehrlicher User-Agent und an den Leerlauf angepasste Fallback-/Monitor-Fristen. Keine Migration nötig.

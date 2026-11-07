@@ -101,12 +101,14 @@ def _historie_context(db: Session, gw: Gateway) -> dict:
 # ── Windows-Druckagent ─────────────────────────────────────────────────────────
 
 def _elvis_context(db: Session, gw: Gateway) -> dict:
-    from app.services.elvis_event_service import elvis_modus
+    from app.services.elvis_event_service import elvis_modus, vergleiche_elvis_events
 
-    events = db.query(AlarmIngest).filter(
-        AlarmIngest.org_id == gw.org_id, AlarmIngest.gateway_id == gw.id, AlarmIngest.source == "elvis",
-    ).order_by(AlarmIngest.received_at.desc(), AlarmIngest.id.desc()).limit(20).all()
-    return {"gw": gw, "elvis_mode": elvis_modus(gw), "elvis_events": events}
+    vergleich = vergleiche_elvis_events(db, gw.org_id, gw.id) if gw.org_id is not None else {
+        "elvis_events": [], "elvis_abgleich": {},
+        "elvis_auswertung": {"gesamt": 0, "zugeordnet": 0, "nur_elvis": 0,
+                             "nummer_unplausibel": 0, "median_s": None},
+    }
+    return {"gw": gw, "elvis_mode": elvis_modus(gw), **vergleich}
 
 
 @router.get("/{gateway_id}/elvis", response_class=HTMLResponse)
